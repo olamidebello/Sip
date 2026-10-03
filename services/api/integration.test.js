@@ -114,5 +114,5 @@ test("registered users can create and join a room; host controls it", {
   assert.equal((await post(`/api/meetings/${id}/lock`, { locked:true }, hostCookie)).status, 200);
   assert.equal((await post(`/api/meetings/${id}/end`, {}, hostCookie)).status, 200);
   const unavailable = await fetch(base + "/api/meetings/" + id, { headers:{ Cookie:guestCookie } });
-  assert.equal(unavailable.status, 404);
+  assert.equal(unavailable.status, 403);
 });
