@@ -1,7 +1,8 @@
 export function setupMeetings() {
   const root = document.querySelector("#meetings");
   const $ = (selector) => root.querySelector(selector);
-  let ws, localStream, screenStream, roomId, selfId, hostId, iceServers = [];
+  let ws, localStream, screenStream, roomId, selfId, hostId, localTile;
+  let iceServers = [], features = {};
   const peers = new Map();
   const status = (value) => { $("#meeting-status").textContent = value; };
   const api = async (path, body) => {
@@ -26,6 +27,15 @@ export function setupMeetings() {
     peer.pc.close();
     peer.tile.remove();
     peers.delete(id);
+  }
+  function showPointer(tile, x, y) {
+    const video = tile.querySelector("video");
+    const dot = document.createElement("span");
+    dot.className = "meeting-pointer";
+    dot.style.left = video.offsetLeft + video.clientWidth * x + "px";
+    dot.style.top = video.offsetTop + video.clientHeight * y + "px";
+    tile.append(dot);
+    setTimeout(() => dot.remove(), 900);
   }
   function videoTile(name, stream, id) {
     const tile = document.createElement("div");
@@ -63,9 +73,49 @@ export function setupMeetings() {
       if (event.candidate) send({ type: "signal", to: id,
         signal: { type: "candidate", candidate: event.candidate.toJSON() } });
     };
-    const peer = { pc, tile, candidates: [] };
+    const assist = document.createElement("button");
+    assist.type = "button";
+    assist.textContent = "Request pointer assistance";
+    assist.hidden = true;
+    assist.onclick = () => {
+      send({ type:"assist-request", to:id });
+      status("Pointer assistance requested. The sharer must approve.");
+    };
+    tile.append(assist);
+    const peer = { pc, tile, assist, candidates: [], screenActive:false, granted:false,
+      lastPointer:0 };
+    tile.querySelector("video").addEventListener("pointermove", (event) => {
+      if (!peer.granted || !peer.screenActive || Date.now() - peer.lastPointer < 70) return;
+      peer.lastPointer = Date.now();
+      const rect = event.currentTarget.getBoundingClientRect();
+      send({ type:"pointer", to:id,
+        x:Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+        y:Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) });
+    });
     peers.set(id, peer);
     return peer;
+  }
+  function setPeerScreen(id, active) {
+    const peer = peers.get(id);
+    if (!peer) return;
+    peer.screenActive = active;
+    peer.assist.hidden = !active || !features.remote_assist;
+    if (!active) peer.granted = false;
+    peer.tile.querySelector("p").textContent =
+      (peer.name || id.slice(0, 8)) + (active ? " — sharing screen" : "");
+  }
+  function addGrant(viewerId, name) {
+    const row = document.createElement("div");
+    row.dataset.viewer = viewerId;
+    row.append(document.createTextNode(name + " can point at your shared screen. "));
+    const revoke = document.createElement("button");
+    revoke.textContent = "Revoke";
+    revoke.onclick = () => {
+      send({ type:"assist-revoke", to:viewerId });
+      row.remove();
+    };
+    row.append(revoke);
+    $("#assist-grants").append(row);
   }
   async function signalFrom(message) {
     const peer = makePeer(message.from, message.from.slice(0, 8));
@@ -93,8 +143,10 @@ export function setupMeetings() {
     localStream = screenStream = undefined;
     $("#meeting-videos").replaceChildren();
     $("#meeting-chat").replaceChildren();
+    $("#assist-requests").replaceChildren();
+    $("#assist-grants").replaceChildren();
     $("#meeting-live").hidden = true;
-    roomId = selfId = hostId = undefined;
+    roomId = selfId = hostId = localTile = undefined;
   }
   function videoSender(pc) {
     return pc.getTransceivers().find((transceiver) =>
@@ -107,6 +159,7 @@ export function setupMeetings() {
       api("/api/meetings/" + id), api("/api/meetings/config")
     ]);
     iceServers = config.iceServers;
+    features = config.features || {};
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
     } catch {
@@ -116,7 +169,8 @@ export function setupMeetings() {
     $("#meeting-live").hidden = false;
     $("#meeting-title").textContent = room.title;
     $("#host-controls").hidden = true;
-    videoTile("You", localStream);
+    localTile = videoTile("You", localStream);
+    $("#meeting-share").hidden = !features.screen_share;
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
     ws = new WebSocket(`${protocol}//${location.host}/api/meetings/${id}/socket`);
     ws.onmessage = async (event) => {
@@ -127,16 +181,51 @@ export function setupMeetings() {
           hostId = data.hostId;
           $("#host-controls").hidden = selfId !== hostId;
           $("#lock-room").textContent = room.locked ? "Unlock room" : "Lock room";
-          for (const peer of data.peers) makePeer(peer.id, peer.name);
+          for (const peer of data.peers) {
+            makePeer(peer.id, peer.name).name = peer.name;
+            setPeerScreen(peer.id, peer.screenActive);
+          }
           status("Joined meeting. Share this meeting ID with signed-in participants.");
         } else if (data.type === "joined") {
           const peer = makePeer(data.id, data.name);
+          peer.name = data.name;
           await peer.pc.setLocalDescription(await peer.pc.createOffer());
           send({ type: "signal", to: data.id,
             signal: { type: "offer", sdp: peer.pc.localDescription.sdp } });
         } else if (data.type === "signal") await signalFrom(data);
         else if (data.type === "left") removePeer(data.id);
         else if (data.type === "chat") entry(data.name, data.text);
+        else if (data.type === "screen-state") setPeerScreen(data.from, data.active);
+        else if (data.type === "screen-stop") {
+          screenStream?.getTracks().forEach((track) => track.stop());
+          $("#meeting-share").hidden = true;
+          status("Screen-sharing permission was removed");
+        } else if (data.type === "assist-request" && screenStream) {
+          const row = document.createElement("div");
+          row.textContent = data.name + " requests pointer assistance on your shared screen. ";
+          for (const approved of [true,false]) {
+            const button = document.createElement("button");
+            button.textContent = approved ? "Allow pointer" : "Deny";
+            button.onclick = () => {
+              send({ type:"assist-response", to:data.from, approved });
+              if (approved) addGrant(data.from, data.name);
+              row.remove();
+            };
+            row.append(button);
+          }
+          $("#assist-requests").append(row);
+        } else if (data.type === "assist-response") {
+          const peer = peers.get(data.from);
+          if (peer) peer.granted = data.approved;
+          status(data.approved ? "Pointer access approved. Move over the shared video to point."
+            : "Pointer request declined");
+        } else if (data.type === "assist-revoked") {
+          const peer = peers.get(data.sharer);
+          if (peer) peer.granted = false;
+          status("Pointer access ended");
+        } else if (data.type === "pointer" && localTile && screenStream) {
+          showPointer(localTile, data.x, data.y);
+        }
       } catch (error) { status(error.message); }
     };
     ws.onclose = () => {
@@ -167,11 +256,17 @@ export function setupMeetings() {
   };
   $("#meeting-share").onclick = async () => {
     try {
+      if (!features.screen_share) throw new Error("Screen sharing is unavailable for your groups");
       if (screenStream) { screenStream.getTracks().forEach((track) => track.stop()); return; }
       screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       const track = screenStream.getVideoTracks()[0];
       const restore = async () => {
+        if (!screenStream) return;
         screenStream = undefined;
+        send({ type:"screen-state", active:false });
+        $("#assist-requests").replaceChildren();
+        $("#assist-grants").replaceChildren();
+        if (localTile) localTile.querySelector("video").srcObject = localStream;
         const camera = localStream?.getVideoTracks()[0];
         await Promise.allSettled([...peers.values()].map(async ({ pc }) => {
           const sender = videoSender(pc);
@@ -184,6 +279,8 @@ export function setupMeetings() {
         const sender = videoSender(pc);
         if (sender) await sender.replaceTrack(track);
       }));
+      if (localTile) localTile.querySelector("video").srcObject = screenStream;
+      send({ type:"screen-state", active:true });
       $("#meeting-share").textContent = "Stop sharing";
     } catch (error) { status(error.message); }
   };
