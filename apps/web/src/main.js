@@ -41,6 +41,29 @@ root.innerHTML = `
     </form>
     <p id="chat-status" role="status"></p>
   </section>
+  <section id="billing" hidden>
+    <h2>Plans and billing</h2>
+    <p>Plan requests create unpaid invoices. Online payment and activation are not available yet.</p>
+    <label>Monthly plan <select id="plans"></select></label>
+    <button id="select-plan" type="button">Request plan</button>
+    <p id="subscription"></p>
+    <h3>Invoices</h3><ul id="invoices"></ul>
+    <h3>Available numbers</h3>
+    <label>Provider <select id="number-provider">
+      <option value="flowroute">Flowroute</option><option value="didww">DIDWW</option>
+    </select></label>
+    <button id="search-numbers" type="button">Search numbers</button>
+    <ul id="numbers"></ul>
+    <h3>Port a number</h3>
+    <p>This creates a draft request for review; it does not submit a carrier port.</p>
+    <form id="port-form">
+      <label>Number (E.164) <input name="number" placeholder="+12125550123" required></label>
+      <label>Destination provider <select name="provider"><option value="flowroute">Flowroute</option>
+        <option value="didww">DIDWW</option></select></label>
+      <button>Create draft</button>
+    </form>
+    <ul id="ports"></ul><p id="billing-status" role="status"></p>
+  </section>
   <section id="admin" hidden>
     <h2>Administrator</h2>
     <p id="admin-overview"></p>
@@ -49,6 +72,17 @@ root.innerHTML = `
       <button>Save server URL</button>
     </form>
     <p id="admin-status" role="status"></p>
+    <form id="create-plan">
+      <h3>Create monthly plan</h3>
+      <label>Name <input name="name" required></label>
+      <label>Description <input name="description"></label>
+      <label>Price in USD cents <input name="monthlyCents" type="number" min="0" step="1" required></label>
+      <button>Create plan</button>
+    </form>
+    <form id="markup-form">
+      <label>DID markup percentage <input name="percent" type="number" min="0" max="1000" step="1" value="30" required></label>
+      <button>Save markup</button>
+    </form>
   </section>
   <p>Development browser dialer. Use a test account on a WSS and WebRTC enabled SIP server.</p>
   <form id="connect">
@@ -138,6 +172,8 @@ function signedIn(user) {
   $("#logout").hidden = false;
   $("#account-status").textContent = `Signed in as ${user.name}`;
   $("#chat").hidden = false;
+  $("#billing").hidden = false;
+  refreshBilling().catch((error) => { $("#billing-status").textContent = error.message; });
   loadContacts().catch((error) => { $("#chat-status").textContent = error.message; });
   $("#admin").hidden = user.role !== "admin";
   if (user.role === "admin") {
@@ -147,6 +183,82 @@ function signedIn(user) {
       .catch((error) => { $("#admin-status").textContent = error.message; });
   }
 }
+function money(cents) { return "$" + (cents / 100).toFixed(2); }
+async function loadPlans() {
+  const { plans } = await apiGet("/api/plans");
+  const list = $("#plans");
+  list.replaceChildren();
+  for (const plan of plans) {
+    const option = document.createElement("option");
+    option.value = plan.id;
+    option.textContent = `${plan.name} — ${money(plan.monthly_cents)}/month: ${plan.description}`;
+    list.append(option);
+  }
+}
+async function refreshBilling() {
+  const [invoices, subscription, ports] = await Promise.all([
+    apiGet("/api/billing/invoices"),
+    apiGet("/api/billing/subscription"),
+    apiGet("/api/porting")
+  ]);
+  $("#subscription").textContent = subscription.subscription
+    ? `${subscription.subscription.name}: ${subscription.subscription.status}` : "No plan requested";
+  $("#invoices").replaceChildren(...invoices.invoices.map((invoice) => {
+    const li = document.createElement("li");
+    li.textContent = `${invoice.description}: ${money(invoice.amount_cents)} — ${invoice.status}`;
+    return li;
+  }));
+  $("#ports").replaceChildren(...ports.requests.map((request) => {
+    const li = document.createElement("li");
+    li.textContent = `${request.number_e164} → ${request.provider}: ${request.status}`;
+    return li;
+  }));
+}
+loadPlans().catch(() => {});
+$("#select-plan").onclick = async () => {
+  try {
+    await accountRequest("/api/billing/select-plan", { planId: $("#plans").value });
+    await refreshBilling();
+    $("#billing-status").textContent = "Plan requested. Invoice is unpaid.";
+  } catch (error) { $("#billing-status").textContent = error.message; }
+};
+$("#search-numbers").onclick = async () => {
+  try {
+    const data = await apiGet("/api/numbers?provider=" + $("#number-provider").value);
+    $("#numbers").replaceChildren(...data.numbers.map((number) => {
+      const li = document.createElement("li");
+      li.textContent = `${number.number}: ${money(number.setupCents)} setup, ${money(number.monthlyCents)}/month`;
+      return li;
+    }));
+    $("#billing-status").textContent = `Live provider inventory with ${data.markupPercent}% markup. Purchasing is unavailable.`;
+  } catch (error) { $("#billing-status").textContent = error.message; }
+};
+$("#port-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await accountRequest("/api/porting", Object.fromEntries(new FormData(event.currentTarget)));
+    event.currentTarget.reset();
+    await refreshBilling();
+    $("#billing-status").textContent = "Draft port request created";
+  } catch (error) { $("#billing-status").textContent = error.message; }
+});
+$("#create-plan").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.currentTarget));
+  try {
+    await accountRequest("/api/admin/plans", { ...data, monthlyCents: Number(data.monthlyCents) });
+    await loadPlans();
+    $("#admin-status").textContent = "Plan created";
+  } catch (error) { $("#admin-status").textContent = error.message; }
+});
+$("#markup-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const percent = Number(new FormData(event.currentTarget).get("percent"));
+    await accountRequest("/api/admin/markup", { percent });
+    $("#admin-status").textContent = "DID markup saved";
+  } catch (error) { $("#admin-status").textContent = error.message; }
+});
 $("#add-contact").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
@@ -212,6 +324,7 @@ $("#logout").onclick = async () => {
     $("#login").hidden = false;
     $("#logout").hidden = true;
     $("#chat").hidden = true;
+    $("#billing").hidden = true;
     $("#admin").hidden = true;
     $("#message-list").replaceChildren();
     $("#account-status").textContent = "Signed out";
