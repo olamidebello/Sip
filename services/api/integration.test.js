@@ -57,6 +57,8 @@ test("registered users can create and join a room; host controls it", {
   const hostMessages = [];
   hostWs.on("message", (data) => hostMessages.push(JSON.parse(data)));
   await once(hostWs, "open");
+  for (let i = 0; i < 20 && !hostMessages.length; i++)
+    await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(hostMessages[0].type, "welcome");
   const guestWs = socket(guestCookie);
   t.after(() => guestWs.terminate());
