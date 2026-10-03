@@ -89,6 +89,14 @@ Locally, the Vite proxy forwards both HTTP and WebSocket traffic to the API. For
 
 This is a small browser peer-to-peer room, not Zoom-scale infrastructure. It has no recording, transcription, scheduling/calendar integration, breakout rooms, waiting room, webinar roles, or media server. Cross-network calls and screen sharing still require real multi-browser testing with the intended TURN deployment. No meeting service is deployed publicly.
 
+## User groups and screen assistance
+
+Administrators can create groups, set the Meetings, Screen sharing, Pointer assistance, Messaging, and Billing flags, and assign multiple groups to a user in the web administrator panel. The API combines permissions across groups. Existing users are placed in the Standard group during the one-time migration; new registrations also join Standard. Standard permits meetings, screen sharing, messaging, and billing, while pointer assistance is off. Administrators may create a support group with pointer assistance and assign it only to approved helpers. Changes to meeting access take effect for new requests and disconnect affected live meeting sockets.
+
+In a meeting, a permitted participant can choose a display or window to share. A permitted helper can ask to point at the shared image. The person sharing must explicitly allow the request, may revoke it, and stopping the share revokes pointer access. The pointer is an overlay in Olamide's page. It does **not** send clicks, keystrokes, clipboard contents, files, or commands to the operating system. Browser JavaScript cannot provide unattended remote desktop control; that would require an installed, authenticated desktop agent, explicit session consent, and separate security review. This prototype does not include such an agent.
+
+Group checks protect the account API and meeting signaling. Media in this four-person peer-to-peer prototype bypasses the API after signaling, so the server cannot independently inspect a camera versus a screen track. Direct SIP registration to an external server is also outside these account permissions. Enforcing calling and media policy needs a trusted SIP/media service. Test screen viewing and pointer interaction with real browsers and configured TURN before use outside local development.
+
 ## Deployment status
 
 The repository is on GitHub, but the account API, database, and SIP infrastructure have **not** been deployed to a public server. A production rollout needs HTTPS on the web/API origin, database backups and migrations, abuse protection across instances, password reset and email verification, monitored hosting, and secure SIP account provisioning. The current in-memory per-IP API rate limit is only a local safeguard.
