@@ -1,4 +1,5 @@
 import { SimpleUser } from "sip.js/lib/platform/web";
+import { checkCurrentLocation } from "./geofence.js";
 import "./style.css";
 
 const root = document.querySelector("#app");
@@ -7,6 +8,23 @@ root.innerHTML = `
     <img src="/olamide-logo.jpg" alt="Olamide" width="1536" height="620">
     <h1>Olamide</h1>
   </header>
+  <section id="account">
+    <strong>Olamide account</strong>
+    <p>Account sign-up does not yet provision a SIP number or calling plan.</p>
+    <form id="signup">
+      <label>Name <input name="name" autocomplete="name" minlength="2" maxlength="100" required></label>
+      <label>Email <input name="email" type="email" autocomplete="email" required></label>
+      <label>Password <input name="password" type="password" autocomplete="new-password" minlength="12" required></label>
+      <button>Create account</button>
+    </form>
+    <form id="login">
+      <label>Email <input name="email" type="email" autocomplete="username" required></label>
+      <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+      <button>Sign in</button>
+    </form>
+    <button id="logout" hidden>Sign out</button>
+    <p id="account-status" role="status">Not signed in</p>
+  </section>
   <p>Development browser dialer. Use a test account on a WSS and WebRTC enabled SIP server.</p>
   <form id="connect">
     <label>SIP address <input name="aor" placeholder="sip:alice@example.com" required></label>
@@ -19,6 +37,12 @@ root.innerHTML = `
     <label>Destination SIP address <input name="target" placeholder="sip:bob@example.com" required></label>
     <button>Call</button>
   </form>
+  <section id="geo">
+    <strong>Calling area</strong>
+    <p id="geo-policy">Loading location policy…</p>
+    <button id="check-location" type="button" hidden>Check my location</button>
+    <p id="geo-result" role="status"></p>
+  </section>
   <section id="incoming" hidden><strong>Incoming call</strong>
     <button id="answer">Answer</button><button id="reject">Reject</button>
   </section>
@@ -37,6 +61,75 @@ const dialForm = $("#dial");
 let phone;
 let onCall = false;
 let onHold = false;
+let geoPolicy = { enabled: true, maxAccuracyMeters: 0, zones: [] };
+let geoPolicyLoaded = false;
+
+async function accountRequest(path, body) {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(body)
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Account request failed");
+  return data;
+}
+function signedIn(user) {
+  $("#signup").hidden = true;
+  $("#login").hidden = true;
+  $("#logout").hidden = false;
+  $("#account-status").textContent = `Signed in as ${user.name}`;
+}
+$("#signup").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  try {
+    await accountRequest("/api/register", Object.fromEntries(data));
+    form.reset();
+    $("#account-status").textContent = "Account created. Sign in below.";
+  } catch (error) { $("#account-status").textContent = error.message; }
+});
+$("#login").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  try {
+    const user = await accountRequest("/api/login", Object.fromEntries(new FormData(form)));
+    form.reset();
+    signedIn(user);
+  } catch (error) { $("#account-status").textContent = error.message; }
+});
+$("#logout").onclick = async () => {
+  try {
+    await accountRequest("/api/logout", {});
+    $("#signup").hidden = false;
+    $("#login").hidden = false;
+    $("#logout").hidden = true;
+    $("#account-status").textContent = "Signed out";
+  } catch (error) { $("#account-status").textContent = error.message; }
+};
+fetch("/api/me", { credentials: "same-origin" })
+  .then(async (response) => response.ok ? signedIn(await response.json()) : undefined)
+  .catch(() => { $("#account-status").textContent = "Account service unavailable"; });
+
+fetch("/geofence-policy.json", { cache: "no-store" })
+  .then(async (response) => {
+    if (!response.ok) throw new Error("Policy unavailable");
+    const policy = await response.json();
+    if (typeof policy.enabled !== "boolean" ||
+        !Number.isFinite(policy.maxAccuracyMeters) ||
+        !Array.isArray(policy.zones)) throw new Error("Invalid policy");
+    geoPolicy = policy;
+    geoPolicyLoaded = true;
+    $("#geo-policy").textContent = policy.enabled
+      ? "Calls require an accurate location within an allowed area."
+      : "Location checks are currently off.";
+    $("#check-location").hidden = !policy.enabled;
+  })
+  .catch(() => {
+    $("#geo-policy").textContent = "Location policy unavailable. Outgoing calls are blocked.";
+  });
 
 function status(message) { $("#status").textContent = message; }
 function callState(active) {
@@ -96,8 +189,16 @@ dialForm.addEventListener("submit", async (event) => {
   if (!phone || onCall) return;
   const target = String(new FormData(dialForm).get("target")).trim();
   if (!/^sip:[^\s@]+@[^\s@]+$/i.test(target)) { status("Enter a SIP address."); return; }
+  if (!geoPolicyLoaded) { status("Location policy unavailable. Call blocked."); return; }
+  const location = await checkCurrentLocation(geoPolicy);
+  $("#geo-result").textContent = location.reason;
+  if (!location.allowed) { status("Call blocked: " + location.reason); return; }
   try { status("Calling…"); await phone.call(target); } catch (error) { report(error); }
 });
+$("#check-location").onclick = async () => {
+  const result = await checkCurrentLocation(geoPolicy);
+  $("#geo-result").textContent = result.reason;
+};
 $("#answer").onclick = async () => { try { await phone?.answer(); } catch (error) { report(error); } };
 $("#reject").onclick = async () => { try { await phone?.decline(); } catch (error) { report(error); } };
 $("#hangup").onclick = async () => { try { await phone?.hangup(); } catch (error) { report(error); } };
