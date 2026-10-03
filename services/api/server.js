@@ -2,6 +2,8 @@ import http from "node:http";
 import fs from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
+import { markupCents } from "./billing.js";
+import { availableNumbers } from "./providers.js";
 import {
   validateRegistration, hashPassword, verifyPassword, createSessionToken, tokenHash
 } from "./security.js";
@@ -14,6 +16,7 @@ if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required");
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const maxBodyBytes = 8192;
 const attempts = new Map();
+const uuidPattern = /^[0-9a-f-]{36}$/i;
 
 function send(res, status, body, headers = {}) {
   res.writeHead(status, {
@@ -123,8 +126,15 @@ async function handler(req, res) {
       const result = await pool.query("SELECT value FROM app_settings WHERE key='sip_wss_url'");
       return send(res, 200, { sipWssUrl: result.rows[0]?.value || "" });
     }
+    if (path === "/api/plans" && req.method === "GET") {
+      const result = await pool.query(
+        "SELECT id,name,monthly_cents,description FROM plans WHERE active=true ORDER BY monthly_cents,id"
+      );
+      return send(res, 200, { plans: result.rows });
+    }
     if (path.startsWith("/api/contacts") || path.startsWith("/api/messages") ||
-        path.startsWith("/api/admin/")) {
+        path.startsWith("/api/admin/") || path.startsWith("/api/billing/") ||
+        path.startsWith("/api/numbers") || path.startsWith("/api/porting")) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
       if (path === "/api/contacts" && req.method === "GET") {
@@ -176,6 +186,118 @@ async function handler(req, res) {
           [randomUUID(), user.id, recipient, body.trim()]
         );
         return send(res, 201, { ...result.rows[0] });
+      }
+      if (path === "/api/billing/invoices" && req.method === "GET") {
+        const result = await pool.query(
+          "SELECT id,description,amount_cents,currency,status,created_at FROM invoices WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100",
+          [user.id]
+        );
+        return send(res, 200, { invoices: result.rows });
+      }
+      if (path === "/api/billing/subscription" && req.method === "GET") {
+        const result = await pool.query(
+          "SELECT s.plan_id,s.status,p.name,p.monthly_cents FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=$1",
+          [user.id]
+        );
+        return send(res, 200, { subscription: result.rows[0] || null });
+      }
+      if (path === "/api/billing/select-plan" && req.method === "POST") {
+        const { planId } = await readJson(req);
+        if (typeof planId !== "string" || !uuidPattern.test(planId))
+          return send(res, 400, { error: "Valid plan required" });
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          const existing = await client.query("SELECT status FROM subscriptions WHERE user_id=$1 FOR UPDATE", [user.id]);
+          if (existing.rows[0]?.status === "active") {
+            await client.query("ROLLBACK");
+            return send(res, 409, { error: "Active plan changes require administrator review" });
+          }
+          const plan = await client.query("SELECT name,monthly_cents FROM plans WHERE id=$1 AND active=true", [planId]);
+          if (!plan.rowCount) {
+            await client.query("ROLLBACK");
+            return send(res, 404, { error: "Plan unavailable" });
+          }
+          await client.query(
+            "UPDATE invoices SET status='void' WHERE user_id=$1 AND status='unpaid' AND description LIKE '% monthly plan'",
+            [user.id]
+          );
+          await client.query(
+            "INSERT INTO subscriptions(user_id,plan_id) VALUES($1,$2) ON CONFLICT(user_id) DO UPDATE SET plan_id=excluded.plan_id,status='pending_payment'",
+            [user.id, planId]
+          );
+          const invoiceId = randomUUID();
+          await client.query(
+            "INSERT INTO invoices(id,user_id,description,amount_cents) VALUES($1,$2,$3,$4)",
+            [invoiceId,user.id,plan.rows[0].name + " monthly plan",plan.rows[0].monthly_cents]
+          );
+          await client.query("COMMIT");
+          return send(res, 201, { status: "pending_payment", invoiceId });
+        } catch (error) {
+          await client.query("ROLLBACK");
+          throw error;
+        } finally { client.release(); }
+      }
+      if (path === "/api/numbers" && req.method === "GET") {
+        const provider = new URL(req.url, origin).searchParams.get("provider");
+        if (!["flowroute","didww"].includes(provider))
+          return send(res, 400, { error: "Select Flowroute or DIDWW" });
+        const result = await pool.query("SELECT value FROM app_settings WHERE key='did_markup_bps'");
+        const markupBps = Number(result.rows[0]?.value ?? 3000);
+        try {
+          const numbers = await availableNumbers(provider);
+          return send(res, 200, { markupPercent: markupBps / 100,
+            numbers: numbers.map(({ monthlyCostCents,setupCostCents,...item }) => ({
+              ...item, monthlyCents: markupCents(monthlyCostCents,markupBps),
+              setupCents: markupCents(setupCostCents,markupBps)
+            }))
+          });
+        } catch (error) {
+          return send(res, 503, { error: error.message });
+        }
+      }
+      if (path === "/api/porting" && req.method === "GET") {
+        const result = await pool.query(
+          "SELECT id,number_e164,provider,status,created_at FROM port_requests WHERE user_id=$1 ORDER BY created_at DESC",
+          [user.id]
+        );
+        return send(res, 200, { requests: result.rows });
+      }
+      if (path === "/api/porting" && req.method === "POST") {
+        const { number, provider } = await readJson(req);
+        if (typeof number !== "string" || !/^\+[1-9]\d{7,14}$/.test(number) ||
+            !["flowroute","didww"].includes(provider))
+          return send(res, 400, { error: "Enter E.164 number and provider" });
+        const result = await pool.query(
+          "INSERT INTO port_requests(id,user_id,number_e164,provider) VALUES($1,$2,$3,$4) RETURNING id,status",
+          [randomUUID(),user.id,number,provider]
+        );
+        return send(res, 201, result.rows[0]);
+      }
+      if (path === "/api/admin/plans" && req.method === "POST") {
+        if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
+        const { name, description = "", monthlyCents } = await readJson(req);
+        if (typeof name !== "string" || !name.trim() || name.length > 100 ||
+            typeof description !== "string" || description.length > 1000 ||
+            !Number.isSafeInteger(monthlyCents) || monthlyCents < 0 || monthlyCents > 10000000)
+          return send(res, 400, { error: "Valid plan name and monthly cents required" });
+        const id = randomUUID();
+        await pool.query(
+          "INSERT INTO plans(id,name,description,monthly_cents) VALUES($1,$2,$3,$4)",
+          [id,name.trim(),description,monthlyCents]
+        );
+        return send(res, 201, { id });
+      }
+      if (path === "/api/admin/markup" && req.method === "POST") {
+        if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
+        const { percent } = await readJson(req);
+        if (!Number.isInteger(percent) || percent < 0 || percent > 1000)
+          return send(res, 400, { error: "Markup must be a whole percent from 0 to 1000" });
+        await pool.query(
+          "INSERT INTO app_settings(key,value) VALUES('did_markup_bps',$1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+          [String(percent * 100)]
+        );
+        return send(res, 200, { percent });
       }
       if (path === "/api/admin/overview" && req.method === "GET") {
         if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
