@@ -81,6 +81,14 @@ Each provider may be configured independently. DIDWW quoting is disabled unless 
 
 Users can create an E.164 number port draft and inspect its status. A draft is not a carrier submission. Carrier authorization, LOA, account documents, eligibility checks, status updates, and routing changes still need implementation.
 
+## Small-group meetings
+
+Signed-in users can create a room and share its meeting ID with other signed-in users. The browser app supports audio/video, mic and camera toggles, screen sharing, temporary room chat, and host controls to lock, remove a participant, or end the room. Signaling uses authenticated, same-origin WebSockets; the media travels peer to peer using WebRTC. The limit is four participants per room. Chat is ephemeral and disappears when the room ends.
+
+Locally, the Vite proxy forwards both HTTP and WebSocket traffic to the API. For deployment, put the API and its WebSocket upgrade path behind the same HTTPS origin as the browser. Camera and screen capture need browser permission and a secure context (localhost works for development). If peers cannot connect across networks, configure `MEETING_ICE_SERVERS_JSON` on the API as a JSON array of STUN/TURN server definitions. TURN credentials sent to browsers are visible to participants; use short-lived credentials and a TURN service you control. There is no TURN server in this repository.
+
+This is a small browser peer-to-peer room, not Zoom-scale infrastructure. It has no recording, transcription, scheduling/calendar integration, breakout rooms, waiting room, webinar roles, or media server. Cross-network calls and screen sharing still require real multi-browser testing with the intended TURN deployment. No meeting service is deployed publicly.
+
 ## Deployment status
 
 The repository is on GitHub, but the account API, database, and SIP infrastructure have **not** been deployed to a public server. A production rollout needs HTTPS on the web/API origin, database backups and migrations, abuse protection across instances, password reset and email verification, monitored hosting, and secure SIP account provisioning. The current in-memory per-IP API rate limit is only a local safeguard.
