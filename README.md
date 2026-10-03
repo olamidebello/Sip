@@ -63,6 +63,24 @@ Use an account email you control and verify the affected row. The public WSS URL
 
 The following are not implemented: WhatsApp-level end-to-end encryption, rich media and group messaging; Zoiper-level multi-account and native OS calling integration; Cash App-like wallet, balance, transfers, cards, identity checks, and regulated payment processing; passkeys/biometrics, OTP, PIN, and device binding. Browsers generally do not expose a reliable device MAC address to web applications. Payment features require a licensed provider or a compliant banking integration, immutable transaction ledger, reconciliation, dispute and fraud workflows, and regulatory review before real money is accepted. Do not enter real payment credentials into this prototype.
 
+## Plans, invoices, numbers, and port drafts
+
+Administrators can create USD monthly plan catalog entries and set the DID markup as a whole percentage. The default markup is 30% on each provider setup and monthly price, rounded up to cents. The browser presents this amount as an inventory **quote**, never as an accepted purchase. The API calculates it from provider inventory; the browser cannot submit its own wholesale price. New plans and markup settings apply to future requests and do not retroactively alter existing invoices.
+
+Users can request a plan and inspect their invoices. Plan requests remain `pending_payment` and invoices remain `unpaid`; there is no payment gateway, recurring charge, tax engine, credit balance, refund, or automatic activation. No card or bank details are collected. A new pending plan request voids earlier unpaid monthly-plan invoices. An active subscription requires operator review to change.
+
+The number search API connects to Flowroute's purchasable-number inventory and DIDWW's available-DID and SKU inventory. Configure provider credentials **only on the API server**:
+
+```sh
+FLOWROUTE_ACCESS_KEY='...' FLOWROUTE_SECRET_KEY='...' \
+DIDWW_API_KEY='...' DIDWW_ACCOUNT_CURRENCY='USD' \
+DATABASE_URL='postgres://...' npm start
+```
+
+Each provider may be configured independently. DIDWW quoting is disabled unless the account's price currency has been confirmed as USD. DIDWW inventory requiring end-user registration is omitted. Price, inventory, taxes, and eligibility must be checked again at checkout. **No DID order is submitted to either provider**, and no number is assigned to a customer or SIP account. Credentials and a payment/settlement workflow are required to implement automatic buying safely. The connector layout in `services/api/providers.js` is intended to support additional providers.
+
+Users can create an E.164 number port draft and inspect its status. A draft is not a carrier submission. Carrier authorization, LOA, account documents, eligibility checks, status updates, and routing changes still need implementation.
+
 ## Deployment status
 
 The repository is on GitHub, but the account API, database, and SIP infrastructure have **not** been deployed to a public server. A production rollout needs HTTPS on the web/API origin, database backups and migrations, abuse protection across instances, password reset and email verification, monitored hosting, and secure SIP account provisioning. The current in-memory per-IP API rate limit is only a local safeguard.
