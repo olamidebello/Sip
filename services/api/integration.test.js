@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import WebSocket from "ws";
-import { Pool } from "pg";
+import { createDatabase } from "./db.js";
 
 test("registered users can create and join a room; host controls it", {
-  skip: !process.env.TEST_DATABASE_URL,
+  skip: !process.env.TEST_MYSQL_URL,
   timeout: 30000
 }, async (t) => {
   const port = 18080 + Math.floor(Math.random() * 1000);
@@ -14,7 +14,7 @@ test("registered users can create and join a room; host controls it", {
   const base = `http://127.0.0.1:${port}`;
   const server = spawn(process.execPath, ["server.js"], {
     cwd: new URL(".", import.meta.url).pathname,
-    env: { ...process.env, DATABASE_URL: process.env.TEST_DATABASE_URL,
+    env: { ...process.env, MYSQL_URL: process.env.TEST_MYSQL_URL,
       PUBLIC_ORIGIN: origin, LISTEN_ADDR: "127.0.0.1", PORT: String(port) },
     stdio: ["ignore","pipe","pipe"]
   });
@@ -71,7 +71,7 @@ test("registered users can create and join a room; host controls it", {
   for (let i = 0; i < 20 && !hostMessages.some((m) => m.type === "chat"); i++)
     await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(hostMessages.find((m) => m.type === "chat")?.text, "hello");
-  const db = new Pool({ connectionString:process.env.TEST_DATABASE_URL });
+  const db = createDatabase(process.env.TEST_MYSQL_URL);
   t.after(() => db.end());
   await db.query("UPDATE users SET role='admin' WHERE id=$1", [hostLogin.body.id]);
   const group = await post("/api/admin/groups", {
