@@ -54,6 +54,15 @@ function currentToken(req) {
   const match = (req.headers.cookie || "").match(/(?:^|;\s*)olamide_session=([^;]+)/);
   return match?.[1];
 }
+async function currentUser(req) {
+  const token = currentToken(req);
+  if (!token) return null;
+  const result = await pool.query(
+    "SELECT u.id, u.display_name, u.email, u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now()",
+    [tokenHash(token)]
+  );
+  return result.rows[0] || null;
+}
 async function handler(req, res) {
   const path = new URL(req.url, origin).pathname;
   if (req.method === "GET" && path === "/api/health")
@@ -84,7 +93,7 @@ async function handler(req, res) {
           email.length > 254 || password.length > 1024)
         return send(res, 400, { error: "Invalid credentials" });
       const result = await pool.query(
-        "SELECT id, display_name, email, password_salt, password_hash FROM users WHERE email=$1",
+        "SELECT id, display_name, email, role, password_salt, password_hash FROM users WHERE email=$1",
         [email.trim().toLowerCase()]
       );
       const user = result.rows[0];
@@ -95,19 +104,13 @@ async function handler(req, res) {
         "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1,$2,now() + interval '7 days')",
         [tokenHash(token), user.id]
       );
-      return send(res, 200, { id: user.id, name: user.display_name, email: user.email },
+      return send(res, 200, { id: user.id, name: user.display_name, email: user.email, role: user.role },
         { "Set-Cookie": sessionCookie(token, 604800) });
     }
     if (req.method === "GET" && path === "/api/me") {
-      const token = currentToken(req);
-      if (!token) return send(res, 401, { error: "Not signed in" });
-      const result = await pool.query(
-        "SELECT u.id, u.display_name, u.email FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now()",
-        [tokenHash(token)]
-      );
-      const user = result.rows[0];
+      const user = await currentUser(req);
       return user
-        ? send(res, 200, { id: user.id, name: user.display_name, email: user.email })
+        ? send(res, 200, { id: user.id, name: user.display_name, email: user.email, role: user.role })
         : send(res, 401, { error: "Session expired" });
     }
     if (req.method === "POST" && path === "/api/logout") {
@@ -115,6 +118,84 @@ async function handler(req, res) {
       if (token) await pool.query("DELETE FROM sessions WHERE token_hash=$1", [tokenHash(token)]);
       return send(res, 200, { status: "signed out" },
         { "Set-Cookie": sessionCookie("", 0) });
+    }
+    if (path === "/api/config" && req.method === "GET") {
+      const result = await pool.query("SELECT value FROM app_settings WHERE key='sip_wss_url'");
+      return send(res, 200, { sipWssUrl: result.rows[0]?.value || "" });
+    }
+    if (path.startsWith("/api/contacts") || path.startsWith("/api/messages") ||
+        path.startsWith("/api/admin/")) {
+      const user = await currentUser(req);
+      if (!user) return send(res, 401, { error: "Sign in required" });
+      if (path === "/api/contacts" && req.method === "GET") {
+        const result = await pool.query(
+          "SELECT u.id, u.display_name AS name, u.email FROM contacts c JOIN users u ON u.id=c.contact_id WHERE c.owner_id=$1 ORDER BY u.display_name LIMIT 200",
+          [user.id]
+        );
+        return send(res, 200, { contacts: result.rows });
+      }
+      if (path === "/api/contacts" && req.method === "POST") {
+        const { email } = await readJson(req);
+        if (typeof email !== "string" || email.length > 254)
+          return send(res, 400, { error: "Valid contact email required" });
+        const found = await pool.query("SELECT id FROM users WHERE email=$1", [email.trim().toLowerCase()]);
+        const contact = found.rows[0];
+        if (!contact || contact.id === user.id)
+          return send(res, 404, { error: "Contact not found" });
+        await pool.query(
+          "INSERT INTO contacts(owner_id, contact_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+          [user.id, contact.id]
+        );
+        return send(res, 201, { id: contact.id });
+      }
+      if (path === "/api/messages" && req.method === "GET") {
+        const contactId = new URL(req.url, origin).searchParams.get("contact");
+        if (!/^[0-9a-f-]{36}$/i.test(contactId || ""))
+          return send(res, 400, { error: "Contact ID required" });
+        const allowed = await pool.query(
+          "SELECT 1 FROM contacts WHERE owner_id=$1 AND contact_id=$2", [user.id, contactId]
+        );
+        if (!allowed.rowCount) return send(res, 403, { error: "Add contact first" });
+        const result = await pool.query(
+          "SELECT id, sender_id AS sender, recipient_id AS recipient, body, created_at FROM messages WHERE (sender_id=$1 AND recipient_id=$2) OR (sender_id=$2 AND recipient_id=$1) ORDER BY created_at DESC, id DESC LIMIT 100",
+          [user.id, contactId]
+        );
+        return send(res, 200, { messages: result.rows.reverse() });
+      }
+      if (path === "/api/messages" && req.method === "POST") {
+        const { recipient, body } = await readJson(req);
+        if (typeof recipient !== "string" || !/^[0-9a-f-]{36}$/i.test(recipient) ||
+            typeof body !== "string" || body.trim().length < 1 || body.length > 4000)
+          return send(res, 400, { error: "Valid recipient and message required (max 4000 characters)" });
+        const allowed = await pool.query(
+          "SELECT 1 FROM contacts WHERE owner_id=$1 AND contact_id=$2", [user.id, recipient]
+        );
+        if (!allowed.rowCount) return send(res, 403, { error: "Add contact first" });
+        const result = await pool.query(
+          "INSERT INTO messages(id,sender_id,recipient_id,body) VALUES($1,$2,$3,$4) RETURNING id,created_at",
+          [randomUUID(), user.id, recipient, body.trim()]
+        );
+        return send(res, 201, { ...result.rows[0] });
+      }
+      if (path === "/api/admin/overview" && req.method === "GET") {
+        if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
+        const result = await pool.query(
+          "SELECT (SELECT count(*)::int FROM users) AS users, (SELECT count(*)::int FROM messages) AS messages, (SELECT count(*)::int FROM sessions WHERE expires_at>now()) AS active_sessions"
+        );
+        return send(res, 200, result.rows[0]);
+      }
+      if (path === "/api/admin/config" && req.method === "POST") {
+        if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
+        const { sipWssUrl } = await readJson(req);
+        if (typeof sipWssUrl !== "string" || sipWssUrl.length > 500 ||
+            (sipWssUrl !== "" && (!sipWssUrl.startsWith("wss://") || !URL.canParse(sipWssUrl))))
+          return send(res, 400, { error: "A wss:// URL is required" });
+        await pool.query(
+          "INSERT INTO app_settings(key,value) VALUES('sip_wss_url',$1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+          [sipWssUrl]
+        );
+        return send(res, 200, { sipWssUrl });
+      }
     }
     return send(res, 404, { error: "Not found" });
   } catch (error) {
