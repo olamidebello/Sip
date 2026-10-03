@@ -3,7 +3,10 @@ import "./style.css";
 
 const root = document.querySelector("#app");
 root.innerHTML = `
-  <h1>Olamide SIP</h1>
+  <header class="brand">
+    <img src="/olamide-logo.jpg" alt="Olamide" width="1536" height="620">
+    <h1>Olamide SIP</h1>
+  </header>
   <p>Development browser dialer. Use a test account on a WSS and WebRTC enabled SIP server.</p>
   <form id="connect">
     <label>SIP address <input name="aor" placeholder="sip:alice@example.com" required></label>
