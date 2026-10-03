@@ -85,8 +85,9 @@ test("registered users can create and join a room; host controls it", {
     }, body:JSON.stringify(body) });
     return { status:res.status, body:await res.json() };
   };
-  assert.equal((await put(`/api/admin/users/${guestLogin.body.id}/groups`,
-    { groupIds:[group.body.id] })).status, 200);
+  const assigned = await put(`/api/admin/users/${guestLogin.body.id}/groups`,
+    { groupIds:[group.body.id] });
+  assert.equal(assigned.status, 200, JSON.stringify(assigned.body) + " " + log);
   const me = await fetch(base + "/api/me", { headers:{ Cookie:guestCookie } });
   assert.equal((await me.json()).features.remote_assist, true);
   hostWs.send(JSON.stringify({ type:"screen-state", active:true }));
