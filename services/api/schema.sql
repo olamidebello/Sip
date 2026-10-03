@@ -91,3 +91,23 @@ CREATE TABLE IF NOT EXISTS meeting_rooms (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS meeting_rooms_host_idx ON meeting_rooms(host_id, created_at);
+CREATE TABLE IF NOT EXISTS user_groups (
+  id uuid PRIMARY KEY,
+  name text NOT NULL UNIQUE,
+  features jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS user_group_members (
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  group_id uuid NOT NULL REFERENCES user_groups(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, group_id)
+);
+INSERT INTO user_groups (id,name,features)
+VALUES ('00000000-0000-4000-8000-000000000001','Standard',
+  '{"meetings":true,"screen_share":true,"remote_assist":false,"messaging":true,"billing":true}')
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO user_group_members(user_id,group_id)
+SELECT u.id,'00000000-0000-4000-8000-000000000001'::uuid FROM users u
+WHERE NOT EXISTS (SELECT 1 FROM app_settings WHERE key='groups_backfilled')
+ON CONFLICT DO NOTHING;
+INSERT INTO app_settings(key,value) VALUES('groups_backfilled','true') ON CONFLICT DO NOTHING;
