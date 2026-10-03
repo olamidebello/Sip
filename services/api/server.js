@@ -5,6 +5,7 @@ import { Pool } from "pg";
 import { markupCents } from "./billing.js";
 import { availableNumbers } from "./providers.js";
 import { attachMeetingSignaling } from "./meetings.js";
+import { validateFeatures, effectiveFeatures } from "./permissions.js";
 import {
   validateRegistration, hashPassword, verifyPassword, createSessionToken, tokenHash
 } from "./security.js";
@@ -68,7 +69,18 @@ async function currentUser(req) {
     "SELECT u.id, u.display_name, u.email, u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now()",
     [tokenHash(token)]
   );
-  return result.rows[0] || null;
+  const user = result.rows[0];
+  if (!user) return null;
+  user.features = await featuresFor(user);
+  return user;
+}
+async function featuresFor(user) {
+  if (user.role === "admin") return effectiveFeatures([], true);
+  const result = await pool.query(
+    "SELECT g.features FROM user_group_members m JOIN user_groups g ON g.id=m.group_id WHERE m.user_id=$1",
+    [user.id]
+  );
+  return effectiveFeatures(result.rows.map((row) => row.features));
 }
 async function handler(req, res) {
   const path = new URL(req.url, origin).pathname;
@@ -76,7 +88,7 @@ async function handler(req, res) {
     return send(res, 200, { status: "ok" });
   if (req.method !== "GET" && req.headers.origin !== origin)
     return send(res, 403, { error: "Invalid origin" });
-  if (req.method === "POST" && !limit(req))
+  if (req.method !== "GET" && !limit(req))
     return send(res, 429, { error: "Too many requests" });
   try {
     if (req.method === "POST" && path === "/api/register") {
@@ -87,6 +99,10 @@ async function handler(req, res) {
         await pool.query(
           "INSERT INTO users (id, display_name, email, password_salt, password_hash) VALUES ($1,$2,$3,$4,$5)",
           [id, name, email, salt, hash]
+        );
+        await pool.query(
+          "INSERT INTO user_group_members(user_id,group_id) VALUES($1,'00000000-0000-4000-8000-000000000001')",
+          [id]
         );
       } catch (error) {
         if (error.code === "23505") return send(res, 409, { error: "Account already exists" });
@@ -111,13 +127,15 @@ async function handler(req, res) {
         "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1,$2,now() + interval '7 days')",
         [tokenHash(token), user.id]
       );
-      return send(res, 200, { id: user.id, name: user.display_name, email: user.email, role: user.role },
+      return send(res, 200, { id: user.id, name: user.display_name, email: user.email,
+        role: user.role, features:await featuresFor(user) },
         { "Set-Cookie": sessionCookie(token, 604800) });
     }
     if (req.method === "GET" && path === "/api/me") {
       const user = await currentUser(req);
       return user
-        ? send(res, 200, { id: user.id, name: user.display_name, email: user.email, role: user.role })
+        ? send(res, 200, { id: user.id, name: user.display_name, email: user.email,
+            role: user.role, features:user.features })
         : send(res, 401, { error: "Session expired" });
     }
     if (req.method === "POST" && path === "/api/logout") {
@@ -136,14 +154,21 @@ async function handler(req, res) {
       );
       return send(res, 200, { plans: result.rows });
     }
-    if (path === "/api/meetings/config" && req.method === "GET")
-      return send(res, 200, { iceServers: meetingIceServers, maxParticipants: 4 });
     if (path.startsWith("/api/contacts") || path.startsWith("/api/messages") ||
         path.startsWith("/api/admin/") || path.startsWith("/api/billing/") ||
         path.startsWith("/api/numbers") || path.startsWith("/api/porting") ||
         path.startsWith("/api/meetings")) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if (path.startsWith("/api/meetings") && !user.features.meetings)
+        return send(res, 403, { error: "Meetings unavailable for your groups" });
+      if (path.startsWith("/api/messages") || path.startsWith("/api/contacts"))
+        if (!user.features.messaging) return send(res, 403, { error: "Messaging unavailable for your groups" });
+      if (path.startsWith("/api/billing/") && !user.features.billing)
+        return send(res, 403, { error: "Billing unavailable for your groups" });
+      if (path === "/api/meetings/config" && req.method === "GET")
+        return send(res, 200, { iceServers: meetingIceServers, maxParticipants: 4,
+          features:user.features });
       if (path === "/api/meetings" && req.method === "POST") {
         const { title } = await readJson(req);
         if (typeof title !== "string" || !title.trim() || title.length > 100)
@@ -351,6 +376,95 @@ async function handler(req, res) {
           "SELECT (SELECT count(*)::int FROM users) AS users, (SELECT count(*)::int FROM messages) AS messages, (SELECT count(*)::int FROM sessions WHERE expires_at>now()) AS active_sessions"
         );
         return send(res, 200, result.rows[0]);
+      }
+      if (path === "/api/admin/groups" && req.method === "GET") {
+        if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
+        const result = await pool.query(
+          "SELECT g.id,g.name,g.features,count(m.user_id)::int AS members FROM user_groups g LEFT JOIN user_group_members m ON m.group_id=g.id GROUP BY g.id ORDER BY g.name LIMIT 200"
+        );
+        return send(res, 200, { groups:result.rows });
+      }
+      if (path === "/api/admin/groups" && req.method === "POST") {
+        if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
+        const { name, features } = await readJson(req);
+        if (typeof name !== "string" || name.trim().length < 2 || name.length > 80)
+          return send(res, 400, { error: "Group name must be 2–80 characters" });
+        let safe;
+        try { safe = validateFeatures(features); }
+        catch { return send(res, 400, { error: "Invalid group features" }); }
+        try {
+          const result = await pool.query(
+            "INSERT INTO user_groups(id,name,features) VALUES($1,$2,$3) RETURNING id,name,features",
+            [randomUUID(),name.trim(),JSON.stringify(safe)]
+          );
+          return send(res, 201, result.rows[0]);
+        } catch (error) {
+          if (error.code === "23505") return send(res, 409, { error: "Group already exists" });
+          throw error;
+        }
+      }
+      const groupMatch = /^\/api\/admin\/groups\/([0-9a-f-]{36})$/.exec(path);
+      if (groupMatch && req.method === "PUT") {
+        if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
+        if (!uuidPattern.test(groupMatch[1])) return send(res, 400, { error: "Invalid group" });
+        const { features } = await readJson(req);
+        let safe;
+        try { safe = validateFeatures(features); }
+        catch { return send(res, 400, { error: "Invalid group features" }); }
+        const result = await pool.query(
+          "UPDATE user_groups SET features=$1 WHERE id=$2 RETURNING id,name,features",
+          [JSON.stringify(safe),groupMatch[1]]
+        );
+        if (result.rowCount) {
+          const members = await pool.query(
+            "SELECT u.id,u.role FROM user_group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=$1",
+            [groupMatch[1]]
+          );
+          for (const member of members.rows)
+            meetingSignaling.recheckUser(member.id, await featuresFor(member));
+        }
+        return result.rowCount ? send(res, 200, result.rows[0])
+          : send(res, 404, { error: "Group unavailable" });
+      }
+      if (path === "/api/admin/users" && req.method === "GET") {
+        if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
+        const result = await pool.query(
+          "SELECT u.id,u.display_name AS name,u.email,u.role,coalesce(array_agg(m.group_id) FILTER (WHERE m.group_id IS NOT NULL),'{}'::uuid[]) AS group_ids FROM users u LEFT JOIN user_group_members m ON m.user_id=u.id GROUP BY u.id ORDER BY u.created_at DESC LIMIT 200"
+        );
+        return send(res, 200, { users:result.rows });
+      }
+      const memberMatch = /^\/api\/admin\/users\/([0-9a-f-]{36})\/groups$/.exec(path);
+      if (memberMatch && req.method === "PUT") {
+        if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
+        const { groupIds } = await readJson(req);
+        if (!Array.isArray(groupIds) || groupIds.length > 20 ||
+            groupIds.some((id) => typeof id !== "string" || !uuidPattern.test(id)))
+          return send(res, 400, { error: "Valid group IDs required" });
+        const ids = [...new Set(groupIds)];
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          const target = await client.query("SELECT id,role FROM users WHERE id=$1 FOR UPDATE", [memberMatch[1]]);
+          if (!target.rowCount) {
+            await client.query("ROLLBACK");
+            return send(res, 404, { error: "User unavailable" });
+          }
+          const found = await client.query("SELECT id FROM user_groups WHERE id=ANY($1::uuid[])", [ids]);
+          if (found.rowCount !== ids.length) {
+            await client.query("ROLLBACK");
+            return send(res, 400, { error: "Unknown group" });
+          }
+          await client.query("DELETE FROM user_group_members WHERE user_id=$1", [memberMatch[1]]);
+          for (const id of ids)
+            await client.query("INSERT INTO user_group_members(user_id,group_id) VALUES($1,$2)", [memberMatch[1],id]);
+          await client.query("COMMIT");
+          meetingSignaling.recheckUser(memberMatch[1],
+            await featuresFor(target.rows[0]));
+          return send(res, 200, { groupIds:ids });
+        } catch (error) {
+          await client.query("ROLLBACK");
+          throw error;
+        } finally { client.release(); }
       }
       if (path === "/api/admin/config" && req.method === "POST") {
         if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
