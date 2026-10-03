@@ -82,3 +82,12 @@ CREATE TABLE IF NOT EXISTS did_quotes (
   created_at timestamptz NOT NULL DEFAULT now(),
   CHECK (status IN ('quote','pending_payment','expired','fulfilled'))
 );
+CREATE TABLE IF NOT EXISTS meeting_rooms (
+  id uuid PRIMARY KEY,
+  host_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title text NOT NULL,
+  locked boolean NOT NULL DEFAULT false,
+  ended_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS meeting_rooms_host_idx ON meeting_rooms(host_id, created_at);
