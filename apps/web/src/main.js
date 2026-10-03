@@ -1,5 +1,6 @@
 import { SimpleUser } from "sip.js/lib/platform/web";
 import { checkCurrentLocation } from "./geofence.js";
+import { setupMeetings } from "./meetings.js";
 import "./style.css";
 
 const root = document.querySelector("#app");
@@ -64,6 +65,34 @@ root.innerHTML = `
     </form>
     <ul id="ports"></ul><p id="billing-status" role="status"></p>
   </section>
+  <section id="meetings" hidden>
+    <h2>Meetings</h2>
+    <p>Small browser video rooms for up to four signed-in participants.</p>
+    <form id="meeting-create">
+      <label>Meeting title <input name="title" maxlength="100" required></label>
+      <button>Create meeting</button>
+    </form>
+    <label>Meeting ID <input id="meeting-id" placeholder="Paste a meeting ID"></label>
+    <button id="meeting-join" type="button">Join meeting</button>
+    <div id="meeting-live" hidden>
+      <h3 id="meeting-title"></h3>
+      <div id="meeting-videos" class="meeting-videos"></div>
+      <button id="meeting-mic" type="button">Mute</button>
+      <button id="meeting-camera" type="button">Camera off</button>
+      <button id="meeting-share" type="button">Share screen</button>
+      <button id="meeting-leave" type="button">Leave</button>
+      <div id="host-controls" hidden>
+        <button id="lock-room" type="button">Lock room</button>
+        <button id="end-room" type="button">End meeting for all</button>
+      </div>
+      <h3>Room chat</h3><ul id="meeting-chat"></ul>
+      <form id="meeting-chat-form">
+        <label>Message <input name="text" maxlength="2000" required></label>
+        <button>Send</button>
+      </form>
+    </div>
+    <p id="meeting-status" role="status"></p>
+  </section>
   <section id="admin" hidden>
     <h2>Administrator</h2>
     <p id="admin-overview"></p>
@@ -117,6 +146,7 @@ root.innerHTML = `
 const $ = (selector) => document.querySelector(selector);
 const connectForm = $("#connect");
 const dialForm = $("#dial");
+const meetings = setupMeetings();
 let phone;
 let onCall = false;
 let onHold = false;
@@ -173,6 +203,7 @@ function signedIn(user) {
   $("#account-status").textContent = `Signed in as ${user.name}`;
   $("#chat").hidden = false;
   $("#billing").hidden = false;
+  meetings.show();
   refreshBilling().catch((error) => { $("#billing-status").textContent = error.message; });
   loadContacts().catch((error) => { $("#chat-status").textContent = error.message; });
   $("#admin").hidden = user.role !== "admin";
@@ -325,6 +356,7 @@ $("#logout").onclick = async () => {
     $("#logout").hidden = true;
     $("#chat").hidden = true;
     $("#billing").hidden = true;
+    meetings.hide();
     $("#admin").hidden = true;
     $("#message-list").replaceChildren();
     $("#account-status").textContent = "Signed out";
