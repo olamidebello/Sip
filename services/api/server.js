@@ -1,7 +1,7 @@
 import http from "node:http";
 import fs from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { Pool } from "pg";
+import { createDatabase } from "./db.js";
 import { markupCents } from "./billing.js";
 import { availableNumbers } from "./providers.js";
 import { attachMeetingSignaling } from "./meetings.js";
@@ -14,8 +14,7 @@ const origin = process.env.PUBLIC_ORIGIN || "http://127.0.0.1:5173";
 const local = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
 if (!local && !origin.startsWith("https://"))
   throw new Error("PUBLIC_ORIGIN must use HTTPS outside local development");
-if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required");
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = createDatabase(process.env.MYSQL_URL);
 const maxBodyBytes = 8192;
 const attempts = new Map();
 const uuidPattern = /^[0-9a-f-]{36}$/i;
@@ -105,7 +104,7 @@ async function handler(req, res) {
           [id]
         );
       } catch (error) {
-        if (error.code === "23505") return send(res, 409, { error: "Account already exists" });
+        if (error.code === "ER_DUP_ENTRY") return send(res, 409, { error: "Account already exists" });
         throw error;
       }
       return send(res, 201, { id, name, email });
@@ -124,7 +123,7 @@ async function handler(req, res) {
         return send(res, 401, { error: "Invalid credentials" });
       const token = createSessionToken();
       await pool.query(
-        "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1,$2,now() + interval '7 days')",
+        "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1,$2,DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 7 DAY))",
         [tokenHash(token), user.id]
       );
       return send(res, 200, { id: user.id, name: user.display_name, email: user.email,
@@ -145,7 +144,7 @@ async function handler(req, res) {
         { "Set-Cookie": sessionCookie("", 0) });
     }
     if (path === "/api/config" && req.method === "GET") {
-      const result = await pool.query("SELECT value FROM app_settings WHERE key='sip_wss_url'");
+      const result = await pool.query("SELECT value FROM app_settings WHERE setting_key='sip_wss_url'");
       return send(res, 200, { sipWssUrl: result.rows[0]?.value || "" });
     }
     if (path === "/api/plans" && req.method === "GET") {
@@ -225,7 +224,7 @@ async function handler(req, res) {
         if (!contact || contact.id === user.id)
           return send(res, 404, { error: "Contact not found" });
         await pool.query(
-          "INSERT INTO contacts(owner_id, contact_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+          "INSERT IGNORE INTO contacts(owner_id, contact_id) VALUES ($1,$2)",
           [user.id, contact.id]
         );
         return send(res, 201, { id: contact.id });
@@ -253,11 +252,13 @@ async function handler(req, res) {
           "SELECT 1 FROM contacts WHERE owner_id=$1 AND contact_id=$2", [user.id, recipient]
         );
         if (!allowed.rowCount) return send(res, 403, { error: "Add contact first" });
-        const result = await pool.query(
-          "INSERT INTO messages(id,sender_id,recipient_id,body) VALUES($1,$2,$3,$4) RETURNING id,created_at",
-          [randomUUID(), user.id, recipient, body.trim()]
+        const id = randomUUID();
+        await pool.query(
+          "INSERT INTO messages(id,sender_id,recipient_id,body) VALUES($1,$2,$3,$4)",
+          [id, user.id, recipient, body.trim()]
         );
-        return send(res, 201, { ...result.rows[0] });
+        const result = await pool.query("SELECT id,created_at FROM messages WHERE id=$1", [id]);
+        return send(res, 201, result.rows[0]);
       }
       if (path === "/api/billing/invoices" && req.method === "GET") {
         const result = await pool.query(
@@ -295,8 +296,8 @@ async function handler(req, res) {
             [user.id]
           );
           await client.query(
-            "INSERT INTO subscriptions(user_id,plan_id) VALUES($1,$2) ON CONFLICT(user_id) DO UPDATE SET plan_id=excluded.plan_id,status='pending_payment'",
-            [user.id, planId]
+            "INSERT INTO subscriptions(user_id,plan_id) VALUES($1,$2) ON DUPLICATE KEY UPDATE plan_id=$3,status='pending_payment'",
+            [user.id, planId, planId]
           );
           const invoiceId = randomUUID();
           await client.query(
@@ -314,7 +315,7 @@ async function handler(req, res) {
         const provider = new URL(req.url, origin).searchParams.get("provider");
         if (!["flowroute","didww"].includes(provider))
           return send(res, 400, { error: "Select Flowroute or DIDWW" });
-        const result = await pool.query("SELECT value FROM app_settings WHERE key='did_markup_bps'");
+        const result = await pool.query("SELECT value FROM app_settings WHERE setting_key='did_markup_bps'");
         const markupBps = Number(result.rows[0]?.value ?? 3000);
         try {
           const numbers = await availableNumbers(provider);
@@ -340,11 +341,12 @@ async function handler(req, res) {
         if (typeof number !== "string" || !/^\+[1-9]\d{7,14}$/.test(number) ||
             !["flowroute","didww"].includes(provider))
           return send(res, 400, { error: "Enter E.164 number and provider" });
-        const result = await pool.query(
-          "INSERT INTO port_requests(id,user_id,number_e164,provider) VALUES($1,$2,$3,$4) RETURNING id,status",
-          [randomUUID(),user.id,number,provider]
+        const id = randomUUID();
+        await pool.query(
+          "INSERT INTO port_requests(id,user_id,number_e164,provider) VALUES($1,$2,$3,$4)",
+          [id,user.id,number,provider]
         );
-        return send(res, 201, result.rows[0]);
+        return send(res, 201, { id,status:"draft" });
       }
       if (path === "/api/admin/plans" && req.method === "POST") {
         if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
@@ -366,22 +368,22 @@ async function handler(req, res) {
         if (!Number.isInteger(percent) || percent < 0 || percent > 1000)
           return send(res, 400, { error: "Markup must be a whole percent from 0 to 1000" });
         await pool.query(
-          "INSERT INTO app_settings(key,value) VALUES('did_markup_bps',$1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-          [String(percent * 100)]
+          "INSERT INTO app_settings(setting_key,value) VALUES('did_markup_bps',$1) ON DUPLICATE KEY UPDATE value=$2",
+          [String(percent * 100),String(percent * 100)]
         );
         return send(res, 200, { percent });
       }
       if (path === "/api/admin/overview" && req.method === "GET") {
         if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
         const result = await pool.query(
-          "SELECT (SELECT count(*)::int FROM users) AS users, (SELECT count(*)::int FROM messages) AS messages, (SELECT count(*)::int FROM sessions WHERE expires_at>now()) AS active_sessions"
+          "SELECT (SELECT COUNT(*) FROM users) AS users, (SELECT COUNT(*) FROM messages) AS messages, (SELECT COUNT(*) FROM sessions WHERE expires_at>UTC_TIMESTAMP(3)) AS active_sessions"
         );
         return send(res, 200, result.rows[0]);
       }
       if (path === "/api/admin/groups" && req.method === "GET") {
         if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
         const result = await pool.query(
-          "SELECT g.id,g.name,g.features,count(m.user_id)::int AS members FROM user_groups g LEFT JOIN user_group_members m ON m.group_id=g.id GROUP BY g.id ORDER BY g.name LIMIT 200"
+          "SELECT g.id,g.name,g.features,(SELECT COUNT(*) FROM user_group_members m WHERE m.group_id=g.id) AS members FROM user_groups g ORDER BY g.name LIMIT 200"
         );
         return send(res, 200, { groups:result.rows });
       }
@@ -394,13 +396,14 @@ async function handler(req, res) {
         try { safe = validateFeatures(features); }
         catch { return send(res, 400, { error: "Invalid group features" }); }
         try {
-          const result = await pool.query(
-            "INSERT INTO user_groups(id,name,features) VALUES($1,$2,$3) RETURNING id,name,features",
-            [randomUUID(),name.trim(),JSON.stringify(safe)]
+          const id = randomUUID();
+          await pool.query(
+            "INSERT INTO user_groups(id,name,features) VALUES($1,$2,$3)",
+            [id,name.trim(),JSON.stringify(safe)]
           );
-          return send(res, 201, result.rows[0]);
+          return send(res, 201, { id,name:name.trim(),features:safe });
         } catch (error) {
-          if (error.code === "23505") return send(res, 409, { error: "Group already exists" });
+          if (error.code === "ER_DUP_ENTRY") return send(res, 409, { error: "Group already exists" });
           throw error;
         }
       }
@@ -412,11 +415,14 @@ async function handler(req, res) {
         let safe;
         try { safe = validateFeatures(features); }
         catch { return send(res, 400, { error: "Invalid group features" }); }
-        const result = await pool.query(
-          "UPDATE user_groups SET features=$1 WHERE id=$2 RETURNING id,name,features",
+        await pool.query(
+          "UPDATE user_groups SET features=$1 WHERE id=$2",
           [JSON.stringify(safe),groupMatch[1]]
         );
-        if (result.rowCount) {
+        const updated = await pool.query(
+          "SELECT id,name,features FROM user_groups WHERE id=$1", [groupMatch[1]]
+        );
+        if (updated.rowCount) {
           const members = await pool.query(
             "SELECT u.id,u.role FROM user_group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=$1",
             [groupMatch[1]]
@@ -424,15 +430,19 @@ async function handler(req, res) {
           for (const member of members.rows)
             meetingSignaling.recheckUser(member.id, await featuresFor(member));
         }
-        return result.rowCount ? send(res, 200, result.rows[0])
+        return updated.rowCount ? send(res, 200, updated.rows[0])
           : send(res, 404, { error: "Group unavailable" });
       }
       if (path === "/api/admin/users" && req.method === "GET") {
         if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
         const result = await pool.query(
-          "SELECT u.id,u.display_name AS name,u.email,u.role,coalesce(array_agg(m.group_id) FILTER (WHERE m.group_id IS NOT NULL),'{}'::uuid[]) AS group_ids FROM users u LEFT JOIN user_group_members m ON m.user_id=u.id GROUP BY u.id ORDER BY u.created_at DESC LIMIT 200"
+          "SELECT id,display_name AS name,email,role FROM users ORDER BY created_at DESC LIMIT 200"
         );
-        return send(res, 200, { users:result.rows });
+        const membership = await pool.query("SELECT user_id,group_id FROM user_group_members");
+        return send(res, 200, { users:result.rows.map((row) => ({
+          ...row, group_ids:membership.rows.filter((item) => item.user_id === row.id)
+            .map((item) => item.group_id)
+        })) });
       }
       const memberMatch = /^\/api\/admin\/users\/([0-9a-f-]{36})\/groups$/.exec(path);
       if (memberMatch && req.method === "PUT") {
@@ -450,7 +460,9 @@ async function handler(req, res) {
             await client.query("ROLLBACK");
             return send(res, 404, { error: "User unavailable" });
           }
-          const found = await client.query("SELECT id FROM user_groups WHERE id=ANY($1::uuid[])", [ids]);
+          const found = ids.length
+            ? await client.query(`SELECT id FROM user_groups WHERE id IN (${ids.map((_, i) => "$" + (i + 1)).join(",")})`, ids)
+            : { rowCount:0 };
           if (found.rowCount !== ids.length) {
             await client.query("ROLLBACK");
             return send(res, 400, { error: "Unknown group" });
@@ -474,8 +486,8 @@ async function handler(req, res) {
             (sipWssUrl !== "" && (!sipWssUrl.startsWith("wss://") || !URL.canParse(sipWssUrl))))
           return send(res, 400, { error: "A wss:// URL is required" });
         await pool.query(
-          "INSERT INTO app_settings(key,value) VALUES('sip_wss_url',$1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-          [sipWssUrl]
+          "INSERT INTO app_settings(setting_key,value) VALUES('sip_wss_url',$1) ON DUPLICATE KEY UPDATE value=$2",
+          [sipWssUrl,sipWssUrl]
         );
         return send(res, 200, { sipWssUrl });
       }
@@ -493,7 +505,7 @@ async function handler(req, res) {
   }
 }
 
-await pool.query(await fs.readFile(new URL("./schema.sql", import.meta.url), "utf8"));
+await pool.initialize(await fs.readFile(new URL("./schema.sql", import.meta.url), "utf8"));
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
