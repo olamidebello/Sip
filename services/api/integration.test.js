@@ -73,6 +73,8 @@ test("registered users can create and join a room; host controls it", {
   assert.equal(hostMessages.find((m) => m.type === "chat")?.text, "hello");
   const db = createDatabase(process.env.TEST_MYSQL_URL);
   t.after(() => db.end());
+  const timezone = await db.query("SELECT @@session.time_zone AS timezone");
+  assert.equal(timezone.rows[0].timezone, "+00:00");
   await db.query("UPDATE users SET role='admin' WHERE id=$1", [hostLogin.body.id]);
   assert.equal((await post("/api/contacts",
     { email:"guest" + unique + "@example.com" }, hostCookie)).status, 201);
