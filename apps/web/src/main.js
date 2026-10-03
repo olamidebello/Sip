@@ -5,7 +5,7 @@ const root = document.querySelector("#app");
 root.innerHTML = `
   <header class="brand">
     <img src="/olamide-logo.jpg" alt="Olamide" width="1536" height="620">
-    <h1>Olamide SIP</h1>
+    <h1>Olamide</h1>
   </header>
   <p>Development browser dialer. Use a test account on a WSS and WebRTC enabled SIP server.</p>
   <form id="connect">
