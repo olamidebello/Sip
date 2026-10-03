@@ -46,6 +46,23 @@ Replace the example coordinates and radius with your permitted area. An enabled 
 
 **Browser location checks are not enforceable security controls.** A modified client or SIP app can bypass them. To restrict actual service usage, validate location or another trusted authorization signal in the provisioning and SIP routing infrastructure; consider that device location can be spoofed. Incoming calls and SIP registration are not restricted by this prototype.
 
+
+## Connected contacts, messages, and administration
+
+Once two users have registered, sign in and add another user's email as a contact. Select the contact to view the last 100 messages and send plain text messages. Messages are stored in PostgreSQL and retrieved through authenticated API routes. This is a basic server-hosted inbox: it has no push notifications, media attachments, calls through the messaging account, group chat, delivery receipts, or end-to-end encryption. A user can add any existing account by email; consent and blocking controls are still needed before public launch.
+
+An administrator can see counts for users, stored messages, and active sessions, and set the default WSS URL offered in the dialer. Administrator access is checked on the server. No account is made administrator automatically. After registering a trusted administrator account, a database operator may promote that specific account with:
+
+```sql
+UPDATE users SET role = 'admin' WHERE email = 'admin@example.com';
+```
+
+Use an account email you control and verify the affected row. The public WSS URL is a connection hint, not a SIP credential or provisioning system. Keep the API on a private interface behind the same-origin HTTPS reverse proxy for a real deployment; configure `PUBLIC_ORIGIN` to the exact browser origin.
+
+## Requested features still in development
+
+The following are not implemented: WhatsApp-level end-to-end encryption, rich media and group messaging; Zoiper-level multi-account and native OS calling integration; Cash App-like wallet, balance, transfers, cards, identity checks, and regulated payment processing; passkeys/biometrics, OTP, PIN, and device binding. Browsers generally do not expose a reliable device MAC address to web applications. Payment features require a licensed provider or a compliant banking integration, immutable transaction ledger, reconciliation, dispute and fraud workflows, and regulatory review before real money is accepted. Do not enter real payment credentials into this prototype.
+
 ## Deployment status
 
 The repository is on GitHub, but the account API, database, and SIP infrastructure have **not** been deployed to a public server. A production rollout needs HTTPS on the web/API origin, database backups and migrations, abuse protection across instances, password reset and email verification, monitored hosting, and secure SIP account provisioning. The current in-memory per-IP API rate limit is only a local safeguard.
