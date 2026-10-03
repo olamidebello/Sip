@@ -25,6 +25,31 @@ root.innerHTML = `
     <button id="logout" hidden>Sign out</button>
     <p id="account-status" role="status">Not signed in</p>
   </section>
+  <section id="chat" hidden>
+    <h2>Messages</h2>
+    <p>Account messages are stored on this server. They are not end-to-end encrypted.</p>
+    <form id="add-contact">
+      <label>Contact email <input name="email" type="email" required></label>
+      <button>Add contact</button>
+    </form>
+    <label>Conversation <select id="contact-list"></select></label>
+    <button id="load-messages" type="button">Refresh messages</button>
+    <ol id="message-list"></ol>
+    <form id="send-message">
+      <label>Message <input name="body" maxlength="4000" required></label>
+      <button>Send</button>
+    </form>
+    <p id="chat-status" role="status"></p>
+  </section>
+  <section id="admin" hidden>
+    <h2>Administrator</h2>
+    <p id="admin-overview"></p>
+    <form id="server-config">
+      <label>Default SIP secure WebSocket URL <input name="sipWssUrl" type="url" placeholder="wss://sip.example.com"></label>
+      <button>Save server URL</button>
+    </form>
+    <p id="admin-status" role="status"></p>
+  </section>
   <p>Development browser dialer. Use a test account on a WSS and WebRTC enabled SIP server.</p>
   <form id="connect">
     <label>SIP address <input name="aor" placeholder="sip:alice@example.com" required></label>
@@ -75,12 +100,92 @@ async function accountRequest(path, body) {
   if (!response.ok) throw new Error(data.error || "Account request failed");
   return data;
 }
+async function apiGet(path) {
+  const response = await fetch(path, { credentials: "same-origin" });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+async function loadContacts() {
+  const { contacts } = await apiGet("/api/contacts");
+  const list = $("#contact-list");
+  const selected = list.value;
+  list.replaceChildren();
+  for (const contact of contacts) {
+    const option = document.createElement("option");
+    option.value = contact.id;
+    option.textContent = `${contact.name} (${contact.email})`;
+    list.append(option);
+  }
+  if (contacts.some((contact) => contact.id === selected)) list.value = selected;
+  await loadMessages();
+}
+async function loadMessages() {
+  const contact = $("#contact-list").value;
+  const list = $("#message-list");
+  list.replaceChildren();
+  if (!contact) return;
+  const { messages } = await apiGet("/api/messages?contact=" + encodeURIComponent(contact));
+  for (const message of messages) {
+    const item = document.createElement("li");
+    item.textContent = `${new Date(message.created_at).toLocaleString()}: ${message.body}`;
+    list.append(item);
+  }
+}
 function signedIn(user) {
   $("#signup").hidden = true;
   $("#login").hidden = true;
   $("#logout").hidden = false;
   $("#account-status").textContent = `Signed in as ${user.name}`;
+  $("#chat").hidden = false;
+  loadContacts().catch((error) => { $("#chat-status").textContent = error.message; });
+  $("#admin").hidden = user.role !== "admin";
+  if (user.role === "admin") {
+    apiGet("/api/admin/overview")
+      .then((stats) => { $("#admin-overview").textContent =
+        `${stats.users} users, ${stats.messages} messages, ${stats.active_sessions} active sessions`; })
+      .catch((error) => { $("#admin-status").textContent = error.message; });
+  }
 }
+$("#add-contact").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await accountRequest("/api/contacts", Object.fromEntries(new FormData(event.currentTarget)));
+    event.currentTarget.reset();
+    await loadContacts();
+    $("#chat-status").textContent = "Contact added";
+  } catch (error) { $("#chat-status").textContent = error.message; }
+});
+$("#contact-list").onchange = () => loadMessages().catch((error) => {
+  $("#chat-status").textContent = error.message;
+});
+$("#load-messages").onclick = () => loadMessages().catch((error) => {
+  $("#chat-status").textContent = error.message;
+});
+$("#send-message").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await accountRequest("/api/messages", {
+      recipient: $("#contact-list").value,
+      body: new FormData(event.currentTarget).get("body")
+    });
+    event.currentTarget.reset();
+    await loadMessages();
+    $("#chat-status").textContent = "Message sent";
+  } catch (error) { $("#chat-status").textContent = error.message; }
+});
+$("#server-config").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const result = await accountRequest("/api/admin/config",
+      Object.fromEntries(new FormData(event.currentTarget)));
+    $("#connect [name=server]").value = result.sipWssUrl;
+    $("#admin-status").textContent = "Server URL saved";
+  } catch (error) { $("#admin-status").textContent = error.message; }
+});
+apiGet("/api/config").then(({ sipWssUrl }) => {
+  if (sipWssUrl) $("#connect [name=server]").value = sipWssUrl;
+}).catch(() => {});
 $("#signup").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -106,6 +211,9 @@ $("#logout").onclick = async () => {
     $("#signup").hidden = false;
     $("#login").hidden = false;
     $("#logout").hidden = true;
+    $("#chat").hidden = true;
+    $("#admin").hidden = true;
+    $("#message-list").replaceChildren();
     $("#account-status").textContent = "Signed out";
   } catch (error) { $("#account-status").textContent = error.message; }
 };
