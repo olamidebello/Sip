@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { markupCents } from "./billing.js";
 import { availableNumbers } from "./providers.js";
+import { attachMeetingSignaling } from "./meetings.js";
 import {
   validateRegistration, hashPassword, verifyPassword, createSessionToken, tokenHash
 } from "./security.js";
@@ -17,6 +18,9 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const maxBodyBytes = 8192;
 const attempts = new Map();
 const uuidPattern = /^[0-9a-f-]{36}$/i;
+const meetingIceServers = JSON.parse(process.env.MEETING_ICE_SERVERS_JSON || "[]");
+if (!Array.isArray(meetingIceServers)) throw new Error("MEETING_ICE_SERVERS_JSON must be an array");
+let meetingSignaling;
 
 function send(res, status, body, headers = {}) {
   res.writeHead(status, {
@@ -132,11 +136,53 @@ async function handler(req, res) {
       );
       return send(res, 200, { plans: result.rows });
     }
+    if (path === "/api/meetings/config" && req.method === "GET")
+      return send(res, 200, { iceServers: meetingIceServers, maxParticipants: 4 });
     if (path.startsWith("/api/contacts") || path.startsWith("/api/messages") ||
         path.startsWith("/api/admin/") || path.startsWith("/api/billing/") ||
-        path.startsWith("/api/numbers") || path.startsWith("/api/porting")) {
+        path.startsWith("/api/numbers") || path.startsWith("/api/porting") ||
+        path.startsWith("/api/meetings")) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if (path === "/api/meetings" && req.method === "POST") {
+        const { title } = await readJson(req);
+        if (typeof title !== "string" || !title.trim() || title.length > 100)
+          return send(res, 400, { error: "Meeting title required (max 100 characters)" });
+        const id = randomUUID();
+        await pool.query("INSERT INTO meeting_rooms(id,host_id,title) VALUES($1,$2,$3)",
+          [id,user.id,title.trim()]);
+        return send(res, 201, { id,title:title.trim(),hostId:user.id });
+      }
+      if (path === "/api/meetings" && req.method === "GET") {
+        const result = await pool.query(
+          "SELECT id,title,locked,created_at FROM meeting_rooms WHERE host_id=$1 AND ended_at IS NULL ORDER BY created_at DESC LIMIT 50",
+          [user.id]
+        );
+        return send(res, 200, { meetings: result.rows });
+      }
+      const meetingMatch = /^\/api\/meetings\/([0-9a-f-]{36})(?:\/(lock|end))?$/i.exec(path);
+      if (meetingMatch && uuidPattern.test(meetingMatch[1])) {
+        const id = meetingMatch[1];
+        const result = await pool.query(
+          "SELECT id,title,host_id,locked,ended_at FROM meeting_rooms WHERE id=$1", [id]
+        );
+        const room = result.rows[0];
+        if (!room || room.ended_at) return send(res, 404, { error: "Meeting unavailable" });
+        if (req.method === "GET" && !meetingMatch[2])
+          return send(res, 200, { id, title:room.title, hostId:room.host_id, locked:room.locked });
+        if (req.method === "POST" && room.host_id === user.id && meetingMatch[2] === "lock") {
+          const { locked } = await readJson(req);
+          if (typeof locked !== "boolean") return send(res, 400, { error: "Boolean locked required" });
+          await pool.query("UPDATE meeting_rooms SET locked=$1 WHERE id=$2", [locked,id]);
+          return send(res, 200, { locked });
+        }
+        if (req.method === "POST" && room.host_id === user.id && meetingMatch[2] === "end") {
+          await pool.query("UPDATE meeting_rooms SET ended_at=now() WHERE id=$1", [id]);
+          meetingSignaling.closeRoom(id);
+          return send(res, 200, { status: "ended" });
+        }
+        return send(res, 403, { error: "Host permission required" });
+      }
       if (path === "/api/contacts" && req.method === "GET") {
         const result = await pool.query(
           "SELECT u.id, u.display_name AS name, u.email FROM contacts c JOIN users u ON u.id=c.contact_id WHERE c.owner_id=$1 ORDER BY u.display_name LIMIT 200",
@@ -335,5 +381,7 @@ async function handler(req, res) {
 await pool.query(await fs.readFile(new URL("./schema.sql", import.meta.url), "utf8"));
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
-http.createServer(handler).listen(port, address, () =>
+const server = http.createServer(handler);
+meetingSignaling = attachMeetingSignaling(server, { pool, origin, currentUser });
+server.listen(port, address, () =>
   console.log(`Account API listening on ${address}:${port}`));
