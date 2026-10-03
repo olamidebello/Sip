@@ -1,0 +1,10 @@
+*{box-sizing:border-box}
+body{font:16px system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;background:#101827;color:#eef4ff}
+h1{color:#72d6eb}
+form,section{padding:1.2rem;margin:1rem 0;border:1px solid #42536c;border-radius:12px}
+label{display:block;margin:.8rem 0}
+input{display:block;width:100%;padding:.65rem;margin:.3rem 0;background:#202c40;color:white;border:1px solid #61738c;border-radius:6px}
+button{background:#10a6bd;color:#08151e;border:0;border-radius:6px;padding:.75rem 1rem;margin:.3rem;cursor:pointer;font-weight:700}
+button:focus-visible,input:focus-visible{outline:3px solid #f5c566}
+#status{min-height:2rem}
+[hidden]{display:none!important}
