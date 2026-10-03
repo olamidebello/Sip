@@ -74,6 +74,26 @@ test("registered users can create and join a room; host controls it", {
   const db = createDatabase(process.env.TEST_MYSQL_URL);
   t.after(() => db.end());
   await db.query("UPDATE users SET role='admin' WHERE id=$1", [hostLogin.body.id]);
+  assert.equal((await post("/api/contacts",
+    { email:"guest" + unique + "@example.com" }, hostCookie)).status, 201);
+  assert.equal((await post("/api/messages",
+    { recipient:guestLogin.body.id, body:"Hello from MySQL" }, hostCookie)).status, 201);
+  const thread = await fetch(base + "/api/messages?contact=" + guestLogin.body.id,
+    { headers:{ Cookie:hostCookie } });
+  assert.equal((await thread.json()).messages[0].body, "Hello from MySQL");
+  const plan = await post("/api/admin/plans",
+    { name:"Test plan " + unique, monthlyCents:1299 }, hostCookie);
+  assert.equal(plan.status, 201);
+  assert.equal((await post("/api/billing/select-plan",
+    { planId:plan.body.id }, guestCookie)).status, 201);
+  const invoices = await fetch(base + "/api/billing/invoices",
+    { headers:{ Cookie:guestCookie } });
+  assert.equal((await invoices.json()).invoices[0].amount_cents, 1299);
+  assert.equal((await post("/api/porting",
+    { number:"+12125550123", provider:"flowroute" }, guestCookie)).status, 201);
+  assert.equal((await post("/api/admin/markup", { percent:35 }, hostCookie)).status, 200);
+  assert.equal((await post("/api/admin/config",
+    { sipWssUrl:"wss://sip.example.com" }, hostCookie)).status, 200);
   const group = await post("/api/admin/groups", {
     name:"Support " + unique,
     features:{ meetings:true, remote_assist:true }
