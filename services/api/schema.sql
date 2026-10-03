@@ -1,113 +1,128 @@
 CREATE TABLE IF NOT EXISTS users (
-  id uuid PRIMARY KEY,
-  display_name text NOT NULL,
-  email text NOT NULL UNIQUE,
-  password_salt text NOT NULL,
-  password_hash text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-ALTER TABLE users ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'user';
+  id CHAR(36) PRIMARY KEY,
+  display_name VARCHAR(100) NOT NULL,
+  email VARCHAR(254) NOT NULL UNIQUE,
+  password_salt VARCHAR(64) NOT NULL,
+  password_hash VARCHAR(128) NOT NULL,
+  role VARCHAR(16) NOT NULL DEFAULT 'user',
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS sessions (
-  token_hash text PRIMARY KEY,
-  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  expires_at timestamptz NOT NULL
-);
-CREATE INDEX IF NOT EXISTS sessions_expires_at_idx ON sessions(expires_at);
+  token_hash CHAR(64) PRIMARY KEY,
+  user_id CHAR(36) NOT NULL,
+  expires_at DATETIME(3) NOT NULL,
+  CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX sessions_expires_at_idx (expires_at)
+) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS contacts (
-  owner_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  contact_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  created_at timestamptz NOT NULL DEFAULT now(),
+  owner_id CHAR(36) NOT NULL,
+  contact_id CHAR(36) NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (owner_id, contact_id),
-  CHECK (owner_id <> contact_id)
-);
+  CONSTRAINT fk_contacts_owner FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_contacts_contact FOREIGN KEY (contact_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT chk_contacts_distinct CHECK (owner_id <> contact_id)
+) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS messages (
-  id uuid PRIMARY KEY,
-  sender_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  recipient_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  body text NOT NULL CHECK (char_length(body) BETWEEN 1 AND 4000),
-  created_at timestamptz NOT NULL DEFAULT now(),
-  CHECK (sender_id <> recipient_id)
-);
-CREATE INDEX IF NOT EXISTS messages_thread_idx ON messages(sender_id, recipient_id, created_at);
-CREATE INDEX IF NOT EXISTS messages_inbox_idx ON messages(recipient_id, created_at);
+  id CHAR(36) PRIMARY KEY,
+  sender_id CHAR(36) NOT NULL,
+  recipient_id CHAR(36) NOT NULL,
+  body TEXT NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_messages_sender FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_messages_recipient FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT chk_messages_distinct CHECK (sender_id <> recipient_id),
+  CONSTRAINT chk_messages_body CHECK (CHAR_LENGTH(body) BETWEEN 1 AND 4000),
+  INDEX messages_thread_idx (sender_id, recipient_id, created_at),
+  INDEX messages_inbox_idx (recipient_id, created_at)
+) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS app_settings (
-  key text PRIMARY KEY,
-  value text NOT NULL
-);
+  setting_key VARCHAR(64) PRIMARY KEY,
+  value TEXT NOT NULL
+) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS plans (
-  id uuid PRIMARY KEY,
-  name text NOT NULL,
-  monthly_cents integer NOT NULL CHECK (monthly_cents >= 0),
-  description text NOT NULL DEFAULT '',
-  active boolean NOT NULL DEFAULT true
-);
+  id CHAR(36) PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  monthly_cents INT NOT NULL,
+  description VARCHAR(1000) NOT NULL DEFAULT '',
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  CONSTRAINT chk_plans_price CHECK (monthly_cents >= 0)
+) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS subscriptions (
-  user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  plan_id uuid NOT NULL REFERENCES plans(id),
-  status text NOT NULL DEFAULT 'pending_payment',
-  created_at timestamptz NOT NULL DEFAULT now(),
-  CHECK (status IN ('pending_payment','active','cancelled'))
-);
+  user_id CHAR(36) PRIMARY KEY,
+  plan_id CHAR(36) NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'pending_payment',
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_subscriptions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_subscriptions_plan FOREIGN KEY (plan_id) REFERENCES plans(id),
+  CONSTRAINT chk_subscription_status CHECK (status IN ('pending_payment','active','cancelled'))
+) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS invoices (
-  id uuid PRIMARY KEY,
-  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  description text NOT NULL,
-  amount_cents integer NOT NULL CHECK (amount_cents >= 0),
-  currency char(3) NOT NULL DEFAULT 'USD',
-  status text NOT NULL DEFAULT 'unpaid',
-  created_at timestamptz NOT NULL DEFAULT now(),
-  CHECK (status IN ('unpaid','paid','void'))
-);
-CREATE INDEX IF NOT EXISTS invoices_user_idx ON invoices(user_id, created_at);
+  id CHAR(36) PRIMARY KEY,
+  user_id CHAR(36) NOT NULL,
+  description VARCHAR(1000) NOT NULL,
+  amount_cents INT NOT NULL,
+  currency CHAR(3) NOT NULL DEFAULT 'USD',
+  status VARCHAR(16) NOT NULL DEFAULT 'unpaid',
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_invoices_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT chk_invoices_amount CHECK (amount_cents >= 0),
+  CONSTRAINT chk_invoices_status CHECK (status IN ('unpaid','paid','void')),
+  INDEX invoices_user_idx (user_id, created_at)
+) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS port_requests (
-  id uuid PRIMARY KEY,
-  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  number_e164 text NOT NULL,
-  provider text NOT NULL,
-  status text NOT NULL DEFAULT 'draft',
-  created_at timestamptz NOT NULL DEFAULT now(),
-  CHECK (status IN ('draft','reviewing','submitted','completed','rejected'))
-);
+  id CHAR(36) PRIMARY KEY,
+  user_id CHAR(36) NOT NULL,
+  number_e164 VARCHAR(16) NOT NULL,
+  provider VARCHAR(32) NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'draft',
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_port_requests_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT chk_port_status CHECK (status IN ('draft','reviewing','submitted','completed','rejected')),
+  INDEX port_requests_user_idx (user_id, created_at)
+) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS did_quotes (
-  id uuid PRIMARY KEY,
-  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  provider text NOT NULL,
-  number_e164 text NOT NULL,
-  provider_monthly_cents integer NOT NULL,
-  provider_setup_cents integer NOT NULL,
-  monthly_cents integer NOT NULL,
-  setup_cents integer NOT NULL,
-  markup_bps integer NOT NULL,
-  status text NOT NULL DEFAULT 'quote',
-  created_at timestamptz NOT NULL DEFAULT now(),
-  CHECK (status IN ('quote','pending_payment','expired','fulfilled'))
-);
+  id CHAR(36) PRIMARY KEY,
+  user_id CHAR(36) NOT NULL,
+  provider VARCHAR(32) NOT NULL,
+  number_e164 VARCHAR(16) NOT NULL,
+  provider_monthly_cents INT NOT NULL,
+  provider_setup_cents INT NOT NULL,
+  monthly_cents INT NOT NULL,
+  setup_cents INT NOT NULL,
+  markup_bps INT NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'quote',
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_did_quotes_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT chk_did_quotes_status CHECK (status IN ('quote','pending_payment','expired','fulfilled'))
+) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS meeting_rooms (
-  id uuid PRIMARY KEY,
-  host_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  title text NOT NULL,
-  locked boolean NOT NULL DEFAULT false,
-  ended_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS meeting_rooms_host_idx ON meeting_rooms(host_id, created_at);
+  id CHAR(36) PRIMARY KEY,
+  host_id CHAR(36) NOT NULL,
+  title VARCHAR(100) NOT NULL,
+  locked BOOLEAN NOT NULL DEFAULT FALSE,
+  ended_at DATETIME(3) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_meeting_rooms_host FOREIGN KEY (host_id) REFERENCES users(id) ON DELETE CASCADE,
+  INDEX meeting_rooms_host_idx (host_id, created_at)
+) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS user_groups (
-  id uuid PRIMARY KEY,
-  name text NOT NULL UNIQUE,
-  features jsonb NOT NULL DEFAULT '{}'::jsonb,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
+  id CHAR(36) PRIMARY KEY,
+  name VARCHAR(80) NOT NULL UNIQUE,
+  features JSON NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS user_group_members (
-  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  group_id uuid NOT NULL REFERENCES user_groups(id) ON DELETE CASCADE,
-  PRIMARY KEY (user_id, group_id)
-);
-INSERT INTO user_groups (id,name,features)
+  user_id CHAR(36) NOT NULL,
+  group_id CHAR(36) NOT NULL,
+  PRIMARY KEY (user_id, group_id),
+  CONSTRAINT fk_user_group_members_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_user_group_members_group FOREIGN KEY (group_id) REFERENCES user_groups(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+INSERT IGNORE INTO user_groups (id,name,features)
 VALUES ('00000000-0000-4000-8000-000000000001','Standard',
-  '{"meetings":true,"screen_share":true,"remote_assist":false,"messaging":true,"billing":true}')
-ON CONFLICT (id) DO NOTHING;
-INSERT INTO user_group_members(user_id,group_id)
-SELECT u.id,'00000000-0000-4000-8000-000000000001'::uuid FROM users u
-WHERE NOT EXISTS (SELECT 1 FROM app_settings WHERE key='groups_backfilled')
-ON CONFLICT DO NOTHING;
-INSERT INTO app_settings(key,value) VALUES('groups_backfilled','true') ON CONFLICT DO NOTHING;
+  '{"meetings":true,"screen_share":true,"remote_assist":false,"messaging":true,"billing":true}');
+INSERT IGNORE INTO user_group_members(user_id,group_id)
+SELECT u.id,'00000000-0000-4000-8000-000000000001' FROM users u
+WHERE NOT EXISTS (SELECT 1 FROM app_settings WHERE setting_key='groups_backfilled');
+INSERT IGNORE INTO app_settings(setting_key,value) VALUES('groups_backfilled','true');
