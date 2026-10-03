@@ -164,7 +164,8 @@ async function handler(req, res) {
         return send(res, 403, { error: "Meetings unavailable for your groups" });
       if (path.startsWith("/api/messages") || path.startsWith("/api/contacts"))
         if (!user.features.messaging) return send(res, 403, { error: "Messaging unavailable for your groups" });
-      if (path.startsWith("/api/billing/") && !user.features.billing)
+      if ((path.startsWith("/api/billing/") || path.startsWith("/api/numbers") ||
+           path.startsWith("/api/porting")) && !user.features.billing)
         return send(res, 403, { error: "Billing unavailable for your groups" });
       if (path === "/api/meetings/config" && req.method === "GET")
         return send(res, 200, { iceServers: meetingIceServers, maxParticipants: 4,
