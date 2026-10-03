@@ -18,6 +18,9 @@ export function createDatabase(url) {
     connectionLimit: 10,
     multipleStatements: false
   });
+  pool.on("connection", (connection) => {
+    connection.query("SET time_zone = '+00:00'");
+  });
   function wrap(connection) {
     return {
       async query(sql, params = []) {
