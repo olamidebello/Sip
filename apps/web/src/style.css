@@ -10,3 +10,7 @@ button{background:#10a6bd;color:#08151e;border:0;border-radius:6px;padding:.75re
 button:focus-visible,input:focus-visible{outline:3px solid #f5c566}
 #status{min-height:2rem}
 [hidden]{display:none!important}
+.meeting-videos{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.75rem}
+.meeting-videos>div{min-width:0;border:1px solid #42536c;border-radius:8px;padding:.5rem}
+.meeting-videos video{width:100%;min-height:140px;background:#111}
+select{padding:.65rem;background:#202c40;color:white;border:1px solid #61738c;border-radius:6px}
