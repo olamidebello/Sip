@@ -1,6 +1,7 @@
 import { SimpleUser } from "sip.js/lib/platform/web";
 import { checkCurrentLocation } from "./geofence.js";
 import { setupMeetings } from "./meetings.js";
+import { setupGroupAdmin } from "./groups.js";
 import "./style.css";
 
 const root = document.querySelector("#app");
@@ -80,6 +81,9 @@ root.innerHTML = `
       <button id="meeting-mic" type="button">Mute</button>
       <button id="meeting-camera" type="button">Camera off</button>
       <button id="meeting-share" type="button">Share screen</button>
+      <p id="share-notice">Screen sharing is visible to all meeting participants. Pointer assistance needs your approval and does not control your computer.</p>
+      <div id="assist-requests" aria-live="polite"></div>
+      <div id="assist-grants"></div>
       <button id="meeting-leave" type="button">Leave</button>
       <div id="host-controls" hidden>
         <button id="lock-room" type="button">Lock room</button>
@@ -112,6 +116,21 @@ root.innerHTML = `
       <label>DID markup percentage <input name="percent" type="number" min="0" max="1000" step="1" value="30" required></label>
       <button>Save markup</button>
     </form>
+    <section id="group-admin">
+      <h3>User groups and feature access</h3>
+      <form id="group-create">
+        <label>New group name <input name="name" minlength="2" maxlength="80" required></label>
+        <div id="group-new-features"></div>
+        <button>Create group</button>
+      </form>
+      <label>Group to edit <select id="group-list"></select></label>
+      <div id="group-edit-features"></div>
+      <button id="group-update" type="button">Save group permissions</button>
+      <label>User <select id="group-user"></select></label>
+      <div id="group-memberships"></div>
+      <button id="group-assign" type="button">Save user's groups</button>
+      <p id="group-status" role="status"></p>
+    </section>
   </section>
   <p>Development browser dialer. Use a test account on a WSS and WebRTC enabled SIP server.</p>
   <form id="connect">
@@ -147,6 +166,7 @@ const $ = (selector) => document.querySelector(selector);
 const connectForm = $("#connect");
 const dialForm = $("#dial");
 const meetings = setupMeetings();
+const groupAdmin = setupGroupAdmin();
 let phone;
 let onCall = false;
 let onHold = false;
@@ -201,13 +221,17 @@ function signedIn(user) {
   $("#login").hidden = true;
   $("#logout").hidden = false;
   $("#account-status").textContent = `Signed in as ${user.name}`;
-  $("#chat").hidden = false;
-  $("#billing").hidden = false;
-  meetings.show();
-  refreshBilling().catch((error) => { $("#billing-status").textContent = error.message; });
-  loadContacts().catch((error) => { $("#chat-status").textContent = error.message; });
+  $("#chat").hidden = !user.features?.messaging;
+  $("#billing").hidden = !user.features?.billing;
+  if (user.features?.meetings) meetings.show();
+  else meetings.hide();
+  if (user.features?.billing)
+    refreshBilling().catch((error) => { $("#billing-status").textContent = error.message; });
+  if (user.features?.messaging)
+    loadContacts().catch((error) => { $("#chat-status").textContent = error.message; });
   $("#admin").hidden = user.role !== "admin";
   if (user.role === "admin") {
+    groupAdmin.refresh().catch((error) => { $("#group-status").textContent = error.message; });
     apiGet("/api/admin/overview")
       .then((stats) => { $("#admin-overview").textContent =
         `${stats.users} users, ${stats.messages} messages, ${stats.active_sessions} active sessions`; })
