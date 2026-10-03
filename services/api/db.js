@@ -26,7 +26,9 @@ export function createDatabase(url) {
           ordered.push(params[Number(index) - 1]);
           return "?";
         });
-        const [data] = await connection.execute(statement, ordered);
+        const [data] = ordered.length
+          ? await connection.execute(statement, ordered)
+          : await connection.query(statement);
         return { rows: Array.isArray(data) ? data : [],
           rowCount: Array.isArray(data) ? data.length : data.affectedRows };
       },
