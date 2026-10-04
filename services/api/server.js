@@ -161,7 +161,7 @@ async function handler(req, res) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
       if (path.startsWith("/api/admin/mobile/"))
-        return handleMobileAdmin({ req,res,path,user,pool,send,readJson });
+        return await handleMobileAdmin({ req,res,path,user,pool,send,readJson });
       if (path.startsWith("/api/meetings") && !user.features.meetings)
         return send(res, 403, { error: "Meetings unavailable for your groups" });
       if (path.startsWith("/api/messages") || path.startsWith("/api/contacts"))
@@ -501,7 +501,8 @@ async function handler(req, res) {
         error.message === "Request too large" || error.message === "Invalid JSON object" ||
         error.message?.startsWith("Name must") ||
         error.message?.startsWith("Enter a valid") ||
-        error.message?.startsWith("Password must"))
+        error.message?.startsWith("Password must") ||
+        error.message?.startsWith("Valid platform") || error.message?.startsWith("Valid version"))
       return send(res, 400, { error: error.message });
     console.error("API request failed", error.code || error.name);
     return send(res, 500, { error: "Internal server error" });
