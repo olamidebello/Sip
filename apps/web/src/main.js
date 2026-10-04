@@ -57,7 +57,7 @@ root.innerHTML = `
     <label>Provider <select id="number-provider">
       <option value="inhouse">In-house</option><option value="flowroute">Flowroute</option><option value="didww">DIDWW</option>
     </select></label>
-    <label>Number prefix (optional) <input id="number-prefix" placeholder="+1203"></label>
+    <label>Number prefix (optional) <input id="number-prefix" placeholder="+23420315"></label>
     <button id="search-numbers" type="button">Search numbers</button>
     <ul id="numbers"></ul>
     <h3>My number requests</h3><ul id="my-numbers"></ul>
@@ -114,10 +114,24 @@ root.innerHTML = `
     <p id="admin-status" role="status"></p>
     <section id="inhouse-admin">
       <h3>In-house DID management</h3>
-      <p>The requested 203150–203154 blocks are held for format review and are not for sale.</p>
+      <p>NCC lists these five Nigerian +234 Ilorin blocks under Smooth Multi-Service Platform Limited. Import candidate inventory, then publish only verified unused numbers. No live switch provisioning is connected.</p>
       <ul id="inhouse-blocks"></ul>
+      <form id="inhouse-block-import">
+        <label>Block <select name="prefix"><option>203150</option><option>203151</option><option>203152</option><option>203153</option><option>203154</option></select></label>
+        <label>Setup price in cents <input name="setupCents" type="number" min="0" required></label>
+        <label>Monthly price in cents <input name="monthlyCents" type="number" min="0" required></label>
+        <button>Import 10,000 candidates</button>
+      </form>
+      <form id="inhouse-range-publish">
+        <label>Block <select name="prefix"><option>203150</option><option>203151</option><option>203152</option><option>203153</option><option>203154</option></select></label>
+        <label>First verified suffix <input name="startSuffix" type="number" min="0" max="9999" required></label>
+        <label>Last verified suffix <input name="endSuffix" type="number" min="0" max="9999" required></label>
+        <label>Unused number verification reference <input name="inventoryReference" maxlength="255" required></label>
+        <label><input name="confirmed" type="checkbox" required> I verified this range is unused and available to offer</label>
+        <button>Publish verified range</button>
+      </form>
       <form id="inhouse-import">
-        <label>Verified E.164 number <input name="number" placeholder="+12035550123" required></label>
+        <label>Verified E.164 number <input name="number" placeholder="+2342031500000" required></label>
         <label>Setup price in USD cents <input name="setupCents" type="number" min="0" required></label>
         <label>Monthly price in USD cents <input name="monthlyCents" type="number" min="0" required></label>
         <label>Numbering rights reference <input name="evidenceReference" maxlength="255" required></label>
@@ -477,7 +491,7 @@ async function refreshInhouse() {
   ]);
   $("#inhouse-blocks").replaceChildren(...blocks.blocks.map((block) => {
     const item=document.createElement("li");
-    item.textContent = `${block.prefix_digits}XXXX — ${block.requested_count.toLocaleString()} proposed, ${block.status}. ${block.note}`;
+    item.textContent = `+234${block.prefix_digits}XXXX — ${block.requested_count.toLocaleString()} candidates, ${block.status}. ${block.note}`;
     return item;
   }));
   const list=$("#inhouse-admin-numbers");list.replaceChildren();
@@ -541,6 +555,27 @@ $("#nigeria-preview").onsubmit=async(event)=>{
   } catch(error) {$("#nigeria-status").textContent=error.message;}
 };
 async function fetchInhouseAction(path,body) {return accountRequest(path,body);}
+$("#inhouse-block-import").onsubmit=async(event) => {
+  event.preventDefault();
+  try {
+    const form=event.currentTarget,data=Object.fromEntries(new FormData(form));
+    const result=await accountRequest(`/api/admin/inhouse/blocks/${data.prefix}/import`,{
+      setupCents:Number(data.setupCents),monthlyCents:Number(data.monthlyCents)});
+    await refreshInhouse();
+    $("#inhouse-status").textContent=`${result.imported} Nigerian numbers staged for verification.`;
+  } catch(error) {$("#inhouse-status").textContent=error.message;}
+};
+$("#inhouse-range-publish").onsubmit=async(event) => {
+  event.preventDefault();
+  try {
+    const form=event.currentTarget,data=Object.fromEntries(new FormData(form));
+    const result=await accountRequest(`/api/admin/inhouse/blocks/${data.prefix}/publish-range`,{
+      startSuffix:Number(data.startSuffix),endSuffix:Number(data.endSuffix),
+      inventoryReference:data.inventoryReference,confirmed:data.confirmed==="on"});
+    await refreshInhouse();
+    $("#inhouse-status").textContent=`${result.published} verified numbers published for reservation; no SIP provisioning.`;
+  } catch(error) {$("#inhouse-status").textContent=error.message;}
+};
 $("#inhouse-import").onsubmit=async(event) => {
   event.preventDefault();
   try {
