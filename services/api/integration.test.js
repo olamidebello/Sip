@@ -160,4 +160,34 @@ test("registered users can create and join a room; host controls it", {
   assert.equal((await post(`/api/meetings/${id}/end`, {}, hostCookie)).status, 200);
   const unavailable = await fetch(base + "/api/meetings/" + id, { headers:{ Cookie:guestCookie } });
   assert.equal(unavailable.status, 403);
+  await db.query("UPDATE users SET role='super_admin' WHERE id=$1",[hostLogin.body.id]);
+  const tenant = await post("/api/admin/tenants",{
+    name:"Isolated " + unique,slug:"isolated-" + unique.replace(/[^a-z0-9]/gi,"").toLowerCase()
+  },hostCookie);
+  assert.equal(tenant.status,201,JSON.stringify(tenant.body) + " " + log);
+  const otherEmail = "other" + unique + "@example.com";
+  const tenantUser = await post("/api/admin/tenant-users",{
+    tenantId:tenant.body.id,name:"Other admin",email:otherEmail,password,role:"admin"
+  },hostCookie);
+  assert.equal(tenantUser.status,201,JSON.stringify(tenantUser.body));
+  const otherLogin = await post("/api/login",{email:otherEmail,password});
+  const otherCookie = otherLogin.cookie.split(";")[0];
+  assert.equal(otherLogin.body.tenantId,tenant.body.id);
+  assert.equal((await post("/api/contacts",{email:"guest" + unique + "@example.com"},otherCookie)).status,404);
+  assert.equal((await post("/api/admin/tenants",{name:"Denied",slug:"denied-tenant"},otherCookie)).status,403);
+  assert.equal((await put(`/api/admin/groups/${group.body.id}`,{features:{messaging:true}})).status,200);
+  const crossGroup = await fetch(base + "/api/admin/groups",{headers:{Cookie:otherCookie}});
+  assert.equal((await crossGroup.json()).groups.some((g) => g.id === group.body.id),false);
+  const crossMeeting = await fetch(base + "/api/meetings/" + id,{headers:{Cookie:otherCookie}});
+  assert.equal(crossMeeting.status,404);
+  const crossApps = await fetch(base + "/api/admin/mobile/apps",{headers:{Cookie:otherCookie}});
+  assert.equal((await crossApps.json()).apps.some((a) => a.id === mobileApp.body.id),false);
+  const suspend = await fetch(base + `/api/admin/tenants/${tenant.body.id}/status`,{
+    method:"PUT",headers:{Origin:origin,Cookie:hostCookie,"Content-Type":"application/json"},
+    body:JSON.stringify({status:"suspended"})
+  });
+  assert.equal(suspend.status,200);
+  const suspended = await fetch(base + "/api/me",{headers:{Cookie:otherCookie}});
+  assert.equal(suspended.status,401);
+
 });
