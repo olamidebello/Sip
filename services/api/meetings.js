@@ -15,7 +15,7 @@ export function attachMeetingSignaling(server, { pool, origin, currentUser }) {
       const user = await currentUser(req);
       if (!user?.features.meetings) throw new Error("Meetings unavailable");
       const result = await pool.query(
-        "SELECT host_id,locked,ended_at FROM meeting_rooms WHERE id=$1", [match[1]]
+        "SELECT host_id,locked,ended_at FROM meeting_rooms WHERE id=$1 AND tenant_id=$2", [match[1],user.tenant_id]
       );
       const room = result.rows[0];
       if (!room || room.ended_at) throw new Error("Meeting unavailable");
@@ -25,6 +25,7 @@ export function attachMeetingSignaling(server, { pool, origin, currentUser }) {
       wss.handleUpgrade(req, socket, head, (ws) => {
         ws.roomId = match[1];
         ws.userId = user.id;
+        ws.tenantId = user.tenant_id;
         ws.name = user.display_name;
         ws.hostId = room.host_id;
         ws.features = user.features;
@@ -154,6 +155,11 @@ export function attachMeetingSignaling(server, { pool, origin, currentUser }) {
           }
         }
       }
+    },
+    closeTenant(tenantId) {
+      for (const peers of roomSockets.values())
+        for (const ws of peers.values())
+          if (ws.tenantId === tenantId) ws.close(1008, "Tenant suspended");
     },
     closeRoom(id) {
       for (const ws of roomSockets.get(id)?.values() || [])
