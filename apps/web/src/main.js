@@ -55,10 +55,12 @@ root.innerHTML = `
     <h3>Invoices</h3><ul id="invoices"></ul>
     <h3>Available numbers</h3>
     <label>Provider <select id="number-provider">
-      <option value="flowroute">Flowroute</option><option value="didww">DIDWW</option>
+      <option value="inhouse">In-house</option><option value="flowroute">Flowroute</option><option value="didww">DIDWW</option>
     </select></label>
+    <label>Number prefix (optional) <input id="number-prefix" placeholder="+1203"></label>
     <button id="search-numbers" type="button">Search numbers</button>
     <ul id="numbers"></ul>
+    <h3>My number requests</h3><ul id="my-numbers"></ul>
     <h3>Port a number</h3>
     <p>This creates a draft request for review; it does not submit a carrier port.</p>
     <form id="port-form">
@@ -68,6 +70,8 @@ root.innerHTML = `
       <button>Create draft</button>
     </form>
     <ul id="ports"></ul><p id="billing-status" role="status"></p>
+    <h3>Nigeria identity verification</h3>
+    <p id="nin-status">Checking NINAuth availability…</p>
   </section>
   <section id="meetings" hidden>
     <h2>Meetings</h2>
@@ -108,6 +112,40 @@ root.innerHTML = `
       <button>Save server URL</button>
     </form>
     <p id="admin-status" role="status"></p>
+    <section id="inhouse-admin">
+      <h3>In-house DID management</h3>
+      <p>The requested 203150–203154 blocks are held for format review and are not for sale.</p>
+      <ul id="inhouse-blocks"></ul>
+      <form id="inhouse-import">
+        <label>Verified E.164 number <input name="number" placeholder="+12035550123" required></label>
+        <label>Setup price in USD cents <input name="setupCents" type="number" min="0" required></label>
+        <label>Monthly price in USD cents <input name="monthlyCents" type="number" min="0" required></label>
+        <label>Numbering rights reference <input name="evidenceReference" maxlength="255" required></label>
+        <button>Stage number</button>
+      </form>
+      <ul id="inhouse-admin-numbers"></ul>
+      <p id="inhouse-status" role="status"></p>
+    </section>
+    <section id="nigeria-admin">
+      <h3>Nigeria interconnect plans</h3>
+      <p>Save the authorized clearinghouse or local operator handoff. No live SIP route is created.</p>
+      <form id="nigeria-peer-form">
+        <label>Operator name <input name="name" required maxlength="100"></label>
+        <label>Peer type <select name="peerType"><option value="clearinghouse">Clearinghouse</option><option value="operator">Local operator</option></select></label>
+        <label>Signaling host <input name="host" placeholder="peer.operator.example" required></label>
+        <label>Port <input name="port" type="number" min="1" max="65535" value="5061" required></label>
+        <label>Transport <select name="transport"><option value="tls">TLS</option><option value="tcp">TCP</option><option value="udp">UDP</option></select></label>
+        <label>+234 destination digits prefix <input name="destinationPrefix" pattern="234[0-9]{0,12}" value="234" required></label>
+        <label>Agreement reference <input name="agreementReference" maxlength="255" required></label>
+        <button>Save handoff plan</button>
+      </form>
+      <ul id="nigeria-peers"></ul>
+      <form id="nigeria-preview">
+        <label>Preview Nigerian number <input name="number" placeholder="+2348012345678" required></label>
+        <button>Preview planned peer</button>
+      </form>
+      <p id="nigeria-status" role="status"></p>
+    </section>
     <section id="cdr-admin">
       <h3>Imported call records</h3>
       <p>Verified switch records only. These are unrated and never charge a customer.</p>
@@ -433,6 +471,87 @@ async function refreshCdr() {
   }
   $("#cdr-status").textContent = `${records.length} recent records; no charges applied.`;
 }
+async function refreshInhouse() {
+  const [blocks,inventory] = await Promise.all([
+    apiGet("/api/admin/inhouse/blocks"),apiGet("/api/admin/inhouse/numbers")
+  ]);
+  $("#inhouse-blocks").replaceChildren(...blocks.blocks.map((block) => {
+    const item=document.createElement("li");
+    item.textContent = `${block.prefix_digits}XXXX — ${block.requested_count.toLocaleString()} proposed, ${block.status}. ${block.note}`;
+    return item;
+  }));
+  const list=$("#inhouse-admin-numbers");list.replaceChildren();
+  for (const did of inventory.numbers) {
+    const item=document.createElement("li");
+    item.append(document.createTextNode(`${did.number_e164} — ${did.status} — `));
+    if (did.status==="unverified") {
+      const publish=document.createElement("button"); publish.textContent="Confirm rights and publish";
+      publish.onclick=async () => {
+        try {
+          await fetchInhouseAction(`/api/admin/inhouse/numbers/${did.id}/publish`,{confirmed:true});
+          await refreshInhouse();
+        } catch(error) {$("#inhouse-status").textContent=error.message;}
+      };
+      item.append(publish);
+    }
+    if (did.status==="available") {
+      const disable=document.createElement("button");disable.textContent="Disable";
+      disable.onclick=async () => {
+        try {await fetchInhouseAction(`/api/admin/inhouse/numbers/${did.id}/disable`,{});await refreshInhouse();}
+        catch(error) {$("#inhouse-status").textContent=error.message;}
+      };
+      item.append(disable);
+    }
+    if (did.status==="reserved") {
+      const release=document.createElement("button");release.textContent="Release after expiry";
+      release.onclick=async () => {
+        try {await fetchInhouseAction(`/api/admin/inhouse/numbers/${did.id}/release`,{});await refreshInhouse();}
+        catch(error) {$("#inhouse-status").textContent=error.message;}
+      };
+      item.append(release);
+    }
+    list.append(item);
+  }
+}
+async function refreshNigeria() {
+  const {peers}=await apiGet("/api/admin/nigeria/peers");
+  $("#nigeria-peers").replaceChildren(...peers.map((peer)=>{
+    const item=document.createElement("li");
+    item.textContent=`${peer.name} (${peer.peer_type}): ${peer.host}:${peer.port}/${peer.transport}, prefix ${peer.destination_prefix} — ${peer.status}`;
+    return item;
+  }));
+}
+$("#nigeria-peer-form").onsubmit=async(event)=>{
+  event.preventDefault();
+  try {
+    const form=event.currentTarget,data=Object.fromEntries(new FormData(form));
+    await accountRequest("/api/admin/nigeria/peers",{...data,port:Number(data.port)});
+    form.reset();await refreshNigeria();
+    $("#nigeria-status").textContent="Handoff saved as a plan; no traffic routed.";
+  } catch(error) {$("#nigeria-status").textContent=error.message;}
+};
+$("#nigeria-preview").onsubmit=async(event)=>{
+  event.preventDefault();
+  try {
+    const number=event.currentTarget.elements.number.value;
+    const {peer}=await apiGet("/api/admin/nigeria/preview?number="+encodeURIComponent(number));
+    $("#nigeria-status").textContent=peer ?
+      `Preview: ${peer.name} for prefix ${peer.destination_prefix}; no call placed.` :
+      "No matching planned Nigerian peer.";
+  } catch(error) {$("#nigeria-status").textContent=error.message;}
+};
+async function fetchInhouseAction(path,body) {return accountRequest(path,body);}
+$("#inhouse-import").onsubmit=async(event) => {
+  event.preventDefault();
+  try {
+    const form=event.currentTarget;
+    const data=Object.fromEntries(new FormData(form));
+    await accountRequest("/api/admin/inhouse/numbers",{...data,
+      setupCents:Number(data.setupCents),monthlyCents:Number(data.monthlyCents)});
+    form.reset();await refreshInhouse();
+    $("#inhouse-status").textContent="Number staged for rights review.";
+  } catch(error) {$("#inhouse-status").textContent=error.message;}
+};
 $("#refresh-cdr").onclick = () => refreshCdr().catch((error) => { $("#cdr-status").textContent = error.message; });
 async function loadContacts() {
   const { contacts } = await apiGet("/api/contacts");
@@ -470,13 +589,19 @@ function signedIn(user) {
   if (user.features?.meetings) meetings.show();
   else meetings.hide();
   if (user.features?.billing)
-    refreshBilling().catch((error) => { $("#billing-status").textContent = error.message; });
+    Promise.all([refreshBilling(),refreshMyNumbers()])
+      .catch((error) => { $("#billing-status").textContent = error.message; });
+  apiGet("/api/nigeria/nin/status")
+    .then((result)=>{$("#nin-status").textContent=result.note;})
+    .catch((error)=>{$("#nin-status").textContent=error.message;});
   if (user.features?.messaging)
     loadContacts().catch((error) => { $("#chat-status").textContent = error.message; });
   $("#agent-panel").hidden = !user.features?.call_center;
   pbx.refreshSelf(user).catch((error) => { $("#agent-status-result").textContent = error.message; });
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
   if (["admin","super_admin"].includes(user.role)) {
+    refreshInhouse().catch((error) => { $("#inhouse-status").textContent = error.message; });
+    refreshNigeria().catch((error) => { $("#nigeria-status").textContent = error.message; });
     refreshCdr().catch((error) => { $("#cdr-status").textContent = error.message; });
     pbx.refreshAdmin().catch((error) => { $("#pbx-status").textContent = error.message; });
     tenantAdmin.refresh(user).catch((error) => { $("#tenant-status").textContent = error.message; });
@@ -519,6 +644,14 @@ async function refreshBilling() {
     return li;
   }));
 }
+async function refreshMyNumbers() {
+  const {numbers}=await apiGet("/api/inhouse/my-numbers");
+  $("#my-numbers").replaceChildren(...numbers.map((did) => {
+    const item=document.createElement("li");
+    item.textContent=`${did.number_e164}: ${did.status}; invoice ${did.invoice_status || "none"}; no SIP route provisioned`;
+    return item;
+  }));
+}
 loadPlans().catch(() => {});
 $("#select-plan").onclick = async () => {
   try {
@@ -529,13 +662,31 @@ $("#select-plan").onclick = async () => {
 };
 $("#search-numbers").onclick = async () => {
   try {
-    const data = await apiGet("/api/numbers?provider=" + $("#number-provider").value);
+    const inhouse=$("#number-provider").value==="inhouse";
+    const data = await apiGet(inhouse ?
+      "/api/inhouse/numbers?q="+encodeURIComponent($("#number-prefix").value.trim()) :
+      "/api/numbers?provider=" + $("#number-provider").value);
     $("#numbers").replaceChildren(...data.numbers.map((number) => {
       const li = document.createElement("li");
       li.textContent = `${number.number}: ${money(number.setupCents)} setup, ${money(number.monthlyCents)}/month`;
+      if (inhouse) {
+        li.textContent=`${number.number_e164}: ${money(number.setup_cents)} setup, ${money(number.monthly_cents)}/month — `;
+        const request=document.createElement("button");request.type="button";request.textContent="Request number";
+        request.onclick=async () => {
+          try {
+            await accountRequest("/api/inhouse/reserve",{number:number.number_e164});
+            await Promise.all([refreshMyNumbers(),refreshBilling()]);
+            $("#search-numbers").click();
+            $("#billing-status").textContent="Reserved for 24 hours; invoice unpaid. No SIP service provisioned.";
+          } catch(error) {$("#billing-status").textContent=error.message;}
+        };
+        li.append(request);
+      }
       return li;
     }));
-    $("#billing-status").textContent = `Live provider inventory with ${data.markupPercent}% markup. Purchasing is unavailable.`;
+    $("#billing-status").textContent = inhouse ?
+      "In-house requests create unpaid invoices and 24-hour reservations; no live SIP provisioning." :
+      `Live provider inventory with ${data.markupPercent}% markup. Purchasing is unavailable.`;
   } catch (error) { $("#billing-status").textContent = error.message; }
 };
 $("#port-form").addEventListener("submit", async (event) => {

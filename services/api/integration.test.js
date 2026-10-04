@@ -80,6 +80,42 @@ test("registered users can create and join a room; host controls it", {
   const timezone = await db.query("SELECT @@session.time_zone AS timezone");
   assert.equal(timezone.rows[0].timezone, "+00:00");
   await db.query("UPDATE users SET role='admin' WHERE id=$1", [hostLogin.body.id]);
+  assert.equal((await post("/api/admin/inhouse/numbers",{
+    number:"+12031500000",setupCents:500,monthlyCents:200,
+    evidenceReference:"test"
+  },hostCookie)).status,400);
+  const didNumber="+1203250"+String(Math.floor(Math.random()*10000)).padStart(4,"0");
+  const staged=await post("/api/admin/inhouse/numbers",{
+    number:didNumber,setupCents:500,monthlyCents:200,
+    evidenceReference:"Integration test only; no real assignment"
+  },hostCookie);
+  assert.equal(staged.status,201,JSON.stringify(staged.body));
+  const unverified=await fetch(base+"/api/inhouse/numbers",{headers:{Cookie:guestCookie}});
+  assert.equal((await unverified.json()).numbers.some((did)=>did.number_e164===didNumber),false);
+  assert.equal((await post(`/api/admin/inhouse/numbers/${staged.body.id}/publish`,
+    {confirmed:true},hostCookie)).status,200);
+  const reserved=await post("/api/inhouse/reserve",{number:didNumber},guestCookie);
+  assert.equal(reserved.status,201,JSON.stringify(reserved.body));
+  assert.equal(reserved.body.provisioned,false);
+  assert.equal((await post("/api/inhouse/reserve",{number:didNumber},hostCookie)).status,409);
+  const myDids=await fetch(base+"/api/inhouse/my-numbers",{headers:{Cookie:guestCookie}});
+  assert.equal((await myDids.json()).numbers.some((did)=>did.number_e164===didNumber),true);
+  const heldBlocks=await fetch(base+"/api/admin/inhouse/blocks",{headers:{Cookie:hostCookie}});
+  assert.equal((await heldBlocks.json()).blocks.length,5);
+  const ninStatus=await fetch(base+"/api/nigeria/nin/status",{headers:{Cookie:guestCookie}});
+  assert.equal((await ninStatus.json()).verified,false);
+  assert.equal((await post("/api/admin/nigeria/peers",{
+    name:"Test peer "+unique,peerType:"clearinghouse",host:"peer.example",
+    port:5061,transport:"tls",destinationPrefix:"234",agreementReference:"Test only"
+  },guestCookie)).status,403);
+  const peer=await post("/api/admin/nigeria/peers",{
+    name:"Test peer "+unique,peerType:"clearinghouse",host:"peer.example",
+    port:5061,transport:"tls",destinationPrefix:"234",agreementReference:"Test only"
+  },hostCookie);
+  assert.equal(peer.status,201,JSON.stringify(peer.body));
+  const preview=await fetch(base+"/api/admin/nigeria/preview?number=%2B2348012345678",
+    {headers:{Cookie:hostCookie}});
+  assert.equal((await preview.json()).peer.id,peer.body.id);
   const cdr = {tenantId:cdrTenant,source:"integration-switch",legId:unique,
     direction:"outbound",from:"+12125550123",to:"+12125550124",
     disposition:"answered",durationSeconds:60,billableSeconds:55,

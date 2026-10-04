@@ -5,6 +5,8 @@ import { createDatabase } from "./db.js";
 import { handleMobileAdmin } from "./mobileAdmin.js";
 import { handlePbx } from "./pbx.js";
 import { handleCdrIngest, handleCdrAdmin } from "./cdr.js";
+import { handleInhouseDids } from "./dids.js";
+import { handleNigeria } from "./nigeria.js";
 import { migrateTenancy, handleTenants, isAdmin, defaultTenantId } from "./tenancy.js";
 import { markupCents } from "./billing.js";
 import { availableNumbers } from "./providers.js";
@@ -169,6 +171,8 @@ async function handler(req, res) {
     if (path.startsWith("/api/contacts") || path.startsWith("/api/messages") ||
         path.startsWith("/api/admin/") || path.startsWith("/api/billing/") ||
         path.startsWith("/api/numbers") || path.startsWith("/api/porting") ||
+        path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
+        path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
         path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") ||
         path === "/api/admin/cdr") {
       const user = await currentUser(req);
@@ -177,6 +181,10 @@ async function handler(req, res) {
         return await handlePbx({req,res,path,user,pool,send,readJson});
       if (path === "/api/admin/cdr" && req.method === "GET")
         return await handleCdrAdmin({req,res,user,pool,send});
+      if (path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/"))
+        return await handleInhouseDids({req,res,path,user,pool,send,readJson});
+      if (path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/"))
+        return await handleNigeria({req,res,path,user,pool,send,readJson});
       if (path.startsWith("/api/admin/tenants") || path === "/api/admin/tenant-users")
         return await handleTenants({req,res,path,user,pool,readJson,send,meetingSignaling,sessionHash:tokenHash(currentToken(req))});
       if (path.startsWith("/api/admin/mobile/"))
@@ -532,6 +540,8 @@ await pool.initialize(await fs.readFile(new URL("./schema.sql", import.meta.url)
 await migrateTenancy(pool);
 await pool.initialize(await fs.readFile(new URL("./pbx-schema.sql", import.meta.url), "utf8"));
 await pool.initialize(await fs.readFile(new URL("./cdr-schema.sql", import.meta.url), "utf8"));
+await pool.initialize(await fs.readFile(new URL("./dids-schema.sql", import.meta.url), "utf8"));
+await pool.initialize(await fs.readFile(new URL("./nigeria-schema.sql", import.meta.url), "utf8"));
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);

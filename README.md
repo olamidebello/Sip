@@ -22,7 +22,7 @@ MYSQL_URL='mysql://USER:PASSWORD@127.0.0.1:3306/olamide' \
 PUBLIC_ORIGIN='http://127.0.0.1:5173' npm start
 ```
 
-The API reapplies the idempotent base tables, tenant migration, `pbx-schema.sql`, and `cdr-schema.sql` on startup. On a remote MySQL connection, configure `MYSQL_SSL_CA` with the path to a trusted CA certificate. In production, run schema changes through a controlled migration process and remove the application's DDL privileges. Back up the database regularly.
+The API reapplies the idempotent base tables, tenant migration, `pbx-schema.sql`, `cdr-schema.sql`, `dids-schema.sql`, and `nigeria-schema.sql` on startup. On a remote MySQL connection, configure `MYSQL_SSL_CA` with the path to a trusted CA certificate. In production, run schema changes through a controlled migration process and remove the application's DDL privileges. Back up the database regularly.
 
 This is a **new MySQL schema**. It does not import records from an earlier PostgreSQL database. If you have a populated PostgreSQL deployment, export, transform, and verify those records separately before switching traffic.
 
@@ -74,6 +74,18 @@ This repository contains a browser SIP dialer, a MySQL-backed account API, and a
 | Carrier routing | Planned trunks, prefix rate deck, tenant call barring with longest-prefix allow exceptions, longest-prefix least-cost preview; authenticated normalized call-record intake | Carrier credentials, switch enforcement, fraud controls, live CDR source and reconciliation |
 | Billing | Monthly plan drafts and unpaid invoices, DID markup quotes | Payment gateway, taxes, prepaid balance enforcement, rated CDR settlement |
 | Deployment | Debian bootstrap, TLS web/API stack, validated Git pull, backups before updates, OS security updates | Public DNS record, SSH/console access, carrier and SIP services |
+
+### In-house DID inventory and the five proposed blocks
+
+The five requested patterns `203150XXXX`, `203151XXXX`, `203152XXXX`, `203153XXXX`, and `203154XXXX` are stored as **proposed blocks**, 10,000 candidates each, under the original tenant. They are not expanded into 50,000 saleable records. The country code and numbering rights have not been supplied. If the intended country is the United States, `+1 203 150-154 XXXX` is invalid under the North American Numbering Plan: the three-digit exchange must begin with 2–9. Supply the country code, exact valid range, carrier/numbering authorization, and route details before publishing inventory. Do not represent a pattern as an assigned or reachable number solely because it has 10,000 possible suffixes.
+
+An administrator can stage a **valid individual E.164 number** with USD setup and monthly prices and a numbering-rights reference in **Administrator → In-house DID management**. Staged numbers are invisible to buyers. After independently checking the rights and reachability, the administrator can confirm and publish one. The server rejects invalid `+1` exchanges, duplicate numbers across tenants, and cross-tenant actions. Customers search published inventory and request a number. A MySQL transaction locks the number, creates an unpaid setup invoice, and reserves it for 24 hours; a second request for the same number fails. An administrator can release an expired reservation, voiding its unpaid invoice. This is **a reservation and invoice request, not a completed purchase**. Monthly fees are displayed but not charged. No payment confirmation, recurring billing, switch provision, inbound route activation, or carrier order is automated. Use the provider's assigned-number feed and switch provisioning acknowledgements before enabling fulfillment.
+
+### Nigeria operator interconnect and NINAuth
+
+The **Nigeria interconnect plans** admin panel stores a tenant-scoped clearinghouse or local-operator name, signaling host, port, transport, `234` destination prefix, and interconnect agreement reference. The preview picks the longest matching planned prefix for a `+234` number. It does not connect to a peer or route media. Obtain the exact point of interconnect, trunk authentication, IP allowlist, codec plan, routing authorization, fraud limits, CDR settlement specification, and commissioning test results from the licensed operator/clearinghouse before configuring a live switch. This application does not install a Nigerian gateway.
+
+The **Nigeria identity verification** panel reports NINAuth as disconnected. It does not ask for, store, or claim to verify a NIN. NIMC's NINAuth enterprise integration requires registration and an approved verification relationship, exact redirect URI, user consent, PKCE, backend token exchange, and validation of the result. Obtain the approved enterprise/partner configuration and test access, then implement and security-review that exact provider flow; do not substitute a local NIN format check for identity verification. Do not put NINs, client secrets, access tokens, or profile data in GitHub, browser storage, or application logs.
 
 ### Browser calling tools
 
