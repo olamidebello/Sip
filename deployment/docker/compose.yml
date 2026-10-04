@@ -32,6 +32,7 @@ services:
       DIDWW_API_KEY: ${DIDWW_API_KEY:-}
       DIDWW_ACCOUNT_CURRENCY: ${DIDWW_ACCOUNT_CURRENCY:-}
       CDR_INGEST_KEYS_JSON: ${CDR_INGEST_KEYS_JSON:-}
+      LDAP_TENANTS_JSON: ${LDAP_TENANTS_JSON:-}
     depends_on:
       mysql:
         condition: service_healthy
