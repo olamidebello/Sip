@@ -105,7 +105,7 @@ export async function handleMobileAdmin({ req, res, path, user, pool, send, read
         const found = await db.query("SELECT r.*,a.platform FROM mobile_releases r JOIN mobile_apps a ON a.id=r.app_id WHERE r.id=$1 FOR UPDATE",[id]);
         const row = found.rows[0];
         if (!row) { await db.query("ROLLBACK"); return send(res,404,{ error:"Release not found" }); }
-        if (row.revision !== body.revision) { await db.query("ROLLBACK"); return send(res,409,{ error:"Release changed; refresh before editing" }); }
+        if (Number(row.revision) !== body.revision) { await db.query("ROLLBACK"); return send(res,409,{ error:"Release changed; refresh before editing" }); }
         const allowed = req.method === "PUT" ? row.status === "draft" :
           action === "approve" ? row.status === "draft" :
           action === "reopen" ? row.status === "approved" : row.status !== "archived";
@@ -121,7 +121,7 @@ export async function handleMobileAdmin({ req, res, path, user, pool, send, read
             [status,action === "approve" ? user.id : null,action === "approve" ? new Date() : null,id]);
         }
         await db.query("INSERT INTO mobile_release_events(id,release_id,actor_id,action,revision) VALUES($1,$2,$3,$4,$5)",
-          [randomUUID(),id,req.method === "PUT" ? "edited" : action,body.revision+1]);
+          [randomUUID(),id,user.id,req.method === "PUT" ? "edited" : action,body.revision+1]);
         await db.query("COMMIT");
         return send(res,200,{ id,status,revision:body.revision+1 });
       } catch (error) {
