@@ -67,7 +67,7 @@ async function currentUser(req) {
   const token = currentToken(req);
   if (!token) return null;
   const result = await pool.query(
-    "SELECT u.id, u.display_name, u.email, u.role, u.tenant_id FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=u.tenant_id AND t.status='active' WHERE s.token_hash=$1 AND s.expires_at>now()",
+    "SELECT u.id,u.display_name,u.email,u.role, CASE WHEN u.role='super_admin' AND selected.id IS NOT NULL THEN selected.id ELSE u.tenant_id END AS tenant_id FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenants selected ON selected.id=s.selected_tenant_id AND selected.status='active' WHERE s.token_hash=$1 AND s.expires_at>now()",
     [tokenHash(token)]
   );
   const user = result.rows[0];
@@ -164,7 +164,7 @@ async function handler(req, res) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
       if (path.startsWith("/api/admin/tenants") || path === "/api/admin/tenant-users")
-        return await handleTenants({req,res,path,user,pool,readJson,send,meetingSignaling});
+        return await handleTenants({req,res,path,user,pool,readJson,send,meetingSignaling,sessionHash:tokenHash(currentToken(req))});
       if (path.startsWith("/api/admin/mobile/"))
         return await handleMobileAdmin({ req,res,path,user,pool,send,readJson });
       if (path.startsWith("/api/meetings") && !user.features.meetings)
