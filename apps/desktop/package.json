@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "description": "Olamide hosted softphone desktop client",
+  "homepage": "https://sip.dobhrap.com",
+  "author": "Olamide",
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
