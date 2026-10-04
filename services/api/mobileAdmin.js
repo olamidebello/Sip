@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isAdmin } from "./tenancy.js";
 
 const idPattern = /^[0-9a-f-]{36}$/i;
 const identifierPattern = /^[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z][A-Za-z0-9_-]*)+$/;
@@ -35,23 +36,23 @@ export function validateRelease(body, platform) {
 }
 
 export async function handleMobileAdmin({ req, res, path, user, pool, send, readJson }) {
-  if (user.role !== "admin") return send(res, 403, { error:"Administrator permission required" });
+  if (!isAdmin(user)) return send(res, 403, { error:"Administrator permission required" });
   if (path === "/api/admin/mobile/overview" && req.method === "GET") {
-    const apps = await pool.query("SELECT platform,COUNT(*) AS count FROM mobile_apps GROUP BY platform");
-    const releases = await pool.query("SELECT status,COUNT(*) AS count FROM mobile_releases GROUP BY status");
+    const apps = await pool.query("SELECT platform,COUNT(*) AS count FROM mobile_apps WHERE tenant_id=$1 GROUP BY platform",[user.tenant_id]);
+    const releases = await pool.query("SELECT r.status,COUNT(*) AS count FROM mobile_releases r JOIN mobile_apps a ON a.id=r.app_id WHERE a.tenant_id=$1 GROUP BY r.status",[user.tenant_id]);
     return send(res, 200, { apps:apps.rows, releases:releases.rows,
       storePublishingAvailable:false, message:"Store uploads require signed native builds and store credentials; approval here is internal only." });
   }
   if (path === "/api/admin/mobile/apps" && req.method === "GET") {
-    const result = await pool.query("SELECT * FROM mobile_apps ORDER BY created_at DESC LIMIT 200");
+    const result = await pool.query("SELECT * FROM mobile_apps WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200",[user.tenant_id]);
     return send(res, 200, { apps:result.rows });
   }
   if (path === "/api/admin/mobile/apps" && req.method === "POST") {
     const app = validateApp(await readJson(req));
     const id = randomUUID();
     try {
-      await pool.query("INSERT INTO mobile_apps(id,platform,app_identifier,display_name,store_app_id,created_by) VALUES($1,$2,$3,$4,$5,$6)",
-        [id,app.platform,app.appIdentifier,app.displayName,app.storeAppId,user.id]);
+      await pool.query("INSERT INTO mobile_apps(id,tenant_id,platform,app_identifier,display_name,store_app_id,created_by) VALUES($1,$2,$3,$4,$5,$6,$7)",
+        [id,user.tenant_id,app.platform,app.appIdentifier,app.displayName,app.storeAppId,user.id]);
     } catch (error) {
       if (error.code === "ER_DUP_ENTRY") return send(res,409,{ error:"App identifier already exists" });
       throw error;
@@ -62,14 +63,14 @@ export async function handleMobileAdmin({ req, res, path, user, pool, send, read
     const appId = new URL(req.url,"http://localhost").searchParams.get("appId");
     if (appId && !idPattern.test(appId)) return send(res,400,{ error:"Invalid app ID" });
     const result = appId
-      ? await pool.query("SELECT r.*,a.platform,a.display_name FROM mobile_releases r JOIN mobile_apps a ON a.id=r.app_id WHERE r.app_id=$1 ORDER BY r.created_at DESC LIMIT 200",[appId])
-      : await pool.query("SELECT r.*,a.platform,a.display_name FROM mobile_releases r JOIN mobile_apps a ON a.id=r.app_id ORDER BY r.created_at DESC LIMIT 200");
+      ? await pool.query("SELECT r.*,a.platform,a.display_name FROM mobile_releases r JOIN mobile_apps a ON a.id=r.app_id WHERE r.app_id=$1 AND a.tenant_id=$2 ORDER BY r.created_at DESC LIMIT 200",[appId,user.tenant_id])
+      : await pool.query("SELECT r.*,a.platform,a.display_name FROM mobile_releases r JOIN mobile_apps a ON a.id=r.app_id WHERE a.tenant_id=$1 ORDER BY r.created_at DESC LIMIT 200",[user.tenant_id]);
     return send(res,200,{ releases:result.rows });
   }
   if (path === "/api/admin/mobile/releases" && req.method === "POST") {
     const body = await readJson(req);
     if (!idPattern.test(body.appId || "")) return send(res,400,{ error:"Invalid app ID" });
-    const app = (await pool.query("SELECT platform FROM mobile_apps WHERE id=$1",[body.appId])).rows[0];
+    const app = (await pool.query("SELECT platform FROM mobile_apps WHERE id=$1 AND tenant_id=$2",[body.appId,user.tenant_id])).rows[0];
     if (!app) return send(res,404,{ error:"App not found" });
     const release = validateRelease(body,app.platform);
     const id = randomUUID();
@@ -91,7 +92,7 @@ export async function handleMobileAdmin({ req, res, path, user, pool, send, read
   if (match && idPattern.test(match[1])) {
     const [,id,action] = match;
     if (action === "events" && req.method === "GET") {
-      const exists = await pool.query("SELECT id FROM mobile_releases WHERE id=$1",[id]);
+      const exists = await pool.query("SELECT r.id FROM mobile_releases r JOIN mobile_apps a ON a.id=r.app_id WHERE r.id=$1 AND a.tenant_id=$2",[id,user.tenant_id]);
       if (!exists.rowCount) return send(res,404,{ error:"Release not found" });
       const events = await pool.query("SELECT e.action,e.revision,e.created_at,u.display_name AS actor FROM mobile_release_events e JOIN users u ON u.id=e.actor_id WHERE e.release_id=$1 ORDER BY e.created_at,e.id",[id]);
       return send(res,200,{ events:events.rows });
@@ -102,7 +103,7 @@ export async function handleMobileAdmin({ req, res, path, user, pool, send, read
       const db = await pool.connect();
       try {
         await db.query("BEGIN");
-        const found = await db.query("SELECT r.*,a.platform FROM mobile_releases r JOIN mobile_apps a ON a.id=r.app_id WHERE r.id=$1 FOR UPDATE",[id]);
+        const found = await db.query("SELECT r.*,a.platform FROM mobile_releases r JOIN mobile_apps a ON a.id=r.app_id WHERE r.id=$1 AND a.tenant_id=$2 FOR UPDATE",[id,user.tenant_id]);
         const row = found.rows[0];
         if (!row) { await db.query("ROLLBACK"); return send(res,404,{ error:"Release not found" }); }
         if (Number(row.revision) !== body.revision) { await db.query("ROLLBACK"); return send(res,409,{ error:"Release changed; refresh before editing" }); }
