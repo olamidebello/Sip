@@ -113,7 +113,6 @@ jobs:
             olamide-browser/olamide-browser.zip \
             olamide-android-debug-apk/*.apk \
             olamide-desktop-linux/*.AppImage \
-            olamide-desktop-linux/*.deb \
             olamide-desktop-win/*.exe \
             olamide-desktop-mac/*.dmg \
             --repo "$GITHUB_REPOSITORY" \
