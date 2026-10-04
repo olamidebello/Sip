@@ -3,6 +3,7 @@ import { checkCurrentLocation } from "./geofence.js";
 import { setupMeetings } from "./meetings.js";
 import { setupGroupAdmin } from "./groups.js";
 import { setupMobileAdmin } from "./mobileAdmin.js";
+import { setupTenants } from "./tenants.js";
 import "./style.css";
 
 const root = document.querySelector("#app");
@@ -132,6 +133,27 @@ root.innerHTML = `
       <button id="group-assign" type="button">Save user's groups</button>
       <p id="group-status" role="status"></p>
     </section>
+    <section id="tenant-admin">
+      <h3>Tenants and administrators</h3>
+      <div id="tenant-super" hidden>
+        <form id="tenant-create">
+          <label>Tenant name <input name="name" maxlength="100" required></label>
+          <label>Slug <input name="slug" pattern="[a-z][a-z0-9-]+" required></label>
+          <button>Create tenant</button>
+        </form>
+      </div>
+      <label>Tenant for new user <select id="tenant-select"></select></label>
+      <button id="tenant-suspend" type="button">Suspend selected tenant</button>
+      <button id="tenant-activate" type="button">Activate selected tenant</button>
+      <form id="tenant-user-create">
+        <label>Name <input name="name" required minlength="2"></label>
+        <label>Email <input name="email" type="email" required></label>
+        <label>Initial password <input name="password" type="password" minlength="12" required></label>
+        <label>Role <select name="role"><option value="user">User</option><option value="admin">Tenant admin</option></select></label>
+        <button>Create tenant user</button>
+      </form>
+      <p id="tenant-status" role="status"></p>
+    </section>
     <section id="mobile-admin">
       <h3>Android and iOS releases</h3>
       <p>Internal release planning and approval. Store upload and publishing are not connected.</p>
@@ -198,6 +220,7 @@ const dialForm = $("#dial");
 const meetings = setupMeetings();
 const groupAdmin = setupGroupAdmin();
 const mobileAdmin = setupMobileAdmin();
+const tenantAdmin = setupTenants();
 let phone;
 let onCall = false;
 let onHold = false;
@@ -260,8 +283,9 @@ function signedIn(user) {
     refreshBilling().catch((error) => { $("#billing-status").textContent = error.message; });
   if (user.features?.messaging)
     loadContacts().catch((error) => { $("#chat-status").textContent = error.message; });
-  $("#admin").hidden = user.role !== "admin";
-  if (user.role === "admin") {
+  $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
+  if (["admin","super_admin"].includes(user.role)) {
+    tenantAdmin.refresh(user).catch((error) => { $("#tenant-status").textContent = error.message; });
     mobileAdmin.refresh().catch((error) => { $("#mobile-status").textContent = error.message; });
     groupAdmin.refresh().catch((error) => { $("#group-status").textContent = error.message; });
     apiGet("/api/admin/overview")
