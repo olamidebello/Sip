@@ -182,6 +182,13 @@ test("registered users can create and join a room; host controls it", {
   assert.equal(crossMeeting.status,404);
   const crossApps = await fetch(base + "/api/admin/mobile/apps",{headers:{Cookie:otherCookie}});
   assert.equal((await crossApps.json()).apps.some((a) => a.id === mobileApp.body.id),false);
+  const switched = await post(`/api/admin/tenants/${tenant.body.id}/switch`,{},hostCookie);
+  assert.equal(switched.status,200);
+  const scopedUsers = await fetch(base + "/api/admin/users",{headers:{Cookie:hostCookie}});
+  const tenantUsers = (await scopedUsers.json()).users;
+  assert.equal(tenantUsers.some((u) => u.id === tenantUser.body.id),true);
+  assert.equal(tenantUsers.some((u) => u.id === guestLogin.body.id),false);
+  assert.equal((await post(`/api/admin/tenants/${"00000000-0000-4000-8000-000000000000"}/switch`,{},hostCookie)).status,200);
   const suspend = await fetch(base + `/api/admin/tenants/${tenant.body.id}/status`,{
     method:"PUT",headers:{Origin:origin,Cookie:hostCookie,"Content-Type":"application/json"},
     body:JSON.stringify({status:"suspended"})
