@@ -14,6 +14,7 @@ export async function migrateAccess(pool) {
 
 export async function handleAccess({req,res,path,user,pool,send,readJson,sessionHash,meetingSignaling}) {
   if (path==="/api/account/password" && req.method==="POST") {
+    if (user.auth_source==="ldap") return send(res,403,{error:"Change your directory password with your LDAP administrator"});
     const {currentPassword,newPassword}=await readJson(req);
     if (typeof currentPassword!=="string" || typeof newPassword!=="string" ||
         newPassword.length<12 || newPassword.length>1024 || currentPassword.length>1024)
