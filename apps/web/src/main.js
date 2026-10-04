@@ -2,6 +2,7 @@ import { SimpleUser } from "sip.js/lib/platform/web";
 import { checkCurrentLocation } from "./geofence.js";
 import { setupMeetings } from "./meetings.js";
 import { setupGroupAdmin } from "./groups.js";
+import { setupMobileAdmin } from "./mobileAdmin.js";
 import "./style.css";
 
 const root = document.querySelector("#app");
@@ -131,6 +132,35 @@ root.innerHTML = `
       <button id="group-assign" type="button">Save user's groups</button>
       <p id="group-status" role="status"></p>
     </section>
+    <section id="mobile-admin">
+      <h3>Android and iOS releases</h3>
+      <p>Internal release planning and approval. Store upload and publishing are not connected.</p>
+      <form id="mobile-app-form">
+        <label>Platform <select name="platform"><option value="android">Android</option><option value="ios">iOS</option></select></label>
+        <label>App identifier <input name="appIdentifier" placeholder="com.example.olamide" required></label>
+        <label>Display name <input name="displayName" required maxlength="100"></label>
+        <label>Store app ID (optional) <input name="storeAppId" maxlength="64"></label>
+        <button>Register app</button>
+      </form>
+      <label>App for new release <select id="mobile-apps"></select></label>
+      <label>Existing release <select id="mobile-releases"></select></label>
+      <button id="mobile-new-release" type="button">New draft</button>
+      <form id="mobile-release-form">
+        <label>Version <input name="versionName" required></label>
+        <label>Build number <input name="buildNumber" required></label>
+        <label>Track <select name="track"><option>internal</option><option>alpha</option><option>beta</option><option>production</option><option>testflight</option><option>app-store</option></select></label>
+        <label>Rollout percent <input name="rolloutPercent" type="number" min="1" max="100" value="100" required></label>
+        <label>Release notes <textarea name="releaseNotes" maxlength="4000"></textarea></label>
+        <label>HTTPS artifact reference (no tokens or query string) <input name="artifactUrl" type="url" required></label>
+        <label>Artifact SHA-256 <input name="artifactSha256" pattern="[a-fA-F0-9]{64}" required></label>
+        <button>Save draft</button>
+      </form>
+      <button id="mobile-approve" type="button">Approve internally</button>
+      <button id="mobile-reopen" type="button">Reopen draft</button>
+      <button id="mobile-archive" type="button">Archive</button>
+      <h4>Release history</h4><ul id="mobile-events"></ul>
+      <p id="mobile-status" role="status"></p>
+    </section>
   </section>
   <p>Development browser dialer. Use a test account on a WSS and WebRTC enabled SIP server.</p>
   <form id="connect">
@@ -167,6 +197,7 @@ const connectForm = $("#connect");
 const dialForm = $("#dial");
 const meetings = setupMeetings();
 const groupAdmin = setupGroupAdmin();
+const mobileAdmin = setupMobileAdmin();
 let phone;
 let onCall = false;
 let onHold = false;
@@ -231,6 +262,7 @@ function signedIn(user) {
     loadContacts().catch((error) => { $("#chat-status").textContent = error.message; });
   $("#admin").hidden = user.role !== "admin";
   if (user.role === "admin") {
+    mobileAdmin.refresh().catch((error) => { $("#mobile-status").textContent = error.message; });
     groupAdmin.refresh().catch((error) => { $("#group-status").textContent = error.message; });
     apiGet("/api/admin/overview")
       .then((stats) => { $("#admin-overview").textContent =
