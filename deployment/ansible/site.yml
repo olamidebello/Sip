@@ -1,0 +1,133 @@
+---
+- name: Deploy Olamide browser dialer and API
+  hosts: olamide
+  become: true
+  vars:
+    app_dir: /opt/olamide
+    app_domain: "{{ lookup('env', 'OLAMIDE_DOMAIN') }}"
+    deployment_ref: main
+    local_secrets_file: "{{ playbook_dir }}/../secrets.env"
+  pre_tasks:
+    - name: Require Debian 12
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version == '12'
+    - name: Require deployment domain
+      ansible.builtin.assert:
+        that: app_domain | length > 3
+        fail_msg: "Set OLAMIDE_DOMAIN on the Ansible controller."
+    - name: Require local deployment secrets
+      ansible.builtin.stat:
+        path: "{{ local_secrets_file }}"
+      register: secrets_stat
+      delegate_to: localhost
+      become: false
+    - name: Stop when secrets are missing
+      ansible.builtin.assert:
+        that: secrets_stat.stat.exists
+        fail_msg: "Create deployment/secrets.env locally from secrets.env.example (never commit it)."
+    - name: Check the domain resolves to this server
+      ansible.builtin.command: "getent ahostsv4 {{ app_domain }}"
+      register: domain_dns
+      changed_when: false
+      delegate_to: localhost
+      become: false
+    - name: Require correct public DNS
+      ansible.builtin.assert:
+        that: ansible_host in domain_dns.stdout
+        fail_msg: "Point {{ app_domain }} to the deployment host before requesting a TLS certificate."
+  tasks:
+    - name: Install base tools and Ansible on the server
+      ansible.builtin.apt:
+        name: [ca-certificates, curl, gnupg, git, ansible]
+        update_cache: true
+        state: present
+    - name: Make apt key directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+    - name: Download Docker signing key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/debian/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+    - name: Configure official Docker package repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch={{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable"
+        filename: docker
+        state: present
+    - name: Install Docker Engine and Compose plugin
+      ansible.builtin.apt:
+        name: [docker-ce, docker-ce-cli, containerd.io, docker-buildx-plugin, docker-compose-plugin]
+        update_cache: true
+        state: present
+    - name: Enable Docker
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+    - name: Ensure deployment directory exists
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        mode: '0700'
+    - name: Checkout application source
+      ansible.builtin.git:
+        repo: https://github.com/olamidebello/Sip.git
+        dest: "{{ app_dir }}/repo"
+        version: "{{ deployment_ref }}"
+        update: true
+    - name: Install private environment file
+      ansible.builtin.copy:
+        src: "{{ local_secrets_file }}"
+        dest: "{{ app_dir }}/repo/deployment/docker/.env"
+        owner: root
+        group: root
+        mode: '0600'
+        backup: false
+      no_log: true
+    - name: Install boot time compose service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/olamide-compose.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Olamide application containers
+          Requires=docker.service
+          After=docker.service network-online.target
+          Wants=network-online.target
+          [Service]
+          Type=oneshot
+          RemainAfterExit=yes
+          WorkingDirectory={{ app_dir }}/repo/deployment/docker
+          ExecStart=/usr/bin/docker compose up -d --build --remove-orphans
+          ExecStop=/usr/bin/docker compose stop
+          TimeoutStartSec=600
+          [Install]
+          WantedBy=multi-user.target
+      register: compose_service
+    - name: Reload systemd when unit changes
+      ansible.builtin.systemd:
+        daemon_reload: true
+      when: compose_service.changed
+    - name: Start and enable application on boot
+      ansible.builtin.systemd:
+        name: olamide-compose.service
+        enabled: true
+        state: started
+    - name: Apply updated application version
+      ansible.builtin.command: docker compose up -d --build --remove-orphans
+      args:
+        chdir: "{{ app_dir }}/repo/deployment/docker"
+      changed_when: true
+    - name: Verify the API container is serving health requests
+      ansible.builtin.command: docker compose exec -T api node -e "fetch('http://127.0.0.1:8080/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      args:
+        chdir: "{{ app_dir }}/repo/deployment/docker"
+      register: health_check
+      retries: 10
+      delay: 5
+      until: health_check.rc == 0
+      changed_when: false
