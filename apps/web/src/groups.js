@@ -44,7 +44,8 @@ export function setupGroupAdmin() {
   }
   function fillUser() {
     const user = users.find((item) => item.id === $("#group-user").value);
-    $("#group-user-details").textContent=user ? `${user.name} — ${user.role}, ${user.status}` : "Select a user";
+    $("#group-user-details").textContent=user ? `${user.name} — ${user.role}, ${user.status}, ${user.auth_source||"local"} authentication` : "Select a user";
+    $("#group-assign").disabled=user?.auth_source==="ldap";
     const container = $("#group-memberships");
     container.replaceChildren();
     for (const group of groups) {
