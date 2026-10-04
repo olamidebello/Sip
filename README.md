@@ -11,7 +11,7 @@ mysql -u root -p < services/api/create-database.sql
 mysql -u root -p olamide < services/api/schema.sql
 ```
 
-`create-database.sql` creates the `olamide` database using `utf8mb4`. `schema.sql` defines users, sessions, contacts, messages, settings, plans, subscriptions, invoices, port requests, DID quotes, meeting rooms, user groups, and group membership. It seeds the Standard group and assigns existing users to it once. Both scripts can be rerun. Create a dedicated MySQL application user and grant access to the `olamide` database; a commented grant example is in `create-database.sql`. Use a strong secret and keep the MySQL server time zone at UTC.
+`create-database.sql` creates the `olamide` database using `utf8mb4`. `schema.sql` defines users, sessions, contacts, messages, settings, plans, subscriptions, invoices, port requests, DID quotes, meeting rooms, user groups, group membership, mobile apps, release drafts, and release audit events. It seeds the Standard group and assigns existing users to it once. Both scripts can be rerun. Create a dedicated MySQL application user and grant access to the `olamide` database; a commented grant example is in `create-database.sql`. Use a strong secret and keep the MySQL server time zone at UTC.
 
 Set the application connection URL only on the API server. URL-encode reserved characters in the password:
 
@@ -44,7 +44,7 @@ Open `http://127.0.0.1:5173`. Vite forwards `/api` HTTP and WebSocket traffic to
 - Plan requests create unpaid invoices. No card or bank data is collected, no payment gateway is wired, and no subscription is activated automatically.
 - Flowroute and DIDWW number inventory can be displayed when API credentials are configured. The default DID setup and monthly markup is 30%, rounded up to cents. Number purchasing is disabled. Port requests are drafts and are not submitted to carriers.
 - Up to four signed-in participants can join a peer-to-peer meeting with audio/video, screen sharing, temporary chat, and host lock/remove/end controls. A permitted helper can request pointer assistance; the sharer must approve and can revoke it. The pointer is a page overlay and cannot control the operating system.
-- Optional browser geofence policy in `apps/web/public/geofence-policy.json`. The sample policy is disabled until permitted zones are provided. Client location checks alone are not enforceable service controls.
+- Administrators can register Android and iOS app identifiers, maintain release drafts with build references and SHA-256 values, select tracks and rollout targets, approve internally, reopen or archive releases, and inspect an audit history. Revision checks prevent stale edits. This does not upload or publish builds to either store.\n- Optional browser geofence policy in `apps/web/public/geofence-policy.json`. The sample policy is disabled until permitted zones are provided. Client location checks alone are not enforceable service controls.
 
 Provider credentials belong only in the API environment:
 
@@ -58,6 +58,6 @@ DIDWW inventory quoting requires confirmation that the provider account uses USD
 
 For cross-network meetings, configure `MEETING_ICE_SERVERS_JSON` with STUN/TURN servers on the API. TURN credentials sent to browsers are visible to participants, so use short-lived credentials. The browser and API need a same-origin HTTPS reverse proxy in production. There is no bundled TURN server or native remote desktop agent.
 
-## Limits before service launch
+## Mobile store publishing prerequisites\n\nThe mobile release screen records HTTPS artifact references without credentials or signed URL query strings. It does not download or verify the artifact bytes. To implement actual publishing, first create native Android and iOS projects and signed release artifacts, enroll the apps in Google Play Console and App Store Connect, and configure their publishing credentials through a secret manager. Build a separate submission worker that verifies artifact SHA-256, calls the Google Play publishing edits API for Android, and uses Apple's build upload and App Store Connect release workflows for iOS. Record store responses and processing states before describing a release as submitted or live. Never store private keys in this repository or the release database.\n\n## Limits before service launch
 
 The repository is a development foundation. It has no class 5 switch, carrier routes, live billing/settlement, DID purchase automation, native Android/iOS clients, Zoom-scale media server, meeting recording, remote keyboard/mouse control, OTP/passkeys/PIN, or production deployment. Browser-only geofencing and group flags cannot enforce policies on an external SIP server or inspect peer-to-peer media. Add a trusted SIP/media service, backups, operational monitoring, abuse controls, migrations, and security review before accepting real users or payments. No Acrobits, WhatsApp, Cash App, Zoom, or Zoiper code or branding is included.
