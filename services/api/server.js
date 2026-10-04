@@ -9,8 +9,8 @@ import { handleInhouseDids } from "./dids.js";
 import { handleNigeria } from "./nigeria.js";
 import { handleReports } from "./reports.js";
 import { migrateAccess,handleAccess } from "./access.js";
+import { migratePricing,pricingRule,sellingCents,handlePricing } from "./pricing.js";
 import { migrateTenancy, handleTenants, isAdmin, defaultTenantId } from "./tenancy.js";
-import { markupCents } from "./billing.js";
 import { availableNumbers } from "./providers.js";
 import { attachMeetingSignaling } from "./meetings.js";
 import { validateFeatures, effectiveFeatures } from "./permissions.js";
@@ -188,6 +188,8 @@ async function handler(req, res) {
           sessionHash:tokenHash(currentToken(req)),meetingSignaling});
       if (path === "/api/admin/reports" || path === "/api/admin/reports.csv")
         return await handleReports({req,res,user,pool,send});
+      if (path==="/api/admin/pricing" || path.startsWith("/api/admin/pricing/"))
+        return await handlePricing({req,res,path,user,pool,send,readJson});
       if (path === "/api/admin/cdr" && req.method === "GET")
         return await handleCdrAdmin({req,res,user,pool,send});
       if (path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/"))
@@ -354,14 +356,13 @@ async function handler(req, res) {
         const provider = new URL(req.url, origin).searchParams.get("provider");
         if (!["flowroute","didww"].includes(provider))
           return send(res, 400, { error: "Select Flowroute or DIDWW" });
-        const result = await pool.query("SELECT value FROM tenant_settings WHERE tenant_id=$1 AND setting_key='did_markup_bps'", [user.tenant_id]);
-        const markupBps = Number(result.rows[0]?.value ?? 3000);
+        const rule=await pricingRule(pool,user.tenant_id,provider);
         try {
           const numbers = await availableNumbers(provider);
-          return send(res, 200, { markupPercent: markupBps / 100,
+          return send(res, 200, { pricing:{mode:rule.mode,setupValue:Number(rule.setupValue),monthlyValue:Number(rule.monthlyValue)},
             numbers: numbers.map(({ monthlyCostCents,setupCostCents,...item }) => ({
-              ...item, monthlyCents: markupCents(monthlyCostCents,markupBps),
-              setupCents: markupCents(setupCostCents,markupBps)
+              ...item, monthlyCents: sellingCents(monthlyCostCents,rule.mode,Number(rule.monthlyValue)),
+              setupCents: sellingCents(setupCostCents,rule.mode,Number(rule.setupValue))
             }))
           });
         } catch (error) {
@@ -568,6 +569,7 @@ await pool.initialize(await fs.readFile(new URL("./pbx-schema.sql", import.meta.
 await pool.initialize(await fs.readFile(new URL("./cdr-schema.sql", import.meta.url), "utf8"));
 await pool.initialize(await fs.readFile(new URL("./dids-schema.sql", import.meta.url), "utf8"));
 await pool.initialize(await fs.readFile(new URL("./nigeria-schema.sql", import.meta.url), "utf8"));
+await migratePricing(pool);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
