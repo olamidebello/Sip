@@ -10,13 +10,15 @@ export function setupLdapAdmin() {
   }
   async function refresh() {
     try {
-      const data=await call("/api/admin/ldap");
+      const [data,policy]=await Promise.all([call("/api/admin/ldap"),call("/api/admin/auth-providers")]);
+      const canManage=policy.superAdmin||policy.ldapAdminManaged;
       $("#ldap-config-state").textContent=data.configured?
         "Secure server connection configured. Directory passwords stay on the server.":
         "Server LDAPS connection is not configured yet. See README deployment steps.";
       $("#ldap-enabled").checked=data.enabled;
-      $("#ldap-enabled").disabled=!data.configured;
-      $("#ldap-save-enabled").disabled=!data.configured;
+      $("#ldap-enabled").disabled=!data.configured||!canManage;
+      $("#ldap-save-enabled").disabled=!data.configured||!canManage;
+      $("#ldap-map-form").querySelectorAll("input,select,button").forEach(element=>{element.disabled=!canManage;});
       const select=$("#ldap-app-group");
       select.replaceChildren(...data.groups.map(group=>{
         const option=document.createElement("option");option.value=group.id;option.textContent=group.name;return option;
@@ -25,6 +27,7 @@ export function setupLdapAdmin() {
         const item=document.createElement("li"),remove=document.createElement("button");
         item.append(document.createTextNode(`${mapping.group_dn} → ${mapping.app_group} `));
         remove.textContent="Remove mapping";remove.type="button";
+        remove.disabled=!canManage;
         remove.onclick=async()=>{
           try {await call(`/api/admin/ldap/mappings/${mapping.id}`,"DELETE");await refresh();status("Mapping removed; LDAP sessions revoked.");}
           catch(error) {status(error.message);}

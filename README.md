@@ -183,6 +183,18 @@ The GitHub Actions workflow **validates code only**. The installed server pulls 
 
 The LDAPS client and filter escaping follow the [ldapts documentation](https://github.com/ldapts/ldapts#configuring-secure-connections). Validate connectivity, CA trust, search permissions, `memberOf` values, mapping behavior, failed logins, and session revocation against your actual directory before enabling it for users.
 
+### Super-admin authentication provider controls
+
+The **Authentication providers** panel displays the current tenant's local-password and LDAPS states. A super admin can enable or disable local sign-in for a selected tenant and decide whether tenant administrators may manage the LDAP enable switch and group mappings. Tenant administrators can view the policy but cannot edit it; when LDAP management is locked, they cannot change LDAP mappings. The original Olamide tenant always retains local super-admin recovery. For another tenant, local sign-in can be disabled only after the server connection is configured, LDAP is enabled, and at least one directory group is mapped. Disabling local sign-in revokes that tenant's local-user sessions; enabling it again permits existing local accounts to sign in. The API is `GET/PUT /api/admin/auth-providers` in the selected tenant context; policy changes are audited. These are two built-in provider integrations, not a facility for uploading and executing arbitrary authentication plugin code.
+
+LDAPS is the network authentication method implemented here. It authenticates users against a configured directory and maps direct `memberOf` group DNs to Olamide groups. It does **not** provide RADIUS/802.1X network admission, OIDC/SAML single sign-on, Kerberos, VPN authentication, or native device enrollment. A directory outage prevents new LDAP sign-ins, and the one-hour session limit remains as described above.
+
+### Install on desktop and mobile
+
+The web frontend is an installable Progressive Web App. The deployed HTTPS site serves `/manifest.webmanifest`, 192- and 512-pixel Olamide icons, and a service worker. On Chrome or Edge desktop or Android, visit `https://sip.dobhrap.com/` and select **Install Olamide** if the browser offers it; otherwise use the browser's **Install app** menu. On iPhone or iPad, open the site in Safari and use **Share → Add to Home Screen**. Launch the installed icon for a standalone app window. The install panel shows platform guidance when an automatic prompt is unavailable. You can also use the site normally without installing it.
+
+The offline page explains that a network connection is required. The service worker caches public shell assets and immutable built JavaScript/CSS; it never caches `/api/` requests or account data. Calling, LDAP sign-in, messaging, billing, and administration require an active server connection. This PWA is **not** a packaged Windows/macOS/Linux binary, an Android APK, or an iOS App Store application. It does not add background SIP wakeup, native call integration, mobile push notifications, or offline calling. Native installers and store publishing remain separate work requiring signing credentials, platform entitlements, and native integration.
+
 ### Reports and analytics
 
 1. Open **Administrator → Reports and analytics**, choose inclusive UTC start and end dates (up to 366 days), then select **Run report**. The report is generated from MySQL for the tenant currently selected in your admin session. Tenant administrators see only their own tenant. Super admins must switch tenant context to review another tenant; this endpoint does not aggregate across tenants.

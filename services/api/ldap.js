@@ -113,6 +113,11 @@ export async function loginWithLdap({pool,connections,slug,email,password,authen
 export async function handleLdapAdmin({req,res,path,user,pool,send,readJson,connections,meetingSignaling}) {
   if (!isAdmin(user)) return send(res,403,{error:"Administrator required"});
   const tenant=user.tenant_id;
+  if (req.method!=="GET" && user.role!=="super_admin") {
+    const policy=await pool.query("SELECT ldap_admin_managed FROM tenant_auth_policy WHERE tenant_id=$1",[tenant]);
+    if (policy.rows[0] && !policy.rows[0].ldap_admin_managed)
+      return send(res,403,{error:"Super admin controls directory authentication for this tenant"});
+  }
   if (path==="/api/admin/ldap" && req.method==="GET") {
     const [settings,mappings,groups]=await Promise.all([
       pool.query("SELECT enabled FROM tenant_ldap_settings WHERE tenant_id=$1",[tenant]),
@@ -126,10 +131,22 @@ export async function handleLdapAdmin({req,res,path,user,pool,send,readJson,conn
     const {enabled}=await readJson(req);
     if (typeof enabled!=="boolean") return send(res,400,{error:"Enabled must be true or false"});
     if (enabled && !connections[tenant]) return send(res,409,{error:"Server LDAPS connection is not configured"});
+    if (!enabled) {
+      const policy=await pool.query("SELECT local_enabled FROM tenant_auth_policy WHERE tenant_id=$1",[tenant]);
+      if (policy.rows[0] && !policy.rows[0].local_enabled)
+        return send(res,409,{error:"Enable local sign-in before disabling LDAP"});
+    }
     const db=await pool.connect();
     let revoked=[];
     try {
       await db.query("BEGIN");
+      await db.query("SELECT id FROM tenants WHERE id=$1 FOR UPDATE",[tenant]);
+      if (!enabled) {
+        const policy=await db.query("SELECT local_enabled FROM tenant_auth_policy WHERE tenant_id=$1",[tenant]);
+        if (policy.rows[0] && !policy.rows[0].local_enabled) {
+          await db.query("ROLLBACK");return send(res,409,{error:"Enable local sign-in before disabling LDAP"});
+        }
+      }
       await db.query("INSERT INTO tenant_ldap_settings(tenant_id,enabled) VALUES($1,$2) ON DUPLICATE KEY UPDATE enabled=VALUES(enabled)",[tenant,enabled]);
       if (!enabled) {
         revoked=(await db.query("SELECT id FROM users WHERE tenant_id=$1 AND auth_source='ldap'",[tenant])).rows;
@@ -160,6 +177,14 @@ export async function handleLdapAdmin({req,res,path,user,pool,send,readJson,conn
     const db=await pool.connect();
     try {
       await db.query("BEGIN");
+      await db.query("SELECT id FROM tenants WHERE id=$1 FOR UPDATE",[tenant]);
+      const policy=await db.query("SELECT local_enabled FROM tenant_auth_policy WHERE tenant_id=$1",[tenant]);
+      if (policy.rows[0] && !policy.rows[0].local_enabled) {
+        const count=await db.query("SELECT COUNT(*) AS total FROM ldap_group_mappings WHERE tenant_id=$1",[tenant]);
+        if (Number(count.rows[0]?.total)<=1) {
+          await db.query("ROLLBACK");return send(res,409,{error:"Enable local sign-in before removing the last LDAP mapping"});
+        }
+      }
       const result=await db.query("DELETE FROM ldap_group_mappings WHERE id=$1 AND tenant_id=$2",[remove[1],tenant]);
       if (!result.rowCount) {await db.query("ROLLBACK");return send(res,404,{error:"Mapping unavailable"});}
       const revoked=await db.query("SELECT id FROM users WHERE tenant_id=$1 AND auth_source='ldap'",[tenant]);

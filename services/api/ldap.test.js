@@ -56,7 +56,10 @@ test("LDAP credentials cannot silently take over a local-password account",async
 });
 
 test("tenant admin cannot map another tenant's app group",async()=>{
-  const pool={query:async(sql,params)=>{assert.equal(params[1],tenant);return {rows:[],rowCount:0};}};
+  const pool={query:async(sql,params)=>{
+    assert.equal(params[sql.includes("tenant_auth_policy")?0:1],tenant);
+    return {rows:[],rowCount:0};
+  }};
   const response=await handleLdapAdmin({req:{method:"POST"},res:{},path:"/api/admin/ldap/mappings",
     user:{id:"actor",tenant_id:tenant,role:"admin"},pool,send:(_res,status,body)=>({status,body}),
     readJson:async()=>({groupDn:"cn=agents,dc=example,dc=org",groupId}),connections:{[tenant]:config}});

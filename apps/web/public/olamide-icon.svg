@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Olamide headset">
+  <rect width="512" height="512" rx="112" fill="#070d1c"/>
+  <path d="M116 267v-41c0-80 63-144 140-144s140 64 140 144v43" fill="none" stroke="#102b4a" stroke-width="34" stroke-linecap="round"/>
+  <rect x="92" y="226" width="54" height="127" rx="26" fill="#102b4a"/>
+  <rect x="366" y="226" width="54" height="127" rx="26" fill="#102b4a"/>
+  <circle cx="256" cy="244" r="86" fill="#18b8ab"/>
+  <path d="M139 364c27 43 68 65 117 65 48 0 89-22 117-65" fill="none" stroke="#102b4a" stroke-width="34" stroke-linecap="round"/>
+  <path d="M397 341c-6 36-29 62-67 67" fill="none" stroke="#102b4a" stroke-width="19" stroke-linecap="round"/>
+  <circle cx="322" cy="408" r="22" fill="#18b8ab"/>
+</svg>

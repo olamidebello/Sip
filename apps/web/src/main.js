@@ -9,6 +9,8 @@ import { setupReports } from "./reports.js";
 import { setupPricing } from "./pricing.js";
 import { setupBackground } from "./background.js";
 import { setupLdapAdmin } from "./ldapAdmin.js";
+import { setupAuthProviders } from "./authProviders.js";
+import { setupInstall } from "./install.js";
 import "./style.css";
 
 const root = document.querySelector("#app");
@@ -17,6 +19,10 @@ root.innerHTML = `
     <img src="/olamide-logo.jpg" alt="Olamide" width="1536" height="620">
     <h1>Olamide</h1>
   </header>
+  <section id="install-panel">
+    <button id="install-app" type="button" hidden>Install Olamide</button>
+    <p id="install-help" role="status"></p>
+  </section>
   <section id="account">
     <strong>Olamide account</strong>
     <p>Account sign-up does not yet provision a SIP number or calling plan.</p>
@@ -154,6 +160,15 @@ root.innerHTML = `
       </form>
       <ul id="ldap-mappings"></ul>
       <p id="ldap-status" role="status"></p>
+    </section>
+    <section id="auth-providers-admin">
+      <h3>Authentication providers</h3>
+      <p id="auth-providers-status" role="status"></p>
+      <form id="auth-providers-form" hidden>
+        <label><input name="localEnabled" type="checkbox"> Allow local password sign-in</label>
+        <label><input name="ldapAdminManaged" type="checkbox"> Let tenant administrators manage LDAP mappings and sign-in</label>
+        <button>Save tenant authentication policy</button>
+      </form>
     </section>
     <section id="background-admin" hidden>
       <h3>Tenant background policy</h3>
@@ -481,6 +496,8 @@ const reports = setupReports({get:(path)=>apiGet(path)});
 const pricing = setupPricing();
 const background = setupBackground();
 const ldapAdmin = setupLdapAdmin();
+const authProviders = setupAuthProviders();
+setupInstall();
 let phone;
 let onCall = false;
 let onHold = false;
@@ -783,6 +800,7 @@ function signedIn(user) {
     reports.refresh();
     pricing.refresh();
     ldapAdmin.refresh();
+    authProviders.refresh();
     refreshInhouse().catch((error) => { $("#inhouse-status").textContent = error.message; });
     refreshNigeria().catch((error) => { $("#nigeria-status").textContent = error.message; });
     refreshCdr().catch((error) => { $("#cdr-status").textContent = error.message; });

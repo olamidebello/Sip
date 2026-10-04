@@ -12,6 +12,7 @@ import { migrateAccess,handleAccess } from "./access.js";
 import { migratePricing,pricingRule,sellingCents,handlePricing } from "./pricing.js";
 import { migrateBackground,handleBackground } from "./background.js";
 import { loadLdapConnections,migrateLdap,loginWithLdap,handleLdapAdmin } from "./ldap.js";
+import { migrateAuthProviders,handleAuthProviders } from "./authProviders.js";
 import { migrateTenancy, handleTenants, isAdmin, defaultTenantId } from "./tenancy.js";
 import { availableNumbers } from "./providers.js";
 import { attachMeetingSignaling } from "./meetings.js";
@@ -81,7 +82,7 @@ async function currentUser(req) {
   const token = currentToken(req);
   if (!token) return null;
   const result = await pool.query(
-    "SELECT u.id,u.display_name,u.email,u.role,u.auth_source, CASE WHEN u.role='super_admin' AND selected.id IS NOT NULL THEN selected.id ELSE u.tenant_id END AS tenant_id FROM sessions s JOIN users u ON u.id=s.user_id AND u.status='active' JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenant_ldap_settings ldap ON ldap.tenant_id=u.tenant_id LEFT JOIN tenants selected ON selected.id=s.selected_tenant_id AND selected.status='active' WHERE s.token_hash=$1 AND s.expires_at>now() AND (u.auth_source='local' OR ldap.enabled=TRUE)",
+    "SELECT u.id,u.display_name,u.email,u.role,u.auth_source, CASE WHEN u.role='super_admin' AND selected.id IS NOT NULL THEN selected.id ELSE u.tenant_id END AS tenant_id FROM sessions s JOIN users u ON u.id=s.user_id AND u.status='active' JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenant_ldap_settings ldap ON ldap.tenant_id=u.tenant_id LEFT JOIN tenant_auth_policy auth ON auth.tenant_id=u.tenant_id LEFT JOIN tenants selected ON selected.id=s.selected_tenant_id AND selected.status='active' WHERE s.token_hash=$1 AND s.expires_at>now() AND ((u.auth_source='local' AND (auth.local_enabled IS NULL OR auth.local_enabled=TRUE OR u.role='super_admin')) OR (u.auth_source='ldap' AND ldap.enabled=TRUE))",
     [tokenHash(token)]
   );
   const user = result.rows[0];
@@ -133,7 +134,7 @@ async function handler(req, res) {
           email.length > 254 || password.length > 1024)
         return send(res, 400, { error: "Invalid credentials" });
       const result = await pool.query(
-        "SELECT u.id, u.display_name, u.email, u.role, u.tenant_id, u.password_salt, u.password_hash FROM users u JOIN tenants t ON t.id=u.tenant_id AND t.status='active' WHERE u.email=$1 AND u.status='active' AND u.auth_source='local'",
+        "SELECT u.id, u.display_name, u.email, u.role, u.tenant_id, u.password_salt, u.password_hash FROM users u JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenant_auth_policy auth ON auth.tenant_id=u.tenant_id WHERE u.email=$1 AND u.status='active' AND u.auth_source='local' AND (auth.local_enabled IS NULL OR auth.local_enabled=TRUE OR u.role='super_admin')",
         [email.trim().toLowerCase()]
       );
       const user = result.rows[0];
@@ -201,6 +202,8 @@ async function handler(req, res) {
         return await handleBackground({req,res,path,user,pool,send,readJson});
       if (path==="/api/admin/ldap" || path.startsWith("/api/admin/ldap/"))
         return await handleLdapAdmin({req,res,path,user,pool,send,readJson,connections:ldapConnections,meetingSignaling});
+      if (path==="/api/admin/auth-providers")
+        return await handleAuthProviders({req,res,path,user,pool,send,readJson,connections:ldapConnections,meetingSignaling});
       if (path==="/api/account/password" || path.startsWith("/api/admin/security/") ||
           /^\/api\/admin\/users\/[0-9a-f-]{36}\/security$/i.test(path) ||
           /^\/api\/admin\/groups\/[0-9a-f-]{36}\/delete$/i.test(path))
@@ -596,6 +599,7 @@ await pool.initialize(await fs.readFile(new URL("./nigeria-schema.sql", import.m
 await migratePricing(pool);
 await migrateBackground(pool);
 await migrateLdap(pool);
+await migrateAuthProviders(pool);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
