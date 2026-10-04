@@ -138,6 +138,10 @@ export function attachMeetingSignaling(server, { pool, origin, currentUser }) {
     });
   });
   return {
+    closeUser(id) {
+      for (const peers of roomSockets.values())
+        peers.get(id)?.close(1008,"Account access changed");
+    },
     recheckUser(id, features) {
       for (const [roomId, peers] of roomSockets) {
         const ws = peers.get(id);
