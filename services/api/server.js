@@ -432,7 +432,7 @@ async function handler(req, res) {
         );
         if (updated.rowCount) {
           const members = await pool.query(
-            "SELECT u.id,u.role FROM user_group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=$1",
+            "SELECT u.id,u.role,u.tenant_id FROM user_group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=$1",
             [groupMatch[1]]
           );
           for (const member of members.rows)
