@@ -94,7 +94,7 @@ jobs:
           path: apps/mobile/build/Build/Products/Debug-iphonesimulator/App.app/
           if-no-files-found: error
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/heads/main') || startsWith(github.ref, 'refs/tags/v')
     needs: [browser, desktop, android, ios-simulator]
     runs-on: ubuntu-latest
     permissions:
@@ -108,14 +108,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd downloads
-          find . -type f -print
-          gh release create "$GITHUB_REF_NAME" \
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            release_tag="$GITHUB_REF_NAME"
+          else
+            release_tag="v0.1.0-preview.${GITHUB_RUN_NUMBER}"
+          fi
+          gh release create "$release_tag" \
             olamide-browser/olamide-browser.zip \
             olamide-android-debug-apk/*.apk \
             olamide-desktop-linux/*.AppImage \
             olamide-desktop-win/*.exe \
             olamide-desktop-mac/*.dmg \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Olamide $GITHUB_REF_NAME" \
+            --target "$GITHUB_SHA" \
+            --title "Olamide $release_tag" \
             --notes 'Pre-release builds. Android is a debug APK. Windows and macOS desktop installers are unsigned. iOS simulator builds are in Actions artifacts, not installable on physical iPhones.' \
             --prerelease
