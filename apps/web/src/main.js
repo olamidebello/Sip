@@ -6,6 +6,7 @@ import { setupMobileAdmin } from "./mobileAdmin.js";
 import { setupTenants } from "./tenants.js";
 import { setupPbx } from "./pbx.js";
 import { setupReports } from "./reports.js";
+import { setupPricing } from "./pricing.js";
 import "./style.css";
 
 const root = document.querySelector("#app");
@@ -157,6 +158,21 @@ root.innerHTML = `
         <label>Numbering rights reference <input name="evidenceReference" maxlength="255" required></label>
         <button>Stage number</button>
       </form>
+      <form id="inhouse-price">
+        <h4>Price selected in-house number</h4>
+        <label>Number ID <input name="id" readonly required></label>
+        <label>Buy setup cents <input name="buySetupCents" type="number" min="0" required></label>
+        <label>Buy monthly cents <input name="buyMonthlyCents" type="number" min="0" required></label>
+        <label>Sell method <select name="priceMode"><option value="manual">Manual sell price</option><option value="rule">Follow in-house rule</option></select></label>
+        <label>Manual setup sell cents <input name="sellSetupCents" type="number" min="0" required></label>
+        <label>Manual monthly sell cents <input name="sellMonthlyCents" type="number" min="0" required></label>
+        <button>Save number pricing</button>
+      </form>
+      <form id="inhouse-filter">
+        <label>Inventory number prefix <input name="q" placeholder="+234203150"></label>
+        <label>Status <select name="status"><option value="">All</option><option>unverified</option><option>available</option><option>reserved</option><option>assigned</option><option>disabled</option></select></label>
+        <button>Find numbers</button>
+      </form>
       <ul id="inhouse-admin-numbers"></ul>
       <p id="inhouse-status" role="status"></p>
     </section>
@@ -194,10 +210,24 @@ root.innerHTML = `
       <label>Price in USD cents <input name="monthlyCents" type="number" min="0" step="1" required></label>
       <button>Create plan</button>
     </form>
-    <form id="markup-form">
-      <label>DID markup percentage <input name="percent" type="number" min="0" max="1000" step="1" value="30" required></label>
-      <button>Save markup</button>
-    </form>
+    <section id="pricing-admin">
+      <h3>DID buying and selling prices</h3>
+      <p>Provider buy costs come from live inventory. In-house buy costs are entered by an administrator. Rules affect new searches and reservations.</p>
+      <form id="pricing-rule">
+        <label>Source <select name="provider"><option value="flowroute">Flowroute</option><option value="didww">DIDWW</option><option value="inhouse">In-house</option></select></label>
+        <label>Method <select name="mode"><option value="percent">Percentage adjustment</option><option value="fixed">Fixed cent increase or decrease</option><option value="manual">Manual selling price in cents</option></select></label>
+        <label>Setup value <input name="setupValue" type="number" step="1" required></label>
+        <label>Monthly value <input name="monthlyValue" type="number" step="1" required></label>
+        <p>Percentage values use basis points: 3000 = +30%, -1000 = -10%. Fixed values use cents; negative decreases price. Manual values are final cents. Decreases stop at zero.</p>
+        <button>Save source rule</button>
+      </form>
+      <form id="pricing-preview">
+        <label>Buy setup cost in cents <input name="buySetup" type="number" min="0" required></label>
+        <label>Buy monthly cost in cents <input name="buyMonthly" type="number" min="0" required></label>
+        <button>Preview selling prices</button>
+      </form>
+      <p id="pricing-result" role="status"></p>
+    </section>
     <section id="group-admin">
       <h3>User groups and feature access</h3>
       <form id="group-create">
@@ -401,6 +431,7 @@ const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
 const pbx = setupPbx();
 const reports = setupReports({get:(path)=>apiGet(path)});
+const pricing = setupPricing();
 let phone;
 let onCall = false;
 let onHold = false;
@@ -518,8 +549,9 @@ async function refreshCdr() {
   $("#cdr-status").textContent = `${records.length} recent records; no charges applied.`;
 }
 async function refreshInhouse() {
+  const filters=new URLSearchParams(new FormData($("#inhouse-filter")));
   const [blocks,inventory] = await Promise.all([
-    apiGet("/api/admin/inhouse/blocks"),apiGet("/api/admin/inhouse/numbers")
+    apiGet("/api/admin/inhouse/blocks"),apiGet("/api/admin/inhouse/numbers?"+filters)
   ]);
   $("#inhouse-blocks").replaceChildren(...blocks.blocks.map((block) => {
     const item=document.createElement("li");
@@ -529,7 +561,18 @@ async function refreshInhouse() {
   const list=$("#inhouse-admin-numbers");list.replaceChildren();
   for (const did of inventory.numbers) {
     const item=document.createElement("li");
-    item.append(document.createTextNode(`${did.number_e164} — ${did.status} — `));
+    item.append(document.createTextNode(`${did.number_e164} — ${did.status} — ${did.price_mode} pricing (buy ${did.buy_setup_cents}/${did.buy_monthly_cents} cents setup/monthly) — `));
+    if (["available","unverified","disabled"].includes(did.status)) {
+      const edit=document.createElement("button");edit.type="button";edit.textContent="Set buy/sell price";
+      edit.onclick=()=>{
+        const form=$("#inhouse-price");
+        for(const [name,value] of Object.entries({id:did.id,buySetupCents:did.buy_setup_cents,
+          buyMonthlyCents:did.buy_monthly_cents,sellSetupCents:did.setup_cents,
+          sellMonthlyCents:did.monthly_cents,priceMode:did.price_mode})) form.elements[name].value=value;
+        form.scrollIntoView({behavior:"smooth"});
+      };
+      item.append(edit);
+    }
     if (did.status==="unverified") {
       const publish=document.createElement("button"); publish.textContent="Confirm rights and publish";
       publish.onclick=async () => {
@@ -559,6 +602,9 @@ async function refreshInhouse() {
     list.append(item);
   }
 }
+$("#inhouse-filter").onsubmit=(event)=>{
+  event.preventDefault();refreshInhouse().catch(error=>{$("#inhouse-status").textContent=error.message;});
+};
 async function refreshNigeria() {
   const {peers}=await apiGet("/api/admin/nigeria/peers");
   $("#nigeria-peers").replaceChildren(...peers.map((peer)=>{
@@ -619,6 +665,20 @@ $("#inhouse-import").onsubmit=async(event) => {
     $("#inhouse-status").textContent="Number staged for rights review.";
   } catch(error) {$("#inhouse-status").textContent=error.message;}
 };
+$("#inhouse-price").onsubmit=async(event)=>{
+  event.preventDefault();
+  try {
+    const data=Object.fromEntries(new FormData(event.currentTarget));
+    const response=await fetch(`/api/admin/inhouse/numbers/${data.id}/pricing`,{
+      method:"PUT",headers:{"Content-Type":"application/json"},credentials:"same-origin",
+      body:JSON.stringify({priceMode:data.priceMode,buySetupCents:Number(data.buySetupCents),
+        buyMonthlyCents:Number(data.buyMonthlyCents),sellSetupCents:Number(data.sellSetupCents),
+        sellMonthlyCents:Number(data.sellMonthlyCents)})});
+    const result=await response.json();
+    if (!response.ok) throw new Error(result.error||"Price update failed");
+    await refreshInhouse();$("#inhouse-status").textContent="Number pricing saved.";
+  } catch(error) {$("#inhouse-status").textContent=error.message;}
+};
 $("#refresh-cdr").onclick = () => refreshCdr().catch((error) => { $("#cdr-status").textContent = error.message; });
 async function loadContacts() {
   const { contacts } = await apiGet("/api/contacts");
@@ -669,6 +729,7 @@ function signedIn(user) {
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
   if (["admin","super_admin"].includes(user.role)) {
     reports.refresh();
+    pricing.refresh();
     refreshInhouse().catch((error) => { $("#inhouse-status").textContent = error.message; });
     refreshNigeria().catch((error) => { $("#nigeria-status").textContent = error.message; });
     refreshCdr().catch((error) => { $("#cdr-status").textContent = error.message; });
@@ -774,14 +835,6 @@ $("#create-plan").addEventListener("submit", async (event) => {
     await accountRequest("/api/admin/plans", { ...data, monthlyCents: Number(data.monthlyCents) });
     await loadPlans();
     $("#admin-status").textContent = "Plan created";
-  } catch (error) { $("#admin-status").textContent = error.message; }
-});
-$("#markup-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  try {
-    const percent = Number(new FormData(event.currentTarget).get("percent"));
-    await accountRequest("/api/admin/markup", { percent });
-    $("#admin-status").textContent = "DID markup saved";
   } catch (error) { $("#admin-status").textContent = error.message; }
 });
 $("#add-contact").addEventListener("submit", async (event) => {
