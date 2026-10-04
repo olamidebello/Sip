@@ -6,6 +6,11 @@ export function validInhouseDid(number) {
   if (!number.startsWith("+1")) return true;
   return /^\+1[2-9]\d{2}[2-9]\d{2}\d{4}$/.test(number);
 }
+export function nigeriaBlockNumber(prefix,suffix) {
+  if (!/^20315[0-4]$/.test(prefix) || !Number.isInteger(suffix) || suffix<0 || suffix>9999) return null;
+  return `+234${prefix}${String(suffix).padStart(4,"0")}`;
+}
+function validPrice(value) { return Number.isSafeInteger(value) && value>=0 && value<=10000000; }
 export async function handleInhouseDids({req,res,path,user,pool,send,readJson}) {
   const tenant = user.tenant_id;
   if (path === "/api/inhouse/numbers" && req.method === "GET") {
@@ -47,6 +52,48 @@ export async function handleInhouseDids({req,res,path,user,pool,send,readJson}) 
   if (path === "/api/admin/inhouse/blocks" && req.method === "GET") {
     const result=await pool.query("SELECT prefix_digits,requested_count,status,note FROM did_requested_blocks WHERE tenant_id=$1 ORDER BY prefix_digits",[tenant]);
     return send(res,200,{blocks:result.rows});
+  }
+  const blockAction=/^\/api\/admin\/inhouse\/blocks\/(20315[0-4])\/(import|publish-range)$/.exec(path);
+  if (blockAction && req.method === "POST") {
+    const [,prefix,operation]=blockAction;
+    const data=await readJson(req);
+    if (operation==="import" && (!validPrice(data.setupCents) || !validPrice(data.monthlyCents)))
+      return send(res,400,{error:"Valid setup and monthly prices in cents required"});
+    if (operation==="publish-range" && (data.confirmed!==true || !Number.isInteger(data.startSuffix) ||
+        !Number.isInteger(data.endSuffix) || data.startSuffix<0 || data.endSuffix>9999 ||
+        data.startSuffix>data.endSuffix || typeof data.inventoryReference!=="string" ||
+        !data.inventoryReference.trim() || data.inventoryReference.length>255))
+      return send(res,400,{error:"Confirm verified unused suffix range and provide inventory reference"});
+    const db=await pool.connect();
+    try {
+      await db.query("BEGIN");
+      const block=(await db.query("SELECT status FROM did_requested_blocks WHERE tenant_id=$1 AND prefix_digits=$2 FOR UPDATE",[tenant,prefix])).rows[0];
+      if (!block) {await db.query("ROLLBACK");return send(res,404,{error:"Block unavailable"});}
+      if (operation==="import") {
+        if (block.status!=="allocated_ncc") {await db.query("ROLLBACK");return send(res,409,{error:"Block already imported or unavailable"});}
+        let imported=0;
+        for (let start=0;start<10000;start+=250) {
+          const values=[],params=[];
+          for (let suffix=start;suffix<start+250;suffix++) {
+            const offset=params.length;
+            values.push(`($${offset+1},$${offset+2},$${offset+3},$${offset+4},$${offset+5},$${offset+6})`);
+            params.push(randomUUID(),tenant,nigeriaBlockNumber(prefix,suffix),data.setupCents,data.monthlyCents,
+              "NCC National Numbering Plan allocation to Smooth Multi-Service Platform Limited");
+          }
+          const result=await db.query(`INSERT IGNORE INTO inhouse_dids(id,tenant_id,number_e164,setup_cents,monthly_cents,evidence_reference) VALUES ${values.join(",")}`,params);
+          imported+=result.rowCount;
+        }
+        await db.query("UPDATE did_requested_blocks SET status='imported_unverified' WHERE tenant_id=$1 AND prefix_digits=$2",[tenant,prefix]);
+        await db.query("COMMIT");
+        return send(res,201,{prefix,imported,status:"imported_unverified",provisioned:false});
+      }
+      if (block.status!=="imported_unverified") {await db.query("ROLLBACK");return send(res,409,{error:"Import block first"});}
+      const result=await db.query("UPDATE inhouse_dids SET status='available',evidence_reference=$1 WHERE tenant_id=$2 AND number_e164 BETWEEN $3 AND $4 AND status='unverified'",
+        [data.inventoryReference.trim(),tenant,nigeriaBlockNumber(prefix,data.startSuffix),nigeriaBlockNumber(prefix,data.endSuffix)]);
+      await db.query("COMMIT");
+      return send(res,200,{prefix,published:result.rowCount,provisioned:false});
+    } catch(error) {await db.query("ROLLBACK");throw error;}
+    finally {db.release();}
   }
   if (path === "/api/admin/inhouse/numbers" && req.method === "GET") {
     const result=await pool.query("SELECT id,number_e164,status,setup_cents,monthly_cents,evidence_reference,user_id,invoice_id,reserved_until FROM inhouse_dids WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200",[tenant]);
