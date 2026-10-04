@@ -9,11 +9,11 @@ CREATE TABLE IF NOT EXISTS did_requested_blocks (
   UNIQUE KEY did_requested_tenant_prefix (tenant_id,prefix_digits)
 ) ENGINE=InnoDB;
 INSERT IGNORE INTO did_requested_blocks(id,tenant_id,prefix_digits,requested_count,status,note) VALUES
-('00000000-0000-4000-8000-000000203150','00000000-0000-4000-8000-000000000000','203150',10000,'needs_format_review','Country and numbering rights unverified; invalid if +1 area 203'),
-('00000000-0000-4000-8000-000000203151','00000000-0000-4000-8000-000000000000','203151',10000,'needs_format_review','Country and numbering rights unverified; invalid if +1 area 203'),
-('00000000-0000-4000-8000-000000203152','00000000-0000-4000-8000-000000000000','203152',10000,'needs_format_review','Country and numbering rights unverified; invalid if +1 area 203'),
-('00000000-0000-4000-8000-000000203153','00000000-0000-4000-8000-000000000000','203153',10000,'needs_format_review','Country and numbering rights unverified; invalid if +1 area 203'),
-('00000000-0000-4000-8000-000000203154','00000000-0000-4000-8000-000000000000','203154',10000,'needs_format_review','Country and numbering rights unverified; invalid if +1 area 203');
+('00000000-0000-4000-8000-000000203150','00000000-0000-4000-8000-000000000000','203150',10000,'needs_format_review','Country and numbering rights unverified — invalid if +1 area 203'),
+('00000000-0000-4000-8000-000000203151','00000000-0000-4000-8000-000000000000','203151',10000,'needs_format_review','Country and numbering rights unverified — invalid if +1 area 203'),
+('00000000-0000-4000-8000-000000203152','00000000-0000-4000-8000-000000000000','203152',10000,'needs_format_review','Country and numbering rights unverified — invalid if +1 area 203'),
+('00000000-0000-4000-8000-000000203153','00000000-0000-4000-8000-000000000000','203153',10000,'needs_format_review','Country and numbering rights unverified — invalid if +1 area 203'),
+('00000000-0000-4000-8000-000000203154','00000000-0000-4000-8000-000000000000','203154',10000,'needs_format_review','Country and numbering rights unverified — invalid if +1 area 203');
 CREATE TABLE IF NOT EXISTS inhouse_dids (
   id CHAR(36) PRIMARY KEY,
   tenant_id CHAR(36) NOT NULL,
