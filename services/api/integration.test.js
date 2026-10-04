@@ -80,6 +80,12 @@ test("registered users can create and join a room; host controls it", {
   const timezone = await db.query("SELECT @@session.time_zone AS timezone");
   assert.equal(timezone.rows[0].timezone, "+00:00");
   await db.query("UPDATE users SET role='admin' WHERE id=$1", [hostLogin.body.id]);
+  const ldapAdmin=await fetch(base+"/api/admin/ldap",{headers:{Cookie:hostCookie}});
+  assert.equal((await ldapAdmin.json()).configured,false);
+  const ldapEnable=await fetch(base+"/api/admin/ldap",{method:"PUT",
+    headers:{Origin:origin,"Content-Type":"application/json",Cookie:hostCookie},
+    body:JSON.stringify({enabled:true})});
+  assert.equal(ldapEnable.status,409);
   const backgroundConfig={dayPreset:"aurora",nightPreset:"midnight",schedule:true,animate:false};
   const backgroundPolicy=await fetch(base+"/api/admin/background",{method:"PUT",
     headers:{Origin:origin,"Content-Type":"application/json",Cookie:hostCookie},
