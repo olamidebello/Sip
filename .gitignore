@@ -1,0 +1,5 @@
+deployment/secrets.env
+deployment/docker/.env
+node_modules/
+apps/web/dist/
+deployment/ansible/inventory.ini
