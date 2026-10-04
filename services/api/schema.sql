@@ -119,6 +119,54 @@ CREATE TABLE IF NOT EXISTS user_group_members (
   CONSTRAINT fk_user_group_members_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_user_group_members_group FOREIGN KEY (group_id) REFERENCES user_groups(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS mobile_apps (
+  id CHAR(36) PRIMARY KEY,
+  platform VARCHAR(16) NOT NULL,
+  app_identifier VARCHAR(255) NOT NULL,
+  display_name VARCHAR(100) NOT NULL,
+  store_app_id VARCHAR(64) NULL,
+  created_by CHAR(36) NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_mobile_apps_creator FOREIGN KEY (created_by) REFERENCES users(id),
+  CONSTRAINT chk_mobile_platform CHECK (platform IN ('android','ios')),
+  UNIQUE KEY mobile_apps_identifier (platform, app_identifier)
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS mobile_releases (
+  id CHAR(36) PRIMARY KEY,
+  app_id CHAR(36) NOT NULL,
+  version_name VARCHAR(64) NOT NULL,
+  build_number VARCHAR(64) NOT NULL,
+  track VARCHAR(32) NOT NULL,
+  rollout_percent TINYINT UNSIGNED NOT NULL DEFAULT 100,
+  release_notes TEXT NOT NULL,
+  artifact_url VARCHAR(2048) NOT NULL,
+  artifact_sha256 CHAR(64) NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'draft',
+  revision INT UNSIGNED NOT NULL DEFAULT 1,
+  created_by CHAR(36) NOT NULL,
+  approved_by CHAR(36) NULL,
+  approved_at DATETIME(3) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_mobile_releases_app FOREIGN KEY (app_id) REFERENCES mobile_apps(id),
+  CONSTRAINT fk_mobile_releases_creator FOREIGN KEY (created_by) REFERENCES users(id),
+  CONSTRAINT fk_mobile_releases_approver FOREIGN KEY (approved_by) REFERENCES users(id),
+  CONSTRAINT chk_mobile_release_status CHECK (status IN ('draft','approved','archived')),
+  CONSTRAINT chk_mobile_rollout CHECK (rollout_percent BETWEEN 1 AND 100),
+  UNIQUE KEY mobile_releases_build (app_id, build_number),
+  INDEX mobile_releases_status (app_id,status,created_at)
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS mobile_release_events (
+  id CHAR(36) PRIMARY KEY,
+  release_id CHAR(36) NOT NULL,
+  actor_id CHAR(36) NOT NULL,
+  action VARCHAR(24) NOT NULL,
+  revision INT UNSIGNED NOT NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_mobile_events_release FOREIGN KEY (release_id) REFERENCES mobile_releases(id),
+  CONSTRAINT fk_mobile_events_actor FOREIGN KEY (actor_id) REFERENCES users(id),
+  INDEX mobile_events_release (release_id,created_at)
+) ENGINE=InnoDB;
 INSERT IGNORE INTO user_groups (id,name,features)
 VALUES ('00000000-0000-4000-8000-000000000001','Standard',
   '{"meetings":true,"screen_share":true,"remote_assist":false,"messaging":true,"billing":true}');
