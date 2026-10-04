@@ -2,6 +2,7 @@ import http from "node:http";
 import fs from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { createDatabase } from "./db.js";
+import { handleMobileAdmin } from "./mobileAdmin.js";
 import { markupCents } from "./billing.js";
 import { availableNumbers } from "./providers.js";
 import { attachMeetingSignaling } from "./meetings.js";
@@ -39,7 +40,7 @@ function limit(req) {
     ? { start: now, count: 0 } : record;
   entry.count++;
   attempts.set(key, entry);
-  return entry.count <= 20;
+  return entry.count <= Number(process.env.API_RATE_LIMIT || 20);
 }
 async function readJson(req) {
   if (!req.headers["content-type"]?.startsWith("application/json"))
@@ -159,6 +160,8 @@ async function handler(req, res) {
         path.startsWith("/api/meetings")) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if (path.startsWith("/api/admin/mobile/"))
+        return handleMobileAdmin({ req,res,path,user,pool,send,readJson });
       if (path.startsWith("/api/meetings") && !user.features.meetings)
         return send(res, 403, { error: "Meetings unavailable for your groups" });
       if (path.startsWith("/api/messages") || path.startsWith("/api/contacts"))
