@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import WebSocket from "ws";
+import { createHmac } from "node:crypto";
 import { createDatabase } from "./db.js";
+const cdrTenant = "00000000-0000-4000-8000-000000000000";
+const cdrSecret = "integration-only-cdr-secret-" + "x".repeat(32);
 
 test("registered users can create and join a room; host controls it", {
   skip: !process.env.TEST_MYSQL_URL,
@@ -15,7 +18,8 @@ test("registered users can create and join a room; host controls it", {
   const server = spawn(process.execPath, ["server.js"], {
     cwd: new URL(".", import.meta.url).pathname,
     env: { ...process.env, MYSQL_URL: process.env.TEST_MYSQL_URL,
-      PUBLIC_ORIGIN: origin, API_RATE_LIMIT:"100", LISTEN_ADDR: "127.0.0.1", PORT: String(port) },
+      PUBLIC_ORIGIN: origin, API_RATE_LIMIT:"100", LISTEN_ADDR: "127.0.0.1", PORT: String(port),
+      CDR_INGEST_KEYS_JSON: JSON.stringify({[cdrTenant]:cdrSecret}) },
     stdio: ["ignore","pipe","pipe"]
   });
   t.after(() => server.kill());
@@ -76,6 +80,27 @@ test("registered users can create and join a room; host controls it", {
   const timezone = await db.query("SELECT @@session.time_zone AS timezone");
   assert.equal(timezone.rows[0].timezone, "+00:00");
   await db.query("UPDATE users SET role='admin' WHERE id=$1", [hostLogin.body.id]);
+  const cdr = {tenantId:cdrTenant,source:"integration-switch",legId:unique,
+    direction:"outbound",from:"+12125550123",to:"+12125550124",
+    disposition:"answered",durationSeconds:60,billableSeconds:55,
+    startedAt:new Date().toISOString().replace(/\.\d{3}Z$/,"Z")};
+  const ingest = async (record, sign = true) => {
+    const raw = JSON.stringify(record), timestamp = String(Math.floor(Date.now()/1000));
+    const signature = sign ? createHmac("sha256",cdrSecret).update(timestamp+"."+raw).digest("hex") : "0".repeat(64);
+    const response = await fetch(base+"/api/integrations/cdr", {
+      method:"POST",headers:{"Content-Type":"application/json",
+        "X-CDR-Timestamp":timestamp,"X-CDR-Signature":signature},body:raw
+    });
+    return {status:response.status,body:await response.json()};
+  };
+  assert.equal((await ingest(cdr,false)).status,401);
+  assert.equal((await ingest(cdr)).status,201);
+  assert.equal((await ingest(cdr)).body.duplicate,true);
+  assert.equal((await ingest({...cdr,durationSeconds:61})).status,409);
+  const cdrAdmin = await fetch(base+"/api/admin/cdr",{headers:{Cookie:hostCookie}});
+  assert.equal(cdrAdmin.status,200);
+  assert.equal((await cdrAdmin.json()).records.some((record) => record.leg_id === unique),true);
+  assert.equal((await fetch(base+"/api/admin/cdr",{headers:{Cookie:guestCookie}})).status,403);
   assert.equal((await post("/api/contacts",
     { email:"guest" + unique + "@example.com" }, hostCookie)).status, 201);
   assert.equal((await post("/api/messages",

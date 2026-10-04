@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { createDatabase } from "./db.js";
 import { handleMobileAdmin } from "./mobileAdmin.js";
 import { handlePbx } from "./pbx.js";
+import { handleCdrIngest, handleCdrAdmin } from "./cdr.js";
 import { migrateTenancy, handleTenants, isAdmin, defaultTenantId } from "./tenancy.js";
 import { markupCents } from "./billing.js";
 import { availableNumbers } from "./providers.js";
@@ -23,6 +24,11 @@ const attempts = new Map();
 const uuidPattern = /^[0-9a-f-]{36}$/i;
 const meetingIceServers = JSON.parse(process.env.MEETING_ICE_SERVERS_JSON || "[]");
 if (!Array.isArray(meetingIceServers)) throw new Error("MEETING_ICE_SERVERS_JSON must be an array");
+const cdrKeys = JSON.parse(process.env.CDR_INGEST_KEYS_JSON || "{}");
+if (!cdrKeys || typeof cdrKeys !== "object" || Array.isArray(cdrKeys) ||
+    Object.entries(cdrKeys).some(([tenant,secret]) =>
+      !uuidPattern.test(tenant) || typeof secret !== "string" || secret.length < 32))
+  throw new Error("CDR_INGEST_KEYS_JSON must map tenant IDs to secrets of at least 32 characters");
 let meetingSignaling;
 
 function send(res, status, body, headers = {}) {
@@ -34,7 +40,7 @@ function send(res, status, body, headers = {}) {
   });
   res.end(JSON.stringify(body));
 }
-function limit(req) {
+function limit(req, maximum = Number(process.env.API_RATE_LIMIT || 20)) {
   const key = req.socket.remoteAddress || "unknown";
   const now = Date.now();
   const record = attempts.get(key);
@@ -42,7 +48,7 @@ function limit(req) {
     ? { start: now, count: 0 } : record;
   entry.count++;
   attempts.set(key, entry);
-  return entry.count <= Number(process.env.API_RATE_LIMIT || 20);
+  return entry.count <= maximum;
 }
 async function readJson(req) {
   if (!req.headers["content-type"]?.startsWith("application/json"))
@@ -88,11 +94,13 @@ async function handler(req, res) {
   const path = new URL(req.url, origin).pathname;
   if (req.method === "GET" && path === "/api/health")
     return send(res, 200, { status: "ok" });
-  if (req.method !== "GET" && req.headers.origin !== origin)
+  const cdrIngest = req.method === "POST" && path === "/api/integrations/cdr";
+  if (req.method !== "GET" && !cdrIngest && req.headers.origin !== origin)
     return send(res, 403, { error: "Invalid origin" });
-  if (req.method !== "GET" && !limit(req))
+  if (req.method !== "GET" && !limit(req,cdrIngest ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
     return send(res, 429, { error: "Too many requests" });
   try {
+    if (cdrIngest) return await handleCdrIngest({req,res,pool,send,keys:cdrKeys});
     if (req.method === "POST" && path === "/api/register") {
       const { name, email, password } = validateRegistration(await readJson(req));
       const { salt, hash } = await hashPassword(password);
@@ -161,11 +169,14 @@ async function handler(req, res) {
     if (path.startsWith("/api/contacts") || path.startsWith("/api/messages") ||
         path.startsWith("/api/admin/") || path.startsWith("/api/billing/") ||
         path.startsWith("/api/numbers") || path.startsWith("/api/porting") ||
-        path.startsWith("/api/meetings") || path.startsWith("/api/pbx/")) {
+        path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") ||
+        path === "/api/admin/cdr") {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
       if (path.startsWith("/api/pbx/"))
         return await handlePbx({req,res,path,user,pool,send,readJson});
+      if (path === "/api/admin/cdr" && req.method === "GET")
+        return await handleCdrAdmin({req,res,user,pool,send});
       if (path.startsWith("/api/admin/tenants") || path === "/api/admin/tenant-users")
         return await handleTenants({req,res,path,user,pool,readJson,send,meetingSignaling,sessionHash:tokenHash(currentToken(req))});
       if (path.startsWith("/api/admin/mobile/"))
@@ -520,6 +531,7 @@ async function handler(req, res) {
 await pool.initialize(await fs.readFile(new URL("./schema.sql", import.meta.url), "utf8"));
 await migrateTenancy(pool);
 await pool.initialize(await fs.readFile(new URL("./pbx-schema.sql", import.meta.url), "utf8"));
+await pool.initialize(await fs.readFile(new URL("./cdr-schema.sql", import.meta.url), "utf8"));
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);

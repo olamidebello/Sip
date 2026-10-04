@@ -11,7 +11,7 @@ mysql -u root -p < services/api/create-database.sql
 mysql -u root -p olamide < services/api/schema.sql
 ```
 
-`create-database.sql` creates the `olamide` database using `utf8mb4`. `schema.sql` defines users, sessions, contacts, messages, settings, plans, subscriptions, invoices, port requests, DID quotes, meeting rooms, user groups, and group membership. It seeds the Standard group and assigns existing users to it once. Both scripts can be rerun. Create a dedicated MySQL application user and grant access to the `olamide` database; a commented grant example is in `create-database.sql`. Use a strong secret and keep the MySQL server time zone at UTC.
+`create-database.sql` creates the `olamide` database using `utf8mb4`. `schema.sql` defines the initial account tables. The API then applies the idempotent tenant migration, `pbx-schema.sql`, and `cdr-schema.sql` on startup. Create a dedicated MySQL application user and grant access to the `olamide` database; a commented grant example is in `create-database.sql`. Use a strong secret and keep the MySQL server time zone at UTC.
 
 Set the application connection URL only on the API server. URL-encode reserved characters in the password:
 
@@ -22,7 +22,7 @@ MYSQL_URL='mysql://USER:PASSWORD@127.0.0.1:3306/olamide' \
 PUBLIC_ORIGIN='http://127.0.0.1:5173' npm start
 ```
 
-The API reapplies the idempotent base tables, tenant migration, and `pbx-schema.sql` on startup. On a remote MySQL connection, configure `MYSQL_SSL_CA` with the path to a trusted CA certificate. In production, run schema changes through a controlled migration process and remove the application's DDL privileges. Back up the database regularly.
+The API reapplies the idempotent base tables, tenant migration, `pbx-schema.sql`, and `cdr-schema.sql` on startup. On a remote MySQL connection, configure `MYSQL_SSL_CA` with the path to a trusted CA certificate. In production, run schema changes through a controlled migration process and remove the application's DDL privileges. Back up the database regularly.
 
 This is a **new MySQL schema**. It does not import records from an earlier PostgreSQL database. If you have a populated PostgreSQL deployment, export, transform, and verify those records separately before switching traffic.
 
@@ -71,7 +71,7 @@ This repository contains a browser SIP dialer, a MySQL-backed account API, and a
 | Browser softphone | SIP.js registration and WebRTC audio calling, hold, mute, DTMF, browser-local favorites, recent calls, local do-not-disturb, selectable audio output where supported | SIP WSS server, users, trunks, SBC, TURN as appropriate |
 | PBX control plane | Tenant extensions, queue membership, DID destination maps, voicemail/forwarding intent | Switch provisioning, active dialplan, voicemail recording and delivery |
 | Call center | Manual agent availability, ring-all/ordered/longest-idle eligibility preview | Live queue engine, call distribution, SLAs, recording, wallboards |
-| Carrier routing | Planned trunks, prefix rate deck, tenant call barring with longest-prefix allow exceptions, longest-prefix least-cost preview | Carrier credentials, switch enforcement, fraud controls, CDR ingestion |
+| Carrier routing | Planned trunks, prefix rate deck, tenant call barring with longest-prefix allow exceptions, longest-prefix least-cost preview; authenticated normalized call-record intake | Carrier credentials, switch enforcement, fraud controls, live CDR source and reconciliation |
 | Billing | Monthly plan drafts and unpaid invoices, DID markup quotes | Payment gateway, taxes, prepaid balance enforcement, rated CDR settlement |
 | Deployment | Debian bootstrap, TLS web/API stack, validated Git pull, backups before updates, OS security updates | Public DNS record, SSH/console access, carrier and SIP services |
 
@@ -83,7 +83,15 @@ Favorites, recent calls, and do-not-disturb are stored in this browser's local s
 
 ASTPP includes carrier-grade softswitch, online charging, reseller billing, routing, DID management, and fraud controls; 3CX includes a live PBX and queue engine. The Olamide control plane is **not** a substitute for either complete product. Do not advertise or rely on prepaid charging, automatic call recording, emergency calling, lawful intercept, carrier routing, or live queue service until those components have been separately implemented and verified.
 
-PortaOne's PortaSwitch also provides SIP call processing, media applications, phone provisioning, customer and reseller self-care, real-time authorization, and rating. The Olamide administrator can now save per-tenant outbound prefix rules under **PBX and call center configuration → Outbound call barring policy**. Save a `block` rule for a broad prefix and an `allow` rule for a more specific exception; the longest matching prefix wins in the route preview. Removing a rule immediately changes preview results. This policy is stored in MySQL but **does not block calls on a SIP switch**. There is no live PortaOne integration, charging engine, CDR ingestion, or reseller settlement. Before going live, provision the exact same policy on an authoritative switch and test fail-closed behavior there.
+PortaOne's PortaSwitch also provides SIP call processing, media applications, phone provisioning, customer and reseller self-care, real-time authorization, and rating. The Olamide administrator can save per-tenant outbound prefix rules under **PBX and call center configuration → Outbound call barring policy**. Save a `block` rule for a broad prefix and an `allow` rule for a more specific exception; the longest matching prefix wins in the route preview. Removing a rule immediately changes preview results. This policy is stored in MySQL but **does not block calls on a SIP switch**. Olamide also accepts normalized signed CDR legs from an external switch, as described below. There is no live PortaOne integration, charging engine, automated CDR reconciliation, or reseller settlement. Before going live, provision the exact same policy on an authoritative switch and test fail-closed behavior there.
+
+### Switch call-record ingestion
+
+Set `CDR_INGEST_KEYS_JSON` in the private API environment to a JSON object mapping each tenant UUID to a separate random HMAC secret of at least 32 characters. Generate a secret with `openssl rand -hex 32`; do not commit it. The default tenant is `00000000-0000-4000-8000-000000000000`. On the server, edit `/etc/olamide/secrets.env` and rerun bootstrap to apply it. Keep the file mode 0600. Remove a tenant entry to revoke its ingestion key. Rotate keys with a controlled switch cutover; the current configuration permits one key per tenant.
+
+`POST /api/integrations/cdr` accepts at most 8 KiB of normalized JSON with `Content-Type: application/json`. Its `X-CDR-Timestamp` is Unix seconds within five minutes of the API clock. Its `X-CDR-Signature` is lowercase or uppercase hex HMAC-SHA256 of the UTF-8 bytes `timestamp + "." + raw_request_body` with that tenant's secret. The caller must supply `tenantId`, `source` (switch identifier), `legId` (unique per source and call leg), `direction` (`inbound` or `outbound`), E.164 `from` and `to`, `disposition` (`answered`, `missed`, `rejected`, or `failed`), integer `durationSeconds`, integer `billableSeconds`, and UTC ISO `startedAt` (for example `2026-10-04T06:00:00Z`). The adapter connecting a switch must normalize its native event fields, map each call leg to the correct tenant, and sign the raw body. A native FreeSWITCH JSON CDR is **not** this normalized contract.
+
+The API stores each `(tenantId, source, legId)` once. An exact replay returns `duplicate:true`; a changed record under the same key returns HTTP 409 for investigation. The admin **Imported call records** panel shows the 100 latest legs for the selected tenant. These records are unrated and never alter invoices, balances, or payments. Source attribution, clock synchronization, completeness checks, fraud monitoring, lawful retention, and reconciliation with the carrier are required before using CDRs for billing. Protect the endpoint with network controls as well as HMAC; its origin exemption exists for server-to-server delivery.
 
 ## Step-by-step first pull on a bare Debian 12 server
 

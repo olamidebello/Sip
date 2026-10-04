@@ -108,6 +108,13 @@ root.innerHTML = `
       <button>Save server URL</button>
     </form>
     <p id="admin-status" role="status"></p>
+    <section id="cdr-admin">
+      <h3>Imported call records</h3>
+      <p>Verified switch records only. These are unrated and never charge a customer.</p>
+      <button id="refresh-cdr" type="button">Refresh call records</button>
+      <ol id="cdr-records"></ol>
+      <p id="cdr-status" role="status"></p>
+    </section>
     <form id="create-plan">
       <h3>Create monthly plan</h3>
       <label>Name <input name="name" required></label>
@@ -416,6 +423,17 @@ async function apiGet(path) {
   if (!response.ok) throw new Error(data.error || "Request failed");
   return data;
 }
+async function refreshCdr() {
+  const {records} = await apiGet("/api/admin/cdr");
+  const list = $("#cdr-records"); list.replaceChildren();
+  for (const record of records) {
+    const item = document.createElement("li");
+    item.textContent = `${record.started_at} · ${record.direction} · ${record.caller_e164} → ${record.callee_e164} · ${record.disposition} · ${record.billable_seconds}s billable · ${record.source}/${record.leg_id}`;
+    list.append(item);
+  }
+  $("#cdr-status").textContent = `${records.length} recent records; no charges applied.`;
+}
+$("#refresh-cdr").onclick = () => refreshCdr().catch((error) => { $("#cdr-status").textContent = error.message; });
 async function loadContacts() {
   const { contacts } = await apiGet("/api/contacts");
   const list = $("#contact-list");
@@ -459,6 +477,7 @@ function signedIn(user) {
   pbx.refreshSelf(user).catch((error) => { $("#agent-status-result").textContent = error.message; });
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
   if (["admin","super_admin"].includes(user.role)) {
+    refreshCdr().catch((error) => { $("#cdr-status").textContent = error.message; });
     pbx.refreshAdmin().catch((error) => { $("#pbx-status").textContent = error.message; });
     tenantAdmin.refresh(user).catch((error) => { $("#tenant-status").textContent = error.message; });
     mobileAdmin.refresh().catch((error) => { $("#mobile-status").textContent = error.message; });

@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS cdr_records (
+  id CHAR(36) PRIMARY KEY,
+  tenant_id CHAR(36) NOT NULL,
+  source VARCHAR(80) NOT NULL,
+  leg_id VARCHAR(80) NOT NULL,
+  payload_hash CHAR(64) NOT NULL,
+  direction VARCHAR(8) NOT NULL,
+  caller_e164 VARCHAR(16) NOT NULL,
+  callee_e164 VARCHAR(16) NOT NULL,
+  disposition VARCHAR(8) NOT NULL,
+  duration_seconds INT UNSIGNED NOT NULL,
+  billable_seconds INT UNSIGNED NOT NULL,
+  started_at DATETIME(3) NOT NULL,
+  received_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_cdr_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT chk_cdr_direction CHECK (direction IN ('inbound','outbound')),
+  CONSTRAINT chk_cdr_disposition CHECK (disposition IN ('answered','missed','rejected','failed')),
+  UNIQUE KEY cdr_tenant_source_leg (tenant_id,source,leg_id),
+  INDEX cdr_tenant_received (tenant_id,received_at)
+) ENGINE=InnoDB;
