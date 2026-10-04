@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { createDatabase } from "./db.js";
 import { handleMobileAdmin } from "./mobileAdmin.js";
+import { migrateTenancy, handleTenants, isAdmin, defaultTenantId } from "./tenancy.js";
 import { markupCents } from "./billing.js";
 import { availableNumbers } from "./providers.js";
 import { attachMeetingSignaling } from "./meetings.js";
@@ -66,7 +67,7 @@ async function currentUser(req) {
   const token = currentToken(req);
   if (!token) return null;
   const result = await pool.query(
-    "SELECT u.id, u.display_name, u.email, u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now()",
+    "SELECT u.id, u.display_name, u.email, u.role, u.tenant_id FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=u.tenant_id AND t.status='active' WHERE s.token_hash=$1 AND s.expires_at>now()",
     [tokenHash(token)]
   );
   const user = result.rows[0];
@@ -75,10 +76,10 @@ async function currentUser(req) {
   return user;
 }
 async function featuresFor(user) {
-  if (user.role === "admin") return effectiveFeatures([], true);
+  if (isAdmin(user)) return effectiveFeatures([], true);
   const result = await pool.query(
-    "SELECT g.features FROM user_group_members m JOIN user_groups g ON g.id=m.group_id WHERE m.user_id=$1",
-    [user.id]
+    "SELECT g.features FROM user_group_members m JOIN user_groups g ON g.id=m.group_id WHERE m.user_id=$1 AND g.tenant_id=$2",
+    [user.id,user.tenant_id]
   );
   return effectiveFeatures(result.rows.map((row) => row.features));
 }
@@ -97,8 +98,8 @@ async function handler(req, res) {
       const id = randomUUID();
       try {
         await pool.query(
-          "INSERT INTO users (id, display_name, email, password_salt, password_hash) VALUES ($1,$2,$3,$4,$5)",
-          [id, name, email, salt, hash]
+          "INSERT INTO users (id, tenant_id, display_name, email, password_salt, password_hash) VALUES ($1,$2,$3,$4,$5,$6)",
+          [id, defaultTenantId, name, email, salt, hash]
         );
         await pool.query(
           "INSERT INTO user_group_members(user_id,group_id) VALUES($1,'00000000-0000-4000-8000-000000000001')",
@@ -116,7 +117,7 @@ async function handler(req, res) {
           email.length > 254 || password.length > 1024)
         return send(res, 400, { error: "Invalid credentials" });
       const result = await pool.query(
-        "SELECT id, display_name, email, role, password_salt, password_hash FROM users WHERE email=$1",
+        "SELECT u.id, u.display_name, u.email, u.role, u.tenant_id, u.password_salt, u.password_hash FROM users u JOIN tenants t ON t.id=u.tenant_id AND t.status='active' WHERE u.email=$1",
         [email.trim().toLowerCase()]
       );
       const user = result.rows[0];
@@ -128,14 +129,14 @@ async function handler(req, res) {
         [tokenHash(token), user.id]
       );
       return send(res, 200, { id: user.id, name: user.display_name, email: user.email,
-        role: user.role, features:await featuresFor(user) },
+        role: user.role, tenantId:user.tenant_id, features:await featuresFor(user) },
         { "Set-Cookie": sessionCookie(token, 604800) });
     }
     if (req.method === "GET" && path === "/api/me") {
       const user = await currentUser(req);
       return user
         ? send(res, 200, { id: user.id, name: user.display_name, email: user.email,
-            role: user.role, features:user.features })
+            role: user.role, tenantId:user.tenant_id, features:user.features })
         : send(res, 401, { error: "Session expired" });
     }
     if (req.method === "POST" && path === "/api/logout") {
@@ -145,12 +146,14 @@ async function handler(req, res) {
         { "Set-Cookie": sessionCookie("", 0) });
     }
     if (path === "/api/config" && req.method === "GET") {
-      const result = await pool.query("SELECT value FROM app_settings WHERE setting_key='sip_wss_url'");
+      const viewer = await currentUser(req);
+      const result = await pool.query("SELECT value FROM tenant_settings WHERE tenant_id=$1 AND setting_key='sip_wss_url'", [viewer?.tenant_id || defaultTenantId]);
       return send(res, 200, { sipWssUrl: result.rows[0]?.value || "" });
     }
     if (path === "/api/plans" && req.method === "GET") {
+      const viewer = await currentUser(req);
       const result = await pool.query(
-        "SELECT id,name,monthly_cents,description FROM plans WHERE active=true ORDER BY monthly_cents,id"
+        "SELECT id,name,monthly_cents,description FROM plans WHERE tenant_id=$1 AND active=true ORDER BY monthly_cents,id", [viewer?.tenant_id || defaultTenantId]
       );
       return send(res, 200, { plans: result.rows });
     }
@@ -160,6 +163,8 @@ async function handler(req, res) {
         path.startsWith("/api/meetings")) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if (path.startsWith("/api/admin/tenants") || path === "/api/admin/tenant-users")
+        return await handleTenants({req,res,path,user,pool,readJson,send,meetingSignaling});
       if (path.startsWith("/api/admin/mobile/"))
         return await handleMobileAdmin({ req,res,path,user,pool,send,readJson });
       if (path.startsWith("/api/meetings") && !user.features.meetings)
@@ -177,8 +182,8 @@ async function handler(req, res) {
         if (typeof title !== "string" || !title.trim() || title.length > 100)
           return send(res, 400, { error: "Meeting title required (max 100 characters)" });
         const id = randomUUID();
-        await pool.query("INSERT INTO meeting_rooms(id,host_id,title) VALUES($1,$2,$3)",
-          [id,user.id,title.trim()]);
+        await pool.query("INSERT INTO meeting_rooms(id,host_id,tenant_id,title) VALUES($1,$2,$3,$4)",
+          [id,user.id,user.tenant_id,title.trim()]);
         return send(res, 201, { id,title:title.trim(),hostId:user.id });
       }
       if (path === "/api/meetings" && req.method === "GET") {
@@ -192,7 +197,7 @@ async function handler(req, res) {
       if (meetingMatch && uuidPattern.test(meetingMatch[1])) {
         const id = meetingMatch[1];
         const result = await pool.query(
-          "SELECT id,title,host_id,locked,ended_at FROM meeting_rooms WHERE id=$1", [id]
+          "SELECT id,title,host_id,locked,ended_at FROM meeting_rooms WHERE id=$1 AND tenant_id=$2", [id,user.tenant_id]
         );
         const room = result.rows[0];
         if (!room || room.ended_at) return send(res, 404, { error: "Meeting unavailable" });
@@ -213,8 +218,8 @@ async function handler(req, res) {
       }
       if (path === "/api/contacts" && req.method === "GET") {
         const result = await pool.query(
-          "SELECT u.id, u.display_name AS name, u.email FROM contacts c JOIN users u ON u.id=c.contact_id WHERE c.owner_id=$1 ORDER BY u.display_name LIMIT 200",
-          [user.id]
+          "SELECT u.id, u.display_name AS name, u.email FROM contacts c JOIN users u ON u.id=c.contact_id WHERE c.owner_id=$1 AND u.tenant_id=$2 ORDER BY u.display_name LIMIT 200",
+          [user.id,user.tenant_id]
         );
         return send(res, 200, { contacts: result.rows });
       }
@@ -222,7 +227,7 @@ async function handler(req, res) {
         const { email } = await readJson(req);
         if (typeof email !== "string" || email.length > 254)
           return send(res, 400, { error: "Valid contact email required" });
-        const found = await pool.query("SELECT id FROM users WHERE email=$1", [email.trim().toLowerCase()]);
+        const found = await pool.query("SELECT id FROM users WHERE email=$1 AND tenant_id=$2", [email.trim().toLowerCase(),user.tenant_id]);
         const contact = found.rows[0];
         if (!contact || contact.id === user.id)
           return send(res, 404, { error: "Contact not found" });
@@ -237,7 +242,7 @@ async function handler(req, res) {
         if (!/^[0-9a-f-]{36}$/i.test(contactId || ""))
           return send(res, 400, { error: "Contact ID required" });
         const allowed = await pool.query(
-          "SELECT 1 FROM contacts WHERE owner_id=$1 AND contact_id=$2", [user.id, contactId]
+          "SELECT 1 FROM contacts c JOIN users u ON u.id=c.contact_id WHERE c.owner_id=$1 AND c.contact_id=$2 AND u.tenant_id=$3", [user.id, contactId,user.tenant_id]
         );
         if (!allowed.rowCount) return send(res, 403, { error: "Add contact first" });
         const result = await pool.query(
@@ -252,7 +257,7 @@ async function handler(req, res) {
             typeof body !== "string" || body.trim().length < 1 || body.length > 4000)
           return send(res, 400, { error: "Valid recipient and message required (max 4000 characters)" });
         const allowed = await pool.query(
-          "SELECT 1 FROM contacts WHERE owner_id=$1 AND contact_id=$2", [user.id, recipient]
+          "SELECT 1 FROM contacts c JOIN users u ON u.id=c.contact_id WHERE c.owner_id=$1 AND c.contact_id=$2 AND u.tenant_id=$3", [user.id, recipient,user.tenant_id]
         );
         if (!allowed.rowCount) return send(res, 403, { error: "Add contact first" });
         const id = randomUUID();
@@ -289,7 +294,7 @@ async function handler(req, res) {
             await client.query("ROLLBACK");
             return send(res, 409, { error: "Active plan changes require administrator review" });
           }
-          const plan = await client.query("SELECT name,monthly_cents FROM plans WHERE id=$1 AND active=true", [planId]);
+          const plan = await client.query("SELECT name,monthly_cents FROM plans WHERE id=$1 AND tenant_id=$2 AND active=true", [planId,user.tenant_id]);
           if (!plan.rowCount) {
             await client.query("ROLLBACK");
             return send(res, 404, { error: "Plan unavailable" });
@@ -318,7 +323,7 @@ async function handler(req, res) {
         const provider = new URL(req.url, origin).searchParams.get("provider");
         if (!["flowroute","didww"].includes(provider))
           return send(res, 400, { error: "Select Flowroute or DIDWW" });
-        const result = await pool.query("SELECT value FROM app_settings WHERE setting_key='did_markup_bps'");
+        const result = await pool.query("SELECT value FROM tenant_settings WHERE tenant_id=$1 AND setting_key='did_markup_bps'", [user.tenant_id]);
         const markupBps = Number(result.rows[0]?.value ?? 3000);
         try {
           const numbers = await availableNumbers(provider);
@@ -352,7 +357,7 @@ async function handler(req, res) {
         return send(res, 201, { id,status:"draft" });
       }
       if (path === "/api/admin/plans" && req.method === "POST") {
-        if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
+        if (!isAdmin(user)) return send(res, 403, { error: "Administrator required" });
         const { name, description = "", monthlyCents } = await readJson(req);
         if (typeof name !== "string" || !name.trim() || name.length > 100 ||
             typeof description !== "string" || description.length > 1000 ||
@@ -360,38 +365,38 @@ async function handler(req, res) {
           return send(res, 400, { error: "Valid plan name and monthly cents required" });
         const id = randomUUID();
         await pool.query(
-          "INSERT INTO plans(id,name,description,monthly_cents) VALUES($1,$2,$3,$4)",
-          [id,name.trim(),description,monthlyCents]
+          "INSERT INTO plans(id,tenant_id,name,description,monthly_cents) VALUES($1,$2,$3,$4,$5)",
+          [id,user.tenant_id,name.trim(),description,monthlyCents]
         );
         return send(res, 201, { id });
       }
       if (path === "/api/admin/markup" && req.method === "POST") {
-        if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
+        if (!isAdmin(user)) return send(res, 403, { error: "Administrator required" });
         const { percent } = await readJson(req);
         if (!Number.isInteger(percent) || percent < 0 || percent > 1000)
           return send(res, 400, { error: "Markup must be a whole percent from 0 to 1000" });
         await pool.query(
-          "INSERT INTO app_settings(setting_key,value) VALUES('did_markup_bps',$1) ON DUPLICATE KEY UPDATE value=$2",
-          [String(percent * 100),String(percent * 100)]
+          "INSERT INTO tenant_settings(tenant_id,setting_key,value) VALUES($1,'did_markup_bps',$2) ON DUPLICATE KEY UPDATE value=$3",
+          [user.tenant_id,String(percent * 100),String(percent * 100)]
         );
         return send(res, 200, { percent });
       }
       if (path === "/api/admin/overview" && req.method === "GET") {
-        if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
+        if (!isAdmin(user)) return send(res, 403, { error: "Administrator required" });
         const result = await pool.query(
-          "SELECT (SELECT COUNT(*) FROM users) AS users, (SELECT COUNT(*) FROM messages) AS messages, (SELECT COUNT(*) FROM sessions WHERE expires_at>UTC_TIMESTAMP(3)) AS active_sessions"
+          "SELECT (SELECT COUNT(*) FROM users WHERE tenant_id=$1) AS users, (SELECT COUNT(*) FROM messages m JOIN users u ON u.id=m.sender_id WHERE u.tenant_id=$2) AS messages, (SELECT COUNT(*) FROM sessions s JOIN users u ON u.id=s.user_id WHERE u.tenant_id=$3 AND s.expires_at>UTC_TIMESTAMP(3)) AS active_sessions", [user.tenant_id,user.tenant_id,user.tenant_id]
         );
         return send(res, 200, result.rows[0]);
       }
       if (path === "/api/admin/groups" && req.method === "GET") {
-        if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
+        if (!isAdmin(user)) return send(res, 403, { error: "Administrator required" });
         const result = await pool.query(
-          "SELECT g.id,g.name,g.features,(SELECT COUNT(*) FROM user_group_members m WHERE m.group_id=g.id) AS members FROM user_groups g ORDER BY g.name LIMIT 200"
+          "SELECT g.id,g.name,g.features,(SELECT COUNT(*) FROM user_group_members m WHERE m.group_id=g.id) AS members FROM user_groups g WHERE g.tenant_id=$1 ORDER BY g.name LIMIT 200", [user.tenant_id]
         );
         return send(res, 200, { groups:result.rows });
       }
       if (path === "/api/admin/groups" && req.method === "POST") {
-        if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
+        if (!isAdmin(user)) return send(res, 403, { error: "Administrator required" });
         const { name, features } = await readJson(req);
         if (typeof name !== "string" || name.trim().length < 2 || name.length > 80)
           return send(res, 400, { error: "Group name must be 2–80 characters" });
@@ -401,8 +406,8 @@ async function handler(req, res) {
         try {
           const id = randomUUID();
           await pool.query(
-            "INSERT INTO user_groups(id,name,features) VALUES($1,$2,$3)",
-            [id,name.trim(),JSON.stringify(safe)]
+            "INSERT INTO user_groups(id,tenant_id,name,features) VALUES($1,$2,$3,$4)",
+            [id,user.tenant_id,name.trim(),JSON.stringify(safe)]
           );
           return send(res, 201, { id,name:name.trim(),features:safe });
         } catch (error) {
@@ -412,18 +417,18 @@ async function handler(req, res) {
       }
       const groupMatch = /^\/api\/admin\/groups\/([0-9a-f-]{36})$/.exec(path);
       if (groupMatch && req.method === "PUT") {
-        if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
+        if (!isAdmin(user)) return send(res, 403, { error: "Administrator required" });
         if (!uuidPattern.test(groupMatch[1])) return send(res, 400, { error: "Invalid group" });
         const { features } = await readJson(req);
         let safe;
         try { safe = validateFeatures(features); }
         catch { return send(res, 400, { error: "Invalid group features" }); }
         await pool.query(
-          "UPDATE user_groups SET features=$1 WHERE id=$2",
-          [JSON.stringify(safe),groupMatch[1]]
+          "UPDATE user_groups SET features=$1 WHERE id=$2 AND tenant_id=$3",
+          [JSON.stringify(safe),groupMatch[1],user.tenant_id]
         );
         const updated = await pool.query(
-          "SELECT id,name,features FROM user_groups WHERE id=$1", [groupMatch[1]]
+          "SELECT id,name,features FROM user_groups WHERE id=$1 AND tenant_id=$2", [groupMatch[1],user.tenant_id]
         );
         if (updated.rowCount) {
           const members = await pool.query(
@@ -437,11 +442,11 @@ async function handler(req, res) {
           : send(res, 404, { error: "Group unavailable" });
       }
       if (path === "/api/admin/users" && req.method === "GET") {
-        if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
+        if (!isAdmin(user)) return send(res, 403, { error: "Administrator required" });
         const result = await pool.query(
-          "SELECT id,display_name AS name,email,role FROM users ORDER BY created_at DESC LIMIT 200"
+          "SELECT id,display_name AS name,email,role FROM users WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200", [user.tenant_id]
         );
-        const membership = await pool.query("SELECT user_id,group_id FROM user_group_members");
+        const membership = await pool.query("SELECT m.user_id,m.group_id FROM user_group_members m JOIN users u ON u.id=m.user_id JOIN user_groups g ON g.id=m.group_id WHERE u.tenant_id=$1 AND g.tenant_id=$2", [user.tenant_id,user.tenant_id]);
         return send(res, 200, { users:result.rows.map((row) => ({
           ...row, group_ids:membership.rows.filter((item) => item.user_id === row.id)
             .map((item) => item.group_id)
@@ -449,7 +454,7 @@ async function handler(req, res) {
       }
       const memberMatch = /^\/api\/admin\/users\/([0-9a-f-]{36})\/groups$/.exec(path);
       if (memberMatch && req.method === "PUT") {
-        if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
+        if (!isAdmin(user)) return send(res, 403, { error: "Administrator required" });
         const { groupIds } = await readJson(req);
         if (!Array.isArray(groupIds) || groupIds.length > 20 ||
             groupIds.some((id) => typeof id !== "string" || !uuidPattern.test(id)))
@@ -458,13 +463,13 @@ async function handler(req, res) {
         const client = await pool.connect();
         try {
           await client.query("BEGIN");
-          const target = await client.query("SELECT id,role FROM users WHERE id=$1 FOR UPDATE", [memberMatch[1]]);
+          const target = await client.query("SELECT id,role,tenant_id FROM users WHERE id=$1 AND tenant_id=$2 FOR UPDATE", [memberMatch[1],user.tenant_id]);
           if (!target.rowCount) {
             await client.query("ROLLBACK");
             return send(res, 404, { error: "User unavailable" });
           }
           const found = ids.length
-            ? await client.query(`SELECT id FROM user_groups WHERE id IN (${ids.map((_, i) => "$" + (i + 1)).join(",")})`, ids)
+            ? await client.query(`SELECT id FROM user_groups WHERE tenant_id=$1 AND id IN (${ids.map((_, i) => "$" + (i + 2)).join(",")})`, [user.tenant_id,...ids])
             : { rowCount:0 };
           if (found.rowCount !== ids.length) {
             await client.query("ROLLBACK");
@@ -483,14 +488,14 @@ async function handler(req, res) {
         } finally { client.release(); }
       }
       if (path === "/api/admin/config" && req.method === "POST") {
-        if (user.role !== "admin") return send(res, 403, { error: "Administrator required" });
+        if (!isAdmin(user)) return send(res, 403, { error: "Administrator required" });
         const { sipWssUrl } = await readJson(req);
         if (typeof sipWssUrl !== "string" || sipWssUrl.length > 500 ||
             (sipWssUrl !== "" && (!sipWssUrl.startsWith("wss://") || !URL.canParse(sipWssUrl))))
           return send(res, 400, { error: "A wss:// URL is required" });
         await pool.query(
-          "INSERT INTO app_settings(setting_key,value) VALUES('sip_wss_url',$1) ON DUPLICATE KEY UPDATE value=$2",
-          [sipWssUrl,sipWssUrl]
+          "INSERT INTO tenant_settings(tenant_id,setting_key,value) VALUES($1,'sip_wss_url',$2) ON DUPLICATE KEY UPDATE value=$3",
+          [user.tenant_id,sipWssUrl,sipWssUrl]
         );
         return send(res, 200, { sipWssUrl });
       }
@@ -510,6 +515,7 @@ async function handler(req, res) {
 }
 
 await pool.initialize(await fs.readFile(new URL("./schema.sql", import.meta.url), "utf8"));
+await migrateTenancy(pool);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
