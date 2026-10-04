@@ -39,10 +39,12 @@ export function setupGroupAdmin() {
   }
   function fillGroup() {
     const group = groups.find((item) => item.id === $("#group-list").value);
+    $("#group-edit-name").value=group?.name||"";
     checkboxList($("#group-edit-features"), group?.features || {}, "group-edit");
   }
   function fillUser() {
     const user = users.find((item) => item.id === $("#group-user").value);
+    $("#group-user-details").textContent=user ? `${user.name} — ${user.role}, ${user.status}` : "Select a user";
     const container = $("#group-memberships");
     container.replaceChildren();
     for (const group of groups) {
@@ -56,9 +58,15 @@ export function setupGroupAdmin() {
     }
   }
   async function refresh() {
-    [{ groups }, { users }] = await Promise.all([
-      api("/api/admin/groups"), api("/api/admin/users")
+    let events;
+    [{ groups }, { users }, { events }] = await Promise.all([
+      api("/api/admin/groups"), api("/api/admin/users"), api("/api/admin/security/events")
     ]);
+    $("#security-events").replaceChildren(...events.map((event)=>{
+      const row=document.createElement("li");
+      row.textContent=`${event.created_at} · ${event.action} · actor ${event.actor_id} · target ${event.target_id||"none"}`;
+      return row;
+    }));
     const chosenGroup = $("#group-list").value;
     const chosenUser = $("#group-user").value;
     $("#group-list").replaceChildren(...groups.map((group) => {
@@ -96,10 +104,18 @@ export function setupGroupAdmin() {
   $("#group-update").onclick = async () => {
     try {
       await api("/api/admin/groups/" + $("#group-list").value,
-        { features:selectedFeatures($("#group-edit-features")) }, "PUT");
+        { name:$("#group-edit-name").value,features:selectedFeatures($("#group-edit-features")) }, "PUT");
       await refresh();
       status("Group permissions updated");
     } catch (error) { status(error.message); }
+  };
+  $("#group-delete").onclick=async()=>{
+    try {
+      const id=$("#group-list").value;
+      if (!id) return status("Select a group");
+      await api(`/api/admin/groups/${id}/delete`,{},"POST");
+      await refresh();status("Empty group deleted");
+    } catch(error) {status(error.message);}
   };
   $("#group-assign").onclick = async () => {
     try {
@@ -109,6 +125,17 @@ export function setupGroupAdmin() {
       await refresh();
       status("User group membership updated");
     } catch (error) { status(error.message); }
+  };
+  for(const [button,action] of Object.entries({
+    "#user-suspend":"suspend","#user-activate":"activate","#user-revoke":"revoke_sessions",
+    "#user-promote":"promote","#user-demote":"demote"
+  })) $(button).onclick=async()=>{
+    try {
+      const id=$("#group-user").value;
+      if (!id) return status("Select a user");
+      await api(`/api/admin/users/${id}/security`,{action});
+      await refresh();status(`User action completed: ${action}`);
+    } catch(error) {status(error.message);}
   };
   return { refresh };
 }
