@@ -1,0 +1,58 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set in secrets.env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?set in secrets.env}
+      MYSQL_USER: ${MYSQL_USER:?set in secrets.env}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set in secrets.env}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks: [private]
+  api:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/api.Dockerfile
+    restart: unless-stopped
+    environment:
+      MYSQL_URL: ${MYSQL_URL:?set in secrets.env}
+      PUBLIC_ORIGIN: https://${DOMAIN:?set domain}
+      LISTEN_ADDR: 0.0.0.0
+      PORT: "8080"
+      NODE_ENV: production
+      MEETING_ICE_SERVERS_JSON: ${MEETING_ICE_SERVERS_JSON:-[]}
+      FLOWROUTE_ACCESS_KEY: ${FLOWROUTE_ACCESS_KEY:-}
+      FLOWROUTE_SECRET_KEY: ${FLOWROUTE_SECRET_KEY:-}
+      DIDWW_API_KEY: ${DIDWW_API_KEY:-}
+      DIDWW_ACCOUNT_CURRENCY: ${DIDWW_ACCOUNT_CURRENCY:-}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks: [private]
+  web:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/web.Dockerfile
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set domain}
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on: [api]
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [private]
+networks:
+  private:
+volumes:
+  mysql_data:
+  caddy_data:
+  caddy_config:
