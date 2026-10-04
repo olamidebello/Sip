@@ -30,6 +30,12 @@ root.innerHTML = `
     </form>
     <button id="logout" hidden>Sign out</button>
     <p id="account-status" role="status">Not signed in</p>
+    <form id="password-change" hidden>
+      <h3>Change password</h3>
+      <label>Current password <input name="currentPassword" type="password" autocomplete="current-password" required></label>
+      <label>New password <input name="newPassword" type="password" autocomplete="new-password" minlength="12" required></label>
+      <button>Change password and sign out other sessions</button>
+    </form>
   </section>
   <section id="chat" hidden>
     <h2>Messages</h2>
@@ -200,11 +206,22 @@ root.innerHTML = `
         <button>Create group</button>
       </form>
       <label>Group to edit <select id="group-list"></select></label>
+      <label>Group name <input id="group-edit-name" minlength="2" maxlength="80"></label>
       <div id="group-edit-features"></div>
       <button id="group-update" type="button">Save group permissions</button>
+      <button id="group-delete" type="button">Delete empty group</button>
       <label>User <select id="group-user"></select></label>
       <div id="group-memberships"></div>
       <button id="group-assign" type="button">Save user's groups</button>
+      <h4>User security</h4>
+      <p id="group-user-details"></p>
+      <button id="user-suspend" type="button">Suspend user</button>
+      <button id="user-activate" type="button">Activate user</button>
+      <button id="user-revoke" type="button">Revoke sessions</button>
+      <button id="user-promote" type="button">Promote to tenant admin</button>
+      <button id="user-demote" type="button">Demote to user</button>
+      <h4>Recent security events</h4>
+      <ol id="security-events"></ol>
       <p id="group-status" role="status"></p>
     </section>
     <section id="tenant-admin">
@@ -633,6 +650,7 @@ function signedIn(user) {
   $("#signup").hidden = true;
   $("#login").hidden = true;
   $("#logout").hidden = false;
+  $("#password-change").hidden = false;
   $("#account-status").textContent = `Signed in as ${user.name}`;
   $("#chat").hidden = !user.features?.messaging;
   $("#billing").hidden = !user.features?.billing;
@@ -830,6 +848,7 @@ $("#logout").onclick = async () => {
     $("#signup").hidden = false;
     $("#login").hidden = false;
     $("#logout").hidden = true;
+    $("#password-change").hidden = true;
     $("#chat").hidden = true;
     $("#billing").hidden = true;
     meetings.hide();
@@ -838,6 +857,14 @@ $("#logout").onclick = async () => {
     $("#message-list").replaceChildren();
     $("#account-status").textContent = "Signed out";
   } catch (error) { $("#account-status").textContent = error.message; }
+};
+$("#password-change").onsubmit=async(event)=>{
+  event.preventDefault();
+  try {
+    const form=event.currentTarget;
+    const result=await accountRequest("/api/account/password",Object.fromEntries(new FormData(form)));
+    form.reset();$("#account-status").textContent=result.status;
+  } catch(error) {$("#account-status").textContent=error.message;}
 };
 fetch("/api/me", { credentials: "same-origin" })
   .then(async (response) => response.ok ? signedIn(await response.json()) : undefined)
