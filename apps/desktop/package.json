@@ -19,7 +19,7 @@
     "productName": "Olamide",
     "files": ["main.cjs", "package.json"],
     "directories": {"output": "dist"},
-    "linux": {"target": ["AppImage", "deb"], "category": "Network"},
+    "linux": {"target": ["AppImage"], "category": "Network"},
     "win": {"target": ["nsis"]},
     "mac": {"target": ["dmg"]},
     "nsis": {"oneClick": false, "allowToChangeInstallationDirectory": true}
