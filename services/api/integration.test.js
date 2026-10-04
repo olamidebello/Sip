@@ -15,7 +15,7 @@ test("registered users can create and join a room; host controls it", {
   const server = spawn(process.execPath, ["server.js"], {
     cwd: new URL(".", import.meta.url).pathname,
     env: { ...process.env, MYSQL_URL: process.env.TEST_MYSQL_URL,
-      PUBLIC_ORIGIN: origin, LISTEN_ADDR: "127.0.0.1", PORT: String(port) },
+      PUBLIC_ORIGIN: origin, API_RATE_LIMIT:"100", LISTEN_ADDR: "127.0.0.1", PORT: String(port) },
     stdio: ["ignore","pipe","pipe"]
   });
   t.after(() => server.kill());
@@ -96,6 +96,28 @@ test("registered users can create and join a room; host controls it", {
   assert.equal((await post("/api/admin/markup", { percent:35 }, hostCookie)).status, 200);
   assert.equal((await post("/api/admin/config",
     { sipWssUrl:"wss://sip.example.com" }, hostCookie)).status, 200);
+  assert.equal((await post("/api/admin/mobile/apps", {
+    platform:"android", appIdentifier:"com.olamide.test" + unique.replace(/[^a-z0-9]/gi,""),
+    displayName:"Olamide Test"
+  }, guestCookie)).status, 403);
+  const mobileApp = await post("/api/admin/mobile/apps", {
+    platform:"android", appIdentifier:"com.olamide.test" + unique.replace(/[^a-z0-9]/gi,""),
+    displayName:"Olamide Test"
+  }, hostCookie);
+  assert.equal(mobileApp.status, 201, JSON.stringify(mobileApp.body));
+  const mobileRelease = await post("/api/admin/mobile/releases", {
+    appId:mobileApp.body.id,versionName:"1.0.0",buildNumber:"1",track:"internal",
+    rolloutPercent:100,releaseNotes:"Internal test",artifactUrl:"https://example.com/build.aab",
+    artifactSha256:"a".repeat(64)
+  }, hostCookie);
+  assert.equal(mobileRelease.status, 201, JSON.stringify(mobileRelease.body));
+  assert.equal((await post(`/api/admin/mobile/releases/${mobileRelease.body.id}/approve`,
+    { revision:1 },hostCookie)).body.status,"approved");
+  assert.equal((await post(`/api/admin/mobile/releases/${mobileRelease.body.id}/approve`,
+    { revision:1 },hostCookie)).status,409);
+  const mobileEvents = await fetch(base + `/api/admin/mobile/releases/${mobileRelease.body.id}/events`,
+    { headers:{ Cookie:hostCookie } });
+  assert.deepEqual((await mobileEvents.json()).events.map((entry) => entry.action),["created","approve"]);
   const group = await post("/api/admin/groups", {
     name:"Support " + unique,
     features:{ meetings:true, remote_assist:true }
