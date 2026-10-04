@@ -8,6 +8,7 @@ import { setupPbx } from "./pbx.js";
 import { setupReports } from "./reports.js";
 import { setupPricing } from "./pricing.js";
 import { setupBackground } from "./background.js";
+import { setupLdapAdmin } from "./ldapAdmin.js";
 import "./style.css";
 
 const root = document.querySelector("#app");
@@ -29,6 +30,13 @@ root.innerHTML = `
       <label>Email <input name="email" type="email" autocomplete="username" required></label>
       <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
       <button>Sign in</button>
+    </form>
+    <form id="ldap-login">
+      <h3>Directory sign-in</h3>
+      <label>Tenant slug <input name="tenantSlug" autocomplete="organization" required></label>
+      <label>Directory email <input name="email" type="email" autocomplete="username" required></label>
+      <label>Directory password <input name="password" type="password" autocomplete="current-password" required></label>
+      <button>Sign in with LDAP</button>
     </form>
     <button id="logout" hidden>Sign out</button>
     <p id="account-status" role="status">Not signed in</p>
@@ -133,6 +141,20 @@ root.innerHTML = `
       <button>Save server URL</button>
     </form>
     <p id="admin-status" role="status"></p>
+    <section id="ldap-admin">
+      <h3>LDAP authentication and group access</h3>
+      <p>Server LDAPS credentials are configured privately. Map directory group DNs to app groups; only mapped members can sign in.</p>
+      <p id="ldap-config-state"></p>
+      <label><input id="ldap-enabled" type="checkbox"> Enable directory sign-in for this tenant</label>
+      <button id="ldap-save-enabled" type="button">Save sign-in policy</button>
+      <form id="ldap-map-form">
+        <label>Directory group DN <input name="groupDn" placeholder="cn=agents,ou=groups,dc=example,dc=com" required maxlength="512"></label>
+        <label>App feature group <select name="groupId" id="ldap-app-group"></select></label>
+        <button>Add group mapping</button>
+      </form>
+      <ul id="ldap-mappings"></ul>
+      <p id="ldap-status" role="status"></p>
+    </section>
     <section id="background-admin" hidden>
       <h3>Tenant background policy</h3>
       <form id="background-admin-form">
@@ -458,6 +480,7 @@ const pbx = setupPbx();
 const reports = setupReports({get:(path)=>apiGet(path)});
 const pricing = setupPricing();
 const background = setupBackground();
+const ldapAdmin = setupLdapAdmin();
 let phone;
 let onCall = false;
 let onHold = false;
@@ -735,10 +758,11 @@ async function loadMessages() {
 function signedIn(user) {
   $("#signup").hidden = true;
   $("#login").hidden = true;
+  $("#ldap-login").hidden = true;
   $("#logout").hidden = false;
   $("#background-user").hidden = false;
   background.refresh(["admin","super_admin"].includes(user.role));
-  $("#password-change").hidden = false;
+  $("#password-change").hidden = user.authSource==="ldap";
   $("#account-status").textContent = `Signed in as ${user.name}`;
   $("#chat").hidden = !user.features?.messaging;
   $("#billing").hidden = !user.features?.billing;
@@ -758,6 +782,7 @@ function signedIn(user) {
   if (["admin","super_admin"].includes(user.role)) {
     reports.refresh();
     pricing.refresh();
+    ldapAdmin.refresh();
     refreshInhouse().catch((error) => { $("#inhouse-status").textContent = error.message; });
     refreshNigeria().catch((error) => { $("#nigeria-status").textContent = error.message; });
     refreshCdr().catch((error) => { $("#cdr-status").textContent = error.message; });
@@ -923,11 +948,20 @@ $("#login").addEventListener("submit", async (event) => {
     signedIn(user);
   } catch (error) { $("#account-status").textContent = error.message; }
 });
+$("#ldap-login").addEventListener("submit",async(event)=>{
+  event.preventDefault();
+  const form=event.currentTarget;
+  try {
+    const user=await accountRequest("/api/login/ldap",Object.fromEntries(new FormData(form)));
+    form.reset();signedIn(user);
+  } catch(error) {$("#account-status").textContent=error.message;}
+});
 $("#logout").onclick = async () => {
   try {
     await accountRequest("/api/logout", {});
     $("#signup").hidden = false;
     $("#login").hidden = false;
+    $("#ldap-login").hidden = false;
     $("#logout").hidden = true;
     $("#password-change").hidden = true;
     $("#background-user").hidden = true;
