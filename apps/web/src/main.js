@@ -143,6 +143,7 @@ root.innerHTML = `
         </form>
       </div>
       <label>Tenant for new user <select id="tenant-select"></select></label>
+      <button id="tenant-switch" type="button">Manage selected tenant</button>
       <button id="tenant-suspend" type="button">Suspend selected tenant</button>
       <button id="tenant-activate" type="button">Activate selected tenant</button>
       <form id="tenant-user-create">
