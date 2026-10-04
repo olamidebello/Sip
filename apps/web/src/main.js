@@ -7,6 +7,7 @@ import { setupTenants } from "./tenants.js";
 import { setupPbx } from "./pbx.js";
 import { setupReports } from "./reports.js";
 import { setupPricing } from "./pricing.js";
+import { setupBackground } from "./background.js";
 import "./style.css";
 
 const root = document.querySelector("#app");
@@ -37,6 +38,18 @@ root.innerHTML = `
       <label>New password <input name="newPassword" type="password" autocomplete="new-password" minlength="12" required></label>
       <button>Change password and sign out other sessions</button>
     </form>
+  </section>
+  <section id="background-user" hidden>
+    <h2>My background</h2>
+    <form id="background-user-form">
+      <label>Day background <select name="dayPreset"><option value="ocean">Ocean</option><option value="midnight">Midnight</option><option value="aurora">Aurora</option><option value="sunrise">Sunrise</option><option value="slate">Slate</option></select></label>
+      <label>Night background <select name="nightPreset"><option value="midnight">Midnight</option><option value="ocean">Ocean</option><option value="aurora">Aurora</option><option value="sunrise">Sunrise</option><option value="slate">Slate</option></select></label>
+      <label><input name="schedule" type="checkbox"> Switch at 6 AM and 6 PM on this device</label>
+      <label><input name="animate" type="checkbox"> Gentle movement</label>
+      <button>Save my background</button>
+    </form>
+    <button id="background-reset" type="button">Use tenant background</button>
+    <p id="background-user-status" role="status"></p>
   </section>
   <section id="chat" hidden>
     <h2>Messages</h2>
@@ -120,6 +133,18 @@ root.innerHTML = `
       <button>Save server URL</button>
     </form>
     <p id="admin-status" role="status"></p>
+    <section id="background-admin" hidden>
+      <h3>Tenant background policy</h3>
+      <form id="background-admin-form">
+        <label>Day background <select name="dayPreset"><option value="ocean">Ocean</option><option value="midnight">Midnight</option><option value="aurora">Aurora</option><option value="sunrise">Sunrise</option><option value="slate">Slate</option></select></label>
+        <label>Night background <select name="nightPreset"><option value="midnight">Midnight</option><option value="ocean">Ocean</option><option value="aurora">Aurora</option><option value="sunrise">Sunrise</option><option value="slate">Slate</option></select></label>
+        <label><input name="schedule" type="checkbox"> Switch at 6 AM and 6 PM on each device</label>
+        <label><input name="animate" type="checkbox"> Gentle movement</label>
+        <label><input name="allowUserOverride" type="checkbox" checked> Allow users to choose their own background</label>
+        <button>Save tenant background</button>
+      </form>
+      <p id="background-admin-status" role="status"></p>
+    </section>
     <section id="report-admin">
       <h3>Reports and analytics</h3>
       <form id="report-filter">
@@ -432,6 +457,7 @@ const tenantAdmin = setupTenants();
 const pbx = setupPbx();
 const reports = setupReports({get:(path)=>apiGet(path)});
 const pricing = setupPricing();
+const background = setupBackground();
 let phone;
 let onCall = false;
 let onHold = false;
@@ -710,6 +736,8 @@ function signedIn(user) {
   $("#signup").hidden = true;
   $("#login").hidden = true;
   $("#logout").hidden = false;
+  $("#background-user").hidden = false;
+  background.refresh(["admin","super_admin"].includes(user.role));
   $("#password-change").hidden = false;
   $("#account-status").textContent = `Signed in as ${user.name}`;
   $("#chat").hidden = !user.features?.messaging;
@@ -902,6 +930,8 @@ $("#logout").onclick = async () => {
     $("#login").hidden = false;
     $("#logout").hidden = true;
     $("#password-change").hidden = true;
+    $("#background-user").hidden = true;
+    background.clear();
     $("#chat").hidden = true;
     $("#billing").hidden = true;
     meetings.hide();
