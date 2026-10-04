@@ -13,6 +13,7 @@ export function setupTenants() {
     current = user;
     const superAdmin = user.role === "super_admin";
     $("#tenant-super").hidden = !superAdmin;
+    $("#tenant-switch").hidden = !superAdmin;
     $("#tenant-suspend").hidden = !superAdmin;
     $("#tenant-activate").hidden = !superAdmin;
     const selector = $("#tenant-select");
@@ -51,6 +52,12 @@ export function setupTenants() {
         ...Object.fromEntries(new FormData(form)),tenantId:$("#tenant-select").value
       });
       form.reset(); status.textContent = `User created in tenant ${data.tenantId}. Share the initial password privately and change it before production use.`;
+    } catch (error) {status.textContent = error.message;}
+  });
+  $("#tenant-switch").addEventListener("click",async () => {
+    try {
+      await call(`/api/admin/tenants/${$("#tenant-select").value}/switch`,"POST",{});
+      window.location.reload();
     } catch (error) {status.textContent = error.message;}
   });
   $("#tenant-suspend").addEventListener("click",async () => {
