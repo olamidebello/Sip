@@ -9,12 +9,12 @@ CREATE TABLE IF NOT EXISTS did_requested_blocks (
   UNIQUE KEY did_requested_tenant_prefix (tenant_id,prefix_digits)
 ) ENGINE=InnoDB;
 INSERT IGNORE INTO did_requested_blocks(id,tenant_id,prefix_digits,requested_count,status,note) VALUES
-('00000000-0000-4000-8000-000000203150','00000000-0000-4000-8000-000000000000','203150',10000,'allocated_ncc','Nigeria +234 Ilorin; allocated to Smooth Multi-Service Platform Limited per NCC'),
-('00000000-0000-4000-8000-000000203151','00000000-0000-4000-8000-000000000000','203151',10000,'allocated_ncc','Nigeria +234 Ilorin; allocated to Smooth Multi-Service Platform Limited per NCC'),
-('00000000-0000-4000-8000-000000203152','00000000-0000-4000-8000-000000000000','203152',10000,'allocated_ncc','Nigeria +234 Ilorin; allocated to Smooth Multi-Service Platform Limited per NCC'),
-('00000000-0000-4000-8000-000000203153','00000000-0000-4000-8000-000000000000','203153',10000,'allocated_ncc','Nigeria +234 Ilorin; allocated to Smooth Multi-Service Platform Limited per NCC'),
-('00000000-0000-4000-8000-000000203154','00000000-0000-4000-8000-000000000000','203154',10000,'allocated_ncc','Nigeria +234 Ilorin; allocated to Smooth Multi-Service Platform Limited per NCC');
-UPDATE did_requested_blocks SET status='allocated_ncc',note='Nigeria +234 Ilorin; allocated to Smooth Multi-Service Platform Limited per NCC'
+('00000000-0000-4000-8000-000000203150','00000000-0000-4000-8000-000000000000','203150',10000,'allocated_ncc','Nigeria +234 Ilorin, allocated to Smooth Multi-Service Platform Limited per NCC'),
+('00000000-0000-4000-8000-000000203151','00000000-0000-4000-8000-000000000000','203151',10000,'allocated_ncc','Nigeria +234 Ilorin, allocated to Smooth Multi-Service Platform Limited per NCC'),
+('00000000-0000-4000-8000-000000203152','00000000-0000-4000-8000-000000000000','203152',10000,'allocated_ncc','Nigeria +234 Ilorin, allocated to Smooth Multi-Service Platform Limited per NCC'),
+('00000000-0000-4000-8000-000000203153','00000000-0000-4000-8000-000000000000','203153',10000,'allocated_ncc','Nigeria +234 Ilorin, allocated to Smooth Multi-Service Platform Limited per NCC'),
+('00000000-0000-4000-8000-000000203154','00000000-0000-4000-8000-000000000000','203154',10000,'allocated_ncc','Nigeria +234 Ilorin, allocated to Smooth Multi-Service Platform Limited per NCC');
+UPDATE did_requested_blocks SET status='allocated_ncc',note='Nigeria +234 Ilorin, allocated to Smooth Multi-Service Platform Limited per NCC'
 WHERE tenant_id='00000000-0000-4000-8000-000000000000'
   AND prefix_digits IN ('203150','203151','203152','203153','203154')
   AND status='needs_format_review';
