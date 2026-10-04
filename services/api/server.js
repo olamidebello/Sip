@@ -11,6 +11,7 @@ import { handleReports } from "./reports.js";
 import { migrateAccess,handleAccess } from "./access.js";
 import { migratePricing,pricingRule,sellingCents,handlePricing } from "./pricing.js";
 import { migrateBackground,handleBackground } from "./background.js";
+import { loadLdapConnections,migrateLdap,loginWithLdap,handleLdapAdmin } from "./ldap.js";
 import { migrateTenancy, handleTenants, isAdmin, defaultTenantId } from "./tenancy.js";
 import { availableNumbers } from "./providers.js";
 import { attachMeetingSignaling } from "./meetings.js";
@@ -30,6 +31,7 @@ const uuidPattern = /^[0-9a-f-]{36}$/i;
 const meetingIceServers = JSON.parse(process.env.MEETING_ICE_SERVERS_JSON || "[]");
 if (!Array.isArray(meetingIceServers)) throw new Error("MEETING_ICE_SERVERS_JSON must be an array");
 const cdrKeys = JSON.parse(process.env.CDR_INGEST_KEYS_JSON || "{}");
+const ldapConnections=loadLdapConnections(process.env.LDAP_TENANTS_JSON);
 if (!cdrKeys || typeof cdrKeys !== "object" || Array.isArray(cdrKeys) ||
     Object.entries(cdrKeys).some(([tenant,secret]) =>
       !uuidPattern.test(tenant) || typeof secret !== "string" || secret.length < 32))
@@ -79,7 +81,7 @@ async function currentUser(req) {
   const token = currentToken(req);
   if (!token) return null;
   const result = await pool.query(
-    "SELECT u.id,u.display_name,u.email,u.role, CASE WHEN u.role='super_admin' AND selected.id IS NOT NULL THEN selected.id ELSE u.tenant_id END AS tenant_id FROM sessions s JOIN users u ON u.id=s.user_id AND u.status='active' JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenants selected ON selected.id=s.selected_tenant_id AND selected.status='active' WHERE s.token_hash=$1 AND s.expires_at>now()",
+    "SELECT u.id,u.display_name,u.email,u.role,u.auth_source, CASE WHEN u.role='super_admin' AND selected.id IS NOT NULL THEN selected.id ELSE u.tenant_id END AS tenant_id FROM sessions s JOIN users u ON u.id=s.user_id AND u.status='active' JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenant_ldap_settings ldap ON ldap.tenant_id=u.tenant_id LEFT JOIN tenants selected ON selected.id=s.selected_tenant_id AND selected.status='active' WHERE s.token_hash=$1 AND s.expires_at>now() AND (u.auth_source='local' OR ldap.enabled=TRUE)",
     [tokenHash(token)]
   );
   const user = result.rows[0];
@@ -131,7 +133,7 @@ async function handler(req, res) {
           email.length > 254 || password.length > 1024)
         return send(res, 400, { error: "Invalid credentials" });
       const result = await pool.query(
-        "SELECT u.id, u.display_name, u.email, u.role, u.tenant_id, u.password_salt, u.password_hash FROM users u JOIN tenants t ON t.id=u.tenant_id AND t.status='active' WHERE u.email=$1 AND u.status='active'",
+        "SELECT u.id, u.display_name, u.email, u.role, u.tenant_id, u.password_salt, u.password_hash FROM users u JOIN tenants t ON t.id=u.tenant_id AND t.status='active' WHERE u.email=$1 AND u.status='active' AND u.auth_source='local'",
         [email.trim().toLowerCase()]
       );
       const user = result.rows[0];
@@ -143,13 +145,26 @@ async function handler(req, res) {
         [tokenHash(token), user.id]
       );
       return send(res, 200, { id: user.id, name: user.display_name, email: user.email,
-        role: user.role, tenantId:user.tenant_id, features:await featuresFor(user) },
+        role: user.role, authSource:"local",tenantId:user.tenant_id, features:await featuresFor(user) },
         { "Set-Cookie": sessionCookie(token, 604800) });
+    }
+    if (req.method==="POST" && path==="/api/login/ldap") {
+      const {tenantSlug,email,password}=await readJson(req);
+      let user;
+      try {user=await loginWithLdap({pool,connections:ldapConnections,slug:tenantSlug,email,password});}
+      catch(error) {console.error("LDAP sign-in failed",error.code||error.name);return send(res,401,{error:"Directory sign-in failed"});}
+      if (!user) return send(res,401,{error:"Directory sign-in failed"});
+      const token=createSessionToken();
+      await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 1 HOUR))",
+        [tokenHash(token),user.id]);
+      return send(res,200,{id:user.id,name:user.display_name,email:user.email,role:user.role,authSource:"ldap",
+        tenantId:user.tenant_id,features:await featuresFor(user)},
+        {"Set-Cookie":sessionCookie(token,3600)});
     }
     if (req.method === "GET" && path === "/api/me") {
       const user = await currentUser(req);
       return user
-        ? send(res, 200, { id: user.id, name: user.display_name, email: user.email,
+        ? send(res, 200, { id: user.id, name: user.display_name, email: user.email,authSource:user.auth_source,
             role: user.role, tenantId:user.tenant_id, features:user.features })
         : send(res, 401, { error: "Session expired" });
     }
@@ -184,6 +199,8 @@ async function handler(req, res) {
         return await handlePbx({req,res,path,user,pool,send,readJson});
       if (path==="/api/background" || path==="/api/admin/background")
         return await handleBackground({req,res,path,user,pool,send,readJson});
+      if (path==="/api/admin/ldap" || path.startsWith("/api/admin/ldap/"))
+        return await handleLdapAdmin({req,res,path,user,pool,send,readJson,connections:ldapConnections,meetingSignaling});
       if (path==="/api/account/password" || path.startsWith("/api/admin/security/") ||
           /^\/api\/admin\/users\/[0-9a-f-]{36}\/security$/i.test(path) ||
           /^\/api\/admin\/groups\/[0-9a-f-]{36}\/delete$/i.test(path))
@@ -493,7 +510,7 @@ async function handler(req, res) {
       if (path === "/api/admin/users" && req.method === "GET") {
         if (!isAdmin(user)) return send(res, 403, { error: "Administrator required" });
         const result = await pool.query(
-          "SELECT id,display_name AS name,email,role,status FROM users WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200", [user.tenant_id]
+          "SELECT id,display_name AS name,email,role,status,auth_source FROM users WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200", [user.tenant_id]
         );
         const membership = await pool.query("SELECT m.user_id,m.group_id FROM user_group_members m JOIN users u ON u.id=m.user_id JOIN user_groups g ON g.id=m.group_id WHERE u.tenant_id=$1 AND g.tenant_id=$2", [user.tenant_id,user.tenant_id]);
         return send(res, 200, { users:result.rows.map((row) => ({
@@ -512,10 +529,14 @@ async function handler(req, res) {
         const client = await pool.connect();
         try {
           await client.query("BEGIN");
-          const target = await client.query("SELECT id,role,tenant_id FROM users WHERE id=$1 AND tenant_id=$2 FOR UPDATE", [memberMatch[1],user.tenant_id]);
+          const target = await client.query("SELECT id,role,tenant_id,auth_source FROM users WHERE id=$1 AND tenant_id=$2 FOR UPDATE", [memberMatch[1],user.tenant_id]);
           if (!target.rowCount) {
             await client.query("ROLLBACK");
             return send(res, 404, { error: "User unavailable" });
+          }
+          if (target.rows[0].auth_source==="ldap") {
+            await client.query("ROLLBACK");
+            return send(res,409,{error:"LDAP groups are synchronized from directory mappings"});
           }
           const found = ids.length
             ? await client.query(`SELECT id FROM user_groups WHERE tenant_id=$1 AND id IN (${ids.map((_, i) => "$" + (i + 2)).join(",")})`, [user.tenant_id,...ids])
@@ -574,6 +595,7 @@ await pool.initialize(await fs.readFile(new URL("./dids-schema.sql", import.meta
 await pool.initialize(await fs.readFile(new URL("./nigeria-schema.sql", import.meta.url), "utf8"));
 await migratePricing(pool);
 await migrateBackground(pool);
+await migrateLdap(pool);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
