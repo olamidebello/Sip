@@ -1,6 +1,6 @@
 ---
 - name: Deploy Olamide browser dialer and API
-  hosts: olamide
+  hosts: all
   become: true
   vars:
     app_dir: /opt/olamide
