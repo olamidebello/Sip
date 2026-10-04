@@ -175,7 +175,7 @@ test("registered users can create and join a room; host controls it", {
   assert.equal(otherLogin.body.tenantId,tenant.body.id);
   assert.equal((await post("/api/contacts",{email:"guest" + unique + "@example.com"},otherCookie)).status,404);
   assert.equal((await post("/api/admin/tenants",{name:"Denied",slug:"denied-tenant"},otherCookie)).status,403);
-  assert.equal((await put(`/api/admin/groups/${group.body.id}`,{features:{messaging:true}})).status,200);
+  assert.equal((await put(`/api/admin/groups/${group.body.id}`,{features:{messaging:true,call_center:true}})).status,200);
   const crossGroup = await fetch(base + "/api/admin/groups",{headers:{Cookie:otherCookie}});
   assert.equal((await crossGroup.json()).groups.some((g) => g.id === group.body.id),false);
   const crossMeeting = await fetch(base + "/api/meetings/" + id,{headers:{Cookie:otherCookie}});
