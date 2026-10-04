@@ -97,6 +97,8 @@ export async function handleTenants({req,res,path,user,pool,readJson,send,meetin
         [id,targetTenant,name.trim(),email.toLowerCase().trim(),salt,hash,role]);
       const group = await db.query("SELECT id FROM user_groups WHERE tenant_id=$1 AND name='Standard'",[targetTenant]);
       if (group.rowCount) await db.query("INSERT INTO user_group_members(user_id,group_id) VALUES($1,$2)",[id,group.rows[0].id]);
+      await db.query("INSERT INTO security_events(id,tenant_id,actor_id,target_id,action) VALUES($1,$2,$3,$4,'user_created')",
+        [randomUUID(),targetTenant,user.id,id]);
       await db.query("COMMIT");
       return send(res,201,{id,tenantId:targetTenant,role});
     } catch (error) {
