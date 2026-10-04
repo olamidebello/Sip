@@ -4,6 +4,7 @@ import { setupMeetings } from "./meetings.js";
 import { setupGroupAdmin } from "./groups.js";
 import { setupMobileAdmin } from "./mobileAdmin.js";
 import { setupTenants } from "./tenants.js";
+import { setupPbx } from "./pbx.js";
 import "./style.css";
 
 const root = document.querySelector("#app");
@@ -155,6 +156,59 @@ root.innerHTML = `
       </form>
       <p id="tenant-status" role="status"></p>
     </section>
+    <section id="pbx-admin">
+      <h3>PBX and call center configuration</h3>
+      <p id="pbx-overview"></p>
+      <h4>Extensions</h4>
+      <form id="pbx-extension-form">
+        <label>Number <input name="number" pattern="[0-9]{2,10}" required></label>
+        <label>Name <input name="name" maxlength="100" required></label>
+        <label>Assigned user <select id="pbx-extension-user" name="userId"></select></label>
+        <label><input name="voicemailEnabled" type="checkbox"> Voicemail planned</label>
+        <label>Forward target <input name="forwardTo" placeholder="Extension or +E.164"></label>
+        <button>Create extension</button>
+      </form><ul id="pbx-extension-list"></ul>
+      <h4>Call queues</h4>
+      <form id="pbx-queue-form">
+        <label>Queue number <input name="number" pattern="[0-9]{2,10}" required></label>
+        <label>Name <input name="name" maxlength="100" required></label>
+        <label>Strategy <select name="strategy"><option value="ring_all">Ring all</option><option value="ordered">Ordered</option><option value="longest_idle">Longest idle</option></select></label>
+        <label>Maximum wait in seconds <input name="maxWaitSeconds" type="number" min="5" max="3600" value="120" required></label>
+        <button>Create queue</button>
+      </form>
+      <label>Queue <select id="pbx-queue-select"></select></label>
+      <div id="pbx-members"></div>
+      <button id="pbx-save-members" type="button">Save queue members</button>
+      <button id="pbx-preview-queue" type="button">Preview eligible agents</button>
+      <h4>Inbound DID routing</h4>
+      <form id="pbx-route-form">
+        <label>DID (+E.164) <input name="did" placeholder="+12125550123" required></label>
+        <label>Destination <select id="pbx-route-destination" name="destinationId"></select></label>
+        <button>Save DID route</button>
+      </form><ul id="pbx-route-list"></ul>
+      <h4>Trunk plans and rate deck</h4>
+      <p>Trunks and rates are for preview. No live trunk is provisioned.</p>
+      <form id="pbx-trunk-form">
+        <label>Name <input name="name" required></label>
+        <label>Host <input name="host" placeholder="sip.provider.example" required></label>
+        <label>Port <input name="port" type="number" min="1" max="65535" value="5061" required></label>
+        <label>Transport <select name="transport"><option value="tls">TLS</option><option value="udp">UDP</option><option value="tcp">TCP</option></select></label>
+        <label>Priority <input name="priority" type="number" min="1" max="1000" value="100" required></label>
+        <button>Add trunk plan</button>
+      </form><ul id="pbx-trunk-list"></ul>
+      <form id="pbx-rate-form">
+        <label>Digits prefix <input name="prefix" pattern="[0-9]{1,15}" required></label>
+        <label>Trunk <select name="trunkId" id="pbx-rate-trunk"></select></label>
+        <label>Cost cents/min <input name="cost" type="number" min="0" required></label>
+        <label>Price cents/min <input name="price" type="number" min="0" required></label>
+        <button>Add rate</button>
+      </form><ul id="pbx-rate-list"></ul>
+      <form id="pbx-route-preview-form">
+        <label>Preview outbound +E.164 <input name="number" placeholder="+12125550123" required></label>
+        <button>Preview route</button>
+      </form>
+      <p id="pbx-status" role="status"></p>
+    </section>
     <section id="mobile-admin">
       <h3>Android and iOS releases</h3>
       <p>Internal release planning and approval. Store upload and publishing are not connected.</p>
@@ -184,6 +238,15 @@ root.innerHTML = `
       <h4>Release history</h4><ul id="mobile-events"></ul>
       <p id="mobile-status" role="status"></p>
     </section>
+  </section>
+  <section id="agent-panel" hidden>
+    <h2>Call center agent</h2>
+    <p id="my-extension"></p>
+    <form id="agent-status-form">
+      <label>Availability <select id="agent-presence"><option>offline</option><option>ready</option><option>away</option></select></label>
+      <button>Set availability</button>
+    </form>
+    <p id="agent-status-result" role="status"></p>
   </section>
   <p>Development browser dialer. Use a test account on a WSS and WebRTC enabled SIP server.</p>
   <form id="connect">
@@ -222,6 +285,7 @@ const meetings = setupMeetings();
 const groupAdmin = setupGroupAdmin();
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
+const pbx = setupPbx();
 let phone;
 let onCall = false;
 let onHold = false;
@@ -284,8 +348,11 @@ function signedIn(user) {
     refreshBilling().catch((error) => { $("#billing-status").textContent = error.message; });
   if (user.features?.messaging)
     loadContacts().catch((error) => { $("#chat-status").textContent = error.message; });
+  $("#agent-panel").hidden = !user.features?.call_center;
+  pbx.refreshSelf(user).catch((error) => { $("#agent-status-result").textContent = error.message; });
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
   if (["admin","super_admin"].includes(user.role)) {
+    pbx.refreshAdmin().catch((error) => { $("#pbx-status").textContent = error.message; });
     tenantAdmin.refresh(user).catch((error) => { $("#tenant-status").textContent = error.message; });
     mobileAdmin.refresh().catch((error) => { $("#mobile-status").textContent = error.message; });
     groupAdmin.refresh().catch((error) => { $("#group-status").textContent = error.message; });
@@ -438,6 +505,7 @@ $("#logout").onclick = async () => {
     $("#chat").hidden = true;
     $("#billing").hidden = true;
     meetings.hide();
+    $("#agent-panel").hidden = true;
     $("#admin").hidden = true;
     $("#message-list").replaceChildren();
     $("#account-status").textContent = "Signed out";

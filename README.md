@@ -4,7 +4,7 @@ Olamide is a development browser softphone with a Node.js account API and MySQL 
 
 ## Generate the MySQL database
 
-Install MySQL 8.4 and Node.js 20 or newer. As a MySQL administrator, create the database and apply the complete schema:
+Install MySQL 8.4 and Node.js 22 or newer for the browser build. As a MySQL administrator, create the database and apply the complete schema:
 
 ```sh
 mysql -u root -p < services/api/create-database.sql
@@ -22,7 +22,7 @@ MYSQL_URL='mysql://USER:PASSWORD@127.0.0.1:3306/olamide' \
 PUBLIC_ORIGIN='http://127.0.0.1:5173' npm start
 ```
 
-The API reapplies the idempotent table definitions on startup. On a remote MySQL connection, configure `MYSQL_SSL_CA` with the path to a trusted CA certificate. In production, run schema changes through a controlled migration process and remove the application's DDL privileges. Back up the database regularly.
+The API reapplies the idempotent base tables, tenant migration, and `pbx-schema.sql` on startup. On a remote MySQL connection, configure `MYSQL_SSL_CA` with the path to a trusted CA certificate. In production, run schema changes through a controlled migration process and remove the application's DDL privileges. Back up the database regularly.
 
 This is a **new MySQL schema**. It does not import records from an earlier PostgreSQL database. If you have a populated PostgreSQL deployment, export, transform, and verify those records separately before switching traffic.
 
@@ -60,29 +60,92 @@ For cross-network meetings, configure `MEETING_ICE_SERVERS_JSON` with STUN/TURN 
 
 ## Limits before service launch
 
-The repository is a development foundation. It has no class 5 switch, carrier routes, live billing/settlement, DID purchase automation, native Android/iOS clients, Zoom-scale media server, meeting recording, remote keyboard/mouse control, OTP/passkeys/PIN, or production deployment. Browser-only geofencing and group flags cannot enforce policies on an external SIP server or inspect peer-to-peer media. Add a trusted SIP/media service, backups, operational monitoring, abuse controls, migrations, and security review before accepting real users or payments. No Acrobits, WhatsApp, Cash App, Zoom, or Zoiper code or branding is included.
+The repository is a development foundation. PBX and call center configuration is a planning control plane; no SIP switch or live call routing is connected. It has no class 5 switch, carrier routes, live billing/settlement, DID purchase automation, native Android/iOS clients, Zoom-scale media server, meeting recording, remote keyboard/mouse control, OTP/passkeys/PIN, or production deployment. Browser-only geofencing and group flags cannot enforce policies on an external SIP server or inspect peer-to-peer media. Add a trusted SIP/media service, backups, operational monitoring, abuse controls, migrations, and security review before accepting real users or payments. No Acrobits, WhatsApp, Cash App, Zoom, or Zoiper code or branding is included.
 
-## Debian 12 deployment
+## Feature status and boundaries
 
-`deployment/ansible/site.yml` installs Ansible and Docker Engine with Compose on the server, checks out this repository, builds the browser and API images, starts MySQL 8.4 and Caddy, and enables the Compose stack at boot. Only HTTP and HTTPS are published by the stack. The chosen domain must resolve to the deployment host, and ports 80/443 must be open. This deploys the **browser app and account API only**; a SIP switch, carrier, TURN service, and native mobile apps are separate infrastructure.
+This repository contains a browser SIP dialer, a MySQL-backed account API, and administration screens. The PBX, queue, DID routing, and rate deck screens **save and preview configuration**; they do not provision a SIP switch or handle media. Neither a plan invoice nor a previewed rate is a charge. A SIP account must come from an external WSS/WebRTC capable switch. This distinction is shown in the interface and API response.
 
-From an SSH enabled Debian or Linux controller, install Ansible, verify the server's SSH host key fingerprint through your provider's console, save the verified host key in `~/.ssh/known_hosts`, and ensure key based SSH access works with a user allowed to become root for package installation. Do not paste a root password into GitHub or the repository. Create `deployment/secrets.env` from `deployment/secrets.env.example` with two different long random MySQL passwords. The value in `MYSQL_URL` must match `MYSQL_PASSWORD`; URL encode reserved password characters, or use URL safe random characters. Keep the file outside Git and back up MySQL before upgrades. Then:
+| Area | Available now | Additional service required |
+| --- | --- | --- |
+| Browser softphone | SIP.js registration and WebRTC audio calling, hold, DTMF | SIP WSS server, users, trunks, SBC, TURN as appropriate |
+| PBX control plane | Tenant extensions, queue membership, DID destination maps, voicemail/forwarding intent | Switch provisioning, active dialplan, voicemail recording and delivery |
+| Call center | Manual agent availability, ring-all/ordered/longest-idle eligibility preview | Live queue engine, call distribution, SLAs, recording, wallboards |
+| Carrier routing | Planned trunks, prefix rate deck, longest-prefix least-cost preview | Carrier credentials, route activation, fraud controls, CDR ingestion |
+| Billing | Monthly plan drafts and unpaid invoices, DID markup quotes | Payment gateway, taxes, prepaid balance enforcement, rated CDR settlement |
+| Deployment | Debian bootstrap, TLS web/API stack, validated Git pull, backups before updates, OS security updates | Public DNS record, SSH/console access, carrier and SIP services |
+
+ASTPP includes carrier-grade softswitch, online charging, reseller billing, routing, DID management, and fraud controls; 3CX includes a live PBX and queue engine. The Olamide control plane is **not** a substitute for either complete product. Do not advertise or rely on prepaid charging, automatic call recording, emergency calling, lawful intercept, carrier routing, or live queue service until those components have been separately implemented and verified.
+
+## Step-by-step first pull on a bare Debian 12 server
+
+**Prerequisites:** a Debian 12 machine with root/console access, outbound HTTPS to Debian/Docker/GitHub, and sufficient disk space for MySQL backups and container builds. In your DNS provider, create an **A record** named `sip` in `dobhrap.com` pointing to the server's public IPv4 address. If IPv6 is configured, point its AAAA record to the same server or remove a stale AAAA record. Allow inbound TCP 80/443 for Caddy's HTTPS certificate and web app. Maintain your SSH access separately. The repository does not contain your public IP, SSH key, or database passwords. Only the web/API stack is installed; no SIP/RTP ports are opened by this playbook.
+
+1. In the provider console, ensure SSH is running and that your login has root or sudo access. If port 22 refuses connections, check `systemctl status ssh`, your cloud firewall, and the provider's console before continuing. Never put a root password in GitHub Actions secrets or this repository.
+2. Confirm DNS: `getent ahostsv4 sip.dobhrap.com`. Its address must be this server. HTTP and HTTPS need to be reachable from the internet for the public TLS check.
+3. On the server as root, install the minimal Git prerequisite and pull the repository:
+
+   ```sh
+   apt-get update
+   apt-get install -y git ca-certificates
+   git clone https://github.com/olamidebello/Sip.git /root/Sip
+   cd /root/Sip
+   OLAMIDE_DOMAIN=sip.dobhrap.com bash deployment/bootstrap.sh
+   ```
+
+   From a sudo-capable account, use `sudo env OLAMIDE_DOMAIN=sip.dobhrap.com bash deployment/bootstrap.sh`. Bootstrap installs Ansible, curl, jq, OpenSSL, Docker Engine and Compose, then generates two distinct random database passwords in `/etc/olamide/secrets.env` (mode 0600). It selects a main-branch commit whose GitHub validation workflow has completed successfully and deploys that commit. Re-running bootstrap keeps the existing secrets and data.
+4. Open `https://sip.dobhrap.com/api/health` and expect `{"status":"ok"}`. Open `https://sip.dobhrap.com` to reach the browser client. A failed DNS/TLS check stops the playbook; inspect `journalctl -u olamide-compose` and `docker compose ps` in `/opt/olamide/repo/deployment/docker`.
+5. Create your first account in the browser, then promote that existing account on the server:
+
+   ```sh
+   cd /opt/olamide/repo/deployment/docker
+   docker compose exec -T api node promote-super-admin.js admin@example.com
+   ```
+
+   Replace the example email. There is no public super-admin registration. Sign out and in to refresh the interface.
+6. In **Administrator → Server URL**, set the **actual external SIP WSS URL** supplied by your PBX or provider, for example `wss://pbx.example.com:8089/ws`. The domain `sip.dobhrap.com` serves this web app; it is not a SIP switch by itself. Test only with an authorized SIP account. Configure `MEETING_ICE_SERVERS_JSON` in `/etc/olamide/secrets.env` for TURN if peer-to-peer meetings must cross restrictive networks, then rerun bootstrap to copy changed secrets and restart the stack.
+
+### Existing external controller deployment
+
+An Ansible controller can deploy the same stack after creating a private `deployment/secrets.env` from `deployment/secrets.env.example`. Set `DOMAIN=sip.dobhrap.com`, `MYSQL_URL` with a URL-safe encoded password matching `MYSQL_PASSWORD`, and a distinct `MYSQL_ROOT_PASSWORD`. Verify the server's SSH host key fingerprint through your provider console before adding it to `~/.ssh/known_hosts`. Run:
 
 ```sh
-OLAMIDE_DOMAIN=your.example.com ansible-playbook -i "YOUR_SERVER_HOST," -u YOUR_SSH_USER deployment/ansible/site.yml
+OLAMIDE_DOMAIN=sip.dobhrap.com ansible-playbook -i "YOUR_SERVER_HOST," -u YOUR_SSH_USER deployment/ansible/site.yml
 ```
 
-The `Deploy Olamide` GitHub Actions workflow validates API and browser checks on changes and can deploy the validated commit automatically. Configure repository Actions secrets `DEPLOY_SSH_KEY` (private key for the server), `DEPLOY_KNOWN_HOSTS` (verified server host key line), and `DEPLOY_ENV` (the complete contents of `deployment/secrets.env`), `DEPLOY_HOST`, `DEPLOY_USER`, and `DEPLOY_DOMAIN`. Without all six it reports that deployment was skipped. The workflow can also be started with `workflow_dispatch`. Do not put real secret values in the sample file or commit them. Run `docker compose -f /opt/olamide/repo/deployment/docker/compose.yml ps` on the server to inspect status. Caddy obtains a TLS certificate only when DNS and inbound ports work.
+The GitHub Actions workflow **validates code only**. The installed server pulls validated commits directly from GitHub; it needs no GitHub SSH deployment secret. The repository is public, so the server queries GitHub's public workflow runs API without a token. GitHub API limits or an incomplete workflow delay updates without replacing the running app.
 
-## Tenants and super administration
+### Updates, backups, and recovery
 
-The existing accounts and records are assigned to the `olamide` default tenant by an idempotent startup migration. New public signups enter that tenant. Tenant admins can create accounts and groups within their tenant; the new admin screen also lets them provision users. Super admins can create or suspend tenants, switch their administration context to an active tenant, see tenant status, and provision tenant admins. Sessions for suspended tenants stop authenticating. A user belongs to one tenant; a globally unique email cannot be reused in another tenant. Existing records remain in the default tenant. Groups, plans, meeting access, messaging contacts, mobile releases, and administrator listings are tenant scoped in the API. Provider API credentials remain shared on this single server, so use separate provider accounts and secret separation before hosting untrusted businesses.
+- `olamide-update.timer` checks GitHub every 15 minutes. It accepts only a successfully validated main-branch push commit. Before a changed version is applied, `deployment/update.sh` takes a compressed MySQL dump into `/opt/olamide/backups/` with restricted permissions, builds fresh Node/Caddy images, and checks API health. On a failed check it restores the previous **application commit**. MySQL schema/data are **not** automatically rolled back; restore the database backup deliberately after assessing the failure. Monitor disk space and manage backup retention externally.
+- Debian `unattended-upgrades` installs security updates automatically. Automatic reboots are disabled to avoid unplanned call interruptions. Review `/var/run/reboot-required`, schedule a maintenance reboot, and separately plan Docker/MySQL image security updates. The Git updater pulls fresh Node/Caddy base images when it builds a new app commit; it does not silently advance the MySQL image.
+- Inspect: `systemctl status olamide-update.timer olamide-update.service olamide-compose.service`, `journalctl -u olamide-update.service -n 100 --no-pager`, `docker compose ps`, and `docker compose logs --tail=100 api web mysql` from `/opt/olamide/repo/deployment/docker`.
+- To pause Git updates: `systemctl disable --now olamide-update.timer`. To apply a validated commit immediately: `systemctl start olamide-update.service`. For a manual app rollback, pause the timer, back up the database, use `git -C /opt/olamide/repo checkout --detach COMMIT_SHA`, then run `docker compose up -d --build` in `/opt/olamide/repo/deployment/docker`. Assess schema compatibility before reverting code.
+- Database credentials stay in `/etc/olamide/secrets.env` and `/opt/olamide/repo/deployment/docker/.env`, both mode 0600. Back up the secrets securely outside the server. Changing MySQL environment passwords on an existing volume does **not** automatically change MySQL account passwords; rotate them inside MySQL and update both URL and environment file together.
 
-There is deliberately no public super admin registration. After registering an initial account and starting the API, promote it on the server with:
+## Administrator manual
 
-```sh
-cd /opt/olamide/repo/deployment/docker
-docker compose exec -T api node promote-super-admin.js admin@example.com
-```
+### Tenants, users, and feature access
 
-Replace the email with the existing account's address. Only a person with server access can run this command. The role takes effect on the next authenticated request. Initial passwords for accounts created by administrators are provided by that administrator; self service reset, tenant invitation email, MFA, account deletion, and comprehensive tenant billing are not implemented. Review and test tenant policies before serving unrelated organizations.
+1. Sign in as the server-promoted super admin. In **Administrator → Tenants**, create a tenant name and slug. The system creates its Standard group. Choose that tenant and click **Manage selected tenant** to change your admin context. You can return to the original tenant the same way.
+2. Add users or tenant administrators with an initial password under **Create tenant user**. Send credentials privately and require a new credential workflow before production use; self-service password reset and MFA are not implemented. Tenant administrators cannot create other tenants or promote a super admin.
+3. In **User groups and feature access**, create groups, select permitted features, and assign users. All membership queries are tenant scoped. Suspending a tenant blocks its HTTP sessions and closes its active meeting WebSockets. Super admins can reactivate it.
+4. Review the admin overview for the currently selected tenant. Email addresses are globally unique across tenants. Existing accounts migrated to the original Olamide tenant.
+
+### PBX extension and queue configuration
+
+1. Create each **extension** with a unique 2–10 digit number, display name, optional assigned user, voicemail intent, and optional forwarding target. A number cannot also be a queue number in the same tenant. The user's **Call center agent** panel displays their assigned extension. Creation saves database intent; it does not provision a SIP device, password, voicemail box, or switch dialplan.
+2. Create a **queue** with a number, name, strategy (`ring_all`, `ordered`, `longest_idle`), and maximum wait time. Select the queue, check its tenant users, and save members. Grant the `Call center agent` group feature to the intended agents. Agents set their own manual availability to `ready`, `away`, or `offline`. **Preview eligible agents** computes the next agents from this status and the queue order. It does not ring phones. `longest_idle` uses the last manual status change, not a verified call idle time.
+3. Under **Inbound DID routing**, enter an E.164 DID and select a saved extension or queue. This maps the number to a destination in MySQL. You must separately configure your carrier and a live PBX to deliver the DID; no carrier order or dialplan update is sent.
+4. Add a **trunk plan** with name, host, port, transport and priority. The button labeled **Enable for preview** includes the trunk in simulation only. Credentials are deliberately not stored in the trunk table. Add prefix rates in integer cents per minute with selling price at least cost; then preview an outbound E.164 number. The preview selects the longest matching prefix, lowest cost, then trunk priority. No outbound call or real-time balance authorization occurs.
+5. The PBX API also exposes `GET /api/pbx/overview`, `/extensions`, `/queues`, `/inbound-routes`, `/trunks`, `/rates`, and `/route-preview?number=%2B12125550123`. All admin mutations require a signed-in administrator and the browser's configured origin. Agent status and an assigned extension are accessible to the signed-in user. Use the browser interface for routine work.
+
+### Plans, numbers, communication, and mobile releases
+
+- Create monthly plans and review unpaid invoices. Plan selection creates a pending invoice; a separate payment processor, tax engine, and settlement reconciliation are required. The DID markup defaults to 30% and can be changed for the current tenant. Flowroute/DIDWW searches need provider API keys in the server environment. Purchase and number port submission remain disabled.
+- Add contacts in the same tenant, send server-stored messages, and use meeting rooms with up to four participants. Meeting chat is temporary; screen sharing uses the browser's screen capture. Pointer assistance is an overlay and cannot operate the remote desktop. Configure TURN for cross-network calls. Messages have no end-to-end encryption or push delivery.
+- Android/iOS release administration records app identifiers, artifact references, tracks, internal approval, and audit history. It does not build native clients or submit to Google/Apple stores.
+
+## Integration work required for a live PBX or ASTPP-class service
+
+Choose a licensed and supported switch (for example Asterisk/FreeSWITCH with an SBC and a suitable provisioning layer) and implement tenant-isolated provisioning for PJSIP credentials, TLS/WSS, dialplan, queue engine, voicemail, inbound/outbound carrier routing, emergency calling policy, media/RTP, and CDR ingestion. Require reconciliation and idempotency between the Olamide database and the switch. Add per-tenant carrier credentials, explicit route activation, number ownership checks, fraud limits, call recording consent and storage policy, and monitoring before enabling trunk traffic. For ASTPP-like charging, add authoritative CDRs, prefix effective dates, rounding rules, taxes, prepaid credit reservation, low-balance interruption, dispute adjustments, and audited settlement. For 3CX-like call center operation, add live queue distribution, presence tied to registration and calls, SLA measurement, callbacks, recording, reports, and supervisor controls. The current queue and LCR endpoints are safe previews for that implementation, not an operational substitute.

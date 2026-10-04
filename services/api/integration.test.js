@@ -151,7 +151,7 @@ test("registered users can create and join a room; host controls it", {
   assert.equal(hostMessages.find((m) => m.type === "pointer")?.x, 0.4);
   const guestClosed = once(guestWs, "close");
   assert.equal((await put(`/api/admin/groups/${group.body.id}`,
-    { features:{ meetings:false, remote_assist:false } })).status, 200);
+    { features:{ meetings:false, remote_assist:false, call_center:true } })).status, 200);
   await guestClosed;
   const noMeeting = await fetch(base + "/api/meetings/config", { headers:{ Cookie:guestCookie } });
   assert.equal(noMeeting.status, 403);
@@ -182,6 +182,44 @@ test("registered users can create and join a room; host controls it", {
   assert.equal(crossMeeting.status,404);
   const crossApps = await fetch(base + "/api/admin/mobile/apps",{headers:{Cookie:otherCookie}});
   assert.equal((await crossApps.json()).apps.some((a) => a.id === mobileApp.body.id),false);
+  const ext = await post("/api/pbx/extensions",{
+    number:"101",name:"Support",userId:guestLogin.body.id,voicemailEnabled:true
+  },hostCookie);
+  assert.equal(ext.status,201,JSON.stringify(ext.body) + " " + log);
+  const queue = await post("/api/pbx/queues",{
+    number:"600",name:"Support queue",strategy:"ordered",maxWaitSeconds:120
+  },hostCookie);
+  assert.equal(queue.status,201,JSON.stringify(queue.body));
+  const queueMembers = await put(`/api/pbx/queues/${queue.body.id}/members`,{
+    userIds:[guestLogin.body.id]
+  });
+  assert.equal(queueMembers.status,200,JSON.stringify(queueMembers.body));
+  assert.equal((await post("/api/pbx/agent-status",{status:"ready"},guestCookie)).status,200);
+  const queuePreview = await fetch(base + `/api/pbx/queues/${queue.body.id}/preview`,{
+    headers:{Cookie:hostCookie}
+  });
+  assert.equal((await queuePreview.json()).eligible[0].user_id,guestLogin.body.id);
+  assert.equal((await post("/api/pbx/inbound-routes",{
+    did:"+12125550124",destinationId:queue.body.id
+  },hostCookie)).status,200);
+  const trunk = await post("/api/pbx/trunks",{
+    name:"Test trunk",host:"sip.example.com",port:5061,transport:"tls",priority:100
+  },hostCookie);
+  assert.equal(trunk.status,201,JSON.stringify(trunk.body));
+  assert.equal((await post("/api/pbx/rates",{
+    prefix:"1",trunkId:trunk.body.id,costCentsPerMinute:2,priceCentsPerMinute:3
+  },hostCookie)).status,201);
+  const enableTrunk = await put(`/api/pbx/trunks/${trunk.body.id}/status`,{enabled:true});
+  assert.equal(enableTrunk.status,200,JSON.stringify(enableTrunk.body));
+  const ratePreview = await fetch(base + "/api/pbx/route-preview?number=%2B12125550124",{
+    headers:{Cookie:hostCookie}
+  });
+  assert.equal((await ratePreview.json()).route.price_cents_per_minute,3);
+  assert.equal((await post("/api/pbx/inbound-routes",{
+    did:"+12125550125",destinationId:queue.body.id
+  },otherCookie)).status,404);
+  const crossPbx = await fetch(base + "/api/pbx/extensions",{headers:{Cookie:otherCookie}});
+  assert.equal((await crossPbx.json()).extensions.length,0);
   const switched = await post(`/api/admin/tenants/${tenant.body.id}/switch`,{},hostCookie);
   assert.equal(switched.status,200);
   const scopedUsers = await fetch(base + "/api/admin/users",{headers:{Cookie:hostCookie}});

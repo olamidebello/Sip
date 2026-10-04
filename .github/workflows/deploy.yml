@@ -1,13 +1,8 @@
-name: Deploy Olamide
+name: Validate Olamide for server pull
 on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - 'apps/web/**'
-      - 'services/api/**'
-      - 'deployment/**'
-      - '.github/workflows/deploy.yml'
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -34,41 +29,3 @@ jobs:
       - name: Browser checks and build
         working-directory: apps/web
         run: npm install --no-audit --no-fund && npm test && npm run build
-  deploy:
-    needs: validate
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    env:
-      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-      DEPLOY_ENV: ${{ secrets.DEPLOY_ENV }}
-      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-      OLAMIDE_DOMAIN: ${{ secrets.DEPLOY_DOMAIN }}
-      ANSIBLE_CONFIG: deployment/ansible/ansible.cfg
-    steps:
-      - uses: actions/checkout@v4
-      - name: Check deployment configuration
-        id: configured
-        shell: bash
-        run: |
-          if [[ -n "$DEPLOY_SSH_KEY" && -n "$DEPLOY_KNOWN_HOSTS" && -n "$DEPLOY_ENV" && -n "$DEPLOY_HOST" && -n "$DEPLOY_USER" && -n "$OLAMIDE_DOMAIN" ]]; then
-            echo 'ready=true' >> "$GITHUB_OUTPUT"
-          else
-            echo '::warning::Deployment skipped: configure DEPLOY_SSH_KEY, DEPLOY_KNOWN_HOSTS, DEPLOY_ENV, DEPLOY_HOST, DEPLOY_USER, and DEPLOY_DOMAIN.'
-            echo 'ready=false' >> "$GITHUB_OUTPUT"
-          fi
-      - name: Install Ansible and run deployment
-        if: steps.configured.outputs.ready == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y ansible
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
-          printf '%s\n' "$DEPLOY_ENV" > deployment/secrets.env
-          chmod 600 deployment/secrets.env
-          ansible-playbook -i "$DEPLOY_HOST," -u "$DEPLOY_USER" deployment/ansible/site.yml -e "deployment_ref=$GITHUB_SHA"

@@ -48,7 +48,7 @@ export async function handleTenants({req,res,path,user,pool,readJson,send,meetin
       await db.query("BEGIN");
       await db.query("INSERT INTO tenants(id,name,slug) VALUES($1,$2,$3)",[id,name.trim(),slug]);
       await db.query("INSERT INTO user_groups(id,tenant_id,name,features) VALUES($1,$2,'Standard',$3)",
-        [randomUUID(),id,JSON.stringify({meetings:true,screen_share:true,remote_assist:false,messaging:true,billing:true})]);
+        [randomUUID(),id,JSON.stringify({meetings:true,screen_share:true,remote_assist:false,messaging:true,billing:true,call_center:false})]);
       await db.query("COMMIT");
       return send(res,201,{id,name:name.trim(),slug,status:"active"});
     } catch (error) {

@@ -1,5 +1,5 @@
 export const FEATURE_KEYS = Object.freeze([
-  "meetings", "screen_share", "remote_assist", "messaging", "billing"
+  "meetings", "screen_share", "remote_assist", "messaging", "billing", "call_center"
 ]);
 
 export function validateFeatures(value) {

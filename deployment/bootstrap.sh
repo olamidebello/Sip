@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if (( EUID != 0 )); then echo 'Run with sudo or as root' >&2; exit 1; fi
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+DOMAIN=${OLAMIDE_DOMAIN:-sip.dobhrap.com}
+if [[ ! "$DOMAIN" =~ ^[a-z0-9.-]+$ ]]; then echo 'Invalid domain' >&2; exit 1; fi
+apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get install -y ansible ca-certificates curl git jq openssl
+install -d -m 0700 /etc/olamide
+if [[ ! -e /etc/olamide/secrets.env ]]; then
+  app_password=$(openssl rand -hex 32)
+  root_password=$(openssl rand -hex 32)
+  umask 077
+  cat > /etc/olamide/secrets.env <<ENV
+DOMAIN=$DOMAIN
+MYSQL_DATABASE=olamide
+MYSQL_USER=olamide_app
+MYSQL_PASSWORD=$app_password
+MYSQL_ROOT_PASSWORD=$root_password
+MYSQL_URL=mysql://olamide_app:$app_password@mysql:3306/olamide
+MEETING_ICE_SERVERS_JSON=[]
+ENV
+  chmod 0600 /etc/olamide/secrets.env
+fi
+validated_ref=$(bash "$SCRIPT_DIR/verified-sha.sh")
+OLAMIDE_DOMAIN="$DOMAIN" ansible-playbook -i 'localhost,' -c local \
+  "$SCRIPT_DIR/ansible/site.yml" \
+  -e "local_secrets_file=/etc/olamide/secrets.env" \
+  -e "deployment_ref=$validated_ref"
+echo "Installed validated commit $validated_ref. See /opt/olamide/repo/README.md."

@@ -3,7 +3,8 @@ const featureLabels = {
   screen_share: "Screen sharing",
   remote_assist: "Pointer assistance",
   messaging: "Messaging",
-  billing: "Plans and billing"
+  billing: "Plans and billing",
+  call_center: "Call center agent"
 };
 
 export function setupGroupAdmin() {

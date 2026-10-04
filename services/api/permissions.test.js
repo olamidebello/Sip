@@ -6,7 +6,7 @@ test("group permissions combine without granting absent features", () => {
   const first = validateFeatures({ meetings:true, messaging:true });
   const second = validateFeatures({ remote_assist:true });
   assert.deepEqual(effectiveFeatures([first,second]), {
-    meetings:true, screen_share:false, remote_assist:true, messaging:true, billing:false
+    meetings:true, screen_share:false, remote_assist:true, messaging:true, billing:false, call_center:false
   });
   assert.equal(effectiveFeatures([],true).screen_share,true);
   assert.throws(() => validateFeatures({ admin:true }));

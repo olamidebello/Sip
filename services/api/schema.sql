@@ -169,7 +169,7 @@ CREATE TABLE IF NOT EXISTS mobile_release_events (
 ) ENGINE=InnoDB;
 INSERT IGNORE INTO user_groups (id,name,features)
 VALUES ('00000000-0000-4000-8000-000000000001','Standard',
-  '{"meetings":true,"screen_share":true,"remote_assist":false,"messaging":true,"billing":true}');
+  '{"meetings":true,"screen_share":true,"remote_assist":false,"messaging":true,"billing":true,"call_center":false}');
 INSERT IGNORE INTO user_group_members(user_id,group_id)
 SELECT u.id,'00000000-0000-4000-8000-000000000001' FROM users u
 WHERE NOT EXISTS (SELECT 1 FROM app_settings WHERE setting_key='groups_backfilled');
