@@ -1,5 +1,15 @@
 *{box-sizing:border-box}
-body{font:16px system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;background:#000;color:#eef4ff}
+html{min-height:100%;background:#000}
+body{font:16px system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;color:#eef4ff}
+html[data-background="midnight"]{background-image:linear-gradient(145deg,#060b19,#142b45 55%,#050b17)}
+html[data-background="ocean"]{background-image:linear-gradient(135deg,#071b36,#0c4861 55%,#06273d)}
+html[data-background="aurora"]{background-image:linear-gradient(130deg,#101735,#124744 50%,#301b53)}
+html[data-background="sunrise"]{background-image:linear-gradient(130deg,#252248,#74405a 52%,#3d365c)}
+html[data-background="slate"]{background-image:linear-gradient(130deg,#172435,#28394c 50%,#101b2b)}
+html[data-background]{background-size:200% 200%;background-attachment:fixed}
+html[data-background-animated="true"]{animation:background-drift 24s ease-in-out infinite alternate}
+@keyframes background-drift{from{background-position:0% 50%}to{background-position:100% 50%}}
+@media (prefers-reduced-motion:reduce){html[data-background-animated="true"]{animation:none}}
 .brand img{display:block;width:min(100%,640px);height:auto;margin:0 auto}
 .brand h1{font-size:1.25rem;text-align:center;margin:0 0 1rem}
 h1{color:#72d6eb}
@@ -22,3 +32,4 @@ select{padding:.65rem;background:#202c40;color:white;border:1px solid #61738c;bo
 #report-details table{width:100%;border-collapse:collapse;font-size:.9rem}
 #report-details th,#report-details td{padding:.5rem;text-align:left;border-bottom:1px solid #42536c}
 #report-export{display:inline-block;padding:.65rem;color:#72d6eb}
+#background-user input[type="checkbox"],#background-admin input[type="checkbox"]{display:inline;width:auto;vertical-align:middle}
