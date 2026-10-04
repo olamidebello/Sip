@@ -90,12 +90,22 @@ test("registered users can create and join a room; host controls it", {
     evidenceReference:"Integration test only; no real assignment"
   },hostCookie);
   assert.equal(staged.status,201,JSON.stringify(staged.body));
+  const priceRule=await fetch(base+"/api/admin/pricing/inhouse",{method:"PUT",
+    headers:{Origin:origin,"Content-Type":"application/json",Cookie:hostCookie},
+    body:JSON.stringify({mode:"percent",setupValue:3000,monthlyValue:3000})});
+  assert.equal(priceRule.status,200);
+  const setDidPrice=await fetch(base+`/api/admin/inhouse/numbers/${staged.body.id}/pricing`,{method:"PUT",
+    headers:{Origin:origin,"Content-Type":"application/json",Cookie:hostCookie},
+    body:JSON.stringify({buySetupCents:100,buyMonthlyCents:50,priceMode:"rule",sellSetupCents:500,sellMonthlyCents:200})});
+  assert.equal(setDidPrice.status,200);
   const unverified=await fetch(base+"/api/inhouse/numbers",{headers:{Cookie:guestCookie}});
   assert.equal((await unverified.json()).numbers.some((did)=>did.number_e164===didNumber),false);
   assert.equal((await post(`/api/admin/inhouse/numbers/${staged.body.id}/publish`,
     {confirmed:true},hostCookie)).status,200);
   const reserved=await post("/api/inhouse/reserve",{number:didNumber},guestCookie);
   assert.equal(reserved.status,201,JSON.stringify(reserved.body));
+  assert.equal(reserved.body.setupCents,130);
+  assert.equal(reserved.body.monthlyCents,65);
   assert.equal(reserved.body.provisioned,false);
   assert.equal((await post("/api/inhouse/reserve",{number:didNumber},hostCookie)).status,409);
   const myDids=await fetch(base+"/api/inhouse/my-numbers",{headers:{Cookie:guestCookie}});
