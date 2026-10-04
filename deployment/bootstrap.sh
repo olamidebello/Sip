@@ -27,4 +27,10 @@ OLAMIDE_DOMAIN="$DOMAIN" ansible-playbook -i 'localhost,' -c local \
   "$SCRIPT_DIR/ansible/site.yml" \
   -e "local_secrets_file=/etc/olamide/secrets.env" \
   -e "deployment_ref=$validated_ref"
+if [[ "${OLAMIDE_SWITCH_STAGE:-0}" == 1 ]]; then
+  token_file=/etc/olamide/signalwire-token
+  [[ -s "$token_file" ]] || { echo "Switch staging requires a private SignalWire token in $token_file" >&2; exit 1; }
+  [[ "$(stat -c %a "$token_file")" == 600 ]] || { echo "Set mode 0600 on $token_file" >&2; exit 1; }
+  SIGNALWIRE_TOKEN=$(<"$token_file") ansible-playbook -i 'localhost,' -c local "$SCRIPT_DIR/ansible/switch.yml"
+fi
 echo "Installed validated commit $validated_ref. See /opt/olamide/repo/README.md."

@@ -1,0 +1,123 @@
+---
+- name: Stage hardened FreeSWITCH package on Debian 12
+  hosts: all
+  become: true
+  vars:
+    signalwire_token: "{{ lookup('env', 'SIGNALWIRE_TOKEN') }}"
+  pre_tasks:
+    - name: Require Debian 12 and package access
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version == '12'
+          - signalwire_token | length >= 16
+        fail_msg: "Debian 12 and a private SIGNALWIRE_TOKEN are required."
+      no_log: true
+  tasks:
+    - name: Install repository prerequisites
+      ansible.builtin.apt:
+        name: [ca-certificates, gnupg, wget, lsb-release, openssl]
+        update_cache: true
+        state: present
+    - name: Create private apt authentication directory
+      ansible.builtin.file:
+        path: /etc/apt/auth.conf.d
+        state: directory
+        mode: '0700'
+    - name: Install SignalWire repository authentication
+      ansible.builtin.copy:
+        dest: /etc/apt/auth.conf.d/freeswitch.conf
+        content: "machine freeswitch.signalwire.com login signalwire password {{ signalwire_token }}\n"
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+    - name: Fetch SignalWire FreeSWITCH repository signing key
+      ansible.builtin.get_url:
+        url: https://freeswitch.signalwire.com/repo/deb/debian-release/signalwire-freeswitch-repo.gpg
+        dest: /usr/share/keyrings/signalwire-freeswitch-repo.gpg
+        url_username: signalwire
+        url_password: "{{ signalwire_token }}"
+        force_basic_auth: true
+        mode: '0644'
+      no_log: true
+    - name: Register the official FreeSWITCH package repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/signalwire-freeswitch-repo.gpg] https://freeswitch.signalwire.com/repo/deb/debian-release/ bookworm main"
+        filename: freeswitch
+        state: present
+    - name: Install the FreeSWITCH vanilla module set without auto-starting
+      ansible.builtin.apt:
+        name: [freeswitch-meta-vanilla, freeswitch-sounds-en-us-callie, freeswitch-sounds-music]
+        update_cache: true
+        state: present
+        policy_rc_d: 101
+    - name: Stop and disable the unprovisioned switch
+      ansible.builtin.systemd:
+        name: freeswitch
+        state: stopped
+        enabled: false
+    - name: Check for default configuration directory
+      ansible.builtin.stat:
+        path: /etc/freeswitch/directory/default
+      register: default_users
+    - name: Remove bundled demonstration SIP accounts
+      ansible.builtin.file:
+        path: /etc/freeswitch/directory/default
+        state: absent
+      when: default_users.stat.exists
+    - name: Remove demonstration public dialplan destinations
+      ansible.builtin.file:
+        path: /etc/freeswitch/dialplan/default
+        state: absent
+    - name: Ensure private switch secrets directory exists
+      ansible.builtin.file:
+        path: /etc/olamide
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+    - name: Check existing event socket password
+      ansible.builtin.stat:
+        path: /etc/olamide/freeswitch-event-secret
+      register: event_secret_stat
+    - name: Generate event socket password once
+      ansible.builtin.command: openssl rand -hex 32
+      register: event_secret_generated
+      changed_when: true
+      when: not event_secret_stat.stat.exists
+      no_log: true
+    - name: Store event socket password
+      ansible.builtin.copy:
+        dest: /etc/olamide/freeswitch-event-secret
+        content: "{{ event_secret_generated.stdout }}\n"
+        owner: root
+        group: root
+        mode: '0600'
+      when: not event_secret_stat.stat.exists
+      no_log: true
+    - name: Read private event socket password
+      ansible.builtin.slurp:
+        src: /etc/olamide/freeswitch-event-secret
+      register: event_secret_file
+      no_log: true
+    - name: Restrict FreeSWITCH event socket to localhost
+      ansible.builtin.copy:
+        dest: /etc/freeswitch/autoload_configs/event_socket.conf.xml
+        owner: root
+        group: freeswitch
+        mode: '0640'
+        content: |
+          <configuration name="event_socket.conf" description="Olamide local event socket">
+            <settings>
+              <param name="listen-ip" value="127.0.0.1"/>
+              <param name="listen-port" value="8021"/>
+              <param name="password" value="{{ event_secret_file.content | b64decode | trim }}"/>
+            </settings>
+          </configuration>
+      no_log: true
+    - name: Assert FreeSWITCH stays disabled pending peer and media commissioning
+      ansible.builtin.command: systemctl is-enabled freeswitch
+      register: switch_enabled
+      changed_when: false
+      failed_when: switch_enabled.stdout != 'disabled'

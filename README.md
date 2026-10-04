@@ -135,6 +135,14 @@ The API stores each `(tenantId, source, legId)` once. An exact replay returns `d
 
 ### Existing external controller deployment
 
+### Optional FreeSWITCH package staging
+
+The primary bootstrap deploys only the web/API/MySQL stack. To **stage** a FreeSWITCH package on the same Debian 12 host, obtain a SignalWire Personal Access Token for the official package repository. Put the token in `/etc/olamide/signalwire-token` as root with mode 0600. From the cloned repository, run `OLAMIDE_SWITCH_STAGE=1 OLAMIDE_DOMAIN=sip.dobhrap.com bash deployment/bootstrap.sh`. The bootstrap installs the validated web/API version, then runs `deployment/ansible/switch.yml`. A remote Ansible controller can run `SIGNALWIRE_TOKEN=... ansible-playbook -i 'SERVER,' -u SSH_USER deployment/ansible/switch.yml` using a private secret mechanism instead of writing a token into shell history.
+
+The switch playbook installs the official vanilla FreeSWITCH package, blocks package auto-start, deletes bundled demo SIP users and demo dialplan destinations, rotates the event socket password, binds that socket to localhost, and leaves the switch **stopped and disabled**. No customer extension, DID, carrier, outbound route, or WSS endpoint is automatically activated. The package's default demo accounts must never be exposed with their shared password. Keep SIP and RTP ports closed until a separate production configuration has been commissioned.
+
+To commission service, an operator must supply valid numbering allocation/LOA, carrier and Nigerian clearinghouse agreements, authenticated peer endpoints and IP allowlists, emergency-calling policy, abuse controls, rate/charging decisions, media/RTP address and port ranges, TLS certificates for WSS, TURN as needed, and a tested dialplan that synchronizes tenant provisioning from MySQL. Test registration, internal and external calls, inbound DID reachability, CDR completeness, failover, fraud blocking, and restore procedures before starting FreeSWITCH. This repository does **not** provide a complete carrier-grade class 5 switch or automatic live provisioning. A single server is a single point of failure; redundant signaling, media, database, and network nodes are needed for carrier availability. The existing Git updater rebuilds web/API containers and does not hot-reload or reconfigure FreeSWITCH.
+
 An Ansible controller can deploy the same stack after creating a private `deployment/secrets.env` from `deployment/secrets.env.example`. Set `DOMAIN=sip.dobhrap.com`, `MYSQL_URL` with a URL-safe encoded password matching `MYSQL_PASSWORD`, and a distinct `MYSQL_ROOT_PASSWORD`. Verify the server's SSH host key fingerprint through your provider console before adding it to `~/.ssh/known_hosts`. Run:
 
 ```sh
