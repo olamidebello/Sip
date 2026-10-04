@@ -1,0 +1,25 @@
+{
+  "name": "olamide-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Olamide hosted softphone desktop client",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "38.0.0",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "com.dobhrap.olamide.desktop",
+    "productName": "Olamide",
+    "files": ["main.cjs", "package.json"],
+    "directories": {"output": "dist"},
+    "linux": {"target": ["AppImage", "deb"], "category": "Network"},
+    "win": {"target": ["nsis"]},
+    "mac": {"target": ["dmg"]},
+    "nsis": {"oneClick": false, "allowToChangeInstallationDirectory": true}
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "appId": "com.dobhrap.olamide",
+  "appName": "Olamide",
+  "webDir": "www",
+  "server": {"url": "https://sip.dobhrap.com", "cleartext": false},
+  "android": {"allowMixedContent": false}
+}
