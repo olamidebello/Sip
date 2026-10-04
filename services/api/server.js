@@ -7,6 +7,7 @@ import { handlePbx } from "./pbx.js";
 import { handleCdrIngest, handleCdrAdmin } from "./cdr.js";
 import { handleInhouseDids } from "./dids.js";
 import { handleNigeria } from "./nigeria.js";
+import { handleReports } from "./reports.js";
 import { migrateTenancy, handleTenants, isAdmin, defaultTenantId } from "./tenancy.js";
 import { markupCents } from "./billing.js";
 import { availableNumbers } from "./providers.js";
@@ -179,6 +180,8 @@ async function handler(req, res) {
       if (!user) return send(res, 401, { error: "Sign in required" });
       if (path.startsWith("/api/pbx/"))
         return await handlePbx({req,res,path,user,pool,send,readJson});
+      if (path === "/api/admin/reports" || path === "/api/admin/reports.csv")
+        return await handleReports({req,res,user,pool,send});
       if (path === "/api/admin/cdr" && req.method === "GET")
         return await handleCdrAdmin({req,res,user,pool,send});
       if (path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/"))
