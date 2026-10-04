@@ -40,10 +40,10 @@ export function setupPbx() {
     $("#agent-presence").value = own?.status || presence.status || "offline";
   }
   async function refreshAdmin() {
-    const [overview,extensionData,queueData,agentData,routeData,trunkData,rateData] = await Promise.all([
+    const [overview,extensionData,queueData,agentData,routeData,trunkData,rateData,policyData] = await Promise.all([
       api("/api/pbx/overview"),api("/api/pbx/extensions"),api("/api/pbx/queues"),
       api("/api/pbx/agent-status"),api("/api/pbx/inbound-routes"),
-      api("/api/pbx/trunks"),api("/api/pbx/rates")
+      api("/api/pbx/trunks"),api("/api/pbx/rates"),api("/api/pbx/outbound-policies")
     ]);
     queues = queueData.queues; agents = agentData.agents; trunks = trunkData.trunks;
     destinations = [...extensionData.extensions.map((d) => ({...d,kind:"extension"})),
@@ -56,6 +56,18 @@ export function setupPbx() {
     list($("#pbx-extension-list"),extensionData.extensions,(e) => `${e.number} ${e.name}${e.user_id ? " — assigned" : " — unassigned"}`);
     list($("#pbx-route-list"),routeData.routes,(r) => `${r.did_e164} → ${r.destination_number} ${r.destination_name}`);
     list($("#pbx-rate-list"),rateData.rates,(r) => `${r.prefix}: ${r.trunk_name}, cost ${r.cost_cents_per_minute}¢/min, price ${r.price_cents_per_minute}¢/min`);
+    const policyList=$("#pbx-policy-list"); policyList.replaceChildren();
+    for (const policy of policyData.policies) {
+      const item=document.createElement("li");
+      const remove=document.createElement("button");
+      remove.type="button"; remove.textContent="Remove";
+      remove.onclick=async () => {
+        try { await api(`/api/pbx/outbound-policies/${policy.id}`,"DELETE"); await refreshAdmin(); }
+        catch(error) {report(error);}
+      };
+      item.append(document.createTextNode(`${policy.prefix}: ${policy.action} ${policy.reason} — `),remove);
+      policyList.append(item);
+    }
     const trunkList = $("#pbx-trunk-list"); trunkList.replaceChildren();
     for (const trunk of trunks) {
       const item = document.createElement("li");
@@ -125,6 +137,9 @@ export function setupPbx() {
     prefix:form.elements.prefix.value,trunkId:form.elements.trunkId.value,
     costCentsPerMinute:Number(form.elements.cost.value),priceCentsPerMinute:Number(form.elements.price.value)
   }));
+  formHandler("#pbx-policy-form","/api/pbx/outbound-policies",(form) => ({
+    prefix:form.elements.prefix.value,action:form.elements.action.value,reason:form.elements.reason.value
+  }));
   $("#pbx-save-members").onclick = async () => {
     const id = $("#pbx-queue-select").value;
     if (!id) return;
@@ -146,8 +161,9 @@ export function setupPbx() {
     event.preventDefault();
     try {
       const number = event.currentTarget.elements.number.value;
-      const {route} = await api("/api/pbx/route-preview?number=" + encodeURIComponent(number));
-      status.textContent = route ? `Simulation: ${route.trunk_name} via prefix ${route.prefix}, price ${route.price_cents_per_minute}¢/min. No call was placed.` : "No enabled route in the preview.";
+      const {route,blocked,policy} = await api("/api/pbx/route-preview?number=" + encodeURIComponent(number));
+      status.textContent = blocked ? `Simulation: blocked by prefix ${policy.prefix}. No call was placed.` :
+        route ? `Simulation: ${route.trunk_name} via prefix ${route.prefix}, price ${route.price_cents_per_minute}¢/min. No call was placed.` : "No enabled route in the preview.";
     } catch (error) {report(error);}
   });
   return {refreshSelf,refreshAdmin};

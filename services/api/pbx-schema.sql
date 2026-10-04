@@ -81,3 +81,14 @@ CREATE TABLE IF NOT EXISTS pbx_rates (
   UNIQUE KEY pbx_rate_prefix_trunk (tenant_id,prefix,trunk_id),
   INDEX pbx_rate_tenant_prefix (tenant_id,prefix)
 ) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS pbx_outbound_policies (
+  id CHAR(36) PRIMARY KEY,
+  tenant_id CHAR(36) NOT NULL,
+  prefix VARCHAR(15) NOT NULL,
+  action VARCHAR(8) NOT NULL,
+  reason VARCHAR(200) NOT NULL DEFAULT '',
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  CONSTRAINT fk_pbx_policy_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT chk_pbx_policy_action CHECK (action IN ('allow','block')),
+  UNIQUE KEY pbx_policy_tenant_prefix (tenant_id,prefix)
+) ENGINE=InnoDB;

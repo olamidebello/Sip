@@ -12,6 +12,13 @@ export function selectAgents(members, strategy) {
   else ready.sort((a,b) => a.position-b.position);
   return strategy === "ring_all" ? ready : ready.slice(0,1);
 }
+export function evaluateOutboundPolicy(number, policies) {
+  const digits = number.slice(1);
+  const matching = policies.filter((policy) => digits.startsWith(policy.prefix))
+    .sort((a,b) => b.prefix.length-a.prefix.length);
+  const policy = matching[0] || null;
+  return {allowed:policy?.action !== "block",policy};
+}
 export async function handlePbx({req,res,path,user,pool,send,readJson}) {
   const admin = isAdmin(user), tenant = user.tenant_id;
   if (path === "/api/pbx/my-extension" && req.method === "GET") {
@@ -169,6 +176,25 @@ export async function handlePbx({req,res,path,user,pool,send,readJson}) {
     const found = await pool.query("SELECT r.id,r.prefix,r.cost_cents_per_minute,r.price_cents_per_minute,r.enabled,t.name AS trunk_name,r.trunk_id FROM pbx_rates r JOIN pbx_trunks t ON t.id=r.trunk_id WHERE r.tenant_id=$1 ORDER BY r.prefix,t.priority LIMIT 500",[tenant]);
     return send(res,200,{rates:found.rows});
   }
+  if (path === "/api/pbx/outbound-policies" && req.method === "GET") {
+    const result = await pool.query("SELECT id,prefix,action,reason,created_at FROM pbx_outbound_policies WHERE tenant_id=$1 ORDER BY CHAR_LENGTH(prefix) DESC,prefix LIMIT 500",[tenant]);
+    return send(res,200,{policies:result.rows,simulationOnly:true});
+  }
+  if (path === "/api/pbx/outbound-policies" && req.method === "POST") {
+    const body = await readJson(req);
+    if (!/^\d{1,15}$/.test(body.prefix || "") || !["allow","block"].includes(body.action) ||
+        typeof body.reason !== "string" || body.reason.length > 200)
+      return send(res,400,{error:"Valid digits prefix, action and reason (max 200 characters) required"});
+    const id = randomUUID();
+    await pool.query("INSERT INTO pbx_outbound_policies(id,tenant_id,prefix,action,reason) VALUES($1,$2,$3,$4,$5) ON DUPLICATE KEY UPDATE action=$6,reason=$7",
+      [id,tenant,body.prefix,body.action,body.reason.trim(),body.action,body.reason.trim()]);
+    return send(res,200,{prefix:body.prefix,action:body.action,simulationOnly:true});
+  }
+  const policyMatch = /^\/api\/pbx\/outbound-policies\/([0-9a-f-]{36})$/i.exec(path);
+  if (policyMatch && req.method === "DELETE") {
+    const result = await pool.query("DELETE FROM pbx_outbound_policies WHERE id=$1 AND tenant_id=$2",[policyMatch[1],tenant]);
+    return send(res,result.rowCount ? 200 : 404,result.rowCount ? {deleted:true} : {error:"Policy unavailable"});
+  }
   if (path === "/api/pbx/rates" && req.method === "POST") {
     const body = await readJson(req);
     if (!/^\d{1,15}$/.test(body.prefix || "") || !uuid.test(body.trunkId || "") ||
@@ -190,9 +216,13 @@ export async function handlePbx({req,res,path,user,pool,send,readJson}) {
   if (path === "/api/pbx/route-preview" && req.method === "GET") {
     const number = new URL(req.url,"http://localhost").searchParams.get("number");
     if (!e164.test(number || "")) return send(res,400,{error:"E.164 number required"});
+    const policies = await pool.query("SELECT prefix,action,reason FROM pbx_outbound_policies WHERE tenant_id=$1 AND $2 LIKE CONCAT(prefix,'%') ORDER BY CHAR_LENGTH(prefix) DESC LIMIT 1",
+      [tenant,number.slice(1)]);
+    const decision = evaluateOutboundPolicy(number,policies.rows);
+    if (!decision.allowed) return send(res,200,{route:null,blocked:true,policy:decision.policy,simulation:true});
     const found = await pool.query("SELECT r.prefix,r.cost_cents_per_minute,r.price_cents_per_minute,t.name AS trunk_name,t.host,t.port,t.transport FROM pbx_rates r JOIN pbx_trunks t ON t.id=r.trunk_id WHERE r.tenant_id=$1 AND t.tenant_id=$2 AND r.enabled=true AND t.enabled=true AND $3 LIKE CONCAT(r.prefix,'%') ORDER BY CHAR_LENGTH(r.prefix) DESC,r.cost_cents_per_minute ASC,t.priority ASC LIMIT 1",
       [tenant,tenant,number.slice(1)]);
-    return send(res,200,{route:found.rows[0] || null,simulation:true});
+    return send(res,200,{route:found.rows[0] || null,blocked:false,policy:decision.policy,simulation:true});
   }
   return send(res,404,{error:"PBX route unavailable"});
 }

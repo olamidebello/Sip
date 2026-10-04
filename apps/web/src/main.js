@@ -203,6 +203,14 @@ root.innerHTML = `
         <label>Price cents/min <input name="price" type="number" min="0" required></label>
         <button>Add rate</button>
       </form><ul id="pbx-rate-list"></ul>
+      <h4>Outbound call barring policy</h4>
+      <p>Longest matching prefix wins. Policies affect the route preview only; connect a switch for live enforcement.</p>
+      <form id="pbx-policy-form">
+        <label>Digits prefix <input name="prefix" pattern="[0-9]{1,15}" required></label>
+        <label>Action <select name="action"><option value="block">Block</option><option value="allow">Allow exception</option></select></label>
+        <label>Reason <input name="reason" maxlength="200"></label>
+        <button>Save preview policy</button>
+      </form><ul id="pbx-policy-list"></ul>
       <form id="pbx-route-preview-form">
         <label>Preview outbound +E.164 <input name="number" placeholder="+12125550123" required></label>
         <button>Preview route</button>

@@ -71,7 +71,7 @@ This repository contains a browser SIP dialer, a MySQL-backed account API, and a
 | Browser softphone | SIP.js registration and WebRTC audio calling, hold, mute, DTMF, browser-local favorites, recent calls, local do-not-disturb, selectable audio output where supported | SIP WSS server, users, trunks, SBC, TURN as appropriate |
 | PBX control plane | Tenant extensions, queue membership, DID destination maps, voicemail/forwarding intent | Switch provisioning, active dialplan, voicemail recording and delivery |
 | Call center | Manual agent availability, ring-all/ordered/longest-idle eligibility preview | Live queue engine, call distribution, SLAs, recording, wallboards |
-| Carrier routing | Planned trunks, prefix rate deck, longest-prefix least-cost preview | Carrier credentials, route activation, fraud controls, CDR ingestion |
+| Carrier routing | Planned trunks, prefix rate deck, tenant call barring with longest-prefix allow exceptions, longest-prefix least-cost preview | Carrier credentials, switch enforcement, fraud controls, CDR ingestion |
 | Billing | Monthly plan drafts and unpaid invoices, DID markup quotes | Payment gateway, taxes, prepaid balance enforcement, rated CDR settlement |
 | Deployment | Debian bootstrap, TLS web/API stack, validated Git pull, backups before updates, OS security updates | Public DNS record, SSH/console access, carrier and SIP services |
 
@@ -82,6 +82,8 @@ Connect with a provisioned SIP address, authorization username, password, and se
 Favorites, recent calls, and do-not-disturb are stored in this browser's local storage, with no cross-device synchronization. Incoming caller identity is not available through the current SimpleUser delegate and appears as “Unknown caller” in recent calls. Recent calls are a convenience list, not carrier CDRs or billing evidence. This page does not provide Acrobits' native push wakeup, CallKit/Android Telecom integration, native contacts, SIP video calls, attended transfer, conferencing, voicemail provisioning, SIP SIMPLE messaging, or mobile background operation. Those require additional SIP client and server development and platform-specific integration.
 
 ASTPP includes carrier-grade softswitch, online charging, reseller billing, routing, DID management, and fraud controls; 3CX includes a live PBX and queue engine. The Olamide control plane is **not** a substitute for either complete product. Do not advertise or rely on prepaid charging, automatic call recording, emergency calling, lawful intercept, carrier routing, or live queue service until those components have been separately implemented and verified.
+
+PortaOne's PortaSwitch also provides SIP call processing, media applications, phone provisioning, customer and reseller self-care, real-time authorization, and rating. The Olamide administrator can now save per-tenant outbound prefix rules under **PBX and call center configuration → Outbound call barring policy**. Save a `block` rule for a broad prefix and an `allow` rule for a more specific exception; the longest matching prefix wins in the route preview. Removing a rule immediately changes preview results. This policy is stored in MySQL but **does not block calls on a SIP switch**. There is no live PortaOne integration, charging engine, CDR ingestion, or reseller settlement. Before going live, provision the exact same policy on an authoritative switch and test fail-closed behavior there.
 
 ## Step-by-step first pull on a bare Debian 12 server
 
