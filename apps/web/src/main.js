@@ -260,6 +260,22 @@ root.innerHTML = `
     <label>Destination SIP address <input name="target" placeholder="sip:bob@example.com" required></label>
     <button>Call</button>
   </form>
+  <section id="softphone-tools">
+    <h2>Calling tools</h2>
+    <label><input id="dnd" type="checkbox"> Do not disturb on this browser</label>
+    <p>Do not disturb declines incoming calls while this page is connected. It does not change your SIP server settings.</p>
+    <form id="favorite-form">
+      <label>Favorite SIP address <input name="address" placeholder="sip:bob@example.com" required></label>
+      <button>Save favorite</button>
+    </form>
+    <h3>Favorites</h3><ul id="favorites"></ul>
+    <h3>Recent calls</h3><ol id="recent-calls"></ol>
+    <button id="clear-calls" type="button">Clear recent calls</button>
+    <label>Audio output <select id="audio-output"><option value="">System default</option></select></label>
+    <button id="refresh-devices" type="button">Refresh audio outputs</button>
+    <p id="device-status" role="status"></p>
+    <p>Favorites, call history, and do not disturb are saved in this browser only.</p>
+  </section>
   <section id="geo">
     <strong>Calling area</strong>
     <p id="geo-policy">Loading location policy…</p>
@@ -270,7 +286,7 @@ root.innerHTML = `
     <button id="answer">Answer</button><button id="reject">Reject</button>
   </section>
   <section id="active" hidden>
-    <button id="hold">Hold</button><button id="hangup">Hang up</button>
+    <button id="hold">Hold</button><button id="mute">Mute</button><button id="hangup">Hang up</button>
     <label>DTMF <input id="tone" maxlength="1" pattern="[0-9*#]"></label><button id="send-tone">Send tone</button>
   </section>
   <button id="disconnect" hidden>Disconnect</button>
@@ -289,6 +305,89 @@ const pbx = setupPbx();
 let phone;
 let onCall = false;
 let onHold = false;
+let muted = false;
+let currentCall = null;
+const localKey = (name) => `olamide.softphone.${name}`;
+function readLocal(name, fallback) {
+  try { return JSON.parse(localStorage.getItem(localKey(name))) ?? fallback; }
+  catch { return fallback; }
+}
+const favorites = new Set(readLocal("favorites", []).filter((value) =>
+  typeof value === "string" && /^sip:[^\s@]+@[^\s@]+$/i.test(value)));
+let recentCalls = readLocal("recent", []);
+if (!Array.isArray(recentCalls)) recentCalls = [];
+$("#dnd").checked = readLocal("dnd", false) === true;
+$("#dnd").onchange = () => localStorage.setItem(localKey("dnd"), JSON.stringify($("#dnd").checked));
+function renderSoftphoneLists() {
+  const favoriteList = $("#favorites");
+  favoriteList.replaceChildren();
+  for (const address of favorites) {
+    const item = document.createElement("li");
+    const dial = document.createElement("button");
+    dial.textContent = address;
+    dial.onclick = () => { dialForm.elements.target.value = address; dialForm.requestSubmit(); };
+    const remove = document.createElement("button");
+    remove.textContent = "Remove";
+    remove.onclick = () => {
+      favorites.delete(address);
+      localStorage.setItem(localKey("favorites"), JSON.stringify([...favorites]));
+      renderSoftphoneLists();
+    };
+    item.append(dial, " ", remove);
+    favoriteList.append(item);
+  }
+  const history = $("#recent-calls");
+  history.replaceChildren();
+  for (const call of recentCalls.slice(0, 50)) {
+    if (!call || typeof call.address !== "string") continue;
+    const item = document.createElement("li");
+    item.textContent = `${call.direction} · ${call.result} · ${call.address} · ${new Date(call.at).toLocaleString()}`;
+    history.append(item);
+  }
+}
+renderSoftphoneLists();
+$("#favorite-form").onsubmit = (event) => {
+  event.preventDefault();
+  const address = String(new FormData(event.currentTarget).get("address")).trim();
+  if (!/^sip:[^\s@]+@[^\s@]+$/i.test(address)) return;
+  favorites.add(address);
+  localStorage.setItem(localKey("favorites"), JSON.stringify([...favorites]));
+  event.currentTarget.reset();
+  renderSoftphoneLists();
+};
+$("#clear-calls").onclick = () => {
+  recentCalls = [];
+  localStorage.removeItem(localKey("recent"));
+  renderSoftphoneLists();
+};
+function finishCall(result) {
+  if (!currentCall) return;
+  recentCalls.unshift({ ...currentCall, result, at: new Date().toISOString() });
+  recentCalls = recentCalls.slice(0, 50);
+  localStorage.setItem(localKey("recent"), JSON.stringify(recentCalls));
+  currentCall = null;
+  renderSoftphoneLists();
+}
+async function refreshAudioOutputs() {
+  const output = $("#audio-output");
+  const previous = output.value;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    output.replaceChildren(new Option("System default", ""));
+    for (const device of devices.filter((entry) => entry.kind === "audiooutput"))
+      output.add(new Option(device.label || "Audio output", device.deviceId));
+    output.value = [...output.options].some((option) => option.value === previous) ? previous : "";
+    $("#device-status").textContent = "Audio outputs loaded.";
+  } catch (error) { $("#device-status").textContent = error.message; }
+}
+$("#refresh-devices").onclick = refreshAudioOutputs;
+$("#audio-output").onchange = async (event) => {
+  try {
+    if (!$("#remote").setSinkId) throw new Error("Audio output selection is not supported in this browser.");
+    await $("#remote").setSinkId(event.target.value);
+    $("#device-status").textContent = "Audio output selected.";
+  } catch (error) { $("#device-status").textContent = error.message; }
+};
 let geoPolicy = { enabled: true, maxAccuracyMeters: 0, zones: [] };
 let geoPolicyLoaded = false;
 
@@ -541,6 +640,8 @@ function callState(active) {
     $("#incoming").hidden = true;
     onHold = false;
     $("#hold").textContent = "Hold";
+    muted = false;
+    $("#mute").textContent = "Mute";
   }
 }
 function report(error) {
@@ -564,9 +665,17 @@ connectForm.addEventListener("submit", async (event) => {
       authorizationPassword: String(data.get("password"))
     },
     delegate: {
-      onCallReceived: () => { $("#incoming").hidden = false; status("Incoming call"); },
-      onCallAnswered: () => { callState(true); status("Call connected"); },
-      onCallHangup: () => { callState(false); status("Call ended"); },
+      onCallReceived: async () => {
+        currentCall = { direction: "incoming", address: "Unknown caller" };
+        if ($("#dnd").checked) {
+          try { await candidate.decline(); } catch (error) { report(error); }
+          finishCall("declined (do not disturb)");
+          return;
+        }
+        $("#incoming").hidden = false; status("Incoming call");
+      },
+      onCallAnswered: () => { if (currentCall) currentCall.answered = true; callState(true); status("Call connected"); },
+      onCallHangup: () => { finishCall(currentCall?.answered ? "completed" : "missed or unanswered"); callState(false); status("Call ended"); },
       onRegistered: () => status("Registered"),
       onUnregistered: () => status("Unregistered")
     }
@@ -580,6 +689,7 @@ connectForm.addEventListener("submit", async (event) => {
     dialForm.hidden = false;
     $("#disconnect").hidden = false;
     status("Registered");
+    refreshAudioOutputs();
   } catch (error) {
     report(error);
     await candidate.disconnect().catch(() => {});
@@ -595,14 +705,16 @@ dialForm.addEventListener("submit", async (event) => {
   const location = await checkCurrentLocation(geoPolicy);
   $("#geo-result").textContent = location.reason;
   if (!location.allowed) { status("Call blocked: " + location.reason); return; }
-  try { status("Calling…"); await phone.call(target); } catch (error) { report(error); }
+  currentCall = { direction: "outgoing", address: target };
+  try { status("Calling…"); await phone.call(target); }
+  catch (error) { finishCall("failed"); report(error); }
 });
 $("#check-location").onclick = async () => {
   const result = await checkCurrentLocation(geoPolicy);
   $("#geo-result").textContent = result.reason;
 };
 $("#answer").onclick = async () => { try { await phone?.answer(); } catch (error) { report(error); } };
-$("#reject").onclick = async () => { try { await phone?.decline(); } catch (error) { report(error); } };
+$("#reject").onclick = async () => { try { await phone?.decline(); finishCall("declined"); } catch (error) { report(error); } };
 $("#hangup").onclick = async () => { try { await phone?.hangup(); } catch (error) { report(error); } };
 $("#hold").onclick = async () => {
   if (!phone || !onCall) return;
@@ -610,6 +722,14 @@ $("#hold").onclick = async () => {
     if (onHold) await phone.unhold(); else await phone.hold();
     onHold = !onHold;
     $("#hold").textContent = onHold ? "Resume" : "Hold";
+  } catch (error) { report(error); }
+};
+$("#mute").onclick = () => {
+  if (!phone || !onCall) return;
+  try {
+    if (muted) phone.unmute(); else phone.mute();
+    muted = !muted;
+    $("#mute").textContent = muted ? "Unmute" : "Mute";
   } catch (error) { report(error); }
 };
 $("#send-tone").onclick = async () => {

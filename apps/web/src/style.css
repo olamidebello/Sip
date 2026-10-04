@@ -16,3 +16,5 @@ button:focus-visible,input:focus-visible{outline:3px solid #f5c566}
 .meeting-pointer{position:absolute;width:18px;height:18px;border-radius:50%;background:#f5c566;border:2px solid #111;transform:translate(-50%,-50%);pointer-events:none;box-shadow:0 0 0 3px #0008}
 #assist-requests>div,#assist-grants>div{border:1px solid #61738c;padding:.5rem;margin:.4rem 0}
 select{padding:.65rem;background:#202c40;color:white;border:1px solid #61738c;border-radius:6px}
+#dnd{display:inline;width:auto;vertical-align:middle}
+#favorites,#recent-calls{overflow-wrap:anywhere}

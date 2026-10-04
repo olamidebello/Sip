@@ -68,12 +68,18 @@ This repository contains a browser SIP dialer, a MySQL-backed account API, and a
 
 | Area | Available now | Additional service required |
 | --- | --- | --- |
-| Browser softphone | SIP.js registration and WebRTC audio calling, hold, DTMF | SIP WSS server, users, trunks, SBC, TURN as appropriate |
+| Browser softphone | SIP.js registration and WebRTC audio calling, hold, mute, DTMF, browser-local favorites, recent calls, local do-not-disturb, selectable audio output where supported | SIP WSS server, users, trunks, SBC, TURN as appropriate |
 | PBX control plane | Tenant extensions, queue membership, DID destination maps, voicemail/forwarding intent | Switch provisioning, active dialplan, voicemail recording and delivery |
 | Call center | Manual agent availability, ring-all/ordered/longest-idle eligibility preview | Live queue engine, call distribution, SLAs, recording, wallboards |
 | Carrier routing | Planned trunks, prefix rate deck, longest-prefix least-cost preview | Carrier credentials, route activation, fraud controls, CDR ingestion |
 | Billing | Monthly plan drafts and unpaid invoices, DID markup quotes | Payment gateway, taxes, prepaid balance enforcement, rated CDR settlement |
 | Deployment | Debian bootstrap, TLS web/API stack, validated Git pull, backups before updates, OS security updates | Public DNS record, SSH/console access, carrier and SIP services |
+
+### Browser calling tools
+
+Connect with a provisioned SIP address, authorization username, password, and secure WebSocket URL. Dial a full `sip:user@domain` address. During a connected call use **Hold**, **Mute**, and **Send tone**. Add a favorite SIP address to dial it again quickly. The recent-call list records up to 50 attempted or received calls in this browser; **Clear recent calls** erases it. **Do not disturb** automatically declines incoming calls only while this page is connected. **Refresh audio outputs** lists available speakers; choosing one requires browser support for `setSinkId` and may require device permission.
+
+Favorites, recent calls, and do-not-disturb are stored in this browser's local storage, with no cross-device synchronization. Incoming caller identity is not available through the current SimpleUser delegate and appears as “Unknown caller” in recent calls. Recent calls are a convenience list, not carrier CDRs or billing evidence. This page does not provide Acrobits' native push wakeup, CallKit/Android Telecom integration, native contacts, SIP video calls, attended transfer, conferencing, voicemail provisioning, SIP SIMPLE messaging, or mobile background operation. Those require additional SIP client and server development and platform-specific integration.
 
 ASTPP includes carrier-grade softswitch, online charging, reseller billing, routing, DID management, and fraud controls; 3CX includes a live PBX and queue engine. The Olamide control plane is **not** a substitute for either complete product. Do not advertise or rely on prepaid charging, automatic call recording, emergency calling, lawful intercept, carrier routing, or live queue service until those components have been separately implemented and verified.
 
