@@ -8,6 +8,7 @@ import { handleCdrIngest, handleCdrAdmin } from "./cdr.js";
 import { handleInhouseDids } from "./dids.js";
 import { handleNigeria } from "./nigeria.js";
 import { handleReports } from "./reports.js";
+import { migrateAccess,handleAccess } from "./access.js";
 import { migrateTenancy, handleTenants, isAdmin, defaultTenantId } from "./tenancy.js";
 import { markupCents } from "./billing.js";
 import { availableNumbers } from "./providers.js";
@@ -77,7 +78,7 @@ async function currentUser(req) {
   const token = currentToken(req);
   if (!token) return null;
   const result = await pool.query(
-    "SELECT u.id,u.display_name,u.email,u.role, CASE WHEN u.role='super_admin' AND selected.id IS NOT NULL THEN selected.id ELSE u.tenant_id END AS tenant_id FROM sessions s JOIN users u ON u.id=s.user_id JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenants selected ON selected.id=s.selected_tenant_id AND selected.status='active' WHERE s.token_hash=$1 AND s.expires_at>now()",
+    "SELECT u.id,u.display_name,u.email,u.role, CASE WHEN u.role='super_admin' AND selected.id IS NOT NULL THEN selected.id ELSE u.tenant_id END AS tenant_id FROM sessions s JOIN users u ON u.id=s.user_id AND u.status='active' JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenants selected ON selected.id=s.selected_tenant_id AND selected.status='active' WHERE s.token_hash=$1 AND s.expires_at>now()",
     [tokenHash(token)]
   );
   const user = result.rows[0];
@@ -129,7 +130,7 @@ async function handler(req, res) {
           email.length > 254 || password.length > 1024)
         return send(res, 400, { error: "Invalid credentials" });
       const result = await pool.query(
-        "SELECT u.id, u.display_name, u.email, u.role, u.tenant_id, u.password_salt, u.password_hash FROM users u JOIN tenants t ON t.id=u.tenant_id AND t.status='active' WHERE u.email=$1",
+        "SELECT u.id, u.display_name, u.email, u.role, u.tenant_id, u.password_salt, u.password_hash FROM users u JOIN tenants t ON t.id=u.tenant_id AND t.status='active' WHERE u.email=$1 AND u.status='active'",
         [email.trim().toLowerCase()]
       );
       const user = result.rows[0];
@@ -170,7 +171,7 @@ async function handler(req, res) {
       return send(res, 200, { plans: result.rows });
     }
     if (path.startsWith("/api/contacts") || path.startsWith("/api/messages") ||
-        path.startsWith("/api/admin/") || path.startsWith("/api/billing/") ||
+        path.startsWith("/api/admin/") || path.startsWith("/api/account/") || path.startsWith("/api/billing/") ||
         path.startsWith("/api/numbers") || path.startsWith("/api/porting") ||
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
@@ -180,6 +181,11 @@ async function handler(req, res) {
       if (!user) return send(res, 401, { error: "Sign in required" });
       if (path.startsWith("/api/pbx/"))
         return await handlePbx({req,res,path,user,pool,send,readJson});
+      if (path==="/api/account/password" || path.startsWith("/api/admin/security/") ||
+          /^\/api\/admin\/users\/[0-9a-f-]{36}\/security$/i.test(path) ||
+          /^\/api\/admin\/groups\/[0-9a-f-]{36}\/delete$/i.test(path))
+        return await handleAccess({req,res,path,user,pool,send,readJson,
+          sessionHash:tokenHash(currentToken(req)),meetingSignaling});
       if (path === "/api/admin/reports" || path === "/api/admin/reports.csv")
         return await handleReports({req,res,user,pool,send});
       if (path === "/api/admin/cdr" && req.method === "GET")
@@ -434,6 +440,8 @@ async function handler(req, res) {
             "INSERT INTO user_groups(id,tenant_id,name,features) VALUES($1,$2,$3,$4)",
             [id,user.tenant_id,name.trim(),JSON.stringify(safe)]
           );
+          await pool.query("INSERT INTO security_events(id,tenant_id,actor_id,target_id,action) VALUES($1,$2,$3,$4,'group_created')",
+            [randomUUID(),user.tenant_id,user.id,id]);
           return send(res, 201, { id,name:name.trim(),features:safe });
         } catch (error) {
           if (error.code === "ER_DUP_ENTRY") return send(res, 409, { error: "Group already exists" });
@@ -444,18 +452,30 @@ async function handler(req, res) {
       if (groupMatch && req.method === "PUT") {
         if (!isAdmin(user)) return send(res, 403, { error: "Administrator required" });
         if (!uuidPattern.test(groupMatch[1])) return send(res, 400, { error: "Invalid group" });
-        const { features } = await readJson(req);
+        const { name,features } = await readJson(req);
+        if (name!==undefined && (typeof name!=="string" || name.trim().length<2 || name.length>80))
+          return send(res,400,{error:"Group name must be 2–80 characters"});
         let safe;
         try { safe = validateFeatures(features); }
         catch { return send(res, 400, { error: "Invalid group features" }); }
-        await pool.query(
-          "UPDATE user_groups SET features=$1 WHERE id=$2 AND tenant_id=$3",
-          [JSON.stringify(safe),groupMatch[1],user.tenant_id]
-        );
+        const before=await pool.query("SELECT name FROM user_groups WHERE id=$1 AND tenant_id=$2",[groupMatch[1],user.tenant_id]);
+        if (!before.rowCount) return send(res,404,{error:"Group unavailable"});
+        const nextName=name===undefined?before.rows[0].name:name.trim();
+        if (before.rows[0].name==="Standard" && nextName!=="Standard")
+          return send(res,409,{error:"Standard group name is protected"});
+        try {
+          await pool.query("UPDATE user_groups SET name=$1,features=$2 WHERE id=$3 AND tenant_id=$4",
+            [nextName,JSON.stringify(safe),groupMatch[1],user.tenant_id]);
+        } catch(error) {
+          if (error.code==="ER_DUP_ENTRY") return send(res,409,{error:"Group name exists"});
+          throw error;
+        }
         const updated = await pool.query(
           "SELECT id,name,features FROM user_groups WHERE id=$1 AND tenant_id=$2", [groupMatch[1],user.tenant_id]
         );
         if (updated.rowCount) {
+          await pool.query("INSERT INTO security_events(id,tenant_id,actor_id,target_id,action) VALUES($1,$2,$3,$4,'group_features_updated')",
+            [randomUUID(),user.tenant_id,user.id,groupMatch[1]]);
           const members = await pool.query(
             "SELECT u.id,u.role,u.tenant_id FROM user_group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=$1",
             [groupMatch[1]]
@@ -469,7 +489,7 @@ async function handler(req, res) {
       if (path === "/api/admin/users" && req.method === "GET") {
         if (!isAdmin(user)) return send(res, 403, { error: "Administrator required" });
         const result = await pool.query(
-          "SELECT id,display_name AS name,email,role FROM users WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200", [user.tenant_id]
+          "SELECT id,display_name AS name,email,role,status FROM users WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200", [user.tenant_id]
         );
         const membership = await pool.query("SELECT m.user_id,m.group_id FROM user_group_members m JOIN users u ON u.id=m.user_id JOIN user_groups g ON g.id=m.group_id WHERE u.tenant_id=$1 AND g.tenant_id=$2", [user.tenant_id,user.tenant_id]);
         return send(res, 200, { users:result.rows.map((row) => ({
@@ -503,6 +523,8 @@ async function handler(req, res) {
           await client.query("DELETE FROM user_group_members WHERE user_id=$1", [memberMatch[1]]);
           for (const id of ids)
             await client.query("INSERT INTO user_group_members(user_id,group_id) VALUES($1,$2)", [memberMatch[1],id]);
+          await client.query("INSERT INTO security_events(id,tenant_id,actor_id,target_id,action) VALUES($1,$2,$3,$4,'group_membership_updated')",
+            [randomUUID(),user.tenant_id,user.id,memberMatch[1]]);
           await client.query("COMMIT");
           meetingSignaling.recheckUser(memberMatch[1],
             await featuresFor(target.rows[0]));
@@ -541,6 +563,7 @@ async function handler(req, res) {
 
 await pool.initialize(await fs.readFile(new URL("./schema.sql", import.meta.url), "utf8"));
 await migrateTenancy(pool);
+await migrateAccess(pool);
 await pool.initialize(await fs.readFile(new URL("./pbx-schema.sql", import.meta.url), "utf8"));
 await pool.initialize(await fs.readFile(new URL("./cdr-schema.sql", import.meta.url), "utf8"));
 await pool.initialize(await fs.readFile(new URL("./dids-schema.sql", import.meta.url), "utf8"));
