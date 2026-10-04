@@ -23,6 +23,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Deployment configuration checks
+        run: |
+          bash -n deployment/bootstrap.sh deployment/update.sh deployment/verified-sha.sh
+          sudo apt-get update
+          sudo apt-get install -y ansible
+          ansible-playbook --syntax-check -i 'localhost,' deployment/ansible/site.yml
+          docker compose --env-file deployment/secrets.env.example -f deployment/docker/compose.yml config -q
       - name: API checks
         working-directory: services/api
         run: npm install --no-audit --no-fund && npm test
