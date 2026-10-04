@@ -10,6 +10,7 @@ import { handleNigeria } from "./nigeria.js";
 import { handleReports } from "./reports.js";
 import { migrateAccess,handleAccess } from "./access.js";
 import { migratePricing,pricingRule,sellingCents,handlePricing } from "./pricing.js";
+import { migrateBackground,handleBackground } from "./background.js";
 import { migrateTenancy, handleTenants, isAdmin, defaultTenantId } from "./tenancy.js";
 import { availableNumbers } from "./providers.js";
 import { attachMeetingSignaling } from "./meetings.js";
@@ -171,7 +172,7 @@ async function handler(req, res) {
       return send(res, 200, { plans: result.rows });
     }
     if (path.startsWith("/api/contacts") || path.startsWith("/api/messages") ||
-        path.startsWith("/api/admin/") || path.startsWith("/api/account/") || path.startsWith("/api/billing/") ||
+        path.startsWith("/api/admin/") || path.startsWith("/api/account/") || path==="/api/background" || path.startsWith("/api/billing/") ||
         path.startsWith("/api/numbers") || path.startsWith("/api/porting") ||
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
@@ -181,6 +182,8 @@ async function handler(req, res) {
       if (!user) return send(res, 401, { error: "Sign in required" });
       if (path.startsWith("/api/pbx/"))
         return await handlePbx({req,res,path,user,pool,send,readJson});
+      if (path==="/api/background" || path==="/api/admin/background")
+        return await handleBackground({req,res,path,user,pool,send,readJson});
       if (path==="/api/account/password" || path.startsWith("/api/admin/security/") ||
           /^\/api\/admin\/users\/[0-9a-f-]{36}\/security$/i.test(path) ||
           /^\/api\/admin\/groups\/[0-9a-f-]{36}\/delete$/i.test(path))
@@ -570,6 +573,7 @@ await pool.initialize(await fs.readFile(new URL("./cdr-schema.sql", import.meta.
 await pool.initialize(await fs.readFile(new URL("./dids-schema.sql", import.meta.url), "utf8"));
 await pool.initialize(await fs.readFile(new URL("./nigeria-schema.sql", import.meta.url), "utf8"));
 await migratePricing(pool);
+await migrateBackground(pool);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
