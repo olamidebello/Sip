@@ -5,6 +5,7 @@ import { setupGroupAdmin } from "./groups.js";
 import { setupMobileAdmin } from "./mobileAdmin.js";
 import { setupTenants } from "./tenants.js";
 import { setupPbx } from "./pbx.js";
+import { setupReports } from "./reports.js";
 import "./style.css";
 
 const root = document.querySelector("#app");
@@ -112,6 +113,19 @@ root.innerHTML = `
       <button>Save server URL</button>
     </form>
     <p id="admin-status" role="status"></p>
+    <section id="report-admin">
+      <h3>Reports and analytics</h3>
+      <form id="report-filter">
+        <label>From (UTC) <input name="from" type="date" required></label>
+        <label>Through (UTC) <input name="to" type="date" required></label>
+        <button>Run report</button>
+      </form>
+      <p id="report-summary"></p>
+      <a id="report-export" hidden>Download daily calls CSV</a>
+      <a id="report-invoice-export" hidden>Download invoice summary CSV</a>
+      <div id="report-details"></div>
+      <p id="report-status" role="status"></p>
+    </section>
     <section id="inhouse-admin">
       <h3>In-house DID management</h3>
       <p>NCC lists these five Nigerian +234 Ilorin blocks under Smooth Multi-Service Platform Limited. Import candidate inventory, then publish only verified unused numbers. No live switch provisioning is connected.</p>
@@ -369,6 +383,7 @@ const groupAdmin = setupGroupAdmin();
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
 const pbx = setupPbx();
+const reports = setupReports({get:(path)=>apiGet(path)});
 let phone;
 let onCall = false;
 let onHold = false;
@@ -635,6 +650,7 @@ function signedIn(user) {
   pbx.refreshSelf(user).catch((error) => { $("#agent-status-result").textContent = error.message; });
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
   if (["admin","super_admin"].includes(user.role)) {
+    reports.refresh();
     refreshInhouse().catch((error) => { $("#inhouse-status").textContent = error.message; });
     refreshNigeria().catch((error) => { $("#nigeria-status").textContent = error.message; });
     refreshCdr().catch((error) => { $("#cdr-status").textContent = error.message; });
