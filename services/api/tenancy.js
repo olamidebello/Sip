@@ -21,6 +21,8 @@ export async function migrateTenancy(pool) {
   if (legacyIndex.rowCount) await pool.query("ALTER TABLE user_groups DROP INDEX name");
   const composite = await pool.query("SELECT 1 FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='user_groups' AND index_name='tenant_group_name'");
   if (!composite.rowCount) await pool.query("ALTER TABLE user_groups ADD UNIQUE KEY tenant_group_name(tenant_id,name)");
+  const sessionContext = await pool.query("SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='sessions' AND column_name='selected_tenant_id'");
+  if (!sessionContext.rowCount) await pool.query("ALTER TABLE sessions ADD COLUMN selected_tenant_id CHAR(36) NULL");
   await pool.query(`CREATE TABLE IF NOT EXISTS tenant_settings (
     tenant_id CHAR(36) NOT NULL, setting_key VARCHAR(64) NOT NULL, value TEXT NOT NULL,
     PRIMARY KEY(tenant_id,setting_key), FOREIGN KEY(tenant_id) REFERENCES tenants(id)
@@ -28,7 +30,7 @@ export async function migrateTenancy(pool) {
   await pool.query("INSERT IGNORE INTO tenant_settings(tenant_id,setting_key,value) SELECT $1,setting_key,value FROM app_settings WHERE setting_key IN ('sip_wss_url','did_markup_bps')",[defaultTenantId]);
 }
 
-export async function handleTenants({req,res,path,user,pool,readJson,send,meetingSignaling}) {
+export async function handleTenants({req,res,path,user,pool,readJson,send,meetingSignaling,sessionHash}) {
   if (path === "/api/admin/tenants" && req.method === "GET") {
     if (user.role !== "super_admin") return send(res,403,{error:"Super admin required"});
     const result = await pool.query("SELECT id,name,slug,status,created_at FROM tenants ORDER BY created_at DESC LIMIT 200");
@@ -54,6 +56,16 @@ export async function handleTenants({req,res,path,user,pool,readJson,send,meetin
       if (error.code === "ER_DUP_ENTRY") return send(res,409,{error:"Tenant slug exists"});
       throw error;
     } finally {db.release();}
+  }
+  const switchMatch = /^\/api\/admin\/tenants\/([0-9a-f-]{36})\/switch$/i.exec(path);
+  if (switchMatch && req.method === "POST") {
+    if (user.role !== "super_admin") return send(res,403,{error:"Super admin required"});
+    if (!uuid.test(switchMatch[1])) return send(res,400,{error:"Invalid tenant"});
+    const tenant = await pool.query("SELECT id FROM tenants WHERE id=$1 AND status='active'",[switchMatch[1]]);
+    if (!tenant.rowCount) return send(res,404,{error:"Active tenant unavailable"});
+    await pool.query("UPDATE sessions SET selected_tenant_id=$1 WHERE token_hash=$2 AND user_id=$3",
+      [switchMatch[1],sessionHash,user.id]);
+    return send(res,200,{tenantId:switchMatch[1]});
   }
   const tenantMatch = /^\/api\/admin\/tenants\/([0-9a-f-]{36})\/status$/i.exec(path);
   if (tenantMatch && req.method === "PUT") {
