@@ -35,7 +35,7 @@
       become: false
     - name: Require correct public DNS
       ansible.builtin.assert:
-        that: ansible_host in domain_dns.stdout
+        that: inventory_hostname in domain_dns.stdout
         fail_msg: "Point {{ app_domain }} to the deployment host before requesting a TLS certificate."
   tasks:
     - name: Install base tools and Ansible on the server
