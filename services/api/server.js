@@ -13,6 +13,7 @@ import { migratePricing,pricingRule,sellingCents,handlePricing } from "./pricing
 import { migrateBackground,handleBackground } from "./background.js";
 import { loadLdapConnections,migrateLdap,loginWithLdap,handleLdapAdmin } from "./ldap.js";
 import { migrateAuthProviders,handleAuthProviders } from "./authProviders.js";
+import {migrateCatalogControl,catalogPolicy,allowed,routeCapability,handleCatalogControl} from "./catalogControl.js";
 import { migrateTenancy, handleTenants, isAdmin, defaultTenantId } from "./tenancy.js";
 import { availableNumbers } from "./providers.js";
 import { attachMeetingSignaling } from "./meetings.js";
@@ -188,7 +189,7 @@ async function handler(req, res) {
       return send(res, 200, { plans: result.rows });
     }
     if (path.startsWith("/api/contacts") || path.startsWith("/api/messages") ||
-        path.startsWith("/api/admin/") || path.startsWith("/api/account/") || path==="/api/background" || path.startsWith("/api/billing/") ||
+        path.startsWith("/api/admin/") || path.startsWith("/api/account/") || path==="/api/background" || path==="/api/catalog-policy" || path.startsWith("/api/billing/") ||
         path.startsWith("/api/numbers") || path.startsWith("/api/porting") ||
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
@@ -196,6 +197,15 @@ async function handler(req, res) {
         path === "/api/admin/cdr") {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if (path==="/api/catalog-policy" && req.method==="GET") {
+        const policy=await catalogPolicy(pool,user.tenant_id);
+        return send(res,200,{planRequests:allowed(policy,user,"planRequests"),didRequests:allowed(policy,user,"didRequests")});
+      }
+      if (path==="/api/admin/catalog-policy")
+        return await handleCatalogControl({req,res,path,user,pool,send,readJson});
+      const capability=routeCapability(path,req.method);
+      if (capability && !allowed(await catalogPolicy(pool,user.tenant_id),user,capability))
+        return send(res,403,{error:"This action is disabled by the tenant's super admin"});
       if (path.startsWith("/api/pbx/"))
         return await handlePbx({req,res,path,user,pool,send,readJson});
       if (path==="/api/background" || path==="/api/admin/background")
@@ -392,6 +402,39 @@ async function handler(req, res) {
           return send(res, 503, { error: error.message });
         }
       }
+      if (path === "/api/numbers/request" && req.method === "POST") {
+        const {provider,number,inventoryId,skuId}=await readJson(req);
+        if (!["flowroute","didww"].includes(provider) || typeof number!=="string" ||
+            !/^\+?[1-9]\d{7,14}$/.test(number) || typeof inventoryId!=="string" || inventoryId.length>128 ||
+            typeof skuId!=="undefined" && (typeof skuId!=="string" || skuId.length>128))
+          return send(res,400,{error:"Choose a valid inventory number"});
+        let inventory;
+        try {inventory=(await availableNumbers(provider)).find(item=>item.number===number && item.inventoryId===inventoryId && (item.skuId||null)===(skuId||null));}
+        catch(error) {return send(res,503,{error:error.message});}
+        if (!inventory) return send(res,409,{error:"Number is no longer in the current provider listing"});
+        const rule=await pricingRule(pool,user.tenant_id,provider);
+        const setup=sellingCents(inventory.setupCostCents,rule.mode,Number(rule.setupValue));
+        const monthly=sellingCents(inventory.monthlyCostCents,rule.mode,Number(rule.monthlyValue));
+        const quoteId=randomUUID(),invoiceId=randomUUID(),client=await pool.connect();
+        try {
+          await client.query("BEGIN");
+          await client.query("INSERT INTO invoices(id,user_id,description,amount_cents) VALUES($1,$2,$3,$4)",
+            [invoiceId,user.id,`Provider DID request ${provider} ${number}`,setup]);
+          await client.query("INSERT INTO did_quotes(id,user_id,provider,number_e164,provider_monthly_cents,provider_setup_cents,monthly_cents,setup_cents,markup_bps,status,invoice_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending_payment',$10)",
+            [quoteId,user.id,provider,number,inventory.monthlyCostCents,inventory.setupCostCents,monthly,setup,rule.mode==="percent"?Number(rule.setupValue):0,invoiceId]);
+          await client.query("COMMIT");
+          return send(res,201,{quoteId,invoiceId,status:"pending_payment",setupCents:setup,monthlyCents:monthly,provisioned:false});
+        } catch(error) {await client.query("ROLLBACK");throw error;} finally {client.release();}
+      }
+      if (path === "/api/numbers/requests" && req.method === "GET") {
+        const result=await pool.query("SELECT q.id,q.provider,q.number_e164,q.setup_cents,q.monthly_cents,q.status,i.status AS invoice_status FROM did_quotes q LEFT JOIN invoices i ON i.id=q.invoice_id JOIN users u ON u.id=q.user_id WHERE q.user_id=$1 AND u.tenant_id=$2 ORDER BY q.created_at DESC LIMIT 100",[user.id,user.tenant_id]);
+        return send(res,200,{requests:result.rows});
+      }
+      if (path === "/api/admin/numbers/requests" && req.method === "GET") {
+        if (!isAdmin(user)) return send(res,403,{error:"Administrator required"});
+        const result=await pool.query("SELECT q.id,q.provider,q.number_e164,q.setup_cents,q.monthly_cents,q.provider_setup_cents,q.provider_monthly_cents,q.status,i.status AS invoice_status,u.email FROM did_quotes q JOIN users u ON u.id=q.user_id LEFT JOIN invoices i ON i.id=q.invoice_id WHERE u.tenant_id=$1 ORDER BY q.created_at DESC LIMIT 200",[user.tenant_id]);
+        return send(res,200,{requests:result.rows});
+      }
       if (path === "/api/porting" && req.method === "GET") {
         const result = await pool.query(
           "SELECT id,number_e164,provider,status,created_at FROM port_requests WHERE user_id=$1 ORDER BY created_at DESC",
@@ -410,6 +453,24 @@ async function handler(req, res) {
           [id,user.id,number,provider]
         );
         return send(res, 201, { id,status:"draft" });
+      }
+      if (path === "/api/admin/plans" && req.method === "GET") {
+        if (!isAdmin(user)) return send(res,403,{error:"Administrator required"});
+        const result=await pool.query("SELECT id,name,description,monthly_cents,active FROM plans WHERE tenant_id=$1 ORDER BY name LIMIT 200",[user.tenant_id]);
+        return send(res,200,{plans:result.rows});
+      }
+      const planMatch=/^\/api\/admin\/plans\/([0-9a-f-]{36})$/.exec(path);
+      if (planMatch && req.method === "PUT") {
+        if (!isAdmin(user)) return send(res,403,{error:"Administrator required"});
+        const {name,description,monthlyCents,active}=await readJson(req);
+        if (typeof name!=="string" || !name.trim() || name.length>100 || typeof description!=="string" || description.length>1000 ||
+            !Number.isSafeInteger(monthlyCents) || monthlyCents<0 || monthlyCents>10000000 || typeof active!=="boolean")
+          return send(res,400,{error:"Valid plan details required"});
+        const result=await pool.query("UPDATE plans SET name=$1,description=$2,monthly_cents=$3,active=$4 WHERE id=$5 AND tenant_id=$6",
+          [name.trim(),description,monthlyCents,active,planMatch[1],user.tenant_id]);
+        if (!result.rowCount) return send(res,404,{error:"Plan unavailable"});
+        await pool.query("INSERT INTO security_events(id,tenant_id,actor_id,target_id,action) VALUES($1,$2,$3,$4,'plan_updated')",[randomUUID(),user.tenant_id,user.id,planMatch[1]]);
+        return send(res,200,{id:planMatch[1],active});
       }
       if (path === "/api/admin/plans" && req.method === "POST") {
         if (!isAdmin(user)) return send(res, 403, { error: "Administrator required" });
@@ -600,6 +661,7 @@ await migratePricing(pool);
 await migrateBackground(pool);
 await migrateLdap(pool);
 await migrateAuthProviders(pool);
+await migrateCatalogControl(pool);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);

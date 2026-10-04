@@ -10,6 +10,7 @@ import { setupPricing } from "./pricing.js";
 import { setupBackground } from "./background.js";
 import { setupLdapAdmin } from "./ldapAdmin.js";
 import { setupAuthProviders } from "./authProviders.js";
+import { setupCatalogControl } from "./catalogControl.js";
 import { setupInstall } from "./install.js";
 import "./style.css";
 
@@ -95,7 +96,7 @@ root.innerHTML = `
     <label>Number prefix (optional) <input id="number-prefix" placeholder="+23420315"></label>
     <button id="search-numbers" type="button">Search numbers</button>
     <ul id="numbers"></ul>
-    <h3>My number requests</h3><ul id="my-numbers"></ul>
+    <h3>My number requests</h3><ul id="my-numbers"></ul><ul id="provider-requests"></ul>
     <h3>Port a number</h3>
     <p>This creates a draft request for review; it does not submit a carrier port.</p>
     <form id="port-form">
@@ -147,6 +148,14 @@ root.innerHTML = `
       <button>Save server URL</button>
     </form>
     <p id="admin-status" role="status"></p>
+    <section id="catalog-controls">
+      <h3>DID, plan, and tenant role controls</h3>
+      <p>Super admins select a tenant above, then set its purchase and tenant administrator permissions here.</p>
+      <p id="catalog-policy-status" role="status"></p>
+      <form id="catalog-policy-form" hidden><button>Save tenant controls</button></form>
+      <h4>Plan catalog</h4><ul id="admin-plans"></ul>
+      <h4>Provider DID requests for review</h4><ul id="admin-did-requests"></ul>
+    </section>
     <section id="ldap-admin">
       <h3>LDAP authentication and group access</h3>
       <p>Server LDAPS credentials are configured privately. Map directory group DNs to app groups; only mapped members can sign in.</p>
@@ -497,6 +506,7 @@ const pricing = setupPricing();
 const background = setupBackground();
 const ldapAdmin = setupLdapAdmin();
 const authProviders = setupAuthProviders();
+const catalogControl = setupCatalogControl();
 setupInstall();
 let phone;
 let onCall = false;
@@ -587,9 +597,9 @@ $("#audio-output").onchange = async (event) => {
 let geoPolicy = { enabled: true, maxAccuracyMeters: 0, zones: [] };
 let geoPolicyLoaded = false;
 
-async function accountRequest(path, body) {
+async function accountRequest(path, body, method="POST") {
   const response = await fetch(path, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json" },
     credentials: "same-origin",
     body: JSON.stringify(body)
@@ -788,6 +798,12 @@ function signedIn(user) {
   if (user.features?.billing)
     Promise.all([refreshBilling(),refreshMyNumbers()])
       .catch((error) => { $("#billing-status").textContent = error.message; });
+  if (user.features?.billing) apiGet("/api/catalog-policy").then(policy=>{
+    $("#select-plan").disabled=!policy.planRequests;
+    $("#search-numbers").disabled=!policy.didRequests;
+    if (!policy.planRequests || !policy.didRequests)
+      $("#billing-status").textContent="Tenant purchase settings: plans "+(policy.planRequests?"enabled":"disabled")+", DIDs "+(policy.didRequests?"enabled":"disabled")+".";
+  }).catch(error=>{$("#billing-status").textContent=error.message;});
   apiGet("/api/nigeria/nin/status")
     .then((result)=>{$("#nin-status").textContent=result.note;})
     .catch((error)=>{$("#nin-status").textContent=error.message;});
@@ -801,6 +817,8 @@ function signedIn(user) {
     pricing.refresh();
     ldapAdmin.refresh();
     authProviders.refresh();
+    catalogControl.refresh();
+    refreshCatalogAdmin().catch((error)=>{$("#admin-status").textContent=error.message;});
     refreshInhouse().catch((error) => { $("#inhouse-status").textContent = error.message; });
     refreshNigeria().catch((error) => { $("#nigeria-status").textContent = error.message; });
     refreshCdr().catch((error) => { $("#cdr-status").textContent = error.message; });
@@ -826,6 +844,28 @@ async function loadPlans() {
     list.append(option);
   }
 }
+async function refreshCatalogAdmin() {
+  const [planData,didData,policyData]=await Promise.all([apiGet("/api/admin/plans"),apiGet("/api/admin/numbers/requests"),apiGet("/api/admin/catalog-policy")]);
+  const list=$("#admin-plans");list.replaceChildren();
+  for(const plan of planData.plans) {
+    const item=document.createElement("li"),button=document.createElement("button");
+    item.textContent=`${plan.name}: ${money(plan.monthly_cents)}/month, ${plan.active?"active":"hidden"} — `;
+    button.type="button";button.textContent=plan.active?"Hide plan":"Publish plan";
+    button.disabled=!(policyData.editable||policyData.policy.adminPlans);
+    button.onclick=async()=>{
+      try {await accountRequest(`/api/admin/plans/${plan.id}`,{name:plan.name,description:plan.description,
+        monthlyCents:plan.monthly_cents,active:!plan.active},"PUT");
+        await Promise.all([refreshCatalogAdmin(),loadPlans()]);}
+      catch(error){$("#admin-status").textContent=error.message;}
+    };
+    item.append(button);list.append(item);
+  }
+  $("#admin-did-requests").replaceChildren(...didData.requests.map(request=>{
+    const item=document.createElement("li");
+    item.textContent=`${request.email}: ${request.number_e164} (${request.provider}) — ${request.status}; invoice ${request.invoice_status||"none"}; setup ${money(request.setup_cents)}, monthly ${money(request.monthly_cents)}`;
+    return item;
+  }));
+}
 async function refreshBilling() {
   const [invoices, subscription, ports] = await Promise.all([
     apiGet("/api/billing/invoices"),
@@ -846,10 +886,15 @@ async function refreshBilling() {
   }));
 }
 async function refreshMyNumbers() {
-  const {numbers}=await apiGet("/api/inhouse/my-numbers");
+  const [{numbers},{requests}]=await Promise.all([apiGet("/api/inhouse/my-numbers"),apiGet("/api/numbers/requests")]);
   $("#my-numbers").replaceChildren(...numbers.map((did) => {
     const item=document.createElement("li");
     item.textContent=`${did.number_e164}: ${did.status}; invoice ${did.invoice_status || "none"}; no SIP route provisioned`;
+    return item;
+  }));
+  $("#provider-requests").replaceChildren(...requests.map(request=>{
+    const item=document.createElement("li");
+    item.textContent=`${request.number_e164} (${request.provider}): ${request.status}; invoice ${request.invoice_status||"none"}; no carrier order placed`;
     return item;
   }));
 }
@@ -882,12 +927,24 @@ $("#search-numbers").onclick = async () => {
           } catch(error) {$("#billing-status").textContent=error.message;}
         };
         li.append(request);
+      } else {
+        li.textContent+=" — ";
+        const request=document.createElement("button");request.type="button";request.textContent="Request DID";
+        request.onclick=async()=>{
+          try {
+            await accountRequest("/api/numbers/request",{provider:number.provider,number:number.number,
+              inventoryId:number.inventoryId,skuId:number.skuId});
+            await Promise.all([refreshMyNumbers(),refreshBilling()]);
+            $("#billing-status").textContent="Request recorded with an unpaid setup invoice. Carrier ordering and SIP provisioning require separate review.";
+          } catch(error) {$("#billing-status").textContent=error.message;}
+        };
+        li.append(request);
       }
       return li;
     }));
     $("#billing-status").textContent = inhouse ?
       "In-house requests create unpaid invoices and 24-hour reservations; no live SIP provisioning." :
-      `Live provider inventory with ${data.markupPercent}% markup. Purchasing is unavailable.`;
+      "Provider inventory is checked again when you request a DID. Requests create unpaid invoices; no carrier order is placed.";
   } catch (error) { $("#billing-status").textContent = error.message; }
 };
 $("#port-form").addEventListener("submit", async (event) => {
@@ -905,6 +962,7 @@ $("#create-plan").addEventListener("submit", async (event) => {
   try {
     await accountRequest("/api/admin/plans", { ...data, monthlyCents: Number(data.monthlyCents) });
     await loadPlans();
+    await refreshCatalogAdmin();
     $("#admin-status").textContent = "Plan created";
   } catch (error) { $("#admin-status").textContent = error.message; }
 });
