@@ -18,3 +18,7 @@ button:focus-visible,input:focus-visible{outline:3px solid #f5c566}
 select{padding:.65rem;background:#202c40;color:white;border:1px solid #61738c;border-radius:6px}
 #dnd{display:inline;width:auto;vertical-align:middle}
 #favorites,#recent-calls{overflow-wrap:anywhere}
+#report-details section{overflow-x:auto}
+#report-details table{width:100%;border-collapse:collapse;font-size:.9rem}
+#report-details th,#report-details td{padding:.5rem;text-align:left;border-bottom:1px solid #42536c}
+#report-export{display:inline-block;padding:.65rem;color:#72d6eb}
