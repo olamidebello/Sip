@@ -16,6 +16,8 @@ import { migrateAuthProviders,handleAuthProviders } from "./authProviders.js";
 import {migrateCatalogControl,catalogPolicy,allowed,routeCapability,handleCatalogControl} from "./catalogControl.js";
 import {migrateSoftphoneState,handleSoftphoneState} from "./softphoneState.js";
 import {migrateGeofencePolicy,handleGeofencePolicy} from "./geofencePolicy.js";
+import {turnIceServer} from "./turn.js";
+import {migrateWallet,handleWallet} from "./wallet.js";
 import { migrateTenancy, handleTenants, isAdmin, defaultTenantId } from "./tenancy.js";
 import { availableNumbers } from "./providers.js";
 import { attachMeetingSignaling } from "./meetings.js";
@@ -34,6 +36,10 @@ const attempts = new Map();
 const uuidPattern = /^[0-9a-f-]{36}$/i;
 const meetingIceServers = JSON.parse(process.env.MEETING_ICE_SERVERS_JSON || "[]");
 if (!Array.isArray(meetingIceServers)) throw new Error("MEETING_ICE_SERVERS_JSON must be an array");
+const turnSecret=process.env.TURN_SECRET,turnHost=process.env.TURN_PUBLIC_HOST;
+if ((turnSecret || turnHost) && (!turnSecret || !turnHost))
+  throw new Error("TURN_SECRET and TURN_PUBLIC_HOST must be set together");
+if (turnSecret) turnIceServer({secret:turnSecret,host:turnHost,userId:"00000000-0000-4000-8000-000000000000"});
 const cdrKeys = JSON.parse(process.env.CDR_INGEST_KEYS_JSON || "{}");
 const ldapConnections=loadLdapConnections(process.env.LDAP_TENANTS_JSON);
 if (!cdrKeys || typeof cdrKeys !== "object" || Array.isArray(cdrKeys) ||
@@ -196,7 +202,7 @@ async function handler(req, res) {
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
         path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") ||
-        path==="/api/geofence" ||
+        path==="/api/geofence" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
         path === "/api/admin/cdr") {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
@@ -204,6 +210,8 @@ async function handler(req, res) {
         return await handleSoftphoneState({req,res,path,user,pool,send,readJson});
       if (path==="/api/geofence" || path==="/api/admin/geofence")
         return await handleGeofencePolicy({req,res,path,user,pool,send,readJson});
+      if (path==="/api/wallet" || path.startsWith("/api/wallet/"))
+        return await handleWallet({req,res,path,user,pool,send,readJson});
       if (path==="/api/catalog-policy" && req.method==="GET") {
         const policy=await catalogPolicy(pool,user.tenant_id);
         return send(res,200,{planRequests:allowed(policy,user,"planRequests"),didRequests:allowed(policy,user,"didRequests")});
@@ -248,7 +256,7 @@ async function handler(req, res) {
            path.startsWith("/api/porting")) && !user.features.billing)
         return send(res, 403, { error: "Billing unavailable for your groups" });
       if (path === "/api/meetings/config" && req.method === "GET")
-        return send(res, 200, { iceServers: meetingIceServers, maxParticipants: 4,
+        return send(res, 200, { iceServers: [...meetingIceServers,...(turnSecret?[turnIceServer({secret:turnSecret,host:turnHost,userId:user.id})]:[])], maxParticipants: 4,
           features:user.features });
       if (path === "/api/meetings" && req.method === "POST") {
         const { title } = await readJson(req);
@@ -671,6 +679,7 @@ await migrateAuthProviders(pool);
 await migrateCatalogControl(pool);
 await migrateSoftphoneState(pool);
 await migrateGeofencePolicy(pool);
+await migrateWallet(pool);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);

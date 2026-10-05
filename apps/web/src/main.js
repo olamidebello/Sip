@@ -89,6 +89,15 @@ root.innerHTML = `
     <button id="select-plan" type="button">Request plan</button>
     <p id="subscription"></p>
     <h3>Invoices</h3><ul id="invoices"></ul>
+    <h3>Account wallet</h3>
+    <p id="wallet-balance">Loading wallet…</p>
+    <p>Funding and cash-out are unavailable until a verified payment provider is connected. A wallet transfer requires an existing cleared balance.</p>
+    <form id="wallet-transfer">
+      <label>Recipient email <input name="recipientEmail" type="email" required></label>
+      <label>Amount (USD cents) <input name="amountCents" type="number" min="1" max="100000000" step="1" required></label>
+      <button>Send from available balance</button>
+    </form>
+    <ul id="wallet-entries"></ul><p id="wallet-status" role="status"></p>
     <h3>Available numbers</h3>
     <label>Provider <select id="number-provider">
       <option value="inhouse">In-house</option><option value="flowroute">Flowroute</option><option value="didww">DIDWW</option>
@@ -940,11 +949,17 @@ async function refreshCatalogAdmin() {
   }));
 }
 async function refreshBilling() {
-  const [invoices, subscription, ports] = await Promise.all([
+  const [invoices, subscription, ports,wallet] = await Promise.all([
     apiGet("/api/billing/invoices"),
     apiGet("/api/billing/subscription"),
-    apiGet("/api/porting")
+    apiGet("/api/porting"),apiGet("/api/wallet")
   ]);
+  $("#wallet-balance").textContent=`Available internal balance: ${money(wallet.balanceCents)} ${wallet.currency}. No funding provider connected.`;
+  $("#wallet-entries").replaceChildren(...wallet.entries.map(entry=>{
+    const item=document.createElement("li");
+    item.textContent=`${Number(entry.delta_cents)>=0?"Received":"Sent"} ${money(Math.abs(Number(entry.delta_cents)))} · ${new Date(entry.created_at).toLocaleString()}`;
+    return item;
+  }));
   $("#subscription").textContent = subscription.subscription
     ? `${subscription.subscription.name}: ${subscription.subscription.status}` : "No plan requested";
   $("#invoices").replaceChildren(...invoices.invoices.map((invoice) => {
@@ -958,6 +973,21 @@ async function refreshBilling() {
     return li;
   }));
 }
+let pendingWalletRequest;
+$("#wallet-transfer").onsubmit=async event=>{
+  event.preventDefault();
+  const form=event.currentTarget,button=form.querySelector("button");
+  if (!pendingWalletRequest) pendingWalletRequest=crypto.randomUUID();
+  button.disabled=true;
+  try {
+    const data=Object.fromEntries(new FormData(form));
+    const result=await accountRequest("/api/wallet/transfers",{recipientEmail:data.recipientEmail,
+      amountCents:Number(data.amountCents),idempotencyKey:pendingWalletRequest});
+    pendingWalletRequest=undefined;form.reset();await refreshBilling();
+    $("#wallet-status").textContent=`Transfer ${result.status}.`;
+  } catch(error) {$("#wallet-status").textContent=error.message;}
+  finally {button.disabled=false;}
+};
 async function refreshMyNumbers() {
   const [{numbers},{requests}]=await Promise.all([apiGet("/api/inhouse/my-numbers"),apiGet("/api/numbers/requests")]);
   $("#my-numbers").replaceChildren(...numbers.map((did) => {

@@ -4,8 +4,7 @@ if (( EUID != 0 )); then echo 'Run with sudo or as root' >&2; exit 1; fi
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 DOMAIN=${OLAMIDE_DOMAIN:-sip.dobhrap.com}
 if [[ ! "$DOMAIN" =~ ^[a-z0-9.-]+$ ]]; then echo 'Invalid domain' >&2; exit 1; fi
-apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y ansible ca-certificates curl git jq openssl
+bash "$SCRIPT_DIR/install-ansible.sh"
 install -d -m 0700 /etc/olamide
 if [[ ! -e /etc/olamide/secrets.env ]]; then
   app_password=$(openssl rand -hex 32)

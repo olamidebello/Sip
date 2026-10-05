@@ -25,12 +25,14 @@ jobs:
           node-version: '22'
       - name: Deployment configuration checks
         run: |
-          bash -n deployment/bootstrap.sh deployment/update.sh deployment/verified-sha.sh
+          bash -n deployment/bootstrap.sh deployment/install.sh deployment/install-ansible.sh deployment/update.sh deployment/verified-sha.sh deployment/docker/turn-entrypoint.sh
           sudo apt-get update
           sudo apt-get install -y ansible
           ansible-playbook --syntax-check -i 'localhost,' deployment/ansible/site.yml
           ansible-playbook --syntax-check -i 'localhost,' deployment/ansible/switch.yml
           docker compose --env-file deployment/secrets.env.example -f deployment/docker/compose.yml config -q
+          docker compose --profile turn --env-file deployment/secrets.env.example -f deployment/docker/compose.yml config -q
+          docker build -f deployment/docker/turn.Dockerfile -t olamide-turn-ci .
       - name: API checks
         working-directory: services/api
         run: npm install --no-audit --no-fund && npm test

@@ -58,11 +58,11 @@ MYSQL_URL='mysql://USER:PASSWORD@127.0.0.1:3306/olamide' npm start
 
 DIDWW inventory quoting requires confirmation that the provider account uses USD. A purchase must recheck inventory, taxes, eligibility, payment settlement, and provider pricing. No provider order is placed by this application.
 
-For cross-network meetings, configure `MEETING_ICE_SERVERS_JSON` with STUN/TURN servers on the API. TURN credentials sent to browsers are visible to participants, so use short-lived credentials. The browser and API need a same-origin HTTPS reverse proxy in production. There is no bundled TURN server or native remote desktop agent.
+For cross-network meetings, configure `MEETING_ICE_SERVERS_JSON` or the optional coturn profile below. TURN credentials sent to browsers expire after one hour. The browser and API need a same-origin HTTPS reverse proxy in production. There is no native remote desktop agent.
 
 ## Limits before service launch
 
-The repository is a development foundation. PBX and call center configuration is a planning control plane; no SIP switch or live call routing is connected. It has no class 5 switch, carrier routes, live billing/settlement, DID purchase automation, native Android/iOS clients, Zoom-scale media server, meeting recording, remote keyboard/mouse control, OTP/passkeys/PIN, or production deployment. Browser-only geofencing and group flags cannot enforce policies on an external SIP server or inspect peer-to-peer media. Add a trusted SIP/media service, backups, operational monitoring, abuse controls, migrations, and security review before accepting real users or payments. No Acrobits, WhatsApp, Cash App, Zoom, or Zoiper code or branding is included.
+The repository is a development foundation. PBX and call center configuration is a planning control plane; no SIP switch or live call routing is connected. It has no class 5 switch, carrier routes, live billing/settlement, DID purchase automation, native Android/iOS clients, Zoom-scale media server, meeting recording, remote keyboard/mouse control, OTP/passkeys/PIN, or production telecom deployment. The wallet starts with zero balance and has no funding or payout integration. Browser-only geofencing and group flags cannot enforce policies on an external SIP server or inspect peer-to-peer media. Add a trusted SIP/media service, backups, operational monitoring, abuse controls, migrations, and security review before accepting real users or payments. No Acrobits, WhatsApp, Cash App, Zoom, or Zoiper code or branding is included.
 
 ## Feature status and boundaries
 
@@ -196,6 +196,37 @@ LDAPS is the network authentication method implemented here. It authenticates us
 The web frontend is an installable Progressive Web App. The deployed HTTPS site serves `/manifest.webmanifest`, 192- and 512-pixel Olamide icons, and a service worker. On Chrome or Edge desktop or Android, visit `https://sip.dobhrap.com/` and select **Install Olamide** if the browser offers it; otherwise use the browser's **Install app** menu. On iPhone or iPad, open the site in Safari and use **Share → Add to Home Screen**. Launch the installed icon for a standalone app window. The install panel shows platform guidance when an automatic prompt is unavailable. You can also use the site normally without installing it.
 
 The offline page explains that a network connection is required. The service worker caches public shell assets and immutable built JavaScript/CSS; it never caches `/api/` requests or account data. Calling, LDAP sign-in, messaging, billing, and administration require an active server connection. This PWA is **not** a packaged Windows/macOS/Linux binary, an Android APK, or an iOS App Store application. It does not add background SIP wakeup, native call integration, mobile push notifications, or offline calling. Native installers and store publishing remain separate work requiring signing credentials, platform entitlements, and native integration.
+
+### Optional TURN relay for meetings
+
+The Compose stack includes a **disabled by default** coturn profile. On the Debian host, verify that `sip.dobhrap.com` resolves to its actual public IPv4 address and that the host can accept TCP and UDP port 3478 plus UDP ports 49160–49260. Use the actual address from your provider console; a server IP written in project notes is not a substitute for checking the deployed host. In `/etc/olamide/secrets.env` set `TURN_PUBLIC_HOST=sip.dobhrap.com`, `TURN_PUBLIC_IP=YOUR_VERIFIED_PUBLIC_IPV4`, a newly generated `TURN_SECRET` of at least 32 random characters (for example `openssl rand -hex 32`), and `COMPOSE_PROFILES=turn`. Keep this file mode 0600. Re-run bootstrap or the validated update service and inspect `docker compose --profile turn ps` in `/opt/olamide/repo/deployment/docker`. The API and coturn must use the same secret. After commissioning, join a meeting from two different networks and inspect the WebRTC candidate pair to verify that a `relay` candidate is selected when direct connectivity fails.
+
+`GET /api/meetings/config` gives authenticated participants one-hour coturn REST credentials generated by the API, without exposing the shared secret. The relay uses UDP/TCP TURN on 3478; TURN over TLS on 5349 is not configured. Keep firewall rules limited to the listed ports and provision enough relay bandwidth and ports for the intended concurrency. This profile is for the four-person web meetings; it does not configure SIP WSS, media routing in FreeSWITCH, or an SBC. A successful container start does not prove audio connectivity across provider networks.
+
+### Bare Debian installation and Ansible automation
+
+On a fresh Debian 12 host, create the public A record first and confirm it resolves to the address shown in the server provider console. From the server console as root, install Git and clone the repository, then run the installer with the verified address:
+
+```bash
+apt-get update && apt-get install -y ca-certificates git
+git clone https://github.com/olamidebello/Sip.git /root/Sip
+cd /root/Sip
+OLAMIDE_DOMAIN=sip.dobhrap.com OLAMIDE_PUBLIC_IP=YOUR_VERIFIED_PUBLIC_IPV4 bash deployment/install.sh
+```
+
+`deployment/install-ansible.sh` installs Debian prerequisites, Ansible, and its dependencies. `deployment/install.sh` checks public DNS before running the existing bootstrap. Bootstrap installs Docker and Compose with Ansible, generates private database passwords, selects a successfully validated main commit, and brings up the web/API/MySQL stack. Rerun the installer to apply a validated update; the scheduled update service also checks for validated main commits. Inspect `/etc/olamide/secrets.env`, `journalctl -u olamide-compose`, and `docker compose ps` in `/opt/olamide/repo/deployment/docker` during commissioning. Keep a console recovery path, backups, and firewall access to HTTPS. This automation does not configure the carrier switch or create DNS records.
+
+### Wallet foundation
+
+Billing users can see their USD wallet balance and activity and submit a peer transfer to an active account in the same tenant. `POST /api/wallet/transfers` accepts `{ "recipientEmail": "person@example.com", "amountCents": 100, "idempotencyKey": "UUID" }`. Each transfer locks both accounts in a MySQL transaction, rejects insufficient funds, records two ledger entries, and returns the same result for an identical request ID. Account balances start at zero. There is no authorized funding path, payment gateway, bank linkage, payout, cash card, dispute handling, KYC, or switch-level prepaid enforcement; transfers cannot execute until a separately reviewed funding integration credits a balance. Do not insert wallet balances manually or treat the UI as a live money service.
+
+### Live telecom and financial commissioning gates
+
+The current FreeSWITCH playbook **stages packages and leaves the switch stopped**. The PBX API stores tenant scoped extensions, queues, DID destinations, trunk intent, rates, and preview policies; it does not yet generate a live FreeSWITCH directory or dialplan. Do not start a public SIP service from this repository as if the stored settings were active. Live WSS registration needs a commissioned SIP profile with trusted TLS, provisioned SIP users and credential lifecycle, verified tenant routing, trunk authentication, media/NAT configuration, and an SBC or equivalent ingress controls. FreeSWITCH [mod_xml_curl](https://developer.signalwire.com/freeswitch/integration/xml-curl/) can fetch directory and dialplan XML from an authenticated backend, while [mod_callcenter](https://developer.signalwire.com/freeswitch/applications/call-queues/) supplies live ACD, and [mod_voicemail](https://developer.signalwire.com/freeswitch/applications/voicemail/) needs recording storage and a delivery service. Those integrations, recording consent and retention rules, queue SLA event capture, and an operator wallboard are not implemented here.
+
+The CDR API accepts signed, idempotent **normalized** records from a configured source but does not subscribe to FreeSWITCH events or rate, settle, reconcile, or charge them. Plan and DID invoices remain unpaid records until an independently verified payment integration is added. Before activating prepaid calling, implement a payment gateway with signature-verified webhooks and idempotency, jurisdiction-specific tax calculation, an immutable ledger, real-time balance reservation and call cutoff at the switch, fraud limits, and carrier invoice reconciliation. Do not credit a wallet from a browser success message or treat the current route preview as a fraud or balance control.
+
+Commissioning the server also requires authorized SSH/console access, public DNS control for `sip.dobhrap.com`, the provider's actual interconnect and account credentials, and production firewall rules. The deployment playbook verifies public HTTPS and DNS when run against the server, but this repository cannot change a DNS zone or supply external credentials. Confirm each dependency and perform end-to-end call, failure, emergency routing, payment, tax, CDR, and recovery tests before advertising live service.
 
 ### Downloadable clients
 
