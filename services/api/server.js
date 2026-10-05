@@ -14,6 +14,8 @@ import { migrateBackground,handleBackground } from "./background.js";
 import { loadLdapConnections,migrateLdap,loginWithLdap,handleLdapAdmin } from "./ldap.js";
 import { migrateAuthProviders,handleAuthProviders } from "./authProviders.js";
 import {migrateCatalogControl,catalogPolicy,allowed,routeCapability,handleCatalogControl} from "./catalogControl.js";
+import {migrateSoftphoneState,handleSoftphoneState} from "./softphoneState.js";
+import {migrateGeofencePolicy,handleGeofencePolicy} from "./geofencePolicy.js";
 import { migrateTenancy, handleTenants, isAdmin, defaultTenantId } from "./tenancy.js";
 import { availableNumbers } from "./providers.js";
 import { attachMeetingSignaling } from "./meetings.js";
@@ -193,10 +195,15 @@ async function handler(req, res) {
         path.startsWith("/api/numbers") || path.startsWith("/api/porting") ||
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
-        path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") ||
+        path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") ||
+        path==="/api/geofence" ||
         path === "/api/admin/cdr") {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if (path.startsWith("/api/softphone/"))
+        return await handleSoftphoneState({req,res,path,user,pool,send,readJson});
+      if (path==="/api/geofence" || path==="/api/admin/geofence")
+        return await handleGeofencePolicy({req,res,path,user,pool,send,readJson});
       if (path==="/api/catalog-policy" && req.method==="GET") {
         const policy=await catalogPolicy(pool,user.tenant_id);
         return send(res,200,{planRequests:allowed(policy,user,"planRequests"),didRequests:allowed(policy,user,"didRequests")});
@@ -662,6 +669,8 @@ await migrateBackground(pool);
 await migrateLdap(pool);
 await migrateAuthProviders(pool);
 await migrateCatalogControl(pool);
+await migrateSoftphoneState(pool);
+await migrateGeofencePolicy(pool);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);

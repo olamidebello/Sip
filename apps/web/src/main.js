@@ -148,6 +148,20 @@ root.innerHTML = `
       <button>Save server URL</button>
     </form>
     <p id="admin-status" role="status"></p>
+    <section id="geofence-admin">
+      <h3>Tenant calling area policy</h3>
+      <p>Allowed circles are checked by the browser before outgoing calls. The SIP switch must enforce its own location policy.</p>
+      <label><input id="geofence-enabled" type="checkbox"> Require a location within an allowed zone</label>
+      <label>Maximum location uncertainty (meters) <input id="geofence-accuracy" type="number" min="1" max="10000" value="100"></label>
+      <form id="geofence-zone-add">
+        <label>Latitude <input name="latitude" type="number" min="-90" max="90" step="any" required></label>
+        <label>Longitude <input name="longitude" type="number" min="-180" max="180" step="any" required></label>
+        <label>Radius (meters) <input name="radiusMeters" type="number" min="1" max="100000" step="any" required></label>
+        <button>Add allowed zone</button>
+      </form>
+      <ul id="geofence-zones"></ul><button id="geofence-save" type="button">Save calling area policy</button>
+      <p id="geofence-admin-status" role="status"></p>
+    </section>
     <section id="catalog-controls">
       <h3>DID, plan, and tenant role controls</h3>
       <p>Super admins select a tenant above, then set its purchase and tenant administrator permissions here.</p>
@@ -473,7 +487,7 @@ root.innerHTML = `
     <label>Audio output <select id="audio-output"><option value="">System default</option></select></label>
     <button id="refresh-devices" type="button">Refresh audio outputs</button>
     <p id="device-status" role="status"></p>
-    <p>Favorites, call history, and do not disturb are saved in this browser only.</p>
+    <p>Favorites, recent call entries, and do not disturb are saved to your Olamide account. Recent entries are app-side observations, not carrier CDRs.</p>
   </section>
   <section id="geo">
     <strong>Calling area</strong>
@@ -513,17 +527,30 @@ let onCall = false;
 let onHold = false;
 let muted = false;
 let currentCall = null;
-const localKey = (name) => `olamide.softphone.${name}`;
-function readLocal(name, fallback) {
-  try { return JSON.parse(localStorage.getItem(localKey(name))) ?? fallback; }
-  catch { return fallback; }
+const favorites = new Set();
+let recentCalls = [],softphoneUserId=null,softphoneLoad=0;
+async function softphoneRequest(path,method="GET",body) {
+  const response=await fetch(path,{method,credentials:"same-origin",
+    headers:body?{"Content-Type":"application/json"}:{},body:body?JSON.stringify(body):undefined});
+  const data=await response.json();
+  if (!response.ok) throw new Error(data.error||"Softphone account request failed");
+  return data;
 }
-const favorites = new Set(readLocal("favorites", []).filter((value) =>
-  typeof value === "string" && /^sip:[^\s@]+@[^\s@]+$/i.test(value)));
-let recentCalls = readLocal("recent", []);
-if (!Array.isArray(recentCalls)) recentCalls = [];
-$("#dnd").checked = readLocal("dnd", false) === true;
-$("#dnd").onchange = () => localStorage.setItem(localKey("dnd"), JSON.stringify($("#dnd").checked));
+async function refreshSoftphoneState(user) {
+  const generation=++softphoneLoad;
+  softphoneUserId=user.id;
+  const [settings,history]=await Promise.all([
+    softphoneRequest("/api/softphone/preferences"),softphoneRequest("/api/softphone/calls")]);
+  if (generation!==softphoneLoad || softphoneUserId!==user.id) return;
+  favorites.clear();for(const address of settings.favorites) favorites.add(address);
+  $("#dnd").checked=settings.dnd;
+  recentCalls=history.calls;renderSoftphoneLists();
+}
+async function saveSoftphonePreferences() {
+  if (!softphoneUserId) throw new Error("Sign in to save softphone settings");
+  await softphoneRequest("/api/softphone/preferences","PUT",{dnd:$("#dnd").checked,favorites:[...favorites]});
+}
+$("#dnd").onchange = () => saveSoftphonePreferences().catch(report);
 function renderSoftphoneLists() {
   const favoriteList = $("#favorites");
   favoriteList.replaceChildren();
@@ -534,10 +561,10 @@ function renderSoftphoneLists() {
     dial.onclick = () => { dialForm.elements.target.value = address; dialForm.requestSubmit(); };
     const remove = document.createElement("button");
     remove.textContent = "Remove";
-    remove.onclick = () => {
+    remove.onclick = async () => {
       favorites.delete(address);
-      localStorage.setItem(localKey("favorites"), JSON.stringify([...favorites]));
       renderSoftphoneLists();
+      try {await saveSoftphonePreferences();} catch(error) {favorites.add(address);renderSoftphoneLists();report(error);}
     };
     item.append(dial, " ", remove);
     favoriteList.append(item);
@@ -552,25 +579,25 @@ function renderSoftphoneLists() {
   }
 }
 renderSoftphoneLists();
-$("#favorite-form").onsubmit = (event) => {
+$("#favorite-form").onsubmit = async (event) => {
   event.preventDefault();
   const address = String(new FormData(event.currentTarget).get("address")).trim();
   if (!/^sip:[^\s@]+@[^\s@]+$/i.test(address)) return;
   favorites.add(address);
-  localStorage.setItem(localKey("favorites"), JSON.stringify([...favorites]));
-  event.currentTarget.reset();
-  renderSoftphoneLists();
+  try {await saveSoftphonePreferences();event.currentTarget.reset();renderSoftphoneLists();}
+  catch(error) {favorites.delete(address);report(error);}
 };
-$("#clear-calls").onclick = () => {
-  recentCalls = [];
-  localStorage.removeItem(localKey("recent"));
-  renderSoftphoneLists();
+$("#clear-calls").onclick = async () => {
+  try {await softphoneRequest("/api/softphone/calls","DELETE");recentCalls=[];renderSoftphoneLists();}
+  catch(error) {report(error);}
 };
 function finishCall(result) {
   if (!currentCall) return;
   recentCalls.unshift({ ...currentCall, result, at: new Date().toISOString() });
   recentCalls = recentCalls.slice(0, 50);
-  localStorage.setItem(localKey("recent"), JSON.stringify(recentCalls));
+  if (softphoneUserId) softphoneRequest("/api/softphone/calls","POST",{
+    direction:currentCall.direction,address:currentCall.address,result
+  }).catch(report);
   currentCall = null;
   renderSoftphoneLists();
 }
@@ -596,6 +623,49 @@ $("#audio-output").onchange = async (event) => {
 };
 let geoPolicy = { enabled: true, maxAccuracyMeters: 0, zones: [] };
 let geoPolicyLoaded = false;
+let geofenceZones=[],geofenceGeneration=0;
+function renderGeofenceZones() {
+  const list=$("#geofence-zones");list.replaceChildren();
+  geofenceZones.forEach((zone,index)=>{
+    const item=document.createElement("li"),button=document.createElement("button");
+    item.textContent=`${zone.latitude}, ${zone.longitude} — ${zone.radiusMeters} m `;
+    button.type="button";button.textContent="Remove";
+    button.onclick=()=>{geofenceZones.splice(index,1);renderGeofenceZones();};
+    item.append(button);list.append(item);
+  });
+}
+async function loadGeofencePolicy() {
+  const generation=++geofenceGeneration;
+  geoPolicyLoaded=false;
+  const policy=await apiGet("/api/geofence");
+  if (generation!==geofenceGeneration) return;
+  if (typeof policy.enabled!=="boolean" || !Number.isFinite(policy.maxAccuracyMeters) || !Array.isArray(policy.zones))
+    throw new Error("Invalid calling area policy");
+  geoPolicy=policy;geoPolicyLoaded=true;
+  $("#geo-policy").textContent=policy.enabled?"Calls require an accurate location within an allowed area.":"Location checks are currently off.";
+  $("#check-location").hidden=!policy.enabled;
+  return policy;
+}
+async function loadGeofenceAdmin() {
+  const policy=await apiGet("/api/admin/geofence");
+  $("#geofence-enabled").checked=policy.enabled;
+  $("#geofence-accuracy").value=policy.maxAccuracyMeters;
+  geofenceZones=policy.zones;renderGeofenceZones();
+}
+$("#geofence-zone-add").onsubmit=event=>{
+  event.preventDefault();
+  const data=Object.fromEntries(new FormData(event.currentTarget));
+  if (geofenceZones.length>=20) {$("#geofence-admin-status").textContent="Maximum 20 zones";return;}
+  geofenceZones.push({latitude:Number(data.latitude),longitude:Number(data.longitude),radiusMeters:Number(data.radiusMeters)});
+  event.currentTarget.reset();renderGeofenceZones();
+};
+$("#geofence-save").onclick=async()=>{
+  try {
+    const policy=await accountRequest("/api/admin/geofence",{enabled:$("#geofence-enabled").checked,
+      maxAccuracyMeters:Number($("#geofence-accuracy").value),zones:geofenceZones},"PUT");
+    await loadGeofencePolicy();$("#geofence-admin-status").textContent=`Saved ${policy.zones.length} zone(s) for this tenant.`;
+  } catch(error) {$("#geofence-admin-status").textContent=error.message;}
+};
 
 async function accountRequest(path, body, method="POST") {
   const response = await fetch(path, {
@@ -783,6 +853,8 @@ async function loadMessages() {
   }
 }
 function signedIn(user) {
+  refreshSoftphoneState(user).catch(error=>{$("#account-status").textContent=error.message;});
+  loadGeofencePolicy().catch(error=>{$("#geo-policy").textContent=error.message+". Outgoing calls are blocked.";});
   $("#signup").hidden = true;
   $("#login").hidden = true;
   $("#ldap-login").hidden = true;
@@ -813,6 +885,7 @@ function signedIn(user) {
   pbx.refreshSelf(user).catch((error) => { $("#agent-status-result").textContent = error.message; });
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
   if (["admin","super_admin"].includes(user.role)) {
+    loadGeofenceAdmin().catch(error=>{$("#geofence-admin-status").textContent=error.message;});
     reports.refresh();
     pricing.refresh();
     ldapAdmin.refresh();
@@ -1034,7 +1107,15 @@ $("#ldap-login").addEventListener("submit",async(event)=>{
 });
 $("#logout").onclick = async () => {
   try {
+    if (phone) {
+      if (onCall) await phone.hangup().catch(()=>{});
+      await phone.unregister().catch(()=>{});
+      await phone.disconnect().catch(()=>{});
+      phone=undefined;connectForm.hidden=false;dialForm.hidden=true;$("#disconnect").hidden=true;callState(false);
+    }
     await accountRequest("/api/logout", {});
+    softphoneLoad++;softphoneUserId=null;favorites.clear();recentCalls=[];$("#dnd").checked=false;renderSoftphoneLists();
+    geofenceGeneration++;geoPolicyLoaded=false;geoPolicy={enabled:true,maxAccuracyMeters:0,zones:[]};$("#geo-policy").textContent="Sign in to load calling area policy.";
     $("#signup").hidden = false;
     $("#login").hidden = false;
     $("#ldap-login").hidden = false;
@@ -1063,24 +1144,6 @@ fetch("/api/me", { credentials: "same-origin" })
   .then(async (response) => response.ok ? signedIn(await response.json()) : undefined)
   .catch(() => { $("#account-status").textContent = "Account service unavailable"; });
 
-fetch("/geofence-policy.json", { cache: "no-store" })
-  .then(async (response) => {
-    if (!response.ok) throw new Error("Policy unavailable");
-    const policy = await response.json();
-    if (typeof policy.enabled !== "boolean" ||
-        !Number.isFinite(policy.maxAccuracyMeters) ||
-        !Array.isArray(policy.zones)) throw new Error("Invalid policy");
-    geoPolicy = policy;
-    geoPolicyLoaded = true;
-    $("#geo-policy").textContent = policy.enabled
-      ? "Calls require an accurate location within an allowed area."
-      : "Location checks are currently off.";
-    $("#check-location").hidden = !policy.enabled;
-  })
-  .catch(() => {
-    $("#geo-policy").textContent = "Location policy unavailable. Outgoing calls are blocked.";
-  });
-
 function status(message) { $("#status").textContent = message; }
 function callState(active) {
   onCall = active;
@@ -1099,6 +1162,7 @@ function report(error) {
 
 connectForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!softphoneUserId) {status("Sign in to Olamide before connecting a SIP account.");return;}
   const data = new FormData(connectForm);
   const aor = String(data.get("aor")).trim();
   const server = String(data.get("server")).trim();
@@ -1150,7 +1214,8 @@ dialForm.addEventListener("submit", async (event) => {
   if (!phone || onCall) return;
   const target = String(new FormData(dialForm).get("target")).trim();
   if (!/^sip:[^\s@]+@[^\s@]+$/i.test(target)) { status("Enter a SIP address."); return; }
-  if (!geoPolicyLoaded) { status("Location policy unavailable. Call blocked."); return; }
+  try {await loadGeofencePolicy();} catch {status("Location policy unavailable. Call blocked.");return;}
+  if (!geoPolicyLoaded) {status("Location policy unavailable. Call blocked.");return;}
   const location = await checkCurrentLocation(geoPolicy);
   $("#geo-result").textContent = location.reason;
   if (!location.allowed) { status("Call blocked: " + location.reason); return; }
@@ -1159,6 +1224,7 @@ dialForm.addEventListener("submit", async (event) => {
   catch (error) { finishCall("failed"); report(error); }
 });
 $("#check-location").onclick = async () => {
+  try {await loadGeofencePolicy();} catch {$("#geo-result").textContent="Location policy unavailable";return;}
   const result = await checkCurrentLocation(geoPolicy);
   $("#geo-result").textContent = result.reason;
 };

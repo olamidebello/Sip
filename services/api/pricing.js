@@ -39,6 +39,15 @@ export async function pricingRule(pool,tenant,provider) {
 }
 export async function handlePricing({req,res,path,user,pool,send,readJson}) {
   if (!isAdmin(user)) return send(res,403,{error:"Administrator required"});
+  if (path==="/api/admin/pricing/preview" && req.method==="POST") {
+    const {mode,setupValue,monthlyValue,buySetup,buyMonthly}=await readJson(req);
+    if (!validRule({mode,setupValue,monthlyValue}) ||
+        ![buySetup,buyMonthly].every(value=>Number.isSafeInteger(value) && value>=0 && value<=10000000))
+      return send(res,400,{error:"Valid pricing rule and buy costs in cents required"});
+    try {return send(res,200,{setupCents:sellingCents(buySetup,mode,setupValue),
+      monthlyCents:sellingCents(buyMonthly,mode,monthlyValue)});}
+    catch {return send(res,400,{error:"Calculated selling price exceeds limit"});}
+  }
   if (path==="/api/admin/pricing" && req.method==="GET") {
     const rules=await Promise.all(SOURCES.map(async provider=>({provider,...await pricingRule(pool,user.tenant_id,provider)})));
     return send(res,200,{rules,note:"Provider buying costs come from live provider inventory. In-house costs are administrator-entered estimates. Changes to rules affect subsequent searches and reservations only."});

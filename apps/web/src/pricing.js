@@ -30,17 +30,14 @@ export function setupPricing() {
       await refresh();result.textContent=`${data.provider} rule saved for subsequent price calculations.`;
     } catch(error) {result.textContent=error.message;}
   };
-  document.querySelector("#pricing-preview").onsubmit=(event)=>{
+  document.querySelector("#pricing-preview").onsubmit=async(event)=>{
     event.preventDefault();
     try {
       const rule={...Object.fromEntries(new FormData(form)),...Object.fromEntries(new FormData(event.currentTarget))};
-      const calculate=(cost,value)=>{
-        const cents=Number(cost),adjustment=Number(value);
-        const raw=rule.mode==="manual"?adjustment:rule.mode==="percent"?
-          Math.ceil(cents*(10000+adjustment)/10000):cents+adjustment;
-        return Math.max(0,raw);
-      };
-      result.textContent=`Preview ${rule.provider}: setup ${calculate(rule.buySetup,rule.setupValue)} cents, monthly ${calculate(rule.buyMonthly,rule.monthlyValue)} cents. Save the rule to apply it.`;
+      const calculated=await request("/api/admin/pricing/preview","POST",{
+        mode:rule.mode,setupValue:Number(rule.setupValue),monthlyValue:Number(rule.monthlyValue),
+        buySetup:Number(rule.buySetup),buyMonthly:Number(rule.buyMonthly)});
+      result.textContent=`Preview ${rule.provider}: setup ${calculated.setupCents} cents, monthly ${calculated.monthlyCents} cents. Save the rule to apply it.`;
     } catch(error) {result.textContent=error.message;}
   };
   return {refresh};
