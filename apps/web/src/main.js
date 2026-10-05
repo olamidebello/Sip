@@ -58,7 +58,8 @@ root.innerHTML = `
     </form>
   </section>
   <section id="dashboard" hidden>
-    <h2>Dashboard</h2><div id="dashboard-tiles" class="dashboard-tiles"></div>
+    <h2>Dashboard</h2><button id="dashboard-refresh" type="button">Refresh dashboard</button>
+    <p id="dashboard-updated"></p><div id="dashboard-tiles" class="dashboard-tiles"></div>
     <details><summary>Customize my dashboard</summary>
       <div id="dashboard-personal-options"></div>
       <button id="dashboard-save" type="button">Save my layout</button>

@@ -30,6 +30,20 @@ function decode(value,fallback) {
 }
 export async function handleDashboard({req,res,path,user,pool,send,readJson}) {
   if(path==="/api/admin/dashboard" && !isAdmin(user)) return send(res,403,{error:"Administrator required"});
+  if(path==="/api/dashboard/summary" && req.method==="GET") {
+    const summary={};
+    const jobs=[];
+    const count=(key,sql,params)=>jobs.push(pool.query(sql,params).then(result=>{summary[key]=Number(result.rows[0]?.total??0);}));
+    if(user.features.messaging) {
+      count("contacts","SELECT COUNT(*) AS total FROM contacts WHERE owner_id=$1",[user.id]);
+      count("messages","SELECT COUNT(*) AS total FROM messages WHERE sender_id=$1 OR recipient_id=$2",[user.id,user.id]);
+    }
+    if(user.features.billing) count("unpaidInvoices","SELECT COUNT(*) AS total FROM invoices WHERE user_id=$1 AND status='unpaid'",[user.id]);
+    if(user.features.meetings) count("openMeetings","SELECT COUNT(*) AS total FROM meeting_rooms WHERE host_id=$1 AND ended_at IS NULL",[user.id]);
+    if(isAdmin(user)) count("tenantUsers","SELECT COUNT(*) AS total FROM users WHERE tenant_id=$1",[user.tenant_id]);
+    await Promise.all(jobs);
+    return send(res,200,{summary,updatedAt:new Date().toISOString(),note:"App records only; no live switch, payment, or carrier telemetry"});
+  }
   if(req.method==="GET") {
     const [tenantResult,personalResult]=await Promise.all([
       pool.query("SELECT tiles,allow_user_override FROM tenant_dashboards WHERE tenant_id=$1",[user.tenant_id]),

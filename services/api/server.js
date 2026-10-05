@@ -203,7 +203,7 @@ async function handler(req, res) {
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
         path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") ||
-        path==="/api/geofence" || path==="/api/dashboard" || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
+        path==="/api/geofence" || path==="/api/dashboard" || path==="/api/dashboard/summary" || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
         path === "/api/admin/cdr") {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
@@ -213,7 +213,7 @@ async function handler(req, res) {
         return await handleGeofencePolicy({req,res,path,user,pool,send,readJson});
       if (path==="/api/wallet" || path.startsWith("/api/wallet/"))
         return await handleWallet({req,res,path,user,pool,send,readJson});
-      if (path==="/api/dashboard" || path==="/api/admin/dashboard")
+      if (path==="/api/dashboard" || path==="/api/dashboard/summary" || path==="/api/admin/dashboard")
         return await handleDashboard({req,res,path,user,pool,send,readJson});
       if (path==="/api/catalog-policy" && req.method==="GET") {
         const policy=await catalogPolicy(pool,user.tenant_id);

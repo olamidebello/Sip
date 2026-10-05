@@ -38,6 +38,7 @@ select{padding:.65rem;background:#202c40;color:white;border:1px solid #61738c;bo
 #app-nav a:focus-visible,.dashboard-tile:focus-visible{outline:3px solid #f5c566}
 #dashboard-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.65rem;margin:1rem 0}
 .dashboard-tile{display:block;min-height:4rem;background:#123b51;white-space:normal}
+.dashboard-tile strong,.dashboard-tile span{display:block}.dashboard-tile span{font-size:.82rem;margin-top:.5rem}
 .dashboard-option{display:flex;align-items:center;gap:.25rem}
 .dashboard-option label{flex:1}.dashboard-option input{display:inline;width:auto}
 .dashboard-option button{padding:.3rem .65rem}
