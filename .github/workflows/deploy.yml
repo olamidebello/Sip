@@ -25,7 +25,7 @@ jobs:
           node-version: '22'
       - name: Deployment configuration checks
         run: |
-          bash -n deployment/bootstrap.sh deployment/install.sh deployment/install-ansible.sh deployment/update.sh deployment/verified-sha.sh deployment/docker/turn-entrypoint.sh
+          bash -n deployment/bootstrap.sh deployment/install-all.sh deployment/install.sh deployment/install-ansible.sh deployment/update.sh deployment/verified-sha.sh deployment/docker/turn-entrypoint.sh
           sudo apt-get update
           sudo apt-get install -y ansible
           ansible-playbook --syntax-check -i 'localhost,' deployment/ansible/site.yml

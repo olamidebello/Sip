@@ -117,17 +117,23 @@ The API stores each `(tenantId, source, legId)` once. An exact replay returns `d
 
 1. In the provider console, ensure SSH is running and that your login has root or sudo access. If port 22 refuses connections, check `systemctl status ssh`, your cloud firewall, and the provider's console before continuing. Never put a root password in GitHub Actions secrets or this repository.
 2. Confirm DNS: `getent ahostsv4 sip.dobhrap.com`. Its address must be this server. HTTP and HTTPS need to be reachable from the internet for the public TLS check.
-3. On the server as root, install the minimal Git prerequisite and pull the repository:
+3. On the server as root, run the **single installer script**. If the repository is already present:
+
+   ```sh
+   cd /root/Sip
+   OLAMIDE_DOMAIN=sip.dobhrap.com OLAMIDE_PUBLIC_IP=YOUR_VERIFIED_PUBLIC_IPV4 bash deployment/install-all.sh
+   ```
+
+   On a completely bare host, first obtain the one script from this repository (review its contents before executing), then run it. Replace the address with the actual public IPv4 shown in your server provider console:
 
    ```sh
    apt-get update
-   apt-get install -y git ca-certificates
-   git clone https://github.com/olamidebello/Sip.git /root/Sip
-   cd /root/Sip
-   OLAMIDE_DOMAIN=sip.dobhrap.com bash deployment/bootstrap.sh
+   apt-get install -y ca-certificates curl
+   curl --fail --location --show-error https://raw.githubusercontent.com/olamidebello/Sip/main/deployment/install-all.sh -o /root/olamide-install-all.sh
+   OLAMIDE_DOMAIN=sip.dobhrap.com OLAMIDE_PUBLIC_IP=YOUR_VERIFIED_PUBLIC_IPV4 bash /root/olamide-install-all.sh
    ```
 
-   From a sudo-capable account, use `sudo env OLAMIDE_DOMAIN=sip.dobhrap.com bash deployment/bootstrap.sh`. Bootstrap installs Ansible, curl, jq, OpenSSL, Docker Engine and Compose, then generates two distinct random database passwords in `/etc/olamide/secrets.env` (mode 0600). It selects a main-branch commit whose GitHub validation workflow has completed successfully and deploys that commit. Re-running bootstrap keeps the existing secrets and data.
+   `install-all.sh` requires Debian 12 and root, validates the address and DNS, installs the minimal Git prerequisite, clones a fresh copy of this repository, and calls the Ansible installer and bootstrap. Bootstrap installs Ansible, curl, jq, OpenSSL, Docker Engine and Compose, then generates two distinct random database passwords in `/etc/olamide/secrets.env` (mode 0600). It selects a main-branch commit whose GitHub validation workflow has completed successfully and deploys that commit. Re-running the installer keeps the existing secrets and data. The script does not request or store SSH passwords. From a sudo-capable account, use `sudo env OLAMIDE_DOMAIN=sip.dobhrap.com OLAMIDE_PUBLIC_IP=YOUR_VERIFIED_PUBLIC_IPV4 bash deployment/install-all.sh`.
 4. Open `https://sip.dobhrap.com/api/health` and expect `{"status":"ok"}`. Open `https://sip.dobhrap.com` to reach the browser client. A failed DNS/TLS check stops the playbook; inspect `journalctl -u olamide-compose` and `docker compose ps` in `/opt/olamide/repo/deployment/docker`.
 5. Create your first account in the browser, then promote that existing account on the server:
 
@@ -205,7 +211,7 @@ The Compose stack includes a **disabled by default** coturn profile. On the Debi
 
 ### Bare Debian installation and Ansible automation
 
-On a fresh Debian 12 host, create the public A record first and confirm it resolves to the address shown in the server provider console. From the server console as root, install Git and clone the repository, then run the installer with the verified address:
+On a fresh Debian 12 host, create the public A record first and confirm it resolves to the address shown in the server provider console. Use the single entrypoint in the preceding guide, `deployment/install-all.sh`. It installs minimal prerequisites, obtains the repository, verifies DNS, and calls the existing installer. If you already cloned the repository, you can also run its lower-level installer:
 
 ```bash
 apt-get update && apt-get install -y ca-certificates git
