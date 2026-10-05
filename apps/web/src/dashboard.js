@@ -1,5 +1,5 @@
 const TILES={dialer:["Dialer","softphone-tools"],messages:["Messages","chat"],billing:["Plans & billing","billing"],
-  meetings:["Meetings","meetings"],agent:["Call center","agent-panel"],admin:["Administration","admin"],reports:["Reports","report-admin"]};
+  meetings:["Meetings","meetings"],support:["Support","support"],agent:["Call center","agent-panel"],admin:["Administration","admin"],reports:["Reports","report-admin"]};
 const $=id=>document.getElementById(id);
 
 export function setupDashboard({get,request}) {
@@ -7,6 +7,7 @@ export function setupDashboard({get,request}) {
   const statistic={messages:()=>`${summary.messages??0} account messages · ${summary.contacts??0} contacts`,
     billing:()=>`${summary.unpaidInvoices??0} unpaid invoices`,
     meetings:()=>`${summary.openMeetings??0} hosted rooms`,
+    support:()=>`${summary.openTickets??0} active tickets`,
     admin:()=>`${summary.tenantUsers??0} tenant users`};
   function options(container,selection,available) {
     const list=$(container);list.replaceChildren();

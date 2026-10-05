@@ -1,7 +1,7 @@
 import {isAdmin} from "./tenancy.js";
 
-export const TILES=["dialer","messages","billing","meetings","agent","admin","reports"];
-export const DEFAULT_TILES=["dialer","messages","billing","meetings","agent","admin"];
+export const TILES=["dialer","messages","billing","meetings","support","agent","admin","reports"];
+export const DEFAULT_TILES=["dialer","messages","billing","meetings","support","agent","admin"];
 export function validateTiles(value) {
   if(!Array.isArray(value) || value.length<1 || value.length>TILES.length ||
      new Set(value).size!==value.length || value.some(tile=>!TILES.includes(tile)))
@@ -9,7 +9,7 @@ export function validateTiles(value) {
   return value;
 }
 function allowedTiles(user) {
-  return TILES.filter(tile=>tile==="dialer" ||
+  return TILES.filter(tile=>tile==="dialer" || tile==="support" ||
     (tile==="messages" && user.features.messaging) ||
     (tile==="billing" && user.features.billing) ||
     (tile==="meetings" && user.features.meetings) ||
@@ -40,6 +40,8 @@ export async function handleDashboard({req,res,path,user,pool,send,readJson}) {
     }
     if(user.features.billing) count("unpaidInvoices","SELECT COUNT(*) AS total FROM invoices WHERE user_id=$1 AND status='unpaid'",[user.id]);
     if(user.features.meetings) count("openMeetings","SELECT COUNT(*) AS total FROM meeting_rooms WHERE host_id=$1 AND ended_at IS NULL",[user.id]);
+    count("openTickets",`SELECT COUNT(*) AS total FROM support_tickets WHERE tenant_id=$1 ${isAdmin(user)?"":"AND requester_id=$2"} AND status NOT IN ('resolved','closed')`,
+      isAdmin(user)?[user.tenant_id]:[user.tenant_id,user.id]);
     if(isAdmin(user)) count("tenantUsers","SELECT COUNT(*) AS total FROM users WHERE tenant_id=$1",[user.tenant_id]);
     await Promise.all(jobs);
     return send(res,200,{summary,updatedAt:new Date().toISOString(),note:"App records only; no live switch, payment, or carrier telemetry"});

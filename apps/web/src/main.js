@@ -14,6 +14,8 @@ import { setupCatalogControl } from "./catalogControl.js";
 import { setupInstall } from "./install.js";
 import { contactEmailsFromCsv, contactsToCsv } from "./contactsCsv.js";
 import { setupDashboard } from "./dashboard.js";
+import { setupSupport } from "./support.js";
+import { setupLocaleSettings } from "./localeSettings.js";
 import "./style.css";
 
 const root = document.querySelector("#app");
@@ -66,6 +68,49 @@ root.innerHTML = `
       <button id="dashboard-reset" type="button">Use tenant layout</button>
     </details>
     <p id="dashboard-status" role="status"></p>
+  </section>
+  <section id="search-panel" hidden>
+    <h2>Search</h2>
+    <form id="global-search"><label>Search visible app records <input name="q" minlength="2" maxlength="100" required></label>
+      <label>Category <select name="scope"><option value="all">All</option><option value="tickets">Tickets</option><option value="contacts">Contacts</option><option value="plans">Plans</option></select></label>
+      <button>Search</button></form>
+    <div id="search-results"></div><p id="search-status" role="status"></p>
+  </section>
+  <section id="locale-settings" hidden>
+    <h2>Language, country and currency</h2>
+    <p>Your selection controls locale preferences and formatting. The interface text is currently English, and prices retain their stated billing currency.</p>
+    <form id="locale-user-form"><label>Language <select name="language"></select></label>
+      <label>Country or territory <select name="country"></select></label>
+      <label>Preferred currency <select name="currency"></select></label>
+      <button>Save my preferences</button></form>
+    <button id="locale-reset" type="button">Use tenant defaults</button><p id="locale-status" role="status"></p>
+  </section>
+  <section id="support" hidden>
+    <h2>Technical support</h2>
+    <form id="support-create"><h3>New ticket</h3>
+      <label>Subject <input name="subject" maxlength="160" required></label>
+      <label>Category <select name="category"><option>technical</option><option>calling</option><option>numbers</option><option>account</option><option>billing</option><option>other</option></select></label>
+      <label>Description <textarea name="description" maxlength="4000" required></textarea></label>
+      <button>Create ticket</button></form>
+    <form id="support-filter"><h3>Tickets</h3>
+      <label>Keywords <input name="q" minlength="2" maxlength="100"></label>
+      <label>Status <select name="status"><option value="">Any</option><option>open</option><option>in_progress</option><option>waiting_on_user</option><option>resolved</option><option>closed</option></select></label>
+      <label>Priority <select name="priority"><option value="">Any</option><option>low</option><option>normal</option><option>high</option><option>urgent</option></select></label>
+      <button>Find tickets</button></form>
+    <button id="support-refresh" type="button">Refresh tickets</button>
+    <ul id="support-list"></ul>
+    <button id="support-prev" type="button">Previous page</button><button id="support-next" type="button">Next page</button>
+    <section id="support-detail" hidden><h3 id="support-title"></h3><p id="support-meta"></p>
+      <p id="support-description"></p><h4>Conversation</h4><ol id="support-replies"></ol>
+      <h4>Ticket history</h4><ol id="support-history"></ol>
+      <form id="support-reply"><label>Reply <textarea name="body" maxlength="4000" required></textarea></label>
+        <label id="support-note-control" hidden><input name="internalNote" type="checkbox"> Internal administrator note</label>
+        <button>Post reply</button></form>
+      <form id="support-manage" hidden><h4>Manage ticket</h4>
+        <label>Status <select name="status"><option>open</option><option>in_progress</option><option>waiting_on_user</option><option>resolved</option><option>closed</option></select></label>
+        <label>Priority <select name="priority"><option>low</option><option>normal</option><option>high</option><option>urgent</option></select></label>
+        <label>Assign administrator <select name="assigneeId"></select></label><button>Save ticket controls</button></form>
+    </section><p id="support-status" role="status"></p>
   </section>
   <section id="background-user" hidden>
     <h2>My background</h2>
@@ -168,6 +213,14 @@ root.innerHTML = `
     <p id="meeting-status" role="status"></p>
   </section>
   <section id="admin" hidden>
+    <section id="locale-admin">
+      <h3>Tenant locale defaults</h3>
+      <form id="locale-admin-form"><label>Language <select name="language"></select></label>
+        <label>Country or territory <select name="country"></select></label>
+        <label>Preferred currency <select name="currency"></select></label>
+        <button>Save tenant defaults</button></form>
+      <p id="locale-admin-status" role="status"></p>
+    </section>
     <section id="dashboard-admin">
       <h3>Tenant dashboard defaults</h3>
       <div id="dashboard-tenant-options"></div>
@@ -543,10 +596,10 @@ root.innerHTML = `
 
 const $ = (selector) => document.querySelector(selector);
 const navigation=[
-  ["account","Account"],["dashboard","Dashboard"],["softphone-tools","Dialer"],["geo","Calling area"],
+  ["account","Account"],["dashboard","Dashboard"],["search-panel","Search"],["support","Support"],["locale-settings","Locale"],["softphone-tools","Dialer"],["geo","Calling area"],
   ["chat","Messages"],["billing","Billing"],["meetings","Meetings"],
   ["agent-panel","Call center"],["background-user","Appearance"],
-  ["admin","Administration"],["dashboard-admin","Dashboard defaults"],["group-admin","Users & groups"],["tenant-admin","Tenants"],
+  ["admin","Administration"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["group-admin","Users & groups"],["tenant-admin","Tenants"],
   ["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],
   ["pricing-admin","Pricing"],["pbx-admin","PBX"],["report-admin","Reports"],
   ["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"],
@@ -569,6 +622,8 @@ const connectForm = $("#connect");
 const dialForm = $("#dial");
 const meetings = setupMeetings();
 const dashboard=setupDashboard({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
+const support=setupSupport({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
+const localeSettings=setupLocaleSettings({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const groupAdmin = setupGroupAdmin();
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
@@ -919,6 +974,8 @@ function signedIn(user) {
   $("#logout").hidden = false;
   $("#background-user").hidden = false;
   $("#dashboard").hidden=false;
+  $("#search-panel").hidden=false;$("#support").hidden=false;
+  $("#locale-settings").hidden=false;
   background.refresh(["admin","super_admin"].includes(user.role));
   $("#password-change").hidden = user.authSource==="ldap";
   $("#account-status").textContent = `Signed in as ${user.name}`;
@@ -944,6 +1001,8 @@ function signedIn(user) {
   pbx.refreshSelf(user).catch((error) => { $("#agent-status-result").textContent = error.message; });
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
   dashboard.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#dashboard-status").textContent=error.message;});
+  support.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#support-status").textContent=error.message;});
+  localeSettings.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#locale-status").textContent=error.message;});
   if (["admin","super_admin"].includes(user.role)) {
     loadGeofenceAdmin().catch(error=>{$("#geofence-admin-status").textContent=error.message;});
     reports.refresh();
@@ -966,7 +1025,7 @@ function signedIn(user) {
   }
   updateNavigation();
 }
-function money(cents) { return "$" + (cents / 100).toFixed(2); }
+function money(cents) { return new Intl.NumberFormat(document.documentElement.lang||"en",{style:"currency",currency:"USD"}).format(cents/100); }
 async function loadPlans() {
   const { plans } = await apiGet("/api/plans");
   const list = $("#plans");
@@ -1226,6 +1285,9 @@ $("#logout").onclick = async () => {
     $("#password-change").hidden = true;
     $("#background-user").hidden = true;
     $("#dashboard").hidden = true;
+    $("#search-panel").hidden=true;$("#support").hidden=true;
+    $("#locale-settings").hidden=true;localeSettings.clear();
+    support.clear();
     background.clear();
     $("#chat").hidden = true;
     $("#billing").hidden = true;

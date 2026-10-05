@@ -14,6 +14,6 @@ test("summary scopes each query to the signed-in user or tenant",async()=>{
     pool:{query:async(sql,params)=>{calls.push({sql,params});return {rows:[{total:2}]};}},
     send:(_res,_code,value)=>{body=value;}});
   assert.equal(body.summary.tenantUsers,2);
-  assert.equal(calls.length,5);
+  assert.equal(calls.length,6);
   assert(calls.every(({params})=>params.every(value=>value===user.id || value===user.tenant_id)));
 });

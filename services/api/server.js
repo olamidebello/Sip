@@ -19,6 +19,9 @@ import {migrateGeofencePolicy,handleGeofencePolicy} from "./geofencePolicy.js";
 import {turnIceServer} from "./turn.js";
 import {migrateWallet,handleWallet} from "./wallet.js";
 import {migrateDashboard,handleDashboard} from "./dashboard.js";
+import {migrateSupport,handleSupport} from "./support.js";
+import {handleSearch} from "./search.js";
+import {migrateLocales,handleLocales} from "./locales.js";
 import { migrateTenancy, handleTenants, isAdmin, defaultTenantId } from "./tenancy.js";
 import { availableNumbers } from "./providers.js";
 import { attachMeetingSignaling } from "./meetings.js";
@@ -203,10 +206,14 @@ async function handler(req, res) {
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
         path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") ||
-        path==="/api/geofence" || path==="/api/dashboard" || path==="/api/dashboard/summary" || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
+        path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path==="/api/dashboard" || path==="/api/dashboard/summary" || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
         path === "/api/admin/cdr") {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if (path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales")
+        return await handleLocales({req,res,path,user,pool,send,readJson});
+      if (path==="/api/search") return await handleSearch({req,res,user,pool,send});
+      if (path.startsWith("/api/support/")) return await handleSupport({req,res,path,user,pool,send,readJson});
       if (path.startsWith("/api/softphone/"))
         return await handleSoftphoneState({req,res,path,user,pool,send,readJson});
       if (path==="/api/geofence" || path==="/api/admin/geofence")
@@ -705,6 +712,8 @@ await migrateSoftphoneState(pool);
 await migrateGeofencePolicy(pool);
 await migrateWallet(pool);
 await migrateDashboard(pool);
+await migrateSupport(pool);
+await migrateLocales(pool);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
