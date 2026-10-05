@@ -81,6 +81,16 @@
         name: docker
         enabled: true
         state: started
+    - name: Probe MySQL image CPU compatibility without touching data
+      ansible.builtin.command: docker run --rm --entrypoint /bin/true mysql:8.4
+      register: mysql_image_probe
+      changed_when: false
+      failed_when: false
+    - name: Require a CPU supported by the MySQL image
+      ansible.builtin.assert:
+        that: mysql_image_probe.rc == 0
+        fail_msg: >-
+          mysql:8.4 cannot run on this virtual CPU. {{ 'The image requires x86-64-v2; ask the VM provider to expose a compatible CPU model or host passthrough, preserving the disk and Docker volumes.' if 'x86-64-v2' in (mysql_image_probe.stderr | default('')) else 'Inspect the MySQL image pull/runtime error: ' ~ (mysql_image_probe.stderr | default('unknown error')) }}
     - name: Ensure deployment directory exists
       ansible.builtin.file:
         path: "{{ app_dir }}"
