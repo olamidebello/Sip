@@ -18,6 +18,7 @@ import {migrateSoftphoneState,handleSoftphoneState} from "./softphoneState.js";
 import {migrateGeofencePolicy,handleGeofencePolicy} from "./geofencePolicy.js";
 import {turnIceServer} from "./turn.js";
 import {migrateWallet,handleWallet} from "./wallet.js";
+import {migrateDashboard,handleDashboard} from "./dashboard.js";
 import { migrateTenancy, handleTenants, isAdmin, defaultTenantId } from "./tenancy.js";
 import { availableNumbers } from "./providers.js";
 import { attachMeetingSignaling } from "./meetings.js";
@@ -67,13 +68,13 @@ function limit(req, maximum = Number(process.env.API_RATE_LIMIT || 20)) {
   attempts.set(key, entry);
   return entry.count <= maximum;
 }
-async function readJson(req) {
+async function readJson(req, limit=maxBodyBytes) {
   if (!req.headers["content-type"]?.startsWith("application/json"))
     throw new Error("Content-Type must be application/json");
   let body = "";
   for await (const chunk of req) {
     body += chunk;
-    if (Buffer.byteLength(body) > maxBodyBytes) throw new Error("Request too large");
+    if (Buffer.byteLength(body) > limit) throw new Error("Request too large");
   }
   const parsed = JSON.parse(body);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
@@ -202,7 +203,7 @@ async function handler(req, res) {
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
         path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") ||
-        path==="/api/geofence" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
+        path==="/api/geofence" || path==="/api/dashboard" || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
         path === "/api/admin/cdr") {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
@@ -212,6 +213,8 @@ async function handler(req, res) {
         return await handleGeofencePolicy({req,res,path,user,pool,send,readJson});
       if (path==="/api/wallet" || path.startsWith("/api/wallet/"))
         return await handleWallet({req,res,path,user,pool,send,readJson});
+      if (path==="/api/dashboard" || path==="/api/admin/dashboard")
+        return await handleDashboard({req,res,path,user,pool,send,readJson});
       if (path==="/api/catalog-policy" && req.method==="GET") {
         const policy=await catalogPolicy(pool,user.tenant_id);
         return send(res,200,{planRequests:allowed(policy,user,"planRequests"),didRequests:allowed(policy,user,"didRequests")});
@@ -299,7 +302,7 @@ async function handler(req, res) {
       }
       if (path === "/api/contacts" && req.method === "GET") {
         const result = await pool.query(
-          "SELECT u.id, u.display_name AS name, u.email FROM contacts c JOIN users u ON u.id=c.contact_id WHERE c.owner_id=$1 AND u.tenant_id=$2 ORDER BY u.display_name LIMIT 200",
+          "SELECT u.id, u.display_name AS name, u.email FROM contacts c JOIN users u ON u.id=c.contact_id WHERE c.owner_id=$1 AND u.tenant_id=$2 ORDER BY u.display_name LIMIT 1000",
           [user.id,user.tenant_id]
         );
         return send(res, 200, { contacts: result.rows });
@@ -317,6 +320,27 @@ async function handler(req, res) {
           [user.id, contact.id]
         );
         return send(res, 201, { id: contact.id });
+      }
+      if (path === "/api/contacts/import" && req.method === "POST") {
+        const { emails } = await readJson(req, 64000);
+        if (!Array.isArray(emails) || emails.length < 1 || emails.length > 500 ||
+            emails.some(email => typeof email !== "string" || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())))
+          return send(res, 400, { error: "Provide 1 to 500 valid contact emails" });
+        const normalized=[...new Set(emails.map(email=>email.trim().toLowerCase()))];
+        const placeholders=normalized.map((_,index)=>`$${index+2}`).join(",");
+        const found=await pool.query(`SELECT id,email FROM users WHERE tenant_id=$1 AND email IN (${placeholders}) AND status='active'`,
+          [user.tenant_id,...normalized]);
+        const mapped=new Map(found.rows.map(row=>[row.email.toLowerCase(),row.id]));
+        const missing=normalized.filter(email=>!mapped.has(email) || mapped.get(email)===user.id);
+        if (missing.length) return send(res, 422, { error: "All contacts must be active users in your tenant (excluding yourself)", missing });
+        const db=await pool.connect();
+        try {
+          await db.query("BEGIN");
+          for (const email of normalized)
+            await db.query("INSERT IGNORE INTO contacts(owner_id,contact_id) VALUES($1,$2)",[user.id,mapped.get(email)]);
+          await db.query("COMMIT");
+        } catch(error) { await db.query("ROLLBACK"); throw error; } finally {db.release();}
+        return send(res, 200, {processed:normalized.length,duplicates:emails.length-normalized.length});
       }
       if (path === "/api/messages" && req.method === "GET") {
         const contactId = new URL(req.url, origin).searchParams.get("contact");
@@ -680,6 +704,7 @@ await migrateCatalogControl(pool);
 await migrateSoftphoneState(pool);
 await migrateGeofencePolicy(pool);
 await migrateWallet(pool);
+await migrateDashboard(pool);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);

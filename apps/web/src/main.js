@@ -12,6 +12,8 @@ import { setupLdapAdmin } from "./ldapAdmin.js";
 import { setupAuthProviders } from "./authProviders.js";
 import { setupCatalogControl } from "./catalogControl.js";
 import { setupInstall } from "./install.js";
+import { contactEmailsFromCsv, contactsToCsv } from "./contactsCsv.js";
+import { setupDashboard } from "./dashboard.js";
 import "./style.css";
 
 const root = document.querySelector("#app");
@@ -20,6 +22,7 @@ root.innerHTML = `
     <img src="/olamide-logo.jpg" alt="Olamide" width="1536" height="620">
     <h1>Olamide</h1>
   </header>
+  <nav id="app-nav" aria-label="Application" hidden></nav>
   <section id="install-panel">
     <button id="install-app" type="button" hidden>Install Olamide</button>
     <p id="install-help" role="status"></p>
@@ -54,6 +57,15 @@ root.innerHTML = `
       <button>Change password and sign out other sessions</button>
     </form>
   </section>
+  <section id="dashboard" hidden>
+    <h2>Dashboard</h2><div id="dashboard-tiles" class="dashboard-tiles"></div>
+    <details><summary>Customize my dashboard</summary>
+      <div id="dashboard-personal-options"></div>
+      <button id="dashboard-save" type="button">Save my layout</button>
+      <button id="dashboard-reset" type="button">Use tenant layout</button>
+    </details>
+    <p id="dashboard-status" role="status"></p>
+  </section>
   <section id="background-user" hidden>
     <h2>My background</h2>
     <form id="background-user-form">
@@ -73,6 +85,11 @@ root.innerHTML = `
       <label>Contact email <input name="email" type="email" required></label>
       <button>Add contact</button>
     </form>
+    <div class="bulk-controls">
+      <label>Import contacts CSV (email column, up to 500 tenant users) <input id="contacts-file" type="file" accept=".csv,text/csv"></label>
+      <button id="contacts-import" type="button">Import contacts</button>
+      <button id="contacts-export" type="button">Export contacts CSV</button>
+    </div>
     <label>Conversation <select id="contact-list"></select></label>
     <button id="load-messages" type="button">Refresh messages</button>
     <ol id="message-list"></ol>
@@ -150,6 +167,13 @@ root.innerHTML = `
     <p id="meeting-status" role="status"></p>
   </section>
   <section id="admin" hidden>
+    <section id="dashboard-admin">
+      <h3>Tenant dashboard defaults</h3>
+      <div id="dashboard-tenant-options"></div>
+      <label><input id="dashboard-overrides" type="checkbox"> Allow users to customize their dashboard</label>
+      <button id="dashboard-tenant-save" type="button">Save tenant dashboard</button>
+      <p id="dashboard-admin-status" role="status"></p>
+    </section>
     <h2>Administrator</h2>
     <p id="admin-overview"></p>
     <form id="server-config">
@@ -517,9 +541,33 @@ root.innerHTML = `
 `;
 
 const $ = (selector) => document.querySelector(selector);
+const navigation=[
+  ["account","Account"],["dashboard","Dashboard"],["softphone-tools","Dialer"],["geo","Calling area"],
+  ["chat","Messages"],["billing","Billing"],["meetings","Meetings"],
+  ["agent-panel","Call center"],["background-user","Appearance"],
+  ["admin","Administration"],["dashboard-admin","Dashboard defaults"],["group-admin","Users & groups"],["tenant-admin","Tenants"],
+  ["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],
+  ["pricing-admin","Pricing"],["pbx-admin","PBX"],["report-admin","Reports"],
+  ["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"],
+  ["ldap-admin","LDAP"],["auth-providers-admin","Authentication"],
+  ["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],
+  ["mobile-admin","App releases"]
+];
+function updateNavigation() {
+  const nav=$("#app-nav");nav.replaceChildren();
+  for(const [id,label] of navigation) {
+    const section=document.getElementById(id);
+    if(!section || section.closest("[hidden]")) continue;
+    const link=document.createElement("a");link.href=`#${id}`;link.textContent=label;
+    nav.append(link);
+  }
+  nav.hidden=false;
+}
+updateNavigation();
 const connectForm = $("#connect");
 const dialForm = $("#dial");
 const meetings = setupMeetings();
+const dashboard=setupDashboard({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const groupAdmin = setupGroupAdmin();
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
@@ -869,6 +917,7 @@ function signedIn(user) {
   $("#ldap-login").hidden = true;
   $("#logout").hidden = false;
   $("#background-user").hidden = false;
+  $("#dashboard").hidden=false;
   background.refresh(["admin","super_admin"].includes(user.role));
   $("#password-change").hidden = user.authSource==="ldap";
   $("#account-status").textContent = `Signed in as ${user.name}`;
@@ -893,6 +942,7 @@ function signedIn(user) {
   $("#agent-panel").hidden = !user.features?.call_center;
   pbx.refreshSelf(user).catch((error) => { $("#agent-status-result").textContent = error.message; });
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
+  dashboard.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#dashboard-status").textContent=error.message;});
   if (["admin","super_admin"].includes(user.role)) {
     loadGeofenceAdmin().catch(error=>{$("#geofence-admin-status").textContent=error.message;});
     reports.refresh();
@@ -913,6 +963,7 @@ function signedIn(user) {
         `${stats.users} users, ${stats.messages} messages, ${stats.active_sessions} active sessions`; })
       .catch((error) => { $("#admin-status").textContent = error.message; });
   }
+  updateNavigation();
 }
 function money(cents) { return "$" + (cents / 100).toFixed(2); }
 async function loadPlans() {
@@ -1078,6 +1129,27 @@ $("#add-contact").addEventListener("submit", async (event) => {
     $("#chat-status").textContent = "Contact added";
   } catch (error) { $("#chat-status").textContent = error.message; }
 });
+$("#contacts-import").onclick=async()=>{
+  const status=$("#chat-status"),file=$("#contacts-file").files?.[0];
+  if(!file) {status.textContent="Choose a CSV file first";return;}
+  try {
+    if(file.size>64000) throw new Error("CSV file exceeds 64 KB");
+    const emails=contactEmailsFromCsv(await file.text());
+    const result=await accountRequest("/api/contacts/import",{emails});
+    $("#contacts-file").value="";
+    await loadContacts();
+    status.textContent=`Processed ${result.processed} contacts (${result.duplicates} repeated rows).`;
+  } catch(error) {status.textContent=error.message;}
+};
+$("#contacts-export").onclick=async()=>{
+  try {
+    const {contacts}=await apiGet("/api/contacts");
+    const url=URL.createObjectURL(new Blob([contactsToCsv(contacts)],{type:"text/csv;charset=utf-8"}));
+    const link=document.createElement("a");link.href=url;link.download="olamide-contacts.csv";link.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    $("#chat-status").textContent=`Exported ${contacts.length} contacts.`;
+  } catch(error) {$("#chat-status").textContent=error.message;}
+};
 $("#contact-list").onchange = () => loadMessages().catch((error) => {
   $("#chat-status").textContent = error.message;
 });
@@ -1152,6 +1224,7 @@ $("#logout").onclick = async () => {
     $("#logout").hidden = true;
     $("#password-change").hidden = true;
     $("#background-user").hidden = true;
+    $("#dashboard").hidden = true;
     background.clear();
     $("#chat").hidden = true;
     $("#billing").hidden = true;
@@ -1160,6 +1233,7 @@ $("#logout").onclick = async () => {
     $("#admin").hidden = true;
     $("#message-list").replaceChildren();
     $("#account-status").textContent = "Signed out";
+    updateNavigation();
   } catch (error) { $("#account-status").textContent = error.message; }
 };
 $("#password-change").onsubmit=async(event)=>{
