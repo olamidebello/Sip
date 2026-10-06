@@ -15,6 +15,7 @@ import { setupInstall } from "./install.js";
 import { setupDownloads } from "./downloads.js";
 import { setupCarrierControl } from "./carrierControl.js";
 import { setupFormGroups } from "./formGroups.js";
+import { setupPageRoutes, pageId } from "./pageRoutes.js";
 import { contactEmailsFromCsv, contactsToCsv } from "./contactsCsv.js";
 import { setupDashboard } from "./dashboard.js";
 import { setupSupport } from "./support.js";
@@ -57,6 +58,7 @@ root.innerHTML = `
     <p>Account sign-up does not yet provision a SIP number or calling plan.</p>
     <div class="signin-choices" aria-label="Sign-in destinations"><button id="signin-user" type="button">User sign in</button><button id="signin-admin" type="button">Administrator sign in</button><button id="signin-super" type="button">Super administrator sign in</button></div>
     <p id="signin-role-help">Your assigned role controls which menus appear after sign-in.</p>
+    <nav class="auth-pages" aria-label="Account pages"><a href="/pages/login">Sign in</a><a href="/pages/signup">Register</a><a href="/pages/ldap-login">Directory sign in</a></nav>
     <form id="signup">
       <label>Name <input name="name" autocomplete="name" minlength="2" maxlength="100" required></label>
       <label>Email <input name="email" type="email" autocomplete="email" required></label>
@@ -636,6 +638,7 @@ const navigationGroups=[
   {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"]]}
 ];
 let activeRole=null;
+let pageRoutes;
 const workspaceViews=["account","dashboard","search-panel","support","locale-settings","background-user","chat","billing","meetings","admin","agent-panel","calling-workspace","downloads"];
 let activeView="dashboard";
 function showWorkspace(target) {
@@ -646,6 +649,10 @@ function showWorkspace(target) {
   const rootView=workspaceViews.find(id=>{const section=document.getElementById(id);return section&&(section===requested||section.contains(requested));});
   if(!rootView) return;
   activeView=target;
+  if(pageId(location.pathname) && target!==document.getElementById(pageId(location.pathname))?.closest('section[id]')?.id) {
+    history.pushState(null,'',`/#${target}`);
+    pageRoutes?.render();
+  }
   for(const id of workspaceViews) document.getElementById(id)?.classList.toggle("workspace-inactive",id!==rootView);
   const admin=$("#admin");
   admin.classList.toggle("admin-subview",rootView==="admin"&&target!=="admin");
@@ -700,8 +707,10 @@ function updateNavigation() {
     for(const group of groups.children){let count=0;for(const link of group.querySelectorAll("a")){link.hidden=!!query&&!link.textContent.toLocaleLowerCase().includes(query);if(!link.hidden)count++;}group.hidden=count===0;visible+=count;if(query&&count)group.open=true;}
     empty.hidden=!query||visible>0;
   };
+  pageRoutes?.refresh();
 }
 updateNavigation();
+pageRoutes=setupPageRoutes({showWorkspace,isSignedIn:()=>!!activeRole});
 $("#app-nav").addEventListener("keydown",event=>{
   if(event.key!=="Escape") return;
   for(const menu of $("#app-nav").querySelectorAll("details[open]")) menu.open=false;
@@ -720,6 +729,7 @@ window.addEventListener("hashchange",()=>{
 });
 for(const [id,label] of [["signin-user","user"],["signin-admin","administrator"],["signin-super","super administrator"]]) {
   $("#"+id).onclick=()=>{
+    if(pageId(location.pathname)!=='login') pageRoutes.go('login');
     $("#account-login-group").open=true;
     $("#signin-role-help").textContent=`Sign in with your existing account. ${label[0].toUpperCase()+label.slice(1)} menus appear only if that role is assigned to you.`;
     $("#login").scrollIntoView({behavior:"smooth",block:"center"});
@@ -1118,7 +1128,8 @@ function signedIn(user) {
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
   updateNavigation();
   const requested=decodeURIComponent(location.hash.slice(1));
-  showWorkspace($("#app-nav").querySelector(`a[href="#${CSS.escape(requested)}"]`)?requested:"dashboard");
+  showWorkspace(pageId(location.pathname) ? document.getElementById(pageId(location.pathname))?.closest('section[id]')?.id || 'dashboard' : $("#app-nav").querySelector(`a[href="#${CSS.escape(requested)}"]`)?requested:"dashboard");
+  pageRoutes.render();
   dashboard.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#dashboard-status").textContent=error.message;});
   support.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#support-status").textContent=error.message;});
   localeSettings.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#locale-status").textContent=error.message;});
@@ -1367,6 +1378,7 @@ $("#signup").addEventListener("submit", async (event) => {
     await accountRequest("/api/register", Object.fromEntries(data));
     form.reset();
     $("#account-status").textContent = "Account created. Sign in below.";
+    pageRoutes.go('login');
   } catch (error) { $("#account-status").textContent = error.message; }
 });
 $("#login").addEventListener("submit", async (event) => {
@@ -1376,6 +1388,7 @@ $("#login").addEventListener("submit", async (event) => {
     const user = await accountRequest("/api/login", Object.fromEntries(new FormData(form)));
     form.reset();
     signedIn(user);
+    history.replaceState(null,'','/#dashboard');pageRoutes.render();showWorkspace('dashboard');
   } catch (error) { $("#account-status").textContent = error.message; }
 });
 $("#ldap-login").addEventListener("submit",async(event)=>{
@@ -1383,7 +1396,7 @@ $("#ldap-login").addEventListener("submit",async(event)=>{
   const form=event.currentTarget;
   try {
     const user=await accountRequest("/api/login/ldap",Object.fromEntries(new FormData(form)));
-    form.reset();signedIn(user);
+    form.reset();signedIn(user);history.replaceState(null,'','/#dashboard');pageRoutes.render();showWorkspace('dashboard');
   } catch(error) {$("#account-status").textContent=error.message;}
 });
 $("#logout").onclick = async () => {
@@ -1421,6 +1434,7 @@ $("#logout").onclick = async () => {
     $("#message-list").replaceChildren();
     $("#account-status").textContent = "Signed out";
     updateNavigation();
+    pageRoutes.go('login');
   } catch (error) { $("#account-status").textContent = error.message; }
 };
 $("#password-change").onsubmit=async(event)=>{
