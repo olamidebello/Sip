@@ -34,6 +34,8 @@ export async function setupDownloads(fetchReleases=fetch) {
     status.textContent="Could not check packages right now. The releases page has the current downloads.";
   }
   list.replaceChildren(...packages.map(item=>card(item,assets.find(asset=>item.match.test(asset.name)&&asset.browser_download_url))));
+  const carrierAsset=assets.find(asset=>asset.name==="olamide-carrier-signed.apk"&&asset.browser_download_url);
+  if (carrierAsset) list.append(card({label:"Carrier partner",kind:"Signed Android APK",note:"For SIM profiles that authorize this APK signing certificate. Includes a carrier display-name control, not a system dialer."},carrierAsset));
   const browser=document.createElement("article");browser.className="download-card browser-card";
   browser.innerHTML="<span class=\"download-platform\">Browser</span><h3>Ready when you are</h3><p>Use Olamide here, or install it from your browser for a standalone window.</p>";
   const start=document.createElement("a");start.className="download-link";start.href="#account";start.textContent="Open in browser ↗";
