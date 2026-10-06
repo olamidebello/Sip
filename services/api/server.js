@@ -1,6 +1,9 @@
 import http from "node:http";
 import { migrate } from './migrate.js';
-import { randomUUID } from "node:crypto";
+import { randomUUID } from 'node:crypto';
+import { handleOnboarding } from './onboarding.js';
+import { handlePasskeys } from './passkeys.js';
+import { handleSipMarketplace } from './sipMarketplace.js';
 import { createDatabase } from "./db.js";
 import { handleMobileAdmin } from "./mobileAdmin.js";
 import { handlePbx } from "./pbx.js";
@@ -27,7 +30,7 @@ import { availableNumbers } from "./providers.js";
 import { attachMeetingSignaling } from "./meetings.js";
 import { validateFeatures, effectiveFeatures } from "./permissions.js";
 import {
-  validateRegistration, hashPassword, verifyPassword, createSessionToken, tokenHash
+  verifyPassword, createSessionToken, tokenHash
 } from "./security.js";
 
 const origin = process.env.PUBLIC_ORIGIN || "http://127.0.0.1:5173";
@@ -122,31 +125,8 @@ async function handler(req, res) {
     return send(res, 429, { error: "Too many requests" });
   try {
     if (cdrIngest) return await handleCdrIngest({req,res,pool,send,keys:cdrKeys});
-    if (req.method === "POST" && path === "/api/register") {
-      const { name, email, password } = validateRegistration(await readJson(req));
-      const { salt, hash } = await hashPassword(password);
-      const id = randomUUID();
-      const db = await pool.connect();
-      try {
-        await db.query("START TRANSACTION");
-        await db.query(
-          "INSERT INTO users (id, tenant_id, display_name, email, password_salt, password_hash) VALUES ($1,$2,$3,$4,$5,$6)",
-          [id, defaultTenantId, name, email, salt, hash]
-        );
-        await db.query(
-          "INSERT INTO user_group_members(user_id,group_id) VALUES($1,'00000000-0000-4000-8000-000000000001')",
-          [id]
-        );
-        await db.query("COMMIT");
-      } catch (error) {
-        await db.query("ROLLBACK");
-        if (error.code === "ER_DUP_ENTRY") return send(res, 409, { error: "Account already exists" });
-        throw error;
-      } finally {
-        db.release();
-      }
-      return send(res, 201, { id, name, email });
-    }
+    if (path.startsWith('/api/register')) return await handleOnboarding({req,res,path,pool,send,readJson,origin});
+    if (path.startsWith('/api/passkeys')) return await handlePasskeys({req,res,path,pool,send,readJson,origin,currentUser,featuresFor,sessionCookie});
     if (req.method === "POST" && path === "/api/login") {
       const { email, password } = await readJson(req);
       if (typeof email !== "string" || typeof password !== "string" ||
@@ -213,9 +193,11 @@ async function handler(req, res) {
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
         path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") ||
         path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path==="/api/dashboard" || path==="/api/dashboard/summary" || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
-        path === "/api/admin/cdr") {
+        path === "/api/admin/cdr" || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if(path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/'))
+        return await handleSipMarketplace({req,res,path,user,pool,send,readJson});
       if (path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales")
         return await handleLocales({req,res,path,user,pool,send,readJson});
       if (path==="/api/search") return await handleSearch({req,res,user,pool,send});
@@ -695,6 +677,7 @@ async function handler(req, res) {
         error.message?.startsWith("Name must") ||
         error.message?.startsWith("Enter a valid") ||
         error.message?.startsWith("Password must") ||
+        error.message?.startsWith("Phone must") || error.message?.startsWith("Enter a complete") ||
         error.message?.startsWith("Valid platform") || error.message?.startsWith("Valid version"))
       return send(res, 400, { error: error.message });
     console.error("API request failed", error.code || error.name);
