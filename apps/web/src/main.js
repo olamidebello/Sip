@@ -45,12 +45,12 @@ root.innerHTML = `
     <div id="download-options" class="download-grid" aria-live="polite"><p>Checking available downloads…</p></div>
     <p id="download-status" class="fine-print" role="status"></p>
     <details class="carrier-details"><summary>Carrier partner integration</summary><p>Carrier branding requires Android carrier privileges for the SIM. The Android package can check authorization and request an Olamide display name only on an authorized SIM. It does not replace the system phone app or emergency calling.</p><div id="carrier-control" hidden><p id="carrier-status" role="status"></p><button id="carrier-check" type="button">Check SIM authorization</button><button id="carrier-apply" type="button" hidden>Set Olamide display name</button><button id="carrier-clear" type="button" hidden>Restore carrier name</button></div><p><a href="/carrier-partner.md" download="Olamide-carrier-integration.md">Download integration requirements ↗</a></p></details>
+    <div id="install-panel">
+      <button id="install-app" type="button" hidden>Install Olamide</button>
+      <p id="install-help" role="status"></p>
+    </div>
   </section>
   <nav id="app-nav" aria-label="Application" hidden></nav>
-  <section id="install-panel">
-    <button id="install-app" type="button" hidden>Install Olamide</button>
-    <p id="install-help" role="status"></p>
-  </section>
   <section id="account">
     <h2>Welcome to Olamide</h2>
     <p>Account sign-up does not yet provision a SIP number or calling plan.</p>
@@ -572,6 +572,8 @@ root.innerHTML = `
     </form>
     <p id="agent-status-result" role="status"></p>
   </section>
+  <section id="calling-workspace" class="calling-workspace">
+  <h2>Olamide dialer</h2>
   <p>Development browser dialer. Use a test account on a WSS and WebRTC enabled SIP server.</p>
   <form id="connect">
     <label>SIP address <input name="aor" placeholder="sip:alice@example.com" required></label>
@@ -616,6 +618,7 @@ root.innerHTML = `
   <button id="disconnect" hidden>Disconnect</button>
   <audio id="remote" autoplay></audio>
   <p id="status" role="status">Disconnected</p>
+  </section>
 `;
 
 const $ = (selector) => document.querySelector(selector);
@@ -623,14 +626,38 @@ setupDownloads();
 setupCarrierControl();
 const navigationGroups=[
   {label:"Workspace",items:[["dashboard","Dashboard"],["search-panel","Search"],["support","Support tickets"]]},
-  {label:"Communications",items:[["softphone-tools","Dialer"],["geo","Calling area"],["chat","Messages"],["meetings","Meetings"],["agent-panel","Call center"]]},
+  {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Messages"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["billing","Plans, numbers & billing"]]},
-  {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"]]},
+  {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
   {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["mobile-admin","App releases"]]},
   {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"]]}
 ];
 let activeRole=null;
+const workspaceViews=["account","dashboard","search-panel","support","locale-settings","background-user","chat","billing","meetings","admin","agent-panel","calling-workspace","downloads"];
+let activeView="dashboard";
+function showWorkspace(target) {
+  if(!activeRole) return;
+  const requested=document.getElementById(target);
+  if(!requested || requested.closest("[hidden]")) return;
+  const rootView=workspaceViews.find(id=>{const section=document.getElementById(id);return section&&(section===requested||section.contains(requested));});
+  if(!rootView) return;
+  activeView=target;
+  for(const id of workspaceViews) document.getElementById(id)?.classList.toggle("workspace-inactive",id!==rootView);
+  const admin=$("#admin");
+  admin.classList.toggle("admin-subview",rootView==="admin"&&target!=="admin");
+  for(const section of admin.querySelectorAll(":scope > section[id]"))
+    section.classList.toggle("workspace-inactive",rootView==="admin"&&section.id!==target);
+  for(const link of $("#app-nav").querySelectorAll(".menu-links a")) {
+    if(link.hash===`#${target}`) link.setAttribute("aria-current","page");
+    else link.removeAttribute("aria-current");
+  }
+}
+function resetWorkspace() {
+  document.body.classList.remove("workspace-mode");
+  for(const section of document.querySelectorAll(".workspace-inactive")) section.classList.remove("workspace-inactive");
+  $("#admin").classList.remove("admin-subview");
+}
 function updateNavigation() {
   const nav=$("#app-nav");nav.replaceChildren();
   nav.hidden=!activeRole;
@@ -639,6 +666,8 @@ function updateNavigation() {
   const title=document.createElement("strong");title.textContent="Olamide workspace";
   const role=document.createElement("span");role.className="role-badge";role.textContent=activeRole==="super_admin"?"Super admin":activeRole==="admin"?"Administrator":"User";
   heading.append(title,role);nav.append(heading);
+  const returnToCall=document.createElement("a");returnToCall.id="return-to-call";returnToCall.href="#calling-workspace";returnToCall.textContent="Return to call";returnToCall.hidden=!onCall;
+  returnToCall.onclick=()=>showWorkspace("calling-workspace");nav.append(returnToCall);
   const search=document.createElement("input");search.type="search";search.className="menu-search";search.placeholder="Find a menu…";search.setAttribute("aria-label","Find a menu");nav.append(search);
   const groups=document.createElement("div");groups.className="menu-groups";nav.append(groups);
   for(const group of navigationGroups) {
@@ -650,7 +679,7 @@ function updateNavigation() {
     const links=document.createElement("div");links.className="menu-links";
     for(const [id,label] of items) {
       const link=document.createElement("a");link.href=`#${id}`;link.textContent=label;
-      link.onclick=()=>{for(const a of nav.querySelectorAll(".menu-links a")) a.removeAttribute("aria-current");link.setAttribute("aria-current","page");details.open=false;};
+      link.onclick=()=>{showWorkspace(id);details.open=false;};
       if(location.hash===`#${id}`) link.setAttribute("aria-current","page");
       links.append(link);
     }
@@ -661,12 +690,31 @@ function updateNavigation() {
   const quick=document.createElement("form");quick.id="quick-locale";quick.className="quick-locale";
   quick.innerHTML='<label>Language <select name="language" aria-label="Quick language"></select></label><label>Currency <select name="currency" aria-label="Quick currency"></select></label><button type="submit">Save preferences</button><p id="quick-locale-status" role="status"></p>';
   quickMenu.append(quick);nav.append(quickMenu);
+  const empty=document.createElement("p");empty.className="menu-empty";empty.hidden=true;empty.textContent="No menus match your search.";empty.setAttribute("role","status");nav.append(empty);
   search.oninput=()=>{
     const query=search.value.trim().toLocaleLowerCase();
-    for(const group of groups.children){let count=0;for(const link of group.querySelectorAll("a")){link.hidden=!!query&&!link.textContent.toLocaleLowerCase().includes(query);if(!link.hidden)count++;}group.hidden=count===0;if(query&&count)group.open=true;}
+    let visible=0;
+    for(const group of groups.children){let count=0;for(const link of group.querySelectorAll("a")){link.hidden=!!query&&!link.textContent.toLocaleLowerCase().includes(query);if(!link.hidden)count++;}group.hidden=count===0;visible+=count;if(query&&count)group.open=true;}
+    empty.hidden=!query||visible>0;
   };
 }
 updateNavigation();
+$("#app-nav").addEventListener("keydown",event=>{
+  if(event.key!=="Escape") return;
+  for(const menu of $("#app-nav").querySelectorAll("details[open]")) menu.open=false;
+  $("#app-nav .menu-search")?.focus();
+});
+document.addEventListener("click",event=>{
+  if($("#app-nav").contains(event.target)) return;
+  for(const menu of $("#app-nav").querySelectorAll("details[open]")) menu.open=false;
+});
+$(".public-nav a[href='#downloads']").addEventListener("click",()=>showWorkspace("downloads"));
+$(".nav-signin").addEventListener("click",()=>{if(activeRole) showWorkspace("dashboard");});
+$(".brand-mark").addEventListener("click",()=>{if(activeRole) showWorkspace("dashboard");});
+window.addEventListener("hashchange",()=>{
+  const target=decodeURIComponent(location.hash.slice(1));
+  if(activeRole&&$("#app-nav").querySelector(`a[href="#${CSS.escape(target)}"]`)) showWorkspace(target);
+});
 for(const [id,label] of [["signin-user","user"],["signin-admin","administrator"],["signin-super","super administrator"]]) {
   $("#"+id).onclick=()=>{
     $("#signin-role-help").textContent=`Sign in with your existing account. ${label[0].toUpperCase()+label.slice(1)} menus appear only if that role is assigned to you.`;
@@ -1023,6 +1071,7 @@ async function loadMessages() {
 }
 function signedIn(user) {
   activeRole=["admin","super_admin"].includes(user.role)?user.role:"user";
+  document.body.classList.add("workspace-mode");
   refreshSoftphoneState(user).catch(error=>{$("#account-status").textContent=error.message;});
   loadGeofencePolicy().catch(error=>{$("#geo-policy").textContent=error.message+". Outgoing calls are blocked.";});
   $("#signup").hidden = true;
@@ -1061,6 +1110,8 @@ function signedIn(user) {
   pbx.refreshSelf(user).catch((error) => { $("#agent-status-result").textContent = error.message; });
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
   updateNavigation();
+  const requested=decodeURIComponent(location.hash.slice(1));
+  showWorkspace($("#app-nav").querySelector(`a[href="#${CSS.escape(requested)}"]`)?requested:"dashboard");
   dashboard.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#dashboard-status").textContent=error.message;});
   support.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#support-status").textContent=error.message;});
   localeSettings.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#locale-status").textContent=error.message;});
@@ -1343,7 +1394,7 @@ $("#logout").onclick = async () => {
     $("#login").hidden = false;
     $("#ldap-login").hidden = false;
     $("#logout").hidden = true;
-    activeRole=null;$(".signin-choices").hidden=false;$("#signin-role-help").textContent="Your assigned role controls which menus appear after sign-in.";
+    activeRole=null;resetWorkspace();$(".signin-choices").hidden=false;$("#signin-role-help").textContent="Your assigned role controls which menus appear after sign-in.";
     $(".nav-signin").textContent="Sign in";$(".nav-signin").href="#account";
     $("#password-change").hidden = true;
     $("#background-user").hidden = true;
@@ -1377,6 +1428,7 @@ fetch("/api/me", { credentials: "same-origin" })
 function status(message) { $("#status").textContent = message; }
 function callState(active) {
   onCall = active;
+  if($("#return-to-call")) $("#return-to-call").hidden=!active;
   $("#active").hidden = !active;
   if (!active) {
     $("#incoming").hidden = true;
@@ -1415,9 +1467,9 @@ connectForm.addEventListener("submit", async (event) => {
           finishCall("declined (do not disturb)");
           return;
         }
-        $("#incoming").hidden = false; status("Incoming call");
+        $("#incoming").hidden = false; showWorkspace("calling-workspace"); status("Incoming call");
       },
-      onCallAnswered: () => { if (currentCall) currentCall.answered = true; callState(true); status("Call connected"); },
+      onCallAnswered: () => { if (currentCall) currentCall.answered = true; showWorkspace("calling-workspace"); callState(true); status("Call connected"); },
       onCallHangup: () => { finishCall(currentCall?.answered ? "completed" : "missed or unanswered"); callState(false); status("Call ended"); },
       onRegistered: () => status("Registered"),
       onUnregistered: () => status("Unregistered")
