@@ -13,6 +13,7 @@ import { setupAuthProviders } from "./authProviders.js";
 import { setupCatalogControl } from "./catalogControl.js";
 import { setupInstall } from "./install.js";
 import { setupDownloads } from "./downloads.js";
+import { setupCarrierControl } from "./carrierControl.js";
 import { contactEmailsFromCsv, contactsToCsv } from "./contactsCsv.js";
 import { setupDashboard } from "./dashboard.js";
 import { setupSupport } from "./support.js";
@@ -43,7 +44,7 @@ root.innerHTML = `
     <div class="section-heading"><div><p class="eyebrow">TAKE OLAMIDE WITH YOU</p><h2 id="download-title">Choose how you connect.</h2><p>Preview packages are published with each successful release build.</p></div><a href="https://github.com/olamidebello/Sip/releases" target="_blank" rel="noopener noreferrer">All releases ↗</a></div>
     <div id="download-options" class="download-grid" aria-live="polite"><p>Checking available downloads…</p></div>
     <p id="download-status" class="fine-print" role="status"></p>
-    <details class="carrier-details"><summary>Carrier partner integration</summary><p>Carrier-controlled SIM branding and default phone handling require Android carrier privileges and a complete native dialer. This preview does not modify your mobile network name or replace emergency calling.</p><a href="/carrier-partner.md" download="Olamide-carrier-integration.md">Download integration requirements ↗</a></details>
+    <details class="carrier-details"><summary>Carrier partner integration</summary><p>Carrier branding requires Android carrier privileges for the SIM. The Android package can check authorization and request an Olamide display name only on an authorized SIM. It does not replace the system phone app or emergency calling.</p><div id="carrier-control" hidden><p id="carrier-status" role="status"></p><button id="carrier-check" type="button">Check SIM authorization</button><button id="carrier-apply" type="button" hidden>Set Olamide display name</button><button id="carrier-clear" type="button" hidden>Restore carrier name</button></div><p><a href="/carrier-partner.md" download="Olamide-carrier-integration.md">Download integration requirements ↗</a></p></details>
   </section>
   <nav id="app-nav" aria-label="Application" hidden></nav>
   <section id="install-panel">
@@ -617,6 +618,7 @@ root.innerHTML = `
 
 const $ = (selector) => document.querySelector(selector);
 setupDownloads();
+setupCarrierControl();
 const navigation=[
   ["account","Account"],["dashboard","Dashboard"],["search-panel","Search"],["support","Support"],["locale-settings","Locale"],["softphone-tools","Dialer"],["geo","Calling area"],
   ["chat","Messages"],["billing","Billing"],["meetings","Meetings"],
