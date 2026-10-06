@@ -40,7 +40,7 @@ Open `http://127.0.0.1:5173`. Vite forwards `/api` HTTP and WebSocket traffic to
 
 ## Current features
 
-- SIP registration over secure WebSocket, browser WebRTC audio calling, answer/reject, hold/resume, hangup, and DTMF. An external WSS/WebRTC-capable SIP server and test account are required; account signup does not provision a SIP extension, phone number, or plan.
+- SIP registration over secure WebSocket, browser WebRTC audio calling, answer/reject, hold/resume, hangup, and DTMF. Verified signup creates a SIP account record; live use requires a commissioned WSS/WebRTC switch and successful switch provisioning. Signup does not assign a phone number or plan.
 - Account registration and sign-in with scrypt password hashes and HttpOnly session cookies. Users can add contacts and exchange server-stored text messages. Messages have no end-to-end encryption or push delivery.
 - Administrators can create user groups, assign feature access, see aggregate counts, create monthly plans, set a default SIP WSS URL, and set a DID markup. The Standard group permits meetings, screen sharing, messaging, and billing; pointer assistance starts disabled.
 - Administrators can run tenant-scoped UTC reports for recorded calls, answer rate, duration, CDR sources and hours, invoice status by currency, DID inventory, port requests, registrations, and PBX agent status. Daily call and invoice summary CSV exports are available.
@@ -64,7 +64,7 @@ For cross-network meetings, configure `MEETING_ICE_SERVERS_JSON` or the optional
 
 ## Limits before service launch
 
-The repository is a development foundation. PBX and call center configuration is a planning control plane; no SIP switch or live call routing is connected. It has no class 5 switch, carrier routes, live billing/settlement, DID purchase automation, native Android/iOS clients, Zoom-scale media server, meeting recording, remote keyboard/mouse control, OTP/passkeys/PIN, or production telecom deployment. The wallet starts with zero balance and has no funding or payout integration. Browser-only geofencing and group flags cannot enforce policies on an external SIP server or inspect peer-to-peer media. Add a trusted SIP/media service, backups, operational monitoring, abuse controls, migrations, and security review before accepting real users or payments. No Acrobits, WhatsApp, Cash App, Zoom, or Zoiper code or branding is included.
+The repository is a development foundation. PBX and call center configuration is a planning control plane; no SIP switch or live call routing is connected by default. It has no class 5 switch, carrier routes, live billing/settlement, DID purchase automation, native Android/iOS clients, Zoom-scale media server, meeting recording, remote keyboard/mouse control, or production telecom deployment. Email OTP and passkeys require the configuration described below. The wallet starts with zero balance and has no funding or payout integration. Browser-only geofencing and group flags cannot enforce policies on an external SIP server or inspect peer-to-peer media. Add a trusted SIP/media service, backups, operational monitoring, abuse controls, migrations, and security review before accepting real users or payments. No Acrobits, WhatsApp, Cash App, Zoom, or Zoiper code or branding is included.
 
 ## Feature status and boundaries
 
@@ -357,3 +357,46 @@ MySQL server lacks the configured database or grants, create them with
 These migrations create data structures for implemented software features;
 external carrier, clearinghouse and payment services still need credentials,
 agreements and provisioning.
+
+## Verified signup, passkeys and SIP provisioning
+
+The registration page collects a full name, email, E.164 phone number and
+address. Configure `RESEND_API_KEY`, `RESEND_FROM` (a verified sender) and a
+random `OTP_HMAC_SECRET` of at least 32 characters in
+`/etc/olamide/secrets.env`, then rerun bootstrap to install the updated private
+environment file. Registration is unavailable until email delivery is
+configured. New accounts have `pending_email` status and cannot sign in. The
+API sends a six-digit email code that expires after 10 minutes; verification
+activates the account. Five incorrect attempts exhaust a code; resend is
+limited to once per minute and creates a fresh code. The MySQL migration adds
+`user_profiles`, `signup_otps`, `passkeys` and `passkey_challenges`.
+
+Signed-in local users can add a WebAuthn passkey in **Account & security**.
+The passkey can then be used on the sign-in page. Device biometric or PIN
+verification remains on the device: the server stores the public key and
+counter, checks origin, relying party ID and a one-use challenge, and requires
+user verification. Use HTTPS with the final app domain. Losing all passkeys
+does not remove password access. An administrator should configure recovery
+and phishing-resistant administrator policies before relying on passkeys as
+the only sign-in method.
+
+Email verification also creates a tenant-scoped `sip_accounts` record with a
+unique authorization username. Set a random 64-character hex
+`SIP_CREDENTIAL_KEY` so the generated SIP password can be encrypted at rest.
+If a commissioned switch adapter is available, set `SIP_PROVISION_URL` to its
+HTTPS endpoint and `SIP_PROVISION_TOKEN` to its private bearer token. The API
+POSTs `{accountId,tenantId,userId,username,password,domain}` with an
+`Idempotency-Key` header and marks the account `active` only after the adapter
+returns JSON `{ "status": "active" }`. The adapter must provision the user on
+the authoritative switch and enforce tenant isolation before acknowledging.
+Without it, the record remains `awaiting_switch` and cannot make calls. The
+account page displays that status; an active user's SIP credentials require
+password reauthentication to reveal. Existing accounts are not retroactively
+assigned credentials by this new signup hook.
+
+**Dial plan marketplace** lets administrators create draft or published offers.
+Users browse published offers and request one. The request and unpaid invoice
+are created together in MySQL; this is a purchase request, not a live routed
+dialplan, recurring charge or payment confirmation. The server still needs
+switch activation, billing authorization, fraud controls and reconciliation
+before the offer can route calls.
