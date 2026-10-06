@@ -8,7 +8,7 @@ export function pageId(pathname) {
 export function setupPageRoutes({ showWorkspace, isSignedIn }) {
   const forms = [...document.querySelectorAll('form[id]:not(#quick-locale)')];
   const index = new Map(forms.map(form => [form.id, form]));
-  const auth = new Set(['signup', 'login', 'ldap-login']);
+  const auth = new Set(['signup', 'signup-verify', 'login', 'ldap-login']);
   const navigation = document.getElementById('app-nav');
   function refresh() {
   for (const group of navigation.querySelectorAll('.menu-links')) {
