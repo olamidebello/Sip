@@ -572,7 +572,7 @@ root.innerHTML = `
     </form>
     <p id="agent-status-result" role="status"></p>
   </section>
-  <section id="calling-workspace" class="calling-workspace">
+  <section id="calling-workspace" class="calling-workspace" hidden>
   <h2>Olamide dialer</h2>
   <p>Development browser dialer. Use a test account on a WSS and WebRTC enabled SIP server.</p>
   <form id="connect">
@@ -1082,6 +1082,7 @@ function signedIn(user) {
   $("#signin-role-help").textContent=`Signed in with ${activeRole==="super_admin"?"super administrator":activeRole==="admin"?"administrator":"user"} access.`;
   $(".nav-signin").textContent="My workspace";$(".nav-signin").href="#dashboard";
   $("#background-user").hidden = false;
+  $("#calling-workspace").hidden=false;
   $("#dashboard").hidden=false;
   $("#search-panel").hidden=false;$("#support").hidden=false;
   $("#locale-settings").hidden=false;
@@ -1398,6 +1399,7 @@ $("#logout").onclick = async () => {
     $(".nav-signin").textContent="Sign in";$(".nav-signin").href="#account";
     $("#password-change").hidden = true;
     $("#background-user").hidden = true;
+    $("#calling-workspace").hidden=true;
     $("#dashboard").hidden = true;
     $("#search-panel").hidden=true;$("#support").hidden=true;
     $("#locale-settings").hidden=true;localeSettings.clear();
