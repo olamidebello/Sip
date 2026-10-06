@@ -1,4 +1,5 @@
 import { SimpleUser } from "sip.js/lib/platform/web";
+import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import { checkCurrentLocation } from "./geofence.js";
 import { setupMeetings } from "./meetings.js";
 import { setupGroupAdmin } from "./groups.js";
@@ -55,20 +56,36 @@ root.innerHTML = `
   <nav id="app-nav" aria-label="Application" hidden></nav>
   <section id="account">
     <h2>Welcome to Olamide</h2>
-    <p>Account sign-up does not yet provision a SIP number or calling plan.</p>
+    <p>Email verification creates an account and SIP identity. Calling needs an activated switch account; no number or plan is assigned at signup.</p>
     <div class="signin-choices" aria-label="Sign-in destinations"><button id="signin-user" type="button">User sign in</button><button id="signin-admin" type="button">Administrator sign in</button><button id="signin-super" type="button">Super administrator sign in</button></div>
     <p id="signin-role-help">Your assigned role controls which menus appear after sign-in.</p>
-    <nav class="auth-pages" aria-label="Account pages"><a href="/pages/login">Sign in</a><a href="/pages/signup">Register</a><a href="/pages/ldap-login">Directory sign in</a></nav>
+    <nav class="auth-pages" aria-label="Account pages"><a href="/pages/login">Sign in</a><a href="/pages/signup">Register</a><a href="/pages/signup-verify">Verify email</a><a href="/pages/ldap-login">Directory sign in</a></nav>
     <form id="signup">
-      <label>Name <input name="name" autocomplete="name" minlength="2" maxlength="100" required></label>
+      <h3>Create an account</h3>
+      <label>Full name <input name="name" autocomplete="name" minlength="2" maxlength="100" required></label>
       <label>Email <input name="email" type="email" autocomplete="email" required></label>
+      <label>Phone (international format) <input name="phone" type="tel" autocomplete="tel" placeholder="+2348012345678" pattern="\+[1-9][0-9]{7,14}" required></label>
+      <label>Street address <input name="address1" autocomplete="address-line1" maxlength="160" required></label>
+      <label>Apartment or suite <input name="address2" autocomplete="address-line2" maxlength="160"></label>
+      <label>City <input name="city" autocomplete="address-level2" maxlength="100" required></label>
+      <label>State or region <input name="region" autocomplete="address-level1" maxlength="100" required></label>
+      <label>Postal code <input name="postalCode" autocomplete="postal-code" maxlength="32" required></label>
+      <label>Country (ISO two-letter code) <input name="country" autocomplete="country" maxlength="2" pattern="[A-Za-z]{2}" placeholder="NG" required></label>
       <label>Password <input name="password" type="password" autocomplete="new-password" minlength="12" required></label>
-      <button>Create account</button>
+      <button>Create account and email code</button>
+    </form>
+    <form id="signup-verify"><h3>Verify your email</h3>
+      <p>Enter the six-digit code we sent. It expires after 10 minutes.</p>
+      <label>Email <input name="email" type="email" autocomplete="email" required></label>
+      <label>Verification code <input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label>
+      <button>Verify and activate</button>
+      <button id="signup-resend" type="button">Resend code</button>
     </form>
     <form id="login">
       <label>Email <input name="email" type="email" autocomplete="username" required></label>
       <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
       <button>Sign in</button>
+      <button type="button" id="passkey-login">Sign in with passkey</button>
     </form>
     <form id="ldap-login">
       <h3>Directory sign-in</h3>
@@ -85,6 +102,15 @@ root.innerHTML = `
       <label>New password <input name="newPassword" type="password" autocomplete="new-password" minlength="12" required></label>
       <button>Change password and sign out other sessions</button>
     </form>
+    <section id="passkey-settings" hidden><h3>Passkeys and device biometrics</h3>
+      <p>Your device checks your fingerprint, face or PIN locally. Olamide stores only a public key.</p>
+      <button id="passkey-add" type="button">Add a passkey</button><ul id="passkey-list"></ul>
+      <p id="passkey-status" role="status"></p>
+    </section>
+    <section id="sip-account-panel" hidden><h3>My SIP account</h3><p id="sip-account-status" role="status"></p>
+      <form id="sip-credentials"><label>Account password to reveal SIP credentials <input name="password" type="password" autocomplete="current-password" required></label><button>Reveal SIP credentials</button></form>
+      <p id="sip-credentials-result" role="status"></p>
+    </section>
   </section>
   <section id="dashboard" hidden>
     <h2>Dashboard</h2><button id="dashboard-refresh" type="button">Refresh dashboard</button>
@@ -207,6 +233,19 @@ root.innerHTML = `
     <ul id="ports"></ul><p id="billing-status" role="status"></p>
     <h3>Nigeria identity verification</h3>
     <p id="nin-status">Checking NINAuth availability…</p>
+  </section>
+  <section id="dialplan-marketplace" hidden><h2>Dial plan marketplace</h2>
+    <p>Browse tenant offers and request a plan. Orders create unpaid invoices; activation requires payment and switch provisioning.</p>
+    <button id="dialplan-refresh" type="button">Refresh offers and orders</button>
+    <div id="dialplan-offers" class="dashboard-tiles"></div><h3>My requests</h3><ul id="dialplan-orders"></ul>
+    <form id="dialplan-admin-create" hidden><h3>Publish an offer</h3>
+      <label>Name <input name="name" maxlength="100" required></label>
+      <label>Description <textarea name="description" maxlength="1000" required></textarea></label>
+      <label>Monthly price in cents <input name="monthlyCents" type="number" min="0" max="100000000" step="1" required></label>
+      <label>Currency <input name="currency" value="USD" maxlength="3" pattern="[A-Z]{3}" required></label>
+      <label>Status <select name="status"><option value="draft">Draft</option><option value="published">Published</option></select></label>
+      <button>Save offer</button>
+    </form><p id="dialplan-status" role="status"></p>
   </section>
   <section id="meetings" hidden>
     <h2>Meetings</h2>
@@ -631,7 +670,7 @@ setupCarrierControl();
 const navigationGroups=[
   {label:"Workspace",items:[["dashboard","Dashboard"],["search-panel","Search"],["support","Support tickets"]]},
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Messages"],["meetings","Meetings"],["agent-panel","Call center"]]},
-  {label:"Commerce",items:[["billing","Plans, numbers & billing"]]},
+  {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
   {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["mobile-admin","App releases"]]},
@@ -639,7 +678,7 @@ const navigationGroups=[
 ];
 let activeRole=null;
 let pageRoutes;
-const workspaceViews=["account","dashboard","search-panel","support","locale-settings","background-user","chat","billing","meetings","admin","agent-panel","calling-workspace","downloads"];
+const workspaceViews=["account","dashboard","search-panel","support","locale-settings","background-user","chat","billing","dialplan-marketplace","meetings","admin","agent-panel","calling-workspace","downloads"];
 let activeView="dashboard";
 function showWorkspace(target) {
   if(!activeRole) return;
@@ -1092,7 +1131,14 @@ function signedIn(user) {
   $("#login").hidden = true;
   $("#ldap-login").hidden = true;
   $("#logout").hidden = false;
-  for(const id of ["account-login-group","account-signup-group","account-directory-group"]) $("#"+id).hidden=true;
+  for(const id of ["account-login-group","account-signup-group","account-verify-group","account-directory-group"]) $("#"+id).hidden=true;
+  $("#passkey-settings").hidden=user.authSource!=="local";
+  if(user.authSource==="local") refreshPasskeys();
+  $("#sip-account-panel").hidden=false;
+  refreshSipAccount();
+  $("#dialplan-marketplace").hidden=!user.features?.billing;
+  $("#dialplan-admin-create").hidden=!['admin','super_admin'].includes(user.role);
+  if(user.features?.billing) refreshDialplans();
   $("#account-password-group").hidden=user.authSource==="ldap";
   $(".signin-choices").hidden=true;
   $("#signin-role-help").textContent=`Signed in with ${activeRole==="super_admin"?"super administrator":activeRole==="admin"?"administrator":"user"} access.`;
@@ -1376,11 +1422,84 @@ $("#signup").addEventListener("submit", async (event) => {
   const data = new FormData(form);
   try {
     await accountRequest("/api/register", Object.fromEntries(data));
+    $("#signup-verify").elements.email.value=data.get('email');
     form.reset();
-    $("#account-status").textContent = "Account created. Sign in below.";
-    pageRoutes.go('login');
+    $("#account-status").textContent = "Check your email for a verification code.";
+    pageRoutes.go('signup-verify');
   } catch (error) { $("#account-status").textContent = error.message; }
 });
+$("#signup-verify").addEventListener('submit',async event=>{
+  event.preventDefault();
+  try {await accountRequest('/api/register/verify',Object.fromEntries(new FormData(event.currentTarget)));
+    $("#account-status").textContent='Email verified. Sign in to continue.';pageRoutes.go('login');}
+  catch(error){$("#account-status").textContent=error.message;}
+});
+$("#signup-resend").onclick=async()=>{
+  try {const result=await accountRequest('/api/register/resend',{email:$("#signup-verify").elements.email.value});
+    $("#account-status").textContent=result.status;}
+  catch(error){$("#account-status").textContent=error.message;}
+};
+async function refreshPasskeys(){
+  try {const result=await apiGet('/api/passkeys');const list=$("#passkey-list");list.replaceChildren();
+    for(const key of result.passkeys){const item=document.createElement('li');
+      item.textContent=`Passkey added ${new Date(key.created_at).toLocaleDateString()} `;
+      const remove=document.createElement('button');remove.type='button';remove.textContent='Remove';
+      remove.onclick=async()=>{try{await accountRequest(`/api/passkeys/${encodeURIComponent(key.id)}`,{},'DELETE');await refreshPasskeys();}
+        catch(error){$("#passkey-status").textContent=error.message;}};item.append(remove);list.append(item);}
+  }catch(error){$("#passkey-status").textContent=error.message;}
+}
+async function refreshSipAccount(){
+  try {const {account,note}=await apiGet('/api/sip-account');
+    $("#sip-account-status").textContent=account?`${account.username}@${account.domain}: ${account.status}. ${note}`:'No SIP account record. Contact support.';
+    $("#sip-credentials").hidden=!account||account.status!=='active';
+  }catch(error){$("#sip-account-status").textContent=error.message;}
+}
+$("#sip-credentials").onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget;
+  try {const result=await accountRequest('/api/sip-account/credentials',{password:form.elements.password.value});
+    form.reset();$("#sip-credentials-result").textContent=`SIP username: ${result.username}; domain: ${result.domain}; password: ${result.password}`;
+    setTimeout(()=>{$("#sip-credentials-result").textContent='Credentials cleared from this page.';},60000);
+  }catch(error){form.reset();$("#sip-credentials-result").textContent=error.message;}
+};
+async function refreshDialplans(){
+  try {const [catalog,requests]=await Promise.all([apiGet('/api/dialplan/offers'),apiGet('/api/dialplan/orders')]);
+    const offers=$("#dialplan-offers");offers.replaceChildren();
+    for(const offer of catalog.offers){const card=document.createElement('article');
+      const heading=document.createElement('h3');heading.textContent=offer.name;
+      const description=document.createElement('p');description.textContent=offer.description;
+      const price=document.createElement('p');price.textContent=new Intl.NumberFormat(undefined,{style:'currency',currency:offer.currency}).format(offer.monthly_cents/100)+' / month';
+      const order=document.createElement('button');order.type='button';order.textContent='Request this plan';
+      order.onclick=async()=>{try{const result=await accountRequest('/api/dialplan/orders',{offerId:offer.id});
+        $("#dialplan-status").textContent=`Request saved; invoice ${result.invoiceId} is unpaid.`;await refreshDialplans();}
+        catch(error){$("#dialplan-status").textContent=error.message;}};
+      card.append(heading,description,price,order);offers.append(card);}
+    if(!catalog.offers.length) offers.textContent='No published offers yet.';
+    const list=$("#dialplan-orders");list.replaceChildren();
+    for(const request of requests.orders){const item=document.createElement('li');item.textContent=`${request.name}: ${request.status} (${new Date(request.created_at).toLocaleDateString()})`;list.append(item);}
+  }catch(error){$("#dialplan-status").textContent=error.message;}
+}
+$("#dialplan-refresh").onclick=refreshDialplans;
+$("#dialplan-admin-create").onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget;const data=Object.fromEntries(new FormData(form));
+  try {await accountRequest('/api/admin/dialplan/offers',{...data,monthlyCents:Number(data.monthlyCents)});
+    form.reset();$("#dialplan-status").textContent='Offer saved.';await refreshDialplans();}
+  catch(error){$("#dialplan-status").textContent=error.message;}
+};
+$("#passkey-add").onclick=async()=>{
+  try {const options=await accountRequest('/api/passkeys/register/options',{});
+    const response=await startRegistration({optionsJSON:options});
+    await accountRequest('/api/passkeys/register/verify',response);
+    $("#passkey-status").textContent='Passkey added.';await refreshPasskeys();}
+  catch(error){$("#passkey-status").textContent=error.message;}
+};
+$("#passkey-login").onclick=async()=>{
+  const email=$("#login").elements.email.value;
+  try {const options=await accountRequest('/api/passkeys/login/options',{email});
+    const response=await startAuthentication({optionsJSON:options});
+    const user=await accountRequest('/api/passkeys/login/verify',{email,response});
+    signedIn(user);history.replaceState(null,'','/#dashboard');pageRoutes.render();showWorkspace('dashboard');}
+  catch(error){$("#account-status").textContent=error.message;}
+};
 $("#login").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1414,7 +1533,10 @@ $("#logout").onclick = async () => {
     $("#login").hidden = false;
     $("#ldap-login").hidden = false;
     $("#logout").hidden = true;
-    for(const id of ["account-login-group","account-signup-group","account-directory-group"]) $("#"+id).hidden=false;
+    for(const id of ["account-login-group","account-signup-group","account-verify-group","account-directory-group"]) $("#"+id).hidden=false;
+    $("#passkey-settings").hidden=true;
+    $("#sip-account-panel").hidden=true;$("#sip-credentials-result").textContent='';
+    $("#dialplan-marketplace").hidden=true;$("#dialplan-offers").replaceChildren();$("#dialplan-orders").replaceChildren();
     $("#account-password-group").hidden=true;
     activeRole=null;resetWorkspace();$(".signin-choices").hidden=false;$("#signin-role-help").textContent="Your assigned role controls which menus appear after sign-in.";
     $(".nav-signin").textContent="Sign in";$(".nav-signin").href="#account";
