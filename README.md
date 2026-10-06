@@ -400,3 +400,28 @@ are created together in MySQL; this is a purchase request, not a live routed
 dialplan, recurring charge or payment confirmation. The server still needs
 switch activation, billing authorization, fraud controls and reconciliation
 before the offer can route calls.
+
+## Carrier provider commissioning and ASTPP-style controls
+
+In **Administration → Carrier providers**, an administrator selects an existing
+tenant trunk, a concurrent call capacity, and a routing intent for Flowroute
+or DIDWW. The server stores the profile in `carrier_provider_profiles`. The
+**Verify inventory API** action checks the provider's private server
+credentials without showing the key in the browser. Credentials remain in
+`/etc/olamide/secrets.env`. **Provision with switch adapter** requires
+`CARRIER_PROVISION_URL` (HTTPS) and `CARRIER_PROVISION_TOKEN`; the adapter
+receives `{tenantId,provider,trunkId,maxConcurrentCalls,routingMode}` with an
+idempotency header. Only a response `{ "status": "active" }` marks the tenant
+profile active. Provider DID search and request endpoints reject providers
+that have not been activated. Changing a profile returns it to draft and
+requires a new adapter acknowledgment. The adapter must enforce trunk
+configuration, capacity and routing on the actual switch; saving a profile
+does not change a running switch.
+
+The existing PBX rate deck, outbound policy preview, DID price rules, tenant
+management, normalized CDR ingestion, wallet transfer ledger, invoices and
+reports provide parts of an ASTPP-style administrative control plane. They
+are not an ASTPP deployment or a carrier-grade charging engine. Live LCR,
+rating, prepaid reservation and cutoff, tax, settlement, reseller accounting,
+fraud detection and reconciliation require authoritative switch events and
+carrier agreements. Do not turn on paid traffic based on preview data.
