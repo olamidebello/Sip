@@ -434,6 +434,16 @@ root.innerHTML = `
       </form>
       <p id="nigeria-status" role="status"></p>
     </section>
+    <section id="carrier-admin"><h3>Carrier provider commissioning</h3>
+      <p>Link a tenant trunk, set capacity, verify private provider credentials, then ask the switch adapter to activate. A provider remains blocked from DID requests until activation is acknowledged.</p>
+      <form id="carrier-profile-form">
+        <label>Provider <select name="provider"><option value="flowroute">Flowroute</option><option value="didww">DIDWW</option></select></label>
+        <label>Tenant trunk <select name="trunkId" required></select></label>
+        <label>Maximum concurrent calls <input name="maxConcurrentCalls" type="number" min="1" max="100000" value="10" required></label>
+        <label>Routing intent <select name="routingMode"><option value="manual">Manual</option><option value="least_cost">Least cost</option><option value="priority">Priority</option></select></label>
+        <button>Save provider profile</button>
+      </form><div id="carrier-profiles"></div><p id="carrier-admin-status" role="status"></p>
+    </section>
     <section id="cdr-admin">
       <h3>Imported call records</h3>
       <p>Verified switch records only. These are unrated and never charge a customer.</p>
@@ -672,7 +682,7 @@ const navigationGroups=[
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Messages"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
-  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
+  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["mobile-admin","App releases"]]},
   {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"]]}
 ];
@@ -1189,6 +1199,7 @@ function signedIn(user) {
     refreshCatalogAdmin().catch((error)=>{$("#admin-status").textContent=error.message;});
     refreshInhouse().catch((error) => { $("#inhouse-status").textContent = error.message; });
     refreshNigeria().catch((error) => { $("#nigeria-status").textContent = error.message; });
+    refreshCarriers().catch(error=>{$("#carrier-admin-status").textContent=error.message;});
     refreshCdr().catch((error) => { $("#cdr-status").textContent = error.message; });
     pbx.refreshAdmin().catch((error) => { $("#pbx-status").textContent = error.message; });
     tenantAdmin.refresh(user).catch((error) => { $("#tenant-status").textContent = error.message; });
@@ -1478,6 +1489,33 @@ async function refreshDialplans(){
     for(const request of requests.orders){const item=document.createElement('li');item.textContent=`${request.name}: ${request.status} (${new Date(request.created_at).toLocaleDateString()})`;list.append(item);}
   }catch(error){$("#dialplan-status").textContent=error.message;}
 }
+async function refreshCarriers(){
+  const [data,trunks]=await Promise.all([apiGet('/api/admin/carriers'),apiGet('/api/pbx/trunks')]);
+  const selection=$("#carrier-profile-form").elements.trunkId;selection.replaceChildren();
+  for(const trunk of trunks.trunks){const option=document.createElement('option');option.value=trunk.id;
+    option.textContent=`${trunk.name} (${trunk.host})`;selection.append(option);}
+  const list=$("#carrier-profiles");list.replaceChildren();
+  for(const profile of data.providers){const card=document.createElement('article');
+    const title=document.createElement('h4');title.textContent=`${profile.provider}: ${profile.status}`;
+    const details=document.createElement('p');details.textContent=`Credentials: ${profile.credentialsConfigured?'configured':'missing'} · capacity: ${profile.max_concurrent_calls??0} · routing: ${profile.routing_mode} · adapter: ${data.adapterConfigured?'configured':'missing'}`;
+    const verify=document.createElement('button');verify.type='button';verify.textContent='Verify inventory API';
+    verify.onclick=async()=>{try{const result=await accountRequest(`/api/admin/carriers/${profile.provider}/verify`,{});
+      $("#carrier-admin-status").textContent=`${result.provider}: credentials valid; ${result.sampleCount} inventory results. No SIP route activated.`;}
+      catch(error){$("#carrier-admin-status").textContent=error.message;}};
+    const activate=document.createElement('button');activate.type='button';activate.textContent='Provision with switch adapter';
+    activate.disabled=!profile.trunk_id||!profile.credentialsConfigured||!data.adapterConfigured;
+    activate.onclick=async()=>{try{const result=await accountRequest(`/api/admin/carriers/${profile.provider}/activate`,{});
+      $("#carrier-admin-status").textContent=`${result.provider}: ${result.status}`;await refreshCarriers();}
+      catch(error){$("#carrier-admin-status").textContent=error.message;await refreshCarriers();}};
+    card.append(title,details,verify,activate);list.append(card);}
+}
+$("#carrier-profile-form").onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget;const data=Object.fromEntries(new FormData(form));
+  try{await accountRequest(`/api/admin/carriers/${data.provider}`,{trunkId:data.trunkId,
+    maxConcurrentCalls:Number(data.maxConcurrentCalls),routingMode:data.routingMode},'PUT');
+    $("#carrier-admin-status").textContent='Provider profile saved as draft.';await refreshCarriers();}
+  catch(error){$("#carrier-admin-status").textContent=error.message;}
+};
 $("#dialplan-refresh").onclick=refreshDialplans;
 $("#dialplan-admin-create").onsubmit=async event=>{
   event.preventDefault();const form=event.currentTarget;const data=Object.fromEntries(new FormData(form));
