@@ -35,7 +35,11 @@ jobs:
           docker build -f deployment/docker/turn.Dockerfile -t olamide-turn-ci .
       - name: API checks
         working-directory: services/api
-        run: npm install --no-audit --no-fund && npm test
+        run: |
+          npm install --no-audit --no-fund
+          MYSQL_URL="$TEST_MYSQL_URL" node migrate.js
+          MYSQL_URL="$TEST_MYSQL_URL" node migrate.js
+          npm test
       - name: Browser checks and build
         working-directory: apps/web
         run: npm install --no-audit --no-fund && npm test && npm run build
