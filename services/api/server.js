@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { handleOnboarding } from './onboarding.js';
 import { handlePasskeys } from './passkeys.js';
 import { handleSipMarketplace } from './sipMarketplace.js';
+import { handleCarrierProviders, carrierActive } from './carrierProviders.js';
 import { createDatabase } from "./db.js";
 import { handleMobileAdmin } from "./mobileAdmin.js";
 import { handlePbx } from "./pbx.js";
@@ -198,6 +199,7 @@ async function handler(req, res) {
       if (!user) return send(res, 401, { error: "Sign in required" });
       if(path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/'))
         return await handleSipMarketplace({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/admin/carriers')) return await handleCarrierProviders({req,res,path,user,pool,send,readJson});
       if (path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales")
         return await handleLocales({req,res,path,user,pool,send,readJson});
       if (path==="/api/search") return await handleSearch({req,res,user,pool,send});
@@ -423,6 +425,7 @@ async function handler(req, res) {
         const provider = new URL(req.url, origin).searchParams.get("provider");
         if (!["flowroute","didww"].includes(provider))
           return send(res, 400, { error: "Select Flowroute or DIDWW" });
+        if(!await carrierActive(pool,user.tenant_id,provider)) return send(res,409,{error:'Carrier provider awaits administrator activation'});
         const rule=await pricingRule(pool,user.tenant_id,provider);
         try {
           const numbers = await availableNumbers(provider);
@@ -442,6 +445,7 @@ async function handler(req, res) {
             !/^\+?[1-9]\d{7,14}$/.test(number) || typeof inventoryId!=="string" || inventoryId.length>128 ||
             typeof skuId!=="undefined" && (typeof skuId!=="string" || skuId.length>128))
           return send(res,400,{error:"Choose a valid inventory number"});
+        if(!await carrierActive(pool,user.tenant_id,provider)) return send(res,409,{error:'Carrier provider awaits administrator activation'});
         let inventory;
         try {inventory=(await availableNumbers(provider)).find(item=>item.number===number && item.inventoryId===inventoryId && (item.skuId||null)===(skuId||null));}
         catch(error) {return send(res,503,{error:error.message});}
