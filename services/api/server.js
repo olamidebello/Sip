@@ -126,18 +126,24 @@ async function handler(req, res) {
       const { name, email, password } = validateRegistration(await readJson(req));
       const { salt, hash } = await hashPassword(password);
       const id = randomUUID();
+      const db = await pool.connect();
       try {
-        await pool.query(
+        await db.query("START TRANSACTION");
+        await db.query(
           "INSERT INTO users (id, tenant_id, display_name, email, password_salt, password_hash) VALUES ($1,$2,$3,$4,$5,$6)",
           [id, defaultTenantId, name, email, salt, hash]
         );
-        await pool.query(
+        await db.query(
           "INSERT INTO user_group_members(user_id,group_id) VALUES($1,'00000000-0000-4000-8000-000000000001')",
           [id]
         );
+        await db.query("COMMIT");
       } catch (error) {
+        await db.query("ROLLBACK");
         if (error.code === "ER_DUP_ENTRY") return send(res, 409, { error: "Account already exists" });
         throw error;
+      } finally {
+        db.release();
       }
       return send(res, 201, { id, name, email });
     }
