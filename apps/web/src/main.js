@@ -54,6 +54,8 @@ root.innerHTML = `
   <section id="account">
     <h2>Welcome to Olamide</h2>
     <p>Account sign-up does not yet provision a SIP number or calling plan.</p>
+    <div class="signin-choices" aria-label="Sign-in destinations"><button id="signin-user" type="button">User sign in</button><button id="signin-admin" type="button">Administrator sign in</button><button id="signin-super" type="button">Super administrator sign in</button></div>
+    <p id="signin-role-help">Your assigned role controls which menus appear after sign-in.</p>
     <form id="signup">
       <label>Name <input name="name" autocomplete="name" minlength="2" maxlength="100" required></label>
       <label>Email <input name="email" type="email" autocomplete="email" required></label>
@@ -619,29 +621,59 @@ root.innerHTML = `
 const $ = (selector) => document.querySelector(selector);
 setupDownloads();
 setupCarrierControl();
-const navigation=[
-  ["account","Account"],["dashboard","Dashboard"],["search-panel","Search"],["support","Support"],["locale-settings","Locale"],["softphone-tools","Dialer"],["geo","Calling area"],
-  ["chat","Messages"],["billing","Billing"],["meetings","Meetings"],
-  ["agent-panel","Call center"],["background-user","Appearance"],
-  ["admin","Administration"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["group-admin","Users & groups"],["tenant-admin","Tenants"],
-  ["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],
-  ["pricing-admin","Pricing"],["pbx-admin","PBX"],["report-admin","Reports"],
-  ["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"],
-  ["ldap-admin","LDAP"],["auth-providers-admin","Authentication"],
-  ["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],
-  ["mobile-admin","App releases"]
+const navigationGroups=[
+  {label:"Workspace",items:[["dashboard","Dashboard"],["search-panel","Search"],["support","Support tickets"]]},
+  {label:"Communications",items:[["softphone-tools","Dialer"],["geo","Calling area"],["chat","Messages"],["meetings","Meetings"],["agent-panel","Call center"]]},
+  {label:"Commerce",items:[["billing","Plans, numbers & billing"]]},
+  {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"]]},
+  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
+  {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["mobile-admin","App releases"]]},
+  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"]]}
 ];
+let activeRole=null;
 function updateNavigation() {
   const nav=$("#app-nav");nav.replaceChildren();
-  for(const [id,label] of navigation) {
-    const section=document.getElementById(id);
-    if(!section || section.closest("[hidden]")) continue;
-    const link=document.createElement("a");link.href=`#${id}`;link.textContent=label;
-    nav.append(link);
+  nav.hidden=!activeRole;
+  if (!activeRole) return;
+  const heading=document.createElement("div");heading.className="menu-heading";
+  const title=document.createElement("strong");title.textContent="Olamide workspace";
+  const role=document.createElement("span");role.className="role-badge";role.textContent=activeRole==="super_admin"?"Super admin":activeRole==="admin"?"Administrator":"User";
+  heading.append(title,role);nav.append(heading);
+  const search=document.createElement("input");search.type="search";search.className="menu-search";search.placeholder="Find a menu…";search.setAttribute("aria-label","Find a menu");nav.append(search);
+  const groups=document.createElement("div");groups.className="menu-groups";nav.append(groups);
+  for(const group of navigationGroups) {
+    if(group.roles&&!group.roles.includes(activeRole)) continue;
+    const items=group.items.filter(([id])=>{const section=document.getElementById(id);return section&&!section.closest("[hidden]");});
+    if(!items.length) continue;
+    const details=document.createElement("details");details.className="menu-group";details.open=group.label==="Workspace";
+    const summary=document.createElement("summary");summary.textContent=group.label;details.append(summary);
+    const links=document.createElement("div");links.className="menu-links";
+    for(const [id,label] of items) {
+      const link=document.createElement("a");link.href=`#${id}`;link.textContent=label;
+      link.onclick=()=>{for(const a of nav.querySelectorAll(".menu-links a")) a.removeAttribute("aria-current");link.setAttribute("aria-current","page");details.open=false;};
+      if(location.hash===`#${id}`) link.setAttribute("aria-current","page");
+      links.append(link);
+    }
+    details.append(links);groups.append(details);
   }
-  nav.hidden=false;
+  const quickMenu=document.createElement("details");quickMenu.className="menu-group locale-menu";
+  const quickTitle=document.createElement("summary");quickTitle.textContent="Language & currency";quickMenu.append(quickTitle);
+  const quick=document.createElement("form");quick.id="quick-locale";quick.className="quick-locale";
+  quick.innerHTML='<label>Language <select name="language" aria-label="Quick language"></select></label><label>Currency <select name="currency" aria-label="Quick currency"></select></label><button type="submit">Save preferences</button><p id="quick-locale-status" role="status"></p>';
+  quickMenu.append(quick);nav.append(quickMenu);
+  search.oninput=()=>{
+    const query=search.value.trim().toLocaleLowerCase();
+    for(const group of groups.children){let count=0;for(const link of group.querySelectorAll("a")){link.hidden=!!query&&!link.textContent.toLocaleLowerCase().includes(query);if(!link.hidden)count++;}group.hidden=count===0;if(query&&count)group.open=true;}
+  };
 }
 updateNavigation();
+for(const [id,label] of [["signin-user","user"],["signin-admin","administrator"],["signin-super","super administrator"]]) {
+  $("#"+id).onclick=()=>{
+    $("#signin-role-help").textContent=`Sign in with your existing account. ${label[0].toUpperCase()+label.slice(1)} menus appear only if that role is assigned to you.`;
+    $("#login").scrollIntoView({behavior:"smooth",block:"center"});
+    $("#login").elements.email.focus({preventScroll:true});
+  };
+}
 const connectForm = $("#connect");
 const dialForm = $("#dial");
 const meetings = setupMeetings();
@@ -990,12 +1022,16 @@ async function loadMessages() {
   }
 }
 function signedIn(user) {
+  activeRole=["admin","super_admin"].includes(user.role)?user.role:"user";
   refreshSoftphoneState(user).catch(error=>{$("#account-status").textContent=error.message;});
   loadGeofencePolicy().catch(error=>{$("#geo-policy").textContent=error.message+". Outgoing calls are blocked.";});
   $("#signup").hidden = true;
   $("#login").hidden = true;
   $("#ldap-login").hidden = true;
   $("#logout").hidden = false;
+  $(".signin-choices").hidden=true;
+  $("#signin-role-help").textContent=`Signed in with ${activeRole==="super_admin"?"super administrator":activeRole==="admin"?"administrator":"user"} access.`;
+  $(".nav-signin").textContent="My workspace";$(".nav-signin").href="#dashboard";
   $("#background-user").hidden = false;
   $("#dashboard").hidden=false;
   $("#search-panel").hidden=false;$("#support").hidden=false;
@@ -1024,6 +1060,7 @@ function signedIn(user) {
   $("#agent-panel").hidden = !user.features?.call_center;
   pbx.refreshSelf(user).catch((error) => { $("#agent-status-result").textContent = error.message; });
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
+  updateNavigation();
   dashboard.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#dashboard-status").textContent=error.message;});
   support.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#support-status").textContent=error.message;});
   localeSettings.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#locale-status").textContent=error.message;});
@@ -1306,6 +1343,8 @@ $("#logout").onclick = async () => {
     $("#login").hidden = false;
     $("#ldap-login").hidden = false;
     $("#logout").hidden = true;
+    activeRole=null;$(".signin-choices").hidden=false;$("#signin-role-help").textContent="Your assigned role controls which menus appear after sign-in.";
+    $(".nav-signin").textContent="Sign in";$(".nav-signin").href="#account";
     $("#password-change").hidden = true;
     $("#background-user").hidden = true;
     $("#dashboard").hidden = true;
