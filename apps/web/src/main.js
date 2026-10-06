@@ -12,6 +12,7 @@ import { setupLdapAdmin } from "./ldapAdmin.js";
 import { setupAuthProviders } from "./authProviders.js";
 import { setupCatalogControl } from "./catalogControl.js";
 import { setupInstall } from "./install.js";
+import { setupDownloads } from "./downloads.js";
 import { contactEmailsFromCsv, contactsToCsv } from "./contactsCsv.js";
 import { setupDashboard } from "./dashboard.js";
 import { setupSupport } from "./support.js";
@@ -20,17 +21,37 @@ import "./style.css";
 
 const root = document.querySelector("#app");
 root.innerHTML = `
-  <header class="brand">
-    <img src="/olamide-icon.svg" alt="Olamide calling logo" width="128" height="128">
-    <h1>Olamide</h1>
+  <header class="brand" id="top">
+    <a class="brand-mark" href="#top" aria-label="Olamide home"><img src="/olamide-icon.svg" alt="" width="48" height="48"><span>Olamide<span class="brand-dot">.</span></span></a>
+    <nav class="public-nav" aria-label="Public navigation"><a href="#experience">Explore</a><a href="#downloads">Downloads</a><a class="nav-signin" href="#account">Sign in</a></nav>
   </header>
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-copy"><p class="eyebrow"><span class="signal-dot"></span> YOUR CALLING SPACE</p>
+      <h1 id="hero-title">Conversations feel better when everything connects.</h1>
+      <p class="hero-lead">A clear place for SIP calling, messages, meetings and account tools. Bring a provisioned SIP account to connect and make calls.</p>
+      <div class="hero-actions"><a class="button-link primary" href="#account">Get started <span aria-hidden="true">↗</span></a><a class="button-link secondary" href="#downloads">Download the app</a></div>
+      <p class="hero-note">Use in your browser, or install a preview build on a supported device.</p>
+    </div>
+    <div class="hero-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="hero-emblem"><img src="/olamide-icon.svg" alt=""></div><div class="art-label art-label-top">Olamide <span>● Connected</span></div><div class="art-label art-label-bottom">One place to connect<span>Calling · Messages · Meetings</span></div></div>
+  </section>
+  <section class="feature-strip" id="experience" aria-label="Olamide features">
+    <article><span class="feature-icon" aria-hidden="true">◉</span><div><h2>Call with clarity</h2><p>Connect a compatible SIP account over secure WebSocket and manage your calls.</p></div></article>
+    <article><span class="feature-icon" aria-hidden="true">✳</span><div><h2>Stay in touch</h2><p>Keep messages, contacts and meetings close to your calling workspace.</p></div></article>
+    <article><span class="feature-icon" aria-hidden="true">▣</span><div><h2>Make it yours</h2><p>Choose your dashboard, appearance and account preferences.</p></div></article>
+  </section>
+  <section class="download-panel" id="downloads" aria-labelledby="download-title">
+    <div class="section-heading"><div><p class="eyebrow">TAKE OLAMIDE WITH YOU</p><h2 id="download-title">Choose how you connect.</h2><p>Preview packages are published with each successful release build.</p></div><a href="https://github.com/olamidebello/Sip/releases" target="_blank" rel="noopener noreferrer">All releases ↗</a></div>
+    <div id="download-options" class="download-grid" aria-live="polite"><p>Checking available downloads…</p></div>
+    <p id="download-status" class="fine-print" role="status"></p>
+    <details class="carrier-details"><summary>Carrier partner integration</summary><p>Carrier-controlled SIM branding and default phone handling require Android carrier privileges and a complete native dialer. This preview does not modify your mobile network name or replace emergency calling.</p><a href="/carrier-partner.md" download="Olamide-carrier-integration.md">Download integration requirements ↗</a></details>
+  </section>
   <nav id="app-nav" aria-label="Application" hidden></nav>
   <section id="install-panel">
     <button id="install-app" type="button" hidden>Install Olamide</button>
     <p id="install-help" role="status"></p>
   </section>
   <section id="account">
-    <strong>Olamide account</strong>
+    <h2>Welcome to Olamide</h2>
     <p>Account sign-up does not yet provision a SIP number or calling plan.</p>
     <form id="signup">
       <label>Name <input name="name" autocomplete="name" minlength="2" maxlength="100" required></label>
@@ -595,6 +616,7 @@ root.innerHTML = `
 `;
 
 const $ = (selector) => document.querySelector(selector);
+setupDownloads();
 const navigation=[
   ["account","Account"],["dashboard","Dashboard"],["search-panel","Search"],["support","Support"],["locale-settings","Locale"],["softphone-tools","Dialer"],["geo","Calling area"],
   ["chat","Messages"],["billing","Billing"],["meetings","Meetings"],
