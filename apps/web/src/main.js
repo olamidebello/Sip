@@ -14,6 +14,7 @@ import { setupCatalogControl } from "./catalogControl.js";
 import { setupInstall } from "./install.js";
 import { setupDownloads } from "./downloads.js";
 import { setupCarrierControl } from "./carrierControl.js";
+import { setupFormGroups } from "./formGroups.js";
 import { contactEmailsFromCsv, contactsToCsv } from "./contactsCsv.js";
 import { setupDashboard } from "./dashboard.js";
 import { setupSupport } from "./support.js";
@@ -622,6 +623,7 @@ root.innerHTML = `
 `;
 
 const $ = (selector) => document.querySelector(selector);
+setupFormGroups();
 setupDownloads();
 setupCarrierControl();
 const navigationGroups=[
@@ -640,6 +642,7 @@ function showWorkspace(target) {
   if(!activeRole) return;
   const requested=document.getElementById(target);
   if(!requested || requested.closest("[hidden]")) return;
+  for(let parent=requested.parentElement;parent;parent=parent.parentElement) if(parent.tagName==="DETAILS") parent.open=true;
   const rootView=workspaceViews.find(id=>{const section=document.getElementById(id);return section&&(section===requested||section.contains(requested));});
   if(!rootView) return;
   activeView=target;
@@ -717,6 +720,7 @@ window.addEventListener("hashchange",()=>{
 });
 for(const [id,label] of [["signin-user","user"],["signin-admin","administrator"],["signin-super","super administrator"]]) {
   $("#"+id).onclick=()=>{
+    $("#account-login-group").open=true;
     $("#signin-role-help").textContent=`Sign in with your existing account. ${label[0].toUpperCase()+label.slice(1)} menus appear only if that role is assigned to you.`;
     $("#login").scrollIntoView({behavior:"smooth",block:"center"});
     $("#login").elements.email.focus({preventScroll:true});
@@ -1078,6 +1082,8 @@ function signedIn(user) {
   $("#login").hidden = true;
   $("#ldap-login").hidden = true;
   $("#logout").hidden = false;
+  for(const id of ["account-login-group","account-signup-group","account-directory-group"]) $("#"+id).hidden=true;
+  $("#account-password-group").hidden=user.authSource==="ldap";
   $(".signin-choices").hidden=true;
   $("#signin-role-help").textContent=`Signed in with ${activeRole==="super_admin"?"super administrator":activeRole==="admin"?"administrator":"user"} access.`;
   $(".nav-signin").textContent="My workspace";$(".nav-signin").href="#dashboard";
@@ -1395,6 +1401,8 @@ $("#logout").onclick = async () => {
     $("#login").hidden = false;
     $("#ldap-login").hidden = false;
     $("#logout").hidden = true;
+    for(const id of ["account-login-group","account-signup-group","account-directory-group"]) $("#"+id).hidden=false;
+    $("#account-password-group").hidden=true;
     activeRole=null;resetWorkspace();$(".signin-choices").hidden=false;$("#signin-role-help").textContent="Your assigned role controls which menus appear after sign-in.";
     $(".nav-signin").textContent="Sign in";$(".nav-signin").href="#account";
     $("#password-change").hidden = true;
