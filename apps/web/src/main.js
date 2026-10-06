@@ -21,7 +21,7 @@ import "./style.css";
 const root = document.querySelector("#app");
 root.innerHTML = `
   <header class="brand">
-    <img src="/olamide-logo.jpg" alt="Olamide" width="1536" height="620">
+    <img src="/olamide-icon.svg" alt="Olamide calling logo" width="128" height="128">
     <h1>Olamide</h1>
   </header>
   <nav id="app-nav" aria-label="Application" hidden></nav>
