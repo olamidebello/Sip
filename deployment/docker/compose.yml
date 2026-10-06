@@ -42,6 +42,8 @@ services:
       SIP_CREDENTIAL_KEY: ${SIP_CREDENTIAL_KEY:-}
       SIP_PROVISION_URL: ${SIP_PROVISION_URL:-}
       SIP_PROVISION_TOKEN: ${SIP_PROVISION_TOKEN:-}
+      CARRIER_PROVISION_URL: ${CARRIER_PROVISION_URL:-}
+      CARRIER_PROVISION_TOKEN: ${CARRIER_PROVISION_TOKEN:-}
     depends_on:
       mysql:
         condition: service_healthy
