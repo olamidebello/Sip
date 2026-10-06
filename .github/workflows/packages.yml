@@ -57,6 +57,11 @@ jobs:
           if-no-files-found: error
   android:
     runs-on: ubuntu-latest
+    env:
+      CARRIER_KEYSTORE_B64: ${{ secrets.CARRIER_KEYSTORE_B64 }}
+      CARRIER_KEY_ALIAS: ${{ secrets.CARRIER_KEY_ALIAS }}
+      CARRIER_KEYSTORE_PASSWORD: ${{ secrets.CARRIER_KEYSTORE_PASSWORD }}
+      CARRIER_KEY_PASSWORD: ${{ secrets.CARRIER_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -67,7 +72,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: android-actions/setup-android@v4
-      - run: npm install --no-audit --no-fund && npx cap add android && npx cap sync android
+      - run: npm install --no-audit --no-fund && npx cap add android && npx cap sync android && bash install-carrier-native.sh
         working-directory: apps/mobile
       - run: ./gradlew assembleDebug
         working-directory: apps/mobile/android
@@ -76,6 +81,25 @@ jobs:
           name: olamide-android-debug-apk
           path: apps/mobile/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+      - name: Build carrier signed APK when operator-approved key is configured
+        if: ${{ env.CARRIER_KEYSTORE_B64 != '' && env.CARRIER_KEY_ALIAS != '' && env.CARRIER_KEYSTORE_PASSWORD != '' && env.CARRIER_KEY_PASSWORD != '' }}
+        working-directory: apps/mobile/android
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$CARRIER_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/olamide-carrier.jks"
+          ./gradlew assembleRelease
+          build_tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
+          "$build_tools/zipalign" -f -p 4 app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/olamide-aligned.apk"
+          mkdir -p carrier-output
+          "$build_tools/apksigner" sign --ks "$RUNNER_TEMP/olamide-carrier.jks" --ks-key-alias "$CARRIER_KEY_ALIAS" --ks-pass env:CARRIER_KEYSTORE_PASSWORD --key-pass env:CARRIER_KEY_PASSWORD --out carrier-output/olamide-carrier-signed.apk "$RUNNER_TEMP/olamide-aligned.apk"
+          "$build_tools/apksigner" verify carrier-output/olamide-carrier-signed.apk
+          rm -f "$RUNNER_TEMP/olamide-carrier.jks" "$RUNNER_TEMP/olamide-aligned.apk"
+      - uses: actions/upload-artifact@v4
+        if: ${{ hashFiles('apps/mobile/android/carrier-output/olamide-carrier-signed.apk') != '' }}
+        with:
+          name: olamide-carrier-signed
+          path: apps/mobile/android/carrier-output/olamide-carrier-signed.apk
   ios-simulator:
     runs-on: macos-latest
     steps:
@@ -113,12 +137,11 @@ jobs:
           else
             release_tag="v0.1.0-preview.${GITHUB_RUN_NUMBER}"
           fi
-          gh release create "$release_tag" \
-            olamide-browser/olamide-browser.zip \
-            olamide-android-debug-apk/*.apk \
-            olamide-desktop-linux/*.AppImage \
-            olamide-desktop-win/*.exe \
-            olamide-desktop-mac/*.dmg \
+          assets=(olamide-browser/olamide-browser.zip olamide-android-debug-apk/*.apk olamide-desktop-linux/*.AppImage olamide-desktop-win/*.exe olamide-desktop-mac/*.dmg)
+          if [[ -f olamide-carrier-signed/olamide-carrier-signed.apk ]]; then
+            assets+=(olamide-carrier-signed/olamide-carrier-signed.apk)
+          fi
+          gh release create "$release_tag" "${assets[@]}" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "Olamide $release_tag" \
