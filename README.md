@@ -1,17 +1,19 @@
 # Olamide SIP
 
-Olamide is a development browser softphone with a Node.js account API and MySQL 8.4 database. The repository has not been deployed to a public server.
+Olamide is a development browser softphone with a Node.js account API and MySQL 8.4 database. See the deployment checks below for the current server state.
 
 ## Generate the MySQL database
 
-Install MySQL 8.4 and Node.js 22 or newer for the browser build. As a MySQL administrator, create the database and apply the complete schema:
+Docker Compose creates the database and runs every implemented migration automatically. For an external MySQL installation, install MySQL 8.4 and Node.js 22 or newer, create the database and grants as an administrator, then run the migration command:
 
 ```sh
 mysql -u root -p < services/api/create-database.sql
-mysql -u root -p olamide < services/api/schema.sql
+cd services/api
+npm install
+MYSQL_URL='mysql://USER:PASSWORD@127.0.0.1:3306/olamide' node migrate.js
 ```
 
-`create-database.sql` creates the `olamide` database using `utf8mb4`. `schema.sql` defines the initial account tables. The API then applies the idempotent tenant migration, `pbx-schema.sql`, and `cdr-schema.sql` on startup. Create a dedicated MySQL application user and grant access to the `olamide` database; a commented grant example is in `create-database.sql`. Use a strong secret and keep the MySQL server time zone at UTC.
+`create-database.sql` creates the `olamide` database using `utf8mb4`. The migration command applies all implemented schema modules. Create a dedicated MySQL application user with the privileges shown in `create-database.sql` and keep the MySQL server time zone at UTC.
 
 Set the application connection URL only on the API server. URL-encode reserved characters in the password:
 
@@ -22,7 +24,7 @@ MYSQL_URL='mysql://USER:PASSWORD@127.0.0.1:3306/olamide' \
 PUBLIC_ORIGIN='http://127.0.0.1:5173' npm start
 ```
 
-The API reapplies the idempotent base tables, tenant migration, `pbx-schema.sql`, `cdr-schema.sql`, `dids-schema.sql`, and `nigeria-schema.sql` on startup. On a remote MySQL connection, configure `MYSQL_SSL_CA` with the path to a trusted CA certificate. In production, run schema changes through a controlled migration process and remove the application's DDL privileges. Back up the database regularly.
+The API reapplies idempotent migrations on startup. On a remote MySQL connection, configure `MYSQL_SSL_CA` with the path to a trusted CA certificate. This deployment uses the same DDL-capable application credential for its migration job; keep it private and back up the database regularly.
 
 This is a **new MySQL schema**. It does not import records from an earlier PostgreSQL database. If you have a populated PostgreSQL deployment, export, transform, and verify those records separately before switching traffic.
 
