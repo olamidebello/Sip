@@ -9,6 +9,7 @@
     "test": "node --test src/*.test.js"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "14.0.0",
     "sip.js": "0.21.2"
   },
   "devDependencies": {
