@@ -308,3 +308,20 @@ To regenerate packages, use the workflow's **Run workflow** button or push packa
 ## Integration work required for a live PBX or ASTPP-class service
 
 Choose a licensed and supported switch (for example Asterisk/FreeSWITCH with an SBC and a suitable provisioning layer) and implement tenant-isolated provisioning for PJSIP credentials, TLS/WSS, dialplan, queue engine, voicemail, inbound/outbound carrier routing, emergency calling policy, media/RTP, and CDR ingestion. Require reconciliation and idempotency between the Olamide database and the switch. Add per-tenant carrier credentials, explicit route activation, number ownership checks, fraud limits, call recording consent and storage policy, and monitoring before enabling trunk traffic. For ASTPP-like charging, add authoritative CDRs, prefix effective dates, rounding rules, taxes, prepaid credit reservation, low-balance interruption, dispute adjustments, and audited settlement. For 3CX-like call center operation, add live queue distribution, presence tied to registration and calls, SLA measurement, callbacks, recording, reports, and supervisor controls. The current queue and LCR endpoints are safe previews for that implementation, not an operational substitute.
+# Form pages and account registration
+
+Forms have direct browser routes under `/pages/<form-id>`. For example,
+`/pages/signup`, `/pages/login`, `/pages/ldap-login` and `/pages/support-create`.
+The application navigation lists forms beneath their workspace section. Browser
+back and forward navigation and direct reloads use the same route; Caddy serves
+the web application for these paths.
+
+Registration submits to `POST /api/register`. The API validates and normalizes
+the account, hashes its password with scrypt, and inserts the user and default
+group membership in a single MySQL transaction. Sign-in uses `POST /api/login`
+and an HttpOnly session cookie; directory sign-in uses `POST /api/login/ldap`.
+Registration creates an application account only. Carrier onboarding still
+requires verified identity, carrier authorization, number assignment, SIP
+credential provisioning, and operational fraud controls before calling access
+can be enabled. Do not treat a newly created account as a provisioned carrier
+subscriber.
