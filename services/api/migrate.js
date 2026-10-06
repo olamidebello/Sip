@@ -13,6 +13,8 @@ import { migrateWallet } from './wallet.js';
 import { migrateDashboard } from './dashboard.js';
 import { migrateSupport } from './support.js';
 import { migrateLocales } from './locales.js';
+import { migrateOnboarding } from './onboarding.js';
+import { migrateSipMarketplace } from './sipMarketplace.js';
 
 const sql = filename => fs.readFile(new URL(filename, import.meta.url), 'utf8');
 
@@ -33,6 +35,8 @@ export async function migrate(pool) {
       ['core', () => pool.initialize(awaitSql.core)],
       ['tenancy', () => migrateTenancy(pool)],
       ['access', () => migrateAccess(pool)],
+      ['onboarding', () => migrateOnboarding(pool)],
+      ['sip_marketplace', () => migrateSipMarketplace(pool)],
       ['pbx', () => pool.initialize(awaitSql.pbx)],
       ['cdr', () => pool.initialize(awaitSql.cdr)],
       ['dids', () => pool.initialize(awaitSql.dids)],
