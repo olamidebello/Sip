@@ -57,11 +57,6 @@ jobs:
           if-no-files-found: error
   android:
     runs-on: ubuntu-latest
-    env:
-      CARRIER_KEYSTORE_B64: ${{ secrets.CARRIER_KEYSTORE_B64 }}
-      CARRIER_KEY_ALIAS: ${{ secrets.CARRIER_KEY_ALIAS }}
-      CARRIER_KEYSTORE_PASSWORD: ${{ secrets.CARRIER_KEYSTORE_PASSWORD }}
-      CARRIER_KEY_PASSWORD: ${{ secrets.CARRIER_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -81,9 +76,25 @@ jobs:
           name: olamide-android-debug-apk
           path: apps/mobile/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+      - name: Check carrier signing configuration
+        id: carrier_secrets
+        env:
+          CARRIER_KEYSTORE_B64: ${{ secrets.CARRIER_KEYSTORE_B64 }}
+          CARRIER_KEY_ALIAS: ${{ secrets.CARRIER_KEY_ALIAS }}
+          CARRIER_KEYSTORE_PASSWORD: ${{ secrets.CARRIER_KEYSTORE_PASSWORD }}
+          CARRIER_KEY_PASSWORD: ${{ secrets.CARRIER_KEY_PASSWORD }}
+        run: |
+          if [[ -n "$CARRIER_KEYSTORE_B64" && -n "$CARRIER_KEY_ALIAS" && -n "$CARRIER_KEYSTORE_PASSWORD" && -n "$CARRIER_KEY_PASSWORD" ]]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          fi
       - name: Build carrier signed APK when operator-approved key is configured
-        if: ${{ env.CARRIER_KEYSTORE_B64 != '' && env.CARRIER_KEY_ALIAS != '' && env.CARRIER_KEYSTORE_PASSWORD != '' && env.CARRIER_KEY_PASSWORD != '' }}
+        if: ${{ steps.carrier_secrets.outputs.ready == 'true' }}
         working-directory: apps/mobile/android
+        env:
+          CARRIER_KEYSTORE_B64: ${{ secrets.CARRIER_KEYSTORE_B64 }}
+          CARRIER_KEY_ALIAS: ${{ secrets.CARRIER_KEY_ALIAS }}
+          CARRIER_KEYSTORE_PASSWORD: ${{ secrets.CARRIER_KEYSTORE_PASSWORD }}
+          CARRIER_KEY_PASSWORD: ${{ secrets.CARRIER_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           umask 077
