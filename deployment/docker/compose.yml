@@ -16,6 +16,7 @@ services:
       retries: 30
     networks: [private]
   api:
+    image: olamide-api:local
     build:
       context: ../..
       dockerfile: deployment/docker/api.Dockerfile
@@ -35,6 +36,18 @@ services:
       DIDWW_ACCOUNT_CURRENCY: ${DIDWW_ACCOUNT_CURRENCY:-}
       CDR_INGEST_KEYS_JSON: ${CDR_INGEST_KEYS_JSON:-}
       LDAP_TENANTS_JSON: ${LDAP_TENANTS_JSON:-}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks: [private]
+  migrate:
+    image: olamide-api:local
+    command: ["node", "migrate.js"]
+    restart: "no"
+    environment:
+      MYSQL_URL: ${MYSQL_URL:?set in secrets.env}
     depends_on:
       mysql:
         condition: service_healthy
