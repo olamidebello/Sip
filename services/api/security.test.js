@@ -4,7 +4,8 @@ import { validateRegistration, hashPassword, verifyPassword, createSessionToken 
 
 test("normalizes email and rejects weak inputs", () => {
   assert.equal(validateRegistration({
-    name: " Olamide ", email: "USER@Example.com ", password: "a secure password"
+    name: " Olamide ", email: "USER@Example.com ", password: "a secure password",
+    phone:'+2348012345678',address1:'123 Main St',city:'Lagos',region:'Lagos',postalCode:'100001',country:'NG'
   }).email, "user@example.com");
   assert.throws(() => validateRegistration({
     name: "O", email: "invalid", password: "short"
