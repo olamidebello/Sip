@@ -418,6 +418,12 @@ requires a new adapter acknowledgment. The adapter must enforce trunk
 configuration, capacity and routing on the actual switch; saving a profile
 does not change a running switch.
 
+**Administration → Charging operations** shows tenant counts for imported
+unrated CDRs, enabled preview rates, unpaid invoices, pending dial plan
+requests, active carrier profiles, and USD wallet liabilities. It links to
+the underlying administration screens. Amounts from other currencies are
+excluded from the USD totals.
+
 The existing PBX rate deck, outbound policy preview, DID price rules, tenant
 management, normalized CDR ingestion, wallet transfer ledger, invoices and
 reports provide parts of an ASTPP-style administrative control plane. They
