@@ -45,6 +45,7 @@ export function setupFormGroups() {
   const signup=wrapElements(account,"account-signup-group","Create an account",["#signup"]);
   if(login&&signup) account.insertBefore(login,signup);
   wrapElements(account,"account-directory-group","Directory sign in",["#ldap-login"]);
+  wrapElements(account,"account-verify-group","Verify email",["#signup-verify"]);
   const password=wrapElements(account,"account-password-group","Change password",["#password-change"]);
   if(password) password.hidden=true;
 
