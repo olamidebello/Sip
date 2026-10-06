@@ -325,3 +325,33 @@ requires verified identity, carrier authorization, number assignment, SIP
 credential provisioning, and operational fraud controls before calling access
 can be enabled. Do not treat a newly created account as a provisioned carrier
 subscriber.
+
+## Automatic MySQL creation and migrations
+
+On a fresh Docker volume, the MySQL container creates the database and
+application account from `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD` and
+`MYSQL_ROOT_PASSWORD` in the private deployment environment file. The
+`migrate` container then creates and updates tables for accounts, tenants,
+permissions, PBX, CDRs, DIDs, Nigeria interconnect records, billing, wallet,
+support and the other implemented API modules. The API starts only after this
+job succeeds, and also reruns the idempotent migrations at startup for local
+development. A MySQL advisory lock serializes migration attempts. Applied
+components are recorded in `schema_components`.
+
+For a fresh server, run the documented `deployment/install-all.sh` command.
+For a normal update, run `bash /opt/olamide/repo/deployment/update.sh`; it backs
+up MySQL before updating and lets Compose execute the migration job. To run
+the job manually from `/opt/olamide/repo/deployment/docker`:
+
+```bash
+docker compose run --rm migrate
+docker compose exec -T mysql sh -c 'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "SELECT component,applied_at FROM schema_components ORDER BY component"'
+```
+
+Do not delete the `mysql_data` volume during updates. MySQL's initial database
+and user creation runs only for a new data directory. If a preexisting external
+MySQL server lacks the configured database or grants, create them with
+`services/api/create-database.sql` and an administrator credential first.
+These migrations create data structures for implemented software features;
+external carrier, clearinghouse and payment services still need credentials,
+agreements and provisioning.
