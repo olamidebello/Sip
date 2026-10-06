@@ -5,6 +5,7 @@ import { handleOnboarding } from './onboarding.js';
 import { handlePasskeys } from './passkeys.js';
 import { handleSipMarketplace } from './sipMarketplace.js';
 import { handleCarrierProviders, carrierActive } from './carrierProviders.js';
+import { handleCharging } from './charging.js';
 import { createDatabase } from "./db.js";
 import { handleMobileAdmin } from "./mobileAdmin.js";
 import { handlePbx } from "./pbx.js";
@@ -200,6 +201,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/'))
         return await handleSipMarketplace({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/carriers')) return await handleCarrierProviders({req,res,path,user,pool,send,readJson});
+      if(path==='/api/admin/charging/overview') return await handleCharging({req,res,user,pool,send});
       if (path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales")
         return await handleLocales({req,res,path,user,pool,send,readJson});
       if (path==="/api/search") return await handleSearch({req,res,user,pool,send});
