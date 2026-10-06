@@ -9,6 +9,8 @@ install -d -m 0700 /etc/olamide
 if [[ ! -e /etc/olamide/secrets.env ]]; then
   app_password=$(openssl rand -hex 32)
   root_password=$(openssl rand -hex 32)
+  otp_secret=$(openssl rand -hex 32)
+  sip_key=$(openssl rand -hex 32)
   umask 077
   cat > /etc/olamide/secrets.env <<ENV
 DOMAIN=$DOMAIN
@@ -17,6 +19,8 @@ MYSQL_USER=olamide_app
 MYSQL_PASSWORD=$app_password
 MYSQL_ROOT_PASSWORD=$root_password
 MYSQL_URL=mysql://olamide_app:$app_password@mysql:3306/olamide
+OTP_HMAC_SECRET=$otp_secret
+SIP_CREDENTIAL_KEY=$sip_key
 MEETING_ICE_SERVERS_JSON=[]
 ENV
   chmod 0600 /etc/olamide/secrets.env
