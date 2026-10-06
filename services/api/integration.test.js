@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import http from 'node:http';
 import { once } from "node:events";
 import WebSocket from "ws";
 import { createHmac } from "node:crypto";
@@ -15,11 +16,21 @@ test("registered users can create and join a room; host controls it", {
   const port = 18080 + Math.floor(Math.random() * 1000);
   const origin = "http://127.0.0.1:5173";
   const base = `http://127.0.0.1:${port}`;
+  const codes=new Map();
+  const mail=http.createServer(async(req,res)=>{
+    let body='';for await(const chunk of req) body+=chunk;
+    const message=JSON.parse(body);codes.set(message.to[0],/\b\d{6}\b/.exec(message.text)?.[0]);
+    res.writeHead(200,{'Content-Type':'application/json'});res.end('{"id":"test-email"}');
+  });
+  mail.listen(0,'127.0.0.1');await once(mail,'listening');
+  t.after(()=>mail.close());
   const server = spawn(process.execPath, ["server.js"], {
     cwd: new URL(".", import.meta.url).pathname,
     env: { ...process.env, MYSQL_URL: process.env.TEST_MYSQL_URL,
       PUBLIC_ORIGIN: origin, API_RATE_LIMIT:"100", LISTEN_ADDR: "127.0.0.1", PORT: String(port),
-      CDR_INGEST_KEYS_JSON: JSON.stringify({[cdrTenant]:cdrSecret}) },
+      CDR_INGEST_KEYS_JSON: JSON.stringify({[cdrTenant]:cdrSecret}),
+      RESEND_API_KEY:'test-key',RESEND_FROM:'test@example.com',OTP_HMAC_SECRET:'test-only-secret-'.repeat(4),
+      SIP_CREDENTIAL_KEY:'ab'.repeat(32),RESEND_API_URL:`http://127.0.0.1:${mail.address().port}/emails` },
     stdio: ["ignore","pipe","pipe"]
   });
   t.after(() => server.kill());
@@ -44,8 +55,11 @@ test("registered users can create and join a room; host controls it", {
   const unique = Date.now().toString(36) + Math.random().toString(36).slice(2);
   const password = "meeting-test-password-123";
   for (const name of ["host","guest"]) {
+    const email=name+unique+'@example.com';
     assert.equal((await post("/api/register",
-      { name, email: name + unique + "@example.com", password })).status, 201);
+      { name,email,password,phone:'+2348012345678',address1:'123 Main St',address2:'',city:'Lagos',region:'Lagos',postalCode:'100001',country:'NG' })).status, 201);
+    assert.equal((await post('/api/login',{email,password})).status,401);
+    assert.equal((await post('/api/register/verify',{email,code:codes.get(email)})).status,200);
   }
   const hostLogin = await post("/api/login", { email:"host" + unique + "@example.com", password });
   const guestLogin = await post("/api/login", { email:"guest" + unique + "@example.com", password });
@@ -77,6 +91,8 @@ test("registered users can create and join a room; host controls it", {
   assert.equal(hostMessages.find((m) => m.type === "chat")?.text, "hello");
   const db = createDatabase(process.env.TEST_MYSQL_URL);
   t.after(() => db.end());
+  const sip=await db.query('SELECT status FROM sip_accounts WHERE user_id=$1',[hostLogin.body.id]);
+  assert.equal(sip.rows[0].status,'awaiting_switch');
   const timezone = await db.query("SELECT @@session.time_zone AS timezone");
   assert.equal(timezone.rows[0].timezone, "+00:00");
   await db.query("UPDATE users SET role='admin' WHERE id=$1", [hostLogin.body.id]);
