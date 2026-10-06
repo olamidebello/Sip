@@ -444,6 +444,13 @@ root.innerHTML = `
         <button>Save provider profile</button>
       </form><div id="carrier-profiles"></div><p id="carrier-admin-status" role="status"></p>
     </section>
+    <section id="charging-admin"><h3>Charging operations</h3>
+      <p>Tenant billing and rate inventory. Live call rating, prepaid cutoff and carrier settlement require authoritative switch integration.</p>
+      <button id="charging-refresh" type="button">Refresh charging overview</button>
+      <div id="charging-tiles" class="dashboard-tiles"></div>
+      <nav class="auth-pages" aria-label="Charging administration"><a href="#pbx-admin">Rate deck and routing</a><a href="#cdr-admin">Call records</a><a href="#pricing-admin">DID pricing</a><a href="#report-admin">Reports</a><a href="#carrier-admin">Carriers</a></nav>
+      <p id="charging-status" role="status"></p>
+    </section>
     <section id="cdr-admin">
       <h3>Imported call records</h3>
       <p>Verified switch records only. These are unrated and never charge a customer.</p>
@@ -682,7 +689,7 @@ const navigationGroups=[
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Messages"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
-  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
+  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["charging-admin","Charging operations"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["mobile-admin","App releases"]]},
   {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"]]}
 ];
@@ -1200,6 +1207,7 @@ function signedIn(user) {
     refreshInhouse().catch((error) => { $("#inhouse-status").textContent = error.message; });
     refreshNigeria().catch((error) => { $("#nigeria-status").textContent = error.message; });
     refreshCarriers().catch(error=>{$("#carrier-admin-status").textContent=error.message;});
+    refreshCharging().catch(error=>{$("#charging-status").textContent=error.message;});
     refreshCdr().catch((error) => { $("#cdr-status").textContent = error.message; });
     pbx.refreshAdmin().catch((error) => { $("#pbx-status").textContent = error.message; });
     tenantAdmin.refresh(user).catch((error) => { $("#tenant-status").textContent = error.message; });
@@ -1516,6 +1524,19 @@ $("#carrier-profile-form").onsubmit=async event=>{
     $("#carrier-admin-status").textContent='Provider profile saved as draft.';await refreshCarriers();}
   catch(error){$("#carrier-admin-status").textContent=error.message;}
 };
+async function refreshCharging(){
+  const summary=await apiGet('/api/admin/charging/overview');
+  const tiles=$("#charging-tiles");tiles.replaceChildren();
+  for(const [label,value] of [
+    ['Imported CDRs (unrated)',summary.cdrCount],['Enabled preview rates',summary.rateCount],
+    ['Unpaid invoices',summary.unpaidInvoices],['Unpaid amount (USD cents)',summary.unpaidCents],
+    ['Pending dial plan requests',summary.pendingDialplans],['Active carrier profiles',summary.activeCarriers],
+    ['Wallet liabilities (USD cents)',summary.walletLiabilityCents]
+  ]){const card=document.createElement('article'),heading=document.createElement('h4'),number=document.createElement('strong');
+    heading.textContent=label;number.textContent=String(value);card.append(heading,number);tiles.append(card);}
+  $("#charging-status").textContent=summary.note;
+}
+$("#charging-refresh").onclick=()=>refreshCharging().catch(error=>{$("#charging-status").textContent=error.message;});
 $("#dialplan-refresh").onclick=refreshDialplans;
 $("#dialplan-admin-create").onsubmit=async event=>{
   event.preventDefault();const form=event.currentTarget;const data=Object.fromEntries(new FormData(form));
