@@ -601,3 +601,7 @@ Named dashboard views and up to eight quick links are scoped to a tenant or user
 The workspace includes scheduled and parked tasks and events with tenant-limited sharing and change history. Administrators can create scheduled in-app announcement campaigns and process selected campaigns in batches. Super administrators can announce across tenants. Users acknowledge messages in the Announcements inbox. The mobile release console also supports atomic batch approval, reopening, and archiving of internal release records; it does not build binaries or submit to app stores.
 
 Local account passkey requirements can be set at tenant, group, and user levels. Required users enroll and sign in with a user-verified WebAuthn credential. LDAP policy stays with the directory provider. See `docs/operations-manual.md` for the operating flow.
+
+## Copyright
+
+Copyright © 2026 Olamide Olatayo Bello. All rights reserved. The original Sip application code and documentation are not offered under an open-source license in this repository. Third-party packages, fonts, images, and other components retain their own licenses; review their notices before redistribution. See [COPYRIGHT.md](COPYRIGHT.md).
