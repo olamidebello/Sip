@@ -42,8 +42,12 @@ export async function handlePbx({req,res,path,user,pool,send,readJson}) {
   }
   if (!admin) return send(res,403,{error:"Administrator required"});
   if (path === "/api/pbx/overview" && req.method === "GET") {
-    const result = await pool.query("SELECT (SELECT COUNT(*) FROM pbx_destinations WHERE tenant_id=$1 AND kind='extension') AS extensions,(SELECT COUNT(*) FROM pbx_destinations WHERE tenant_id=$2 AND kind='queue') AS queues,(SELECT COUNT(*) FROM pbx_inbound_routes WHERE tenant_id=$3) AS inbound_routes,(SELECT COUNT(*) FROM pbx_trunks WHERE tenant_id=$4) AS trunks",[tenant,tenant,tenant,tenant]);
-    return send(res,200,{...result.rows[0],switchConnected:false,note:"Configuration preview only. No SIP switch, media server, call routing or charging is connected."});
+    const [result,switchState] = await Promise.all([
+      pool.query("SELECT (SELECT COUNT(*) FROM pbx_destinations WHERE tenant_id=$1 AND kind='extension') AS extensions,(SELECT COUNT(*) FROM pbx_destinations WHERE tenant_id=$2 AND kind='queue') AS queues,(SELECT COUNT(*) FROM pbx_inbound_routes WHERE tenant_id=$3) AS inbound_routes,(SELECT COUNT(*) FROM pbx_trunks WHERE tenant_id=$4) AS trunks",[tenant,tenant,tenant,tenant]),
+      pool.query("SELECT enabled FROM switch_tenants WHERE tenant_id=$1",[tenant])
+    ]);
+    return send(res,200,{...result.rows[0],switchConfigured:!!switchState.rows[0]?.enabled,
+      switchConnected:false,note:"FreeSWITCH lookups may be enabled, but this API does not verify switch runtime or enforce charging. Queue and public DID routes remain planning records."});
   }
   if (path === "/api/pbx/extensions" && req.method === "GET") {
     const found = await pool.query("SELECT d.id,d.number,d.name,d.enabled,e.user_id,e.voicemail_enabled,e.forward_to FROM pbx_destinations d JOIN pbx_extensions e ON e.destination_id=d.id WHERE d.tenant_id=$1 ORDER BY d.number",[tenant]);
