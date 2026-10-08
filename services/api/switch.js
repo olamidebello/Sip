@@ -2,6 +2,7 @@ import {randomBytes,timingSafeEqual,createDecipheriv,createCipheriv} from 'node:
 import {isAdmin} from './tenancy.js';
 import {selectQuote} from './operatorControl.js';
 import {evaluateOutboundPolicy} from './pbx.js';
+import {syncKamailioCredential} from './kamailio.js';
 
 const domainPattern=/^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$/i;
 const gatewayPattern=/^[a-z][a-z0-9_-]{1,63}$/;
@@ -114,11 +115,14 @@ export async function handleSwitchAdmin({req,res,path,user,pool,send,readJson}){
     if(!key||!process.env.FREESWITCH_XML_PASSWORD)return send(res,409,{error:'Switch credentials unavailable'});
     const cfg=await pool.query('SELECT domain FROM switch_tenants WHERE tenant_id=$1 AND enabled=TRUE',[tenant]);
     if(!cfg.rowCount)return send(res,409,{error:'Enable tenant switch first'});
-    const found=await pool.query("SELECT id,domain,secret_cipher,status FROM sip_accounts WHERE user_id=$1 AND tenant_id=$2",[b.userId,tenant]);
+    const found=await pool.query("SELECT id,username,domain,secret_cipher,status FROM sip_accounts WHERE user_id=$1 AND tenant_id=$2",[b.userId,tenant]);
     if(!found.rowCount||found.rows[0].domain!==cfg.rows[0].domain)return send(res,409,{error:'SIP account domain does not match switch'});
-    const generated=found.rows[0].secret_cipher?null:encrypt(randomBytes(32).toString('base64url'),key);
+    const password=found.rows[0].secret_cipher?decrypt(found.rows[0].secret_cipher,key):randomBytes(32).toString('base64url');
+    const generated=found.rows[0].secret_cipher?null:encrypt(password,key);
     await pool.query("UPDATE sip_accounts SET status='active',secret_cipher=COALESCE(secret_cipher,$3) WHERE id=$1 AND tenant_id=$2",
       [found.rows[0].id,tenant,generated]);
+    await syncKamailioCredential(pool,{accountId:found.rows[0].id,username:found.rows[0].username,
+      domain:found.rows[0].domain,password});
     return send(res,200,{userId:b.userId,status:'active'});
   }
   return send(res,404,{error:'Switch route unavailable'});
