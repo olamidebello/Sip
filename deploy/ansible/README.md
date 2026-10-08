@@ -52,3 +52,35 @@ If `coturn_enabled: true`, the role provisions coturn with an HMAC shared secret
 ## Recovery
 
 Disable the tenant switch lookup in the GUI to stop new directory and dialplan results. Disable a gateway mapping to stop new outbound selections. Existing calls are not disconnected. The role makes no irreversible database changes beyond the API's idempotent migration. Back up the switch configuration and MySQL before rollout.
+
+## Fleet operations from the super administrator dashboard
+
+`deployment/bootstrap.sh` installs the application and switch, then enables the private
+`olamide-fleet-runner.timer` on a Linux controller with active systemd. The Windows
+`deployment/install-class5.bat` starts the same bootstrap through WSL; a WSL instance
+without systemd requires a persistent Linux controller for scheduled jobs.
+
+The controller keeps `deployment/secrets.env`, encrypted
+`deploy/ansible/group_vars/switch_nodes/vault.yml`, its Ansible Vault password in
+`~/.config/olamide-runner/vault-password`, and SSH keys. These must not be placed
+in the web UI or committed. The timer runs once a minute. Inspect failures with
+`journalctl -u olamide-fleet-runner.service`; manually inspect the next pass with
+`python3 deploy/ansible/runner.py --vault-password-file ~/.config/olamide-runner/vault-password`.
+
+Add a switch in **Server and network operations** using a reviewed IPv4 address,
+SSH user and port. Before queuing an installation, establish the host key in the
+controller's `known_hosts`, verify Debian 12, SSH key access and passwordless sudo,
+and prepare network firewall rules. The GUI queues only health, install and upgrade
+jobs, with a health or upgrade interval of at least 5 or 60 minutes respectively.
+Jobs are leased and retried at most three times; Ansible provisions one node at a
+time. Server inventory, jobs, checks, schedules, events and report thresholds are
+stored in MySQL. The UI shows configured capacity, not tested call capacity.
+
+The generated initial inventory uses Caddy's certificate volume on the application
+host. For a separate switch, configure `freeswitch_wss_certificate_source:
+controller` and `freeswitch_wss_certificate`/`freeswitch_wss_key` in the private
+inventory with a trusted certificate for the SIP domain before installing. Its
+renewal needs an operator managed certificate deployment process. The API does not
+accept arbitrary cron expressions, shell commands, firewall changes or credentials
+from the browser. Application nodes can be registered for inventory but the
+existing Compose capacity controller handles app replica requests on one host.
