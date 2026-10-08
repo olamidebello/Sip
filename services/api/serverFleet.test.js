@@ -18,7 +18,7 @@ test('runner identity requires full secret',()=>{
 test('fleet rejects non-super-admin before database access',async()=>{
   let result;
   await handleServerFleetAdmin({req:{method:'GET'},path:'/api/admin/servers',user:{role:'admin'},
-    pool:null,send:(_res,code,body)=>{result={code,body};}});
+    pool:{query:async()=>({rows:[]})},send:(_res,code,body)=>{result={code,body};}});
   assert.equal(result.code,403);
   let runnerResult;
   await handleServerFleetRunner({req:{headers:{authorization:'Bearer bad'}},path:'/api/integrations/deployment/nodes',
