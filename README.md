@@ -431,3 +431,45 @@ are not an ASTPP deployment or a carrier-grade charging engine. Live LCR,
 rating, prepaid reservation and cutoff, tax, settlement, reseller accounting,
 fraud detection and reconciliation require authoritative switch events and
 carrier agreements. Do not turn on paid traffic based on preview data.
+
+### Flowroute messaging callbacks and external SMS
+
+Olamide accepts four Flowroute account callback types at private, tokenized HTTPS URLs. After a validated update, sign in as the administrator for the carrier tenant and open **Administration → Messaging webhooks** to copy the four full URLs. In Flowroute Manage → Messaging Webhooks, paste the corresponding URL into **SMS**, **MMS**, **SMS DLR**, and **MMS DLR**, enable each and save. The public URL shapes are:
+
+| Flowroute field | Olamide URL shape |
+| --- | --- |
+| SMS | `https://sip.dobhrap.com/api/webhooks/flowroute/<PRIVATE_TOKEN>/sms` |
+| MMS | `https://sip.dobhrap.com/api/webhooks/flowroute/<PRIVATE_TOKEN>/mms` |
+| SMS DLR | `https://sip.dobhrap.com/api/webhooks/flowroute/<PRIVATE_TOKEN>/sms-dlr` |
+| MMS DLR | `https://sip.dobhrap.com/api/webhooks/flowroute/<PRIVATE_TOKEN>/mms-dlr` |
+
+The private token is generated into `/etc/olamide/secrets.env` on bootstrap or first validated update and copied to the Compose environment. Do not paste it into tickets or public repositories. For a manual install, use `openssl rand -hex 32` as `FLOWROUTE_WEBHOOK_TOKEN` and restart the API. An administrator with access to the carrier tenant can see and copy the complete URLs on the Messaging webhooks page. The callbacks require this token, accept Flowroute JSON API content, store events idempotently by provider record and receipt level, and show recent events to carrier tenant administrators. MMS media metadata is retained without the temporary signed download URLs; attachment downloads are not implemented. If you rotate the token, update all Flowroute callback URLs and restart the API.
+
+For external text messaging, enter Flowroute API access and secret keys privately as `FLOWROUTE_ACCESS_KEY` and `FLOWROUTE_SECRET_KEY` in `/etc/olamide/secrets.env`, then rerun bootstrap or synchronize the private Compose environment and restart. In **Administration → Messaging webhooks**, confirm that a phone number belongs to this Flowroute account and is SMS enabled; assign its E.164 number to an active tenant user, set a daily send limit, and enable it. The user opens **Communications → Text messages**, chooses the assigned sender, and enters an external E.164 mobile number and SMS text. Incoming SMS and MMS callbacks for an assigned number appear in that user's inbox; outgoing SMS shows carrier acceptance or an unknown state if the provider response could not be confirmed. Delivery receipts are recorded in the administrator event log. Quota limits guard sends, but carrier usage charges are billed by Flowroute and no prepaid SMS wallet debit or settlement is implemented. A daily quota of zero blocks sending. Carrier messaging must be provisioned and funded with Flowroute before use. The existing **Account messages** page is separate server-based chat between Olamide users.
+
+These controls cover number assignment, SMS inbox/outbox, callback monitoring, provider setup and tenant scoped administration. Other ASTPP billing, switch, reseller and carrier features require their own authoritative integrations and are not implied by these screens.
+
+### Bootstrap the `olamidebello` super administrator
+
+The application supports a local `olamidebello` username with super administrator privileges and a mandatory first login password change. This account is **not** created by a Git pull alone. After migrations and the API container are running, execute the following on the server console. The prompt reads the requested temporary password without printing it or adding it to shell history:
+
+```bash
+cd /opt/olamide/repo/deployment/docker
+read -rsp 'Temporary super admin password: ' OLAMIDE_TEMP_PASSWORD; printf '\n'
+printf '%s\n' "$OLAMIDE_TEMP_PASSWORD" | docker compose exec -T api node bootstrap-super-admin.js olamidebello
+unset OLAMIDE_TEMP_PASSWORD
+```
+
+Enter the temporary value supplied during setup (the requested value is ten digits). Sign in using username `olamidebello`, then immediately choose a new password of at least 12 characters in **Account → Change password**. All privileged API routes remain blocked until that change succeeds. The account has an internal placeholder email address (`olamidebello@local.invalid`); set a verified real email through a separate account profile process before expecting mail delivery. The bootstrap command refuses an existing account and never resets its password. Super administrators can switch tenants and manage tenant administrators; tenant administrators cannot promote users to administrator or change another administrator's status or role.
+
+### Flowroute outbound rate import
+
+An administrator can open **Administration → Carrier rate deck**, select Flowroute's `outbound_rates.csv`, and choose **Import and activate rate deck**. The server validates all rows and imports a new version into MySQL as one transaction, then switches the active database deck after all rows succeed. Reimporting an identical file is idempotent. Every active prefix uses the `Default` USD-per-minute cost and a fixed **30% markup** (`user price = cost × 1.30`) rounded half up to six decimal places. For this supplied file, 98,249 unique current prefixes were validated; for example, `$0.008330` becomes `$0.010829` per minute. First and subsequent billing intervals are retained. The resulting rate deck is visible through **Communications → Outbound rates** by longest matching dialed prefix. It is a customer quote catalog; the PBX preview routes, live switch, prepaid enforcement, CDR rating, carrier settlement, and invoices are not activated by the upload. Commission an authoritative switch rating adapter and reconcile CDRs before using these prices to bill calls.
+
+### Help menu, tutorials and AI support
+
+Use the **Sign in** drop down in the public header to choose User, Administrator, Super administrator, Directory sign in, Create account, or Verify email. All roles use the same local sign in endpoint; a requested sign in destination does not grant that role. The assigned account role controls the menus after authentication.
+
+Choose **Help** from the public header or **Workspace → Help & tutorials** when signed in. The Help page contains FAQs and a user tutorial; authenticated tenant administrators also see the administrator tutorial. **Open a support ticket** takes signed in users to the existing ticket workflow. The AI support guide handles general usage questions only and cannot modify accounts or carrier infrastructure.
+
+To activate AI support, add `OPENAI_SUPPORT_API_KEY` to the private `/etc/olamide/secrets.env`, optionally set `OPENAI_SUPPORT_MODEL` (default `gpt-4.1-mini`), and rerun bootstrap so the API container receives it. Keep the key server side. The endpoint requires a signed in account, caps each question at 1,200 characters and ten requests per user per hour per API process, sends only that question and the fixed product guide to the model, uses `store:false`, and returns a generic error if the provider is unavailable. No account records, tickets or secrets are supplied to the model. Without a key, users can still read the FAQs and open a ticket. Production cost limits, retention policies and incident monitoring should be configured on the provider account before rollout.
