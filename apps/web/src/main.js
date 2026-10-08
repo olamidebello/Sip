@@ -705,6 +705,7 @@ root.innerHTML = `
     <section id="fleet-admin" hidden>
       <h3>Server and network operations</h3><p>Register switch hosts, review connectivity and versions, queue approved installations, and schedule health checks or upgrades. The private Ansible runner requires SSH access and passwordless sudo on managed hosts.</p>
       <p id="fleet-summary"></p><p id="fleet-status" role="status"></p>
+      <h4>Cluster overview by region</h4><p id="fleet-topology"></p>
       <form id="fleet-add"><h4>Add a server</h4>
         <label>Name <input name="name" pattern="[a-z][a-z0-9-]{1,39}" required></label>
         <label>IPv4 address <input name="host" required></label>
