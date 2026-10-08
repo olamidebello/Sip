@@ -16,6 +16,9 @@ import {setupFleetAccessAdmin} from "./fleetAccessAdmin.js";
 import {setupFleetFirewallAdmin} from "./fleetFirewallAdmin.js";
 import {setupOperationsAdmin} from "./operationsAdmin.js";
 import {setupWorkspaceQuick} from "./workspaceQuick.js";
+import {setupWorkPlanner} from "./workPlanner.js";
+import {setupCampaigns} from "./campaigns.js";
+import {setupPasskeyPolicy} from "./passkeyPolicy.js";
 import { setupMobileAdmin } from "./mobileAdmin.js";
 import { setupTenants } from "./tenants.js";
 import { setupPbx } from "./pbx.js";
@@ -194,6 +197,19 @@ root.innerHTML = `
     </details>
     <p id="dashboard-status" role="status"></p>
   </section>
+  <section id="planner" hidden><h2>Events and tasks</h2><p>Park an idea, schedule it for a later day, and share it with active users in your tenant. Shared viewers can read; editors can change the item. Only the creator manages sharing.</p>
+    <p id="planner-summary"></p><button id="planner-new" type="button">New item</button><button id="planner-refresh" type="button">Refresh</button>
+    <label>Show <select id="planner-filter"><option value="all">All</option><option value="scheduled">Scheduled</option><option value="parked">Parked</option><option value="completed">Completed</option><option value="shared">Shared with me</option></select></label>
+    <form id="planner-form"><input name="itemId" type="hidden"><input name="expectedVersion" type="hidden">
+      <label>Type <select name="kind"><option value="task">Task</option><option value="event">Event</option></select></label>
+      <label>Title <input name="title" maxlength="160" required></label><label>Details <textarea name="description" maxlength="2000"></textarea></label>
+      <label>Status <select name="status"><option value="parked">Park for later</option><option value="scheduled">Scheduled</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label>
+      <label>Start or due time <input name="startAt" type="datetime-local"></label><label>Event end <input name="endAt" type="datetime-local"></label>
+      <label>Share with tenant user emails, one per line <textarea name="shares" rows="3"></textarea></label>
+      <label>Share permission <select name="sharePermission"><option value="view">View</option><option value="edit">Edit</option></select></label><button>Save item</button></form>
+    <p id="planner-status" role="status"></p><ul id="planner-list"></ul><p id="planner-detail"></p>
+  </section>
+  <section id="campaign-inbox-panel" hidden><h2>Announcements</h2><button id="campaign-inbox-refresh" type="button">Refresh notifications</button><p id="campaign-inbox-status" role="status"></p><ul id="campaign-inbox"></ul></section>
   <section id="search-panel" hidden>
     <h2>Search</h2>
     <form id="global-search"><label>Search visible app records <input name="q" minlength="2" maxlength="100" required></label>
@@ -436,6 +452,7 @@ root.innerHTML = `
         <button>Save tenant authentication policy</button>
       </form>
     </section>
+    <section id="passkey-policy-admin"><h3>Passkey requirements</h3><p>Require device verified WebAuthn sign-in for local accounts at tenant, group or user level. A user override takes priority; a required group takes priority over the tenant default.</p><label>Tenant mode <select id="passkey-policy-tenant-mode"><option value="optional">Optional</option><option value="required">Required</option></select></label><button id="passkey-policy-tenant-save" type="button">Save tenant policy</button><label>Group <select id="passkey-policy-group"></select></label><label>Override <select id="passkey-policy-group-mode"><option value="inherit">Inherit</option><option value="optional">Optional</option><option value="required">Required</option></select></label><button id="passkey-policy-group-save" type="button">Save group policy</button><label>Local user <select id="passkey-policy-user"></select></label><label>Override <select id="passkey-policy-user-mode"><option value="inherit">Inherit</option><option value="optional">Optional</option><option value="required">Required</option></select></label><button id="passkey-policy-user-save" type="button">Save user policy</button><p id="passkey-policy-status" role="status"></p></section>
     <section id="background-admin" hidden>
       <h3>Tenant background policy</h3>
       <form id="background-admin-form">
@@ -885,6 +902,7 @@ root.innerHTML = `
       </form>
       <p id="pbx-status" role="status"></p>
     </section>
+    <section id="campaign-admin"><h3>Tenant campaigns and alerts</h3><p>Draft, schedule and publish in-app announcements. All tenants is available to super administrators.</p><button id="campaign-new" type="button">New draft</button><form id="campaign-form"><label>Title <input name="title" maxlength="160" required></label><label>Message <textarea name="body" maxlength="4000" required></textarea></label><label>Audience <select name="audience"><option value="tenant">Current tenant</option><option value="all">All tenants</option></select></label><label>Publish time <input name="publishAt" type="datetime-local" required></label><label>Expires <input name="expiresAt" type="datetime-local"></label><button>Save draft</button></form><button id="campaign-refresh" type="button">Refresh</button><button id="campaign-publish" type="button">Publish selected</button><button id="campaign-pause" type="button">Pause selected</button><button id="campaign-archive" type="button">Archive selected</button><p id="campaign-status" role="status"></p><ul id="campaign-list"></ul></section>
     <section id="mobile-admin">
       <h3>Android and iOS releases</h3>
       <p>Internal release planning and approval. Store upload and publishing are not connected.</p>
@@ -911,6 +929,10 @@ root.innerHTML = `
       <button id="mobile-approve" type="button">Approve internally</button>
       <button id="mobile-reopen" type="button">Reopen draft</button>
       <button id="mobile-archive" type="button">Archive</button>
+      <h4>Batch release actions</h4><label>Choose releases <select id="mobile-batch-releases" multiple size="6"></select></label>
+      <button id="mobile-batch-approve" type="button">Approve selected internally</button>
+      <button id="mobile-batch-reopen" type="button">Reopen selected</button>
+      <button id="mobile-batch-archive" type="button">Archive selected</button>
       <h4>Release history</h4><ul id="mobile-events"></ul>
       <p id="mobile-status" role="status"></p>
     </section>
@@ -979,18 +1001,18 @@ setupFormGroups();
 setupDownloads();
 setupCarrierControl();
 const navigationGroups=[
-  {label:"Workspace",items:[["dashboard","Dashboard"],["search-panel","Search"],["support","Support tickets"],["help","Help & tutorials"]]},
+  {label:"Workspace",items:[["dashboard","Dashboard"],["campaign-inbox-panel","Announcements"],["planner","Events & tasks"],["search-panel","Search"],["support","Support tickets"],["help","Help & tutorials"]]},
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
   {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","FreeSWITCH"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
-  {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["mobile-admin","App releases"]]},
+  {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
   {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"]]}
 ];
 let activeRole=null;
 let pageRoutes;
-const workspaceViews=["account","help","dashboard","search-panel","support","locale-settings","background-user","chat","external-sms","outbound-rates","billing","dialplan-marketplace","meetings","admin","fleet-admin","agent-panel","calling-workspace","downloads"];
+const workspaceViews=["account","help","dashboard","planner","campaign-inbox-panel","search-panel","support","locale-settings","background-user","chat","external-sms","outbound-rates","billing","dialplan-marketplace","meetings","admin","fleet-admin","agent-panel","calling-workspace","downloads"];
 let activeView="dashboard";
 function showWorkspace(target) {
   if(!activeRole) return;
@@ -1107,6 +1129,9 @@ const fleetGrants=setupFleetAccessAdmin({get:apiGet,request:accountRequest});
 const fleetFirewall=setupFleetFirewallAdmin({get:apiGet,request:accountRequest});
 const operationsAdmin=setupOperationsAdmin({get:apiGet,request:accountRequest});
 const workspaceQuick=setupWorkspaceQuick({get:apiGet,request:accountRequest,show:showWorkspace,current:()=>activeView});
+const workPlanner=setupWorkPlanner({get:apiGet,request:accountRequest});
+const campaigns=setupCampaigns();
+const passkeyPolicy=setupPasskeyPolicy();
 const providerWebhooks=setupProviderWebhookAdmin({get:apiGet,request:accountRequest});
 const didwwAdmin=setupDidwwAdmin({get:apiGet,request:accountRequest});
 const adapterAdmin=setupAdapterAdmin({get:apiGet,request:accountRequest});
@@ -1453,6 +1478,15 @@ async function loadMessages() {
   }
 }
 function signedIn(user) {
+  if(user.passkeyEnrollmentRequired||user.passkeySigninRequired){
+    activeRole='pending_passkey';document.body.classList.add('workspace-mode');
+    $('#account').hidden=false;$('#logout').hidden=false;$('#app-nav').hidden=true;
+    $('#account-login-group').hidden=true;$('#account-signup-group').hidden=true;$('#account-directory-group').hidden=true;$('#account-verify-group').hidden=true;
+    $('#password-change').hidden=true;$('#passkey-settings').hidden=!!user.passkeySigninRequired;
+    if(user.passkeyEnrollmentRequired)refreshPasskeys();
+    $('#account-status').textContent=user.passkeySigninRequired?'Sign out and use passkey sign-in to continue.':'Register a passkey, then sign out and use passkey sign-in.';
+    showWorkspace('account');return;
+  }
   if(user.mustChangePassword){
     activeRole='pending_password_change';
     $('#account-password-group').open=true;
@@ -1517,7 +1551,7 @@ function signedIn(user) {
   $("#background-user").hidden = false;
   $("#calling-workspace").hidden=false;
   $("#dashboard").hidden=false;
-  $("#search-panel").hidden=false;$("#support").hidden=false;
+  $("#planner").hidden=false;$("#campaign-inbox-panel").hidden=false;$("#search-panel").hidden=false;$("#support").hidden=false;
   $("#locale-settings").hidden=false;
   background.refresh(["admin","super_admin"].includes(user.role));
   $("#password-change").hidden = user.authSource==="ldap";
@@ -1547,7 +1581,8 @@ function signedIn(user) {
   pbx.refreshSelf(user).catch((error) => { $("#agent-status-result").textContent = error.message; });
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
   updateNavigation();
-  workspaceQuick.refresh();
+  workspaceQuick.refresh();workPlanner.refresh();campaigns.inbox();
+  if(["admin","super_admin"].includes(user.role)){ $("#campaign-admin").hidden=false;$("#campaign-form [name=audience] option[value=all]").hidden=user.role!=="super_admin";campaigns.refresh();passkeyPolicy.refresh(); }
   if(user.role!=="super_admin")apiGet("/api/admin/servers/permissions").then(({accessLevel})=>{
     if(!activeRole||activeRole==="pending_password_change")return;
     $("#fleet-admin").hidden=accessLevel==="none";
@@ -2038,7 +2073,7 @@ $("#logout").onclick = async () => {
     $("#background-user").hidden = true;
     $("#calling-workspace").hidden=true;
     $("#dashboard").hidden = true;
-    $("#search-panel").hidden=true;$("#support").hidden=true;
+    $("#planner").hidden=true;$("#campaign-inbox-panel").hidden=true;$("#campaign-admin").hidden=true;$("#search-panel").hidden=true;$("#support").hidden=true;
     $("#locale-settings").hidden=true;localeSettings.clear();
     support.clear();
     background.clear();
