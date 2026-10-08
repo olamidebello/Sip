@@ -37,3 +37,23 @@ test('Flowroute auto setup stages the selected PoP and leaves traffic disabled',
   assert.match(calls.find(x=>x.sql.startsWith('INSERT INTO pbx_trunks')).sql,/enabled\) VALUES.*FALSE/);
   assert.ok(calls.some(x=>x.sql==='COMMIT'));
 });
+
+test('super admin can register a future carrier and duplicate IDs are rejected',async()=>{
+  const calls=[];
+  const pool={query:async(sql,params)=>{calls.push({sql,params});return {rowCount:1,rows:[]};}};
+  const base={req:{method:'POST'},path:'/api/admin/carriers/catalog',
+    user:{id:'user-1',role:'super_admin',tenant_id:'tenant-1'},pool,
+    send:(_res,status,body)=>({status,body})};
+  const added=await handleCarrierProviders({...base,readJson:async()=>({provider:'example-voice',displayName:'Example Voice'})});
+  assert.equal(added.status,201);
+  assert.deepEqual(calls[0].params,['tenant-1','example-voice','Example Voice','user-1']);
+  const invalid=await handleCarrierProviders({...base,readJson:async()=>({provider:'flowroute',displayName:'Duplicate'})});
+  assert.equal(invalid.status,400);
+});
+
+test('tenant administrator cannot register a future carrier',async()=>{
+  const result=await handleCarrierProviders({req:{method:'POST'},path:'/api/admin/carriers/catalog',
+    user:{role:'admin',tenant_id:'tenant-1'},pool:{query:()=>{throw Error('must not query');}},
+    send:(_res,status,body)=>({status,body})});
+  assert.equal(result.status,403);
+});
