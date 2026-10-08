@@ -553,3 +553,31 @@ This receipt log does not rate calls, settle carrier charges, or store a full
 CDR payload. Review DIDWW's account settings and test in sandbox before
 switching to production. Actual DIDWW account provisioning and DIDWW support
 enablement must be performed in the DIDWW account.
+
+## Scalable carrier adapter registry
+
+Set `CARRIER_ADAPTER_TARGETS_JSON` privately on the API service to a JSON
+object of named HTTPS targets, each with a `url` and a 32+ character `token`.
+The super admin Carrier adapters screen lists target keys without disclosing
+URLs or tokens. Add one or more nodes for Flowroute, DIDWW, or a catalog carrier;
+set a region, priority, and maximum planned concurrent calls. Nodes start
+disabled. Run Check health, then enable a healthy node. The commissioning API
+selects the lowest-priority eligible healthy node whose configured capacity
+covers the carrier profile. It records the node that acknowledged activation,
+then sends deactivation to that same node. Operations and outcomes are audited
+in MySQL. Existing `CARRIER_PROVISION_URL` and
+`CARRIER_PROVISION_TOKEN` remain supported as a legacy target when a carrier
+has no managed nodes.
+
+Each target must implement HTTPS JSON POST actions:
+`health` -> `{"status":"healthy"}`,
+`verify` -> `{"status":"verified"}`,
+`activate` -> `{"status":"active"}`, and
+`deactivate` -> `{"status":"inactive"}`.
+The request includes `tenantId`, `provider`, adapter and trunk IDs, and
+capacity/routing intent where applicable. The adapter must verify ownership,
+apply configuration on the authoritative switch/provider, and return success
+only after observing the resulting state. The registry scales the control
+plane and planned capacity; live load distribution, SIP media, and automatic
+call failover require the actual switch implementation. Health checks are
+manual in the GUI until a monitoring worker is deployed.
