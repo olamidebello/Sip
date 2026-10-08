@@ -12,8 +12,10 @@
       - freeswitch_public_ip | default('') | length > 0
       - ansible_processor_vcpus | int >= 2
       - ansible_memtotal_mb | int >= 4096
-      - freeswitch_wss_certificate | default('') | length > 0
-      - freeswitch_wss_key | default('') | length > 0
+      - freeswitch_wss_certificate_source | default('controller') in ['controller','caddy']
+      - freeswitch_wss_certificate_source | default('controller') == 'caddy' or freeswitch_wss_certificate | default('') | length > 0
+      - freeswitch_wss_certificate_source | default('controller') == 'caddy' or freeswitch_wss_key | default('') | length > 0
+      - freeswitch_wss_certificate_source | default('controller') != 'caddy' or not (manage_firewall | default(false) | bool)
       - not (coturn_enabled | default(false) | bool) or (coturn_secret | default('') | length >= 32)
       - not (manage_firewall | default(false) | bool) or (freeswitch_ssh_allowed_cidrs | default([]) | length > 0)
     fail_msg: "Debian 12, a private API URL, certificate/key, and vaulted credentials are required."
@@ -38,7 +40,7 @@
 
 - name: Install apt prerequisites
   ansible.builtin.apt:
-    name: [ca-certificates, gnupg, python3, python3-apt, curl, logrotate, chrony]
+    name: [ca-certificates, gnupg, python3, python3-apt, curl, openssl, logrotate, chrony]
     update_cache: true
     state: present
 
@@ -267,6 +269,7 @@
     group: freeswitch
     mode: '0640'
   notify: Restart FreeSWITCH
+  when: freeswitch_wss_certificate_source | default('controller') == 'controller'
 
 - name: Install WSS private key
   ansible.builtin.copy:
@@ -277,6 +280,101 @@
     mode: '0600'
   no_log: true
   notify: Restart FreeSWITCH
+  when: freeswitch_wss_certificate_source | default('controller') == 'controller'
+
+- name: Locate Caddy certificate volume
+  ansible.builtin.command:
+    argv: [docker, volume, inspect, "{{ freeswitch_caddy_volume | default('docker_caddy_data') }}"]
+  register: caddy_volume
+  changed_when: false
+  when: freeswitch_wss_certificate_source | default('controller') == 'caddy'
+
+- name: Discover Caddy TLS certificate and key
+  ansible.builtin.find:
+    paths: "{{ (caddy_volume.stdout | from_json | first).Mountpoint }}/caddy/certificates"
+    patterns: "{{ freeswitch_domain }}.{{ item }}"
+    recurse: true
+    file_type: file
+  loop: [crt, key]
+  register: caddy_tls_files
+  when: freeswitch_wss_certificate_source | default('controller') == 'caddy'
+
+- name: Require a trusted Caddy certificate and key
+  ansible.builtin.assert:
+    that:
+      - caddy_tls_files.results[0].matched | int > 0
+      - caddy_tls_files.results[1].matched | int > 0
+    fail_msg: "Caddy has not issued a certificate for the SIP domain."
+  when: freeswitch_wss_certificate_source | default('controller') == 'caddy'
+
+- name: Install Caddy certificate for WSS
+  ansible.builtin.copy:
+    src: "{{ caddy_tls_files.results[0].files[0].path }}"
+    remote_src: true
+    dest: /etc/freeswitch/tls/wss.crt
+    owner: freeswitch
+    group: freeswitch
+    mode: '0640'
+  when: freeswitch_wss_certificate_source | default('controller') == 'caddy'
+  notify: Restart FreeSWITCH
+
+- name: Install Caddy private key for WSS
+  ansible.builtin.copy:
+    src: "{{ caddy_tls_files.results[1].files[0].path }}"
+    remote_src: true
+    dest: /etc/freeswitch/tls/wss.key
+    owner: freeswitch
+    group: freeswitch
+    mode: '0600'
+  no_log: true
+  when: freeswitch_wss_certificate_source | default('controller') == 'caddy'
+  notify: Restart FreeSWITCH
+
+- name: Install WSS certificate renewal sync
+  ansible.builtin.template:
+    src: sync-caddy-wss.sh.j2
+    dest: /usr/local/sbin/olamide-sync-wss
+    owner: root
+    group: root
+    mode: '0700'
+  no_log: true
+  when: freeswitch_wss_certificate_source | default('controller') == 'caddy'
+
+- name: Install WSS certificate sync units
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/olamide-wss-sync.{{ item.suffix }}"
+    content: "{{ item.content }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - suffix: service
+      content: |
+        [Unit]
+        Description=Sync Caddy certificate to FreeSWITCH WSS
+        After=docker.service freeswitch.service
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/local/sbin/olamide-sync-wss
+    - suffix: timer
+      content: |
+        [Unit]
+        Description=Check FreeSWITCH WSS certificate renewal
+        [Timer]
+        OnBootSec=15min
+        OnUnitActiveSec=6h
+        Persistent=true
+        [Install]
+        WantedBy=timers.target
+  when: freeswitch_wss_certificate_source | default('controller') == 'caddy'
+
+- name: Enable WSS certificate sync timer
+  ansible.builtin.systemd:
+    name: olamide-wss-sync.timer
+    daemon_reload: true
+    enabled: true
+    state: started
+  when: freeswitch_wss_certificate_source | default('controller') == 'caddy'
 
 - name: Enable XML curl module
   ansible.builtin.lineinfile:
