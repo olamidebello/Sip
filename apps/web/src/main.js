@@ -491,7 +491,13 @@ root.innerHTML = `
     </section>
     <section id="carrier-admin"><h3>Carrier provider commissioning</h3>
       <p>Link a tenant trunk, set capacity, verify private provider credentials, then ask the switch adapter to activate. A provider remains blocked from DID requests until activation is acknowledged.</p>
-      <form id="carrier-profile-form">
+      <form id="flowroute-auto-form" hidden><h4>Flowroute PoP setup</h4>
+        <label>Point of presence <select name="pop"><option value="US-East-VA">US East, Virginia</option><option value="US-West-OR">US West, Oregon</option></select></label>
+        <label>Maximum concurrent calls <input name="maxConcurrentCalls" type="number" min="1" max="100000" value="10" required></label>
+        <label>Routing intent <select name="routingMode"><option value="manual">Manual</option><option value="least_cost">Least cost</option><option value="priority">Priority</option></select></label>
+        <button type="submit">Set up Flowroute trunk</button>
+        <p>The trunk is staged with traffic disabled. Activating calls requires the switch adapter and matching Flowroute route settings.</p>
+      </form><form id="carrier-profile-form">
         <label>Provider <select name="provider"><option value="flowroute">Flowroute</option><option value="didww">DIDWW</option></select></label>
         <label>Tenant trunk <select name="trunkId" required></select></label>
         <label>Maximum concurrent calls <input name="maxConcurrentCalls" type="number" min="1" max="100000" value="10" required></label>
@@ -1287,6 +1293,7 @@ function signedIn(user) {
   sipProfiles.refresh();
   $("#sip-profile-admin").hidden=user.role!=="super_admin";
   $("#provider-webhook-admin").hidden=user.role!=="super_admin";
+  $("#flowroute-auto-form").hidden=user.role!=="super_admin";
   if(user.role==="super_admin")providerWebhooks.refresh();
   if(["admin","super_admin"].includes(user.role)){commerceOps.refreshPayment();commerceOps.refreshCluster();}
   if(user.role==="super_admin") sipProfiles.refreshAdmin();
@@ -1653,13 +1660,16 @@ async function refreshDialplans(){
 }
 async function refreshCarriers(){
   const [data,trunks]=await Promise.all([apiGet('/api/admin/carriers'),apiGet('/api/pbx/trunks')]);
-  const selection=$("#carrier-profile-form").elements.trunkId;selection.replaceChildren();
+  const selection=$("#carrier-profile-form").elements.trunkId,priorTrunk=selection.value;selection.replaceChildren();
   for(const trunk of trunks.trunks){const option=document.createElement('option');option.value=trunk.id;
     option.textContent=`${trunk.name} (${trunk.host})`;selection.append(option);}
+  if(trunks.trunks.some(trunk=>trunk.id===priorTrunk)) selection.value=priorTrunk;
   const list=$("#carrier-profiles");list.replaceChildren();
   for(const profile of data.providers){const card=document.createElement('article');
     const title=document.createElement('h4');title.textContent=`${profile.provider}: ${profile.status}`;
     const details=document.createElement('p');details.textContent=`Credentials: ${profile.credentialsConfigured?'configured':'missing'} · capacity: ${profile.max_concurrent_calls??0} · routing: ${profile.routing_mode} · adapter: ${data.adapterConfigured?'configured':'missing'}`;
+    const trunk=trunks.trunks.find(item=>item.id===profile.trunk_id);
+    const target=document.createElement('p');target.textContent=trunk?`Trunk: ${trunk.name} (${trunk.host}:${trunk.port}/${trunk.transport}) · ${trunk.enabled?'enabled':'disabled'}`:'No trunk selected';
     const verify=document.createElement('button');verify.type='button';verify.textContent='Verify inventory API';
     verify.onclick=async()=>{try{const result=await accountRequest(`/api/admin/carriers/${profile.provider}/verify`,{});
       $("#carrier-admin-status").textContent=`${result.provider}: credentials valid; ${result.sampleCount} inventory results. No SIP route activated.`;}
@@ -1669,8 +1679,22 @@ async function refreshCarriers(){
     activate.onclick=async()=>{try{const result=await accountRequest(`/api/admin/carriers/${profile.provider}/activate`,{});
       $("#carrier-admin-status").textContent=`${result.provider}: ${result.status}`;await refreshCarriers();}
       catch(error){$("#carrier-admin-status").textContent=error.message;await refreshCarriers();}};
-    card.append(title,details,verify,activate);list.append(card);}
+    card.append(title,details,target,verify,activate);list.append(card);}
 }
+$("#flowroute-auto-form").onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button[type="submit"]');
+  button.disabled=true;
+  try{
+    const data=Object.fromEntries(new FormData(form));
+    const result=await accountRequest('/api/admin/carriers/flowroute/auto-provision',{
+      pop:data.pop,maxConcurrentCalls:Number(data.maxConcurrentCalls),routingMode:data.routingMode});
+    await refreshCarriers();
+    $("#carrier-profile-form").elements.provider.value='flowroute';
+    $("#carrier-profile-form").elements.trunkId.value=result.trunkId;
+    $("#carrier-admin-status").textContent=`Flowroute ${result.pop} trunk staged at ${result.host}:5060. Activate with the switch adapter when ready.`;
+  }catch(error){$("#carrier-admin-status").textContent=error.message;}
+  finally{button.disabled=false;}
+};
 $("#carrier-profile-form").onsubmit=async event=>{
   event.preventDefault();const form=event.currentTarget;const data=Object.fromEntries(new FormData(form));
   try{await accountRequest(`/api/admin/carriers/${data.provider}`,{trunkId:data.trunkId,
