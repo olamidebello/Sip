@@ -15,5 +15,5 @@ if errorlevel 1 (
   echo Restart Windows if requested, open Ubuntu once to create its user, then run this file again.
   exit /b 1
 )
-wsl.exe -- bash deployment/bootstrap.sh
+wsl.exe -- bash deployment/controller-bootstrap.sh
 exit /b %errorlevel%
