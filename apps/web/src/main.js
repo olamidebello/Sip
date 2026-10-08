@@ -9,6 +9,7 @@ import {setupProviderWebhookAdmin} from "./providerWebhookAdmin.js";
 import {setupDidwwAdmin} from "./didwwAdmin.js";
 import {setupAdapterAdmin} from "./adapterAdmin.js";
 import {setupOperatorControl} from "./operatorControl.js";
+import {setupSwitchAdmin} from "./switchAdmin.js";
 import { setupMobileAdmin } from "./mobileAdmin.js";
 import { setupTenants } from "./tenants.js";
 import { setupPbx } from "./pbx.js";
@@ -538,6 +539,25 @@ root.innerHTML = `
         <label>E.164 destination <input name="number" placeholder="+12125550123" required></label><button>Preview route</button></form>
       <p id="operator-quote" role="status"></p><p id="operator-status" role="status"></p>
     </section>
+    <section id="switch-admin">
+      <h3>FreeSWITCH</h3>
+      <p>Serve active SIP accounts and authenticated outbound dialplans from the tenant database. Configure FreeSWITCH XML curl and Sofia gateways on the switch host before enabling traffic. Public inbound routes and real time charging are not enabled here.</p>
+      <form id="switch-config">
+        <label>SIP domain <input name="domain" placeholder="sip.example.com" required></label>
+        <label>Outbound tariff <select name="tariffId"></select></label>
+        <label><input name="enabled" type="checkbox"> Enable tenant switch lookups</label>
+        <button>Save switch settings</button>
+      </form>
+      <form id="switch-gateway-form">
+        <label>Carrier <select name="provider" id="switch-provider"></select></label>
+        <label>Configured Sofia gateway name <input name="gatewayName" pattern="[a-z][a-z0-9_-]{1,63}" required></label>
+        <label><input name="enabled" type="checkbox"> Enable gateway route</label><button>Save gateway mapping</button>
+      </form>
+      <h4>Gateway mappings</h4><ul id="switch-gateways"></ul>
+      <h4>SIP accounts</h4><ul id="switch-accounts"></ul>
+      <button id="switch-refresh" type="button">Refresh switch configuration</button>
+      <p id="switch-status" role="status"></p>
+    </section>
     <section id="carrier-adapter-admin" hidden>
       <h3>Carrier adapter nodes</h3>
       <p>Assign multiple private adapter targets to Flowroute, DIDWW, or a future carrier. Health and capacity determine which node commissions a carrier; the active assignment stays pinned until deactivation. Define target URLs and tokens only on the server.</p>
@@ -872,7 +892,7 @@ const navigationGroups=[
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
-  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
+  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","FreeSWITCH"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["mobile-admin","App releases"]]},
   {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"]]}
 ];
@@ -992,6 +1012,7 @@ const providerWebhooks=setupProviderWebhookAdmin({get:apiGet,request:accountRequ
 const didwwAdmin=setupDidwwAdmin({get:apiGet,request:accountRequest});
 const adapterAdmin=setupAdapterAdmin({get:apiGet,request:accountRequest});
 const operatorAdmin=setupOperatorControl();
+const switchAdmin=setupSwitchAdmin();
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
 const pbx = setupPbx();
@@ -1371,6 +1392,11 @@ function signedIn(user) {
   $("#carrier-catalog-form").hidden=user.role!=="super_admin";
   if(user.role==="super_admin"){providerWebhooks.refresh();didwwAdmin.refresh();adapterAdmin.refresh();}
   if(["admin","super_admin"].includes(user.role))operatorAdmin.refresh();
+  if(["admin","super_admin"].includes(user.role)){
+    switchAdmin.refresh(user.role==="super_admin");
+    $("#switch-config").querySelectorAll("input,select,button").forEach(el=>el.disabled=user.role!=="super_admin");
+    $("#switch-gateway-form").querySelectorAll("input,select,button").forEach(el=>el.disabled=user.role!=="super_admin");
+  }
   if(["admin","super_admin"].includes(user.role)){commerceOps.refreshPayment();commerceOps.refreshCluster();}
   if(user.role==="super_admin") sipProfiles.refreshAdmin();
   $("#dialplan-marketplace").hidden=!user.features?.billing;
