@@ -1,0 +1,33 @@
+# Kamailio rebuild (work in progress)
+
+This branch replaces the FreeSWITCH-specific switch plane in stages. It is not a production switch and must not be cut over until the gates below pass.
+
+## Component boundaries
+
+| Component | Responsibility |
+| --- | --- |
+| Kamailio | SIP registrar, digest authentication, tenant domain separation, routing and carrier selection |
+| RTPengine | RTP/SRTP and WebRTC media relay and NAT traversal |
+| Media application server | IVR, voicemail, queues, conferencing, recordings and announcements |
+| Olamide API/MySQL | Tenant provisioning, encrypted source credentials, HA1 synchronization, authorization, tariff policy, CDR and payment state |
+| Carrier adapters | Flowroute/DIDWW trunks and DID ingress with verified peer addresses |
+
+The API exposes `POST /api/switch/kamailio/route` with a private bearer token. Kamailio must authenticate REGISTER and INVITE before passing its verified username, domain and destination. The API rejects unknown tenants, inactive users, disabled accounts, disallowed destinations and routes without an enabled tariff and carrier mapping. Its response is a route decision, not a direct carrier credential or arbitrary SIP URI.
+
+`kamailio_credentials` stores an MD5 HA1 digest required by SIP Digest. The `kamailio_active_subscribers` view joins the existing user, tenant, account and switch enablement states so disabling one revokes authentication. Read-only database access should be granted only to the view. The activation path synchronizes credentials; `backfill-kamailio.js` handles existing active accounts. The plaintext SIP password remains encrypted in `sip_accounts` and is never returned by the route endpoint.
+
+## Pending implementation gates
+
+- Deploy a pinned Kamailio release and RTPengine with verified packages, TLS/WSS certificate renewal, root-owned private configuration, firewall ACLs and service health probes.
+- Validate Kamailio digest auth against the active subscriber view; reject unauthenticated INVITE, cross-tenant From/To, spoofed caller and all unknown methods.
+- Implement an authenticated adapter from Kamailio to the route endpoint, including timeout and reject behavior, URI mapping, NAT, RTPEngine offer/answer/delete and WebRTC media negotiation.
+- Provision media application servers for IVR, queues, voicemail, conferencing and recording. Kamailio alone does not provide the existing media applications.
+- Wire DID ingress to verified carrier peers and tenant ownership, handle emergency calls explicitly, and reconcile CDRs with rating and balances.
+- Verify a real registration, extension call, outbound carrier call, inbound DID, hangup, failed authentication, browser WSS call, media, recording, failover and 500-call capacity target.
+- Keep the current FreeSWITCH deployment serving traffic until rollback and migration tests pass. Do not run this branch's database migration on production until its schema and permissions are reviewed.
+
+## Secrets and operation
+
+Set `KAMAILIO_ROUTE_TOKEN` as a private random value of at least 32 characters in the API runtime and Kamailio adapter. It must not be committed or placed in a URL. Use a separate MySQL user limited to `SELECT` on the active subscriber view for Kamailio authentication. Apply schema migration before running the backfill, with `MYSQL_URL` and `SIP_CREDENTIAL_KEY` supplied privately to the API container.
+
+The leaked SignalWire token used in earlier package attempts is unrelated to this rebuild and should be revoked.
