@@ -8,6 +8,7 @@ import {setupCommerceOps} from "./commerceOps.js";
 import {setupProviderWebhookAdmin} from "./providerWebhookAdmin.js";
 import {setupDidwwAdmin} from "./didwwAdmin.js";
 import {setupAdapterAdmin} from "./adapterAdmin.js";
+import {setupOperatorControl} from "./operatorControl.js";
 import { setupMobileAdmin } from "./mobileAdmin.js";
 import { setupTenants } from "./tenants.js";
 import { setupPbx } from "./pbx.js";
@@ -513,6 +514,30 @@ root.innerHTML = `
         <button>Save provider profile</button>
       </form><div id="carrier-profiles"></div><p id="carrier-admin-status" role="status"></p>
     </section>
+    <section id="operator-admin">
+      <h3>Wholesale tariffs & route preview</h3>
+      <p>Configure tenant tariffs, scheduled carrier rates, and blocked destination prefixes. Quotes show eligible active carrier profiles. Live switch routing, real time spending limits, and charging require a switch integration.</p>
+      <form id="operator-create"><label>Tariff name <input name="name" maxlength="80" required></label>
+        <label>Selection <select name="mode"><option value="least_cost">Least cost</option><option value="priority">Priority</option></select></label><button>Create tariff</button></form>
+      <div id="operator-tariffs"></div>
+      <label>Tariff <select id="operator-tariff"></select></label>
+      <form id="operator-rate-create"><h4>Scheduled carrier rate</h4>
+        <label>Carrier <select id="operator-carrier"></select></label>
+        <label>Destination prefix <input name="prefix" pattern="[1-9][0-9]{0,14}" required></label>
+        <label>Cost cents/min <input name="cost" type="number" min="0" max="1000000" required></label>
+        <label>Price cents/min <input name="price" type="number" min="0" max="1000000" required></label>
+        <label>Priority <input name="priority" type="number" min="1" max="1000" value="100" required></label>
+        <label>Effective UTC <input name="effective" type="datetime-local" required></label>
+        <label>Expires UTC <input name="expires" type="datetime-local"></label><button>Add rate</button></form>
+      <ul id="operator-rates"></ul>
+      <form id="operator-block-create"><h4>Destination fraud block</h4>
+        <label>Prefix <input name="prefix" pattern="[1-9][0-9]{0,14}" required></label>
+        <label>Reason <input name="reason" maxlength="200" required></label><button>Block prefix</button></form>
+      <ul id="operator-blocks"></ul>
+      <form id="operator-quote-form"><h4>Route quote</h4>
+        <label>E.164 destination <input name="number" placeholder="+12125550123" required></label><button>Preview route</button></form>
+      <p id="operator-quote" role="status"></p><p id="operator-status" role="status"></p>
+    </section>
     <section id="carrier-adapter-admin" hidden>
       <h3>Carrier adapter nodes</h3>
       <p>Assign multiple private adapter targets to Flowroute, DIDWW, or a future carrier. Health and capacity determine which node commissions a carrier; the active assignment stays pinned until deactivation. Define target URLs and tokens only on the server.</p>
@@ -847,7 +872,7 @@ const navigationGroups=[
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
-  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
+  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["mobile-admin","App releases"]]},
   {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"]]}
 ];
@@ -966,6 +991,7 @@ const commerceOps=setupCommerceOps({get:apiGet,request:accountRequest});
 const providerWebhooks=setupProviderWebhookAdmin({get:apiGet,request:accountRequest});
 const didwwAdmin=setupDidwwAdmin({get:apiGet,request:accountRequest});
 const adapterAdmin=setupAdapterAdmin({get:apiGet,request:accountRequest});
+const operatorAdmin=setupOperatorControl();
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
 const pbx = setupPbx();
@@ -1344,6 +1370,7 @@ function signedIn(user) {
   $("#flowroute-auto-form").hidden=user.role!=="super_admin";
   $("#carrier-catalog-form").hidden=user.role!=="super_admin";
   if(user.role==="super_admin"){providerWebhooks.refresh();didwwAdmin.refresh();adapterAdmin.refresh();}
+  if(["admin","super_admin"].includes(user.role))operatorAdmin.refresh();
   if(["admin","super_admin"].includes(user.role)){commerceOps.refreshPayment();commerceOps.refreshCluster();}
   if(user.role==="super_admin") sipProfiles.refreshAdmin();
   $("#dialplan-marketplace").hidden=!user.features?.billing;
