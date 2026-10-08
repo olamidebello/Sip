@@ -37,11 +37,21 @@ def probe(node):
            'sudo', '-n', 'systemctl', 'is-active', 'freeswitch']
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-        status = 'healthy' if result.returncode == 0 and result.stdout.strip() == 'active' else 'degraded'
+        status = ('healthy' if result.returncode == 0 and result.stdout.strip() == 'active'
+                  else 'unreachable' if result.returncode == 255 else 'degraded')
+        version = None
+        if status == 'healthy':
+            package = subprocess.run(['ssh', '-p', str(node['ssh_port']), '-o', 'BatchMode=yes',
+                '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8', target,
+                'dpkg-query', '-W', '-f=${Version}', 'freeswitch'], capture_output=True,
+                text=True, timeout=15)
+            if package.returncode == 0:
+                version = package.stdout.strip()[:80]
     except (subprocess.TimeoutExpired, OSError):
         status = 'unreachable'
+        version = None
     latency = int((time.monotonic() - start) * 1000)
-    return {'nodeId': node['id'], 'status': status, 'latencyMs': latency, 'version': None}
+    return {'nodeId': node['id'], 'status': status, 'latencyMs': latency, 'version': version}
 
 
 def deploy(node, inventory, vault_password):
