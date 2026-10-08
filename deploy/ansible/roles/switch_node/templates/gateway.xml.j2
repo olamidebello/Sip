@@ -1,0 +1,10 @@
+<include>
+  <gateway name="{{ item.name | e }}">
+    <param name="proxy" value="{{ item.proxy | e }}"/>
+    <param name="register" value="{{ (item.register | default(false) | bool) | ternary('true','false') }}"/>
+{% if item.username | default('') %}
+    <param name="username" value="{{ item.username | e }}"/>
+    <param name="password" value="{{ item.password | e }}"/>
+{% endif %}
+  </gateway>
+</include>
