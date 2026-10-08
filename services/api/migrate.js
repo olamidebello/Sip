@@ -29,6 +29,7 @@ import { migrateOperationsPolicy } from './operationsPolicy.js';
 import { migrateFleetNetwork } from './fleetNetwork.js';
 import { migrateFleetFirewall } from './fleetFirewall.js';
 import { migrateDashboardViews } from './dashboard.js';
+import { migrateWorkspaceShortcuts } from './workspaceShortcuts.js';
 import { migrateMessagingWebhooks } from './messagingWebhooks.js';
 import { migrateFlowrouteRates } from './flowrouteRates.js';
 
@@ -82,6 +83,7 @@ export async function migrate(pool) {
       ['wallet', () => migrateWallet(pool)],
       ['dashboard', () => migrateDashboard(pool)],
       ['dashboard_views', () => migrateDashboardViews(pool)],
+      ['workspace_shortcuts', () => migrateWorkspaceShortcuts(pool)],
       ['support', () => migrateSupport(pool)],
       ['locales', () => migrateLocales(pool)]
     ];
