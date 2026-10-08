@@ -124,3 +124,9 @@ body.workspace-mode #app>section:not(.workspace-inactive){max-width:100%}
 #help{max-width:1060px;margin:1rem auto 2rem;padding:clamp(1.2rem,3vw,2rem);border-radius:20px;background:#102438;border:1px solid #406879;color:#d8e9ee}#help h2{font-size:clamp(1.8rem,3vw,2.4rem);margin:0}#help h3{color:#dff8f5}#help>section{margin:1.5rem 0;padding:1.1rem;background:#0b1b2c;border:1px solid #38536b;border-radius:14px;scroll-margin-top:5rem}#help-faq details{padding:.85rem .3rem;border-bottom:1px solid #375266}#help-faq summary{cursor:pointer;font-weight:700}#help-faq p{color:#b8d0d9}#help li{margin:.65rem 0;line-height:1.55}.help-links{display:flex;flex-wrap:wrap;gap:.6rem;margin:1rem 0}.help-links a{color:#082b2d;background:#5fe1d0;padding:.45rem .75rem;border-radius:8px;font-weight:700;text-decoration:none}#help-agent textarea{display:block;width:100%;min-height:6rem;background:#172b3c;color:white;border:1px solid #6d93a3;border-radius:8px;padding:.6rem}#help-answer{white-space:pre-wrap;overflow-wrap:anywhere;margin:.8rem 0;line-height:1.5}
 @media(max-width:760px){.login-options{left:auto;right:0}}
 .login-options #login-options-auth,.login-options #login-options-account{display:grid;gap:.35rem}.login-options [hidden]{display:none!important}
+#app-nav .nav-signout{border:1px solid rgba(255,255,255,.24);border-radius:8px;background:transparent;color:inherit;padding:.55rem .8rem;cursor:pointer}
+#app-nav .nav-signout:hover,#app-nav .nav-signout:focus-visible{background:rgba(255,255,255,.12)}
+#sip-profile-list li{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;padding:.65rem 0;border-bottom:1px solid #d9e3ed}
+#sip-profile-list li span{flex:1 1 240px;overflow-wrap:anywhere}
+#sip-profile-admin [id$="-choices"]{display:flex;flex-wrap:wrap;gap:.6rem;margin:.65rem 0 1rem}
+#sip-profile-admin [id$="-choices"] label{min-width:125px}
