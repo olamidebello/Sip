@@ -134,6 +134,13 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
     return send(res,200,{days,health:health.rows,jobs:jobs.rows,settings:settings.rows[0],capacity:capacity.rows,events:events.rows,
       note:'Capacity is configured inventory, not measured concurrent call throughput. Health is reported by the private runner.'});
   }
+  if(path==='/api/admin/servers/topology'&&req.method==='GET'){
+    const [regions,targets]=await Promise.all([
+      pool.query("SELECT n.region,n.role,COUNT(*) AS nodes,COALESCE(SUM(n.capacity),0) AS configured_capacity,COALESCE(SUM(n.enabled=TRUE AND n.status='healthy' AND n.last_seen_at>=DATE_SUB(UTC_TIMESTAMP(3),INTERVAL s.stale_seconds SECOND)),0) AS fresh_healthy FROM deployment_nodes n JOIN deployment_report_settings s ON s.id=1 WHERE n.deleted_at IS NULL GROUP BY n.region,n.role ORDER BY n.region,n.role"),
+      pool.query("SELECT COUNT(*) AS targets FROM redirector_targets t JOIN deployment_nodes n ON n.id=t.node_id JOIN deployment_report_settings s ON s.id=1 WHERE t.enabled=TRUE AND n.enabled=TRUE AND n.deleted_at IS NULL AND n.status='healthy' AND n.last_seen_at>=DATE_SUB(UTC_TIMESTAMP(3),INTERVAL s.stale_seconds SECOND)")]);
+    return send(res,200,{regions:regions.rows,healthyWssTargets:Number(targets.rows[0]?.targets||0),
+      scope:'Inventory and fresh health only; application replicas are controlled by the existing single-host Compose cluster.'});
+  }
   if(path==='/api/admin/servers/report-settings'&&req.method==='PUT'){
     if(!granted('manage'))return send(res,403,{error:'Fleet management access required'});
     const b=await readJson(req);
