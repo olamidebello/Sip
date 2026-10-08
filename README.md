@@ -74,7 +74,7 @@ The repository is a development foundation. PBX and call center configuration is
 
 ## Feature status and boundaries
 
-This repository contains a browser SIP dialer, a MySQL-backed account API, and administration screens. The PBX, queue, DID routing, and rate deck screens **save and preview configuration**; they do not provision a SIP switch or handle media. Neither a plan invoice nor a previewed rate is a charge. A SIP account must come from an external WSS/WebRTC capable switch. This distinction is shown in the interface and API response.
+This repository contains a browser SIP dialer, a MySQL-backed account API, FreeSWITCH installation and XML bridge, and administration screens. The supported switch deployment can provision tenant SIP accounts and dialplan lookups when commissioned. PBX, queue, DID routing and rate deck features still need live carrier, media, charging and acceptance work. Neither a plan invoice nor a previewed rate is a charge.
 
 | Area | Available now | Additional service required |
 | --- | --- | --- |
@@ -163,7 +163,7 @@ The API stores each `(tenantId, source, legId)` once. An exact replay returns `d
 
 ### Optional FreeSWITCH package staging
 
-The primary bootstrap deploys only the web/API/MySQL stack. To **stage** a FreeSWITCH package on the same Debian 12 host, obtain a SignalWire Personal Access Token for the official package repository. Put the token in `/etc/olamide/signalwire-token` as root with mode 0600. From the cloned repository, run `OLAMIDE_SWITCH_STAGE=1 OLAMIDE_DOMAIN=sip.dobhrap.com bash deployment/bootstrap.sh`. The bootstrap installs the validated web/API version, then runs `deployment/ansible/switch.yml`. A remote Ansible controller can run `SIGNALWIRE_TOKEN=... ansible-playbook -i 'SERVER,' -u SSH_USER deployment/ansible/switch.yml` using a private secret mechanism instead of writing a token into shell history.
+The server-side `deployment/bootstrap.sh` remains the validated web/API/MySQL installer used by `deployment/install-all.sh`. For a combined app and FreeSWITCH install from a trusted Debian or Ubuntu controller, run `bash deployment/controller-bootstrap.sh` from a persistent checkout, or use `deployment/install-class5.bat` through WSL on Windows. The controller flow prompts for the application DNS name, public IPv4, SSH user, SignalWire package token and Ansible Vault password, then installs the application and switch. Keep the private inventory, Vault file, runner token and SSH keys on the controller.
 
 The switch playbook installs the official vanilla FreeSWITCH package, blocks package auto-start, deletes bundled demo SIP users and demo dialplan destinations, rotates the event socket password, binds that socket to localhost, and leaves the switch **stopped and disabled**. No customer extension, DID, carrier, outbound route, or WSS endpoint is automatically activated. The package's default demo accounts must never be exposed with their shared password. Keep SIP and RTP ports closed until a separate production configuration has been commissioned.
 
