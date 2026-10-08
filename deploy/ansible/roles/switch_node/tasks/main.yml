@@ -1,3 +1,244 @@
+---
+- name: Validate platform and required configuration
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution == 'Debian'
+      - ansible_distribution_major_version == '12'
+      - freeswitch_install_method | default('package') == 'source' or freeswitch_signalwire_token | default('') | length > 0
+      - freeswitch_xml_password | default('') | length >= 32
+      - freeswitch_esl_password | default('') | length >= 32
+      - freeswitch_domain is match('^[a-z0-9][a-z0-9.-]+[a-z0-9]$')
+      - freeswitch_xml_url is match('^https://[^/]+/api/switch/xml$')
+      - freeswitch_public_ip | default('') | length > 0
+      - ansible_processor_vcpus | int >= 2
+      - ansible_memtotal_mb | int >= 4096
+      - freeswitch_wss_certificate_source | default('controller') in ['controller','caddy']
+      - freeswitch_wss_certificate_source | default('controller') == 'caddy' or freeswitch_wss_certificate | default('') | length > 0
+      - freeswitch_wss_certificate_source | default('controller') == 'caddy' or freeswitch_wss_key | default('') | length > 0
+      - freeswitch_wss_certificate_source | default('controller') != 'caddy' or not (manage_firewall | default(false) | bool)
+      - not (coturn_enabled | default(false) | bool) or (coturn_secret | default('') | length >= 32)
+      - not (manage_firewall | default(false) | bool) or (freeswitch_ssh_allowed_cidrs | default([]) | length > 0)
+    fail_msg: "Debian 12, a private API URL, certificate/key, and vaulted credentials are required."
+  no_log: true
+
+- name: Validate gateway names and SIP peers
+  ansible.builtin.assert:
+    that:
+      - item.name is match('^[a-z][a-z0-9_-]{1,63}$')
+      - item.proxy is match('^[a-zA-Z0-9.-]+(:[0-9]{2,5})?$')
+      - item.username | default('') | length < 128
+      - item.password | default('') | length < 256
+  loop: "{{ freeswitch_gateways | default([]) }}"
+  no_log: true
+
+- name: Validate firewall allowlists
+  ansible.builtin.assert:
+    that:
+      - item is match('^[0-9.]+/[0-9]{1,2}$')
+  loop: "{{ (freeswitch_ssh_allowed_cidrs | default([])) + (freeswitch_carrier_allowed_cidrs | default([])) }}"
+  when: manage_firewall | default(false) | bool
+
+- name: Validate switch installation method
+  ansible.builtin.assert:
+    that: freeswitch_install_method | default('package') in ['package', 'source']
+
+- name: Install apt prerequisites
+  ansible.builtin.apt:
+    name: [ca-certificates, gnupg, python3, python3-apt, curl, openssl, logrotate, chrony]
+    update_cache: true
+    state: present
+
+- name: Install nftables before opening switch services
+  ansible.builtin.apt:
+    name: nftables
+    state: present
+  when: manage_firewall | default(false) | bool
+
+- name: Validate and apply switch firewall rules
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    owner: root
+    group: root
+    mode: '0644'
+    validate: 'nft -c -f %s'
+  when: manage_firewall | default(false) | bool
+  notify: Restart nftables
+
+- name: Enable switch firewall before package installation
+  ansible.builtin.service:
+    name: nftables
+    enabled: true
+    state: started
+  when: manage_firewall | default(false) | bool
+
+- name: Apply firewall changes before package installation
+  ansible.builtin.meta: flush_handlers
+
+- name: Download authenticated SignalWire signing key
+  ansible.builtin.get_url:
+    url: https://freeswitch.signalwire.com/repo/deb/debian-release/signalwire-freeswitch-repo.gpg
+    dest: /usr/share/keyrings/signalwire-freeswitch-repo.gpg
+    owner: root
+    group: root
+    mode: '0644'
+    url_username: signalwire
+    url_password: "{{ freeswitch_signalwire_token }}"
+    force_basic_auth: true
+  no_log: true
+
+  when: freeswitch_install_method | default('package') == 'package'
+
+- name: Store package repository credentials
+  ansible.builtin.copy:
+    dest: /etc/apt/auth.conf.d/freeswitch.conf
+    content: "machine freeswitch.signalwire.com login signalwire password {{ freeswitch_signalwire_token }}\n"
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+
+  when: freeswitch_install_method | default('package') == 'package'
+
+- name: Configure SignalWire stable repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/signalwire-freeswitch-repo.gpg] https://freeswitch.signalwire.com/repo/deb/debian-release/ bookworm main"
+    filename: freeswitch
+    state: present
+    update_cache: true
+
+  when: freeswitch_install_method | default('package') == 'package'
+
+- name: Check candidate FreeSWITCH package
+  ansible.builtin.command: apt-cache policy freeswitch
+  register: freeswitch_package_policy
+  changed_when: false
+
+  when: freeswitch_install_method | default('package') == 'package'
+
+- name: Require a stable package at or above the supported release
+  ansible.builtin.assert:
+    that:
+      - "'Candidate:' in freeswitch_package_policy.stdout"
+      - "'Candidate: (none)' not in freeswitch_package_policy.stdout"
+    fail_msg: "The configured SignalWire stable repository has no FreeSWITCH candidate."
+
+  when: freeswitch_install_method | default('package') == 'package'
+
+- name: Record candidate FreeSWITCH version
+  ansible.builtin.set_fact:
+    freeswitch_candidate_version: "{{ freeswitch_package_policy.stdout | regex_search('Candidate: ([^ ]+)', '\\1') | first }}"
+
+  when: freeswitch_install_method | default('package') == 'package'
+
+- name: Compare candidate with minimum supported version
+  ansible.builtin.command:
+    argv:
+      - dpkg
+      - --compare-versions
+      - "{{ freeswitch_candidate_version | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+') }}"
+      - ge
+      - "{{ freeswitch_minimum_version | default('1.11.3') }}"
+  changed_when: false
+
+  when: freeswitch_install_method | default('package') == 'package'
+
+- name: Check for an existing FreeSWITCH installation
+  ansible.builtin.command: dpkg-query -W -f=${Version} freeswitch
+  register: previous_freeswitch_package
+  changed_when: false
+  failed_when: false
+
+- name: Determine whether a package upgrade is needed
+  ansible.builtin.command:
+    argv: [dpkg, --compare-versions, "{{ previous_freeswitch_package.stdout }}", lt, "{{ freeswitch_candidate_version }}"]
+  register: freeswitch_upgrade_needed
+  changed_when: false
+  failed_when: false
+  when:
+    - previous_freeswitch_package.rc == 0
+    - freeswitch_upgrade | default(true) | bool
+
+- name: Check active calls before replacing an installed switch
+  ansible.builtin.command:
+    argv: [fs_cli, -H, 127.0.0.1, -P, '8021', -p, "{{ freeswitch_esl_password }}", -x, 'show calls count']
+  register: active_calls
+  changed_when: false
+  no_log: true
+  when:
+    - previous_freeswitch_package.rc == 0
+    - freeswitch_upgrade_needed.rc | default(1) == 0
+
+- name: Refuse an upgrade while calls are active
+  ansible.builtin.assert:
+    that:
+      - active_calls.stdout is match('^\\s*0 total')
+    fail_msg: "Active calls remain. Drain this node before upgrading FreeSWITCH."
+  when:
+    - previous_freeswitch_package.rc == 0
+    - freeswitch_upgrade_needed.rc | default(1) == 0
+
+- name: Create switch backup directory
+  ansible.builtin.file:
+    path: /var/backups/olamide-switch
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  when: previous_freeswitch_package.rc == 0
+
+- name: Back up switch configuration before upgrade
+  ansible.builtin.command:
+    argv:
+      - tar
+      - -C
+      - /etc
+      - -czf
+      - "/var/backups/olamide-switch/freeswitch-{{ ansible_date_time.iso8601_basic_short }}.tar.gz"
+      - freeswitch
+  when:
+    - previous_freeswitch_package.rc == 0
+    - freeswitch_upgrade_needed.rc | default(1) == 0
+  changed_when: true
+
+- name: Record previous package version for rollback
+  ansible.builtin.copy:
+    dest: "/var/backups/olamide-switch/freeswitch-{{ ansible_date_time.iso8601_basic_short }}.version"
+    content: "{{ previous_freeswitch_package.stdout }}\n"
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - previous_freeswitch_package.rc == 0
+    - freeswitch_upgrade_needed.rc | default(1) == 0
+
+- name: Build the pinned upstream FreeSWITCH release without package credentials
+  ansible.builtin.script:
+    cmd: "{{ role_path }}/files/install-source.sh v1.11.3"
+    executable: /bin/bash
+    creates: /usr/local/freeswitch/.olamide-source-v1.11.3
+  when: freeswitch_install_method | default('package') == 'source'
+
+- name: Install FreeSWITCH and XML curl
+  ansible.builtin.apt:
+    name:
+      - freeswitch-meta-vanilla
+      - freeswitch-mod-xml-curl
+    state: "{{ 'latest' if freeswitch_upgrade | default(true) | bool else 'present' }}"
+
+  when: freeswitch_install_method | default('package') == 'package'
+
+- name: Check optional sound packages in the authenticated repository
+  ansible.builtin.command:
+    argv: [apt-cache, policy, "{{ item }}"]
+  loop:
+    - freeswitch-sounds-en-us-callie
+    - freeswitch-sounds-music
+  register: freeswitch_sound_policy
+  changed_when: false
+
+  when: freeswitch_install_method | default('package') == 'package'
+
 - name: Install available FreeSWITCH sound packages
   ansible.builtin.apt:
     name: "{{ item.item }}"
