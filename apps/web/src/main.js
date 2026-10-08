@@ -15,6 +15,7 @@ import {setupFleetNetworkAdmin} from "./fleetNetworkAdmin.js";
 import {setupFleetAccessAdmin} from "./fleetAccessAdmin.js";
 import {setupFleetFirewallAdmin} from "./fleetFirewallAdmin.js";
 import {setupOperationsAdmin} from "./operationsAdmin.js";
+import {setupWorkspaceQuick} from "./workspaceQuick.js";
 import { setupMobileAdmin } from "./mobileAdmin.js";
 import { setupTenants } from "./tenants.js";
 import { setupPbx } from "./pbx.js";
@@ -71,6 +72,7 @@ root.innerHTML = `
     </div>
   </section>
   <nav id="app-nav" aria-label="Application" hidden></nav>
+  <dialog id="command-palette" aria-label="Jump to a workspace page"><h2>Jump to</h2><label>Find a page <input id="command-search" type="search" autocomplete="off" placeholder="Search pages…"></label><ul id="command-results"></ul><p id="command-empty" hidden>No matching page in your current access.</p><form method="dialog"><button>Close</button></form></dialog>
   <section id="help" aria-labelledby="help-title"><h2 id="help-title">Help center</h2>
     <p>Find a quick answer, follow a guided tour, or contact support.</p>
     <nav class="help-links" aria-label="Help topics"><a href="#help-faq">FAQs</a><a href="#help-user">User tutorial</a><a href="#help-admin">Administrator tutorial</a><a href="#help-technical">Technical guide</a><a href="#help-agent">AI support</a><a href="#support">Support tickets</a></nav>
@@ -85,6 +87,7 @@ root.innerHTML = `
       <details><summary>What does a network device configuration save do?</summary><p>It creates a versioned desired configuration and an audit event. Router and firewall vendor changes need a supported adapter; saving a draft does not change the device.</p></details>
       <details><summary>Why is a deployment job pending?</summary><p>The private Ansible runner may be offline or waiting for SSH, Vault or a previous job. An operator can inspect the controller timer and job history.</p></details>
       <details><summary>How do named dashboards and backgrounds work?</summary><p>Save a personal dashboard view or choose a tenant view. Drag tiles to change their order. In My background, choose a preset or dark custom colors. Tenant administrators can lock personal overrides.</p></details>
+      <details><summary>How do I jump back to a workspace page?</summary><p>Press Ctrl K or Command K to search visible pages. Save up to eight quick links on Dashboard and use Continue to return to a recently visited page. Links follow your current access.</p></details>
     </section>
     <section id="help-user"><h3>User tutorial</h3><ol>
       <li>Register, confirm your email, and sign in.</li><li>Open Account & security to set a passkey and check your SIP identity.</li>
@@ -176,6 +179,8 @@ root.innerHTML = `
   </section>
   <section id="dashboard" hidden>
     <h2>Dashboard</h2><button id="dashboard-refresh" type="button">Refresh dashboard</button>
+    <button id="command-open" type="button">Jump to page · Ctrl K</button>
+    <section id="workspace-shortcuts"><h3>My quick links</h3><button id="workspace-add-current" type="button">Add current page</button><button id="workspace-resume" type="button" hidden></button><ul id="workspace-shortcut-list"></ul><p id="workspace-shortcut-status" role="status"></p></section>
     <p id="dashboard-updated"></p><div id="dashboard-tiles" class="dashboard-tiles"></div>
     <details><summary>My dashboard views</summary><p>Create named layouts for yourself. Administrators can publish a layout to the selected tenant.</p>
       <form id="dashboard-view-create"><label>View name <input name="name" maxlength="60" required></label>
@@ -1008,6 +1013,7 @@ function showWorkspace(target) {
     if(link.hash===`#${target}`) link.setAttribute("aria-current","page");
     else link.removeAttribute("aria-current");
   }
+  workspaceQuick.record(target);
 }
 function resetWorkspace() {
   document.body.classList.remove("workspace-mode");
@@ -1100,6 +1106,7 @@ const fleetNetwork=setupFleetNetworkAdmin({get:apiGet,request:accountRequest});
 const fleetGrants=setupFleetAccessAdmin({get:apiGet,request:accountRequest});
 const fleetFirewall=setupFleetFirewallAdmin({get:apiGet,request:accountRequest});
 const operationsAdmin=setupOperationsAdmin({get:apiGet,request:accountRequest});
+const workspaceQuick=setupWorkspaceQuick({get:apiGet,request:accountRequest,show:showWorkspace,current:()=>activeView});
 const providerWebhooks=setupProviderWebhookAdmin({get:apiGet,request:accountRequest});
 const didwwAdmin=setupDidwwAdmin({get:apiGet,request:accountRequest});
 const adapterAdmin=setupAdapterAdmin({get:apiGet,request:accountRequest});
@@ -1540,11 +1547,13 @@ function signedIn(user) {
   pbx.refreshSelf(user).catch((error) => { $("#agent-status-result").textContent = error.message; });
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
   updateNavigation();
+  workspaceQuick.refresh();
   if(user.role!=="super_admin")apiGet("/api/admin/servers/permissions").then(({accessLevel})=>{
     if(!activeRole||activeRole==="pending_password_change")return;
     $("#fleet-admin").hidden=accessLevel==="none";
     if(accessLevel!=="none"){serverFleet.refresh();fleetNetwork.refresh();fleetFirewall.refresh();}
     updateNavigation();
+    workspaceQuick.refresh();
   }).catch(()=>{});
   const requested=decodeURIComponent(location.hash.slice(1));
   showWorkspace(pageId(location.pathname) ? document.getElementById(pageId(location.pathname))?.closest('section[id]')?.id || 'dashboard' : $("#app-nav").querySelector(`a[href="#${CSS.escape(requested)}"]`)?requested:"dashboard");
@@ -2023,7 +2032,7 @@ $("#logout").onclick = async () => {
     $("#sip-account-panel").hidden=true;$("#sip-credentials-result").textContent='';
     $("#dialplan-marketplace").hidden=true;$("#dialplan-offers").replaceChildren();$("#dialplan-orders").replaceChildren();
     $("#account-password-group").hidden=true;
-    activeRole=null;resetWorkspace();$("#help-agent").hidden=true;$("#help-admin").hidden=true;$("#signin-role-help").textContent="Your assigned role controls which menus appear after sign-in.";
+    activeRole=null;workspaceQuick.clear();resetWorkspace();$("#help-agent").hidden=true;$("#help-admin").hidden=true;$("#signin-role-help").textContent="Your assigned role controls which menus appear after sign-in.";
     $('#login-menu-label').textContent='Sign in';$('#login-options-auth').hidden=false;$('#login-options-account').hidden=true;
     $("#password-change").hidden = true;
     $("#background-user").hidden = true;
