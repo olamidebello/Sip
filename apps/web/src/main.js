@@ -4,6 +4,8 @@ import { checkCurrentLocation } from "./geofence.js";
 import { setupMeetings } from "./meetings.js";
 import { setupGroupAdmin } from "./groups.js";
 import { setupSipProfiles } from "./sipProfiles.js";
+import {setupCommerceOps} from "./commerceOps.js";
+import {setupProviderWebhookAdmin} from "./providerWebhookAdmin.js";
 import { setupMobileAdmin } from "./mobileAdmin.js";
 import { setupTenants } from "./tenants.js";
 import { setupPbx } from "./pbx.js";
@@ -253,11 +255,11 @@ root.innerHTML = `
   </section>
   <section id="billing" hidden>
     <h2>Plans and billing</h2>
-    <p>Plan requests create unpaid invoices. Online payment and activation are not available yet.</p>
+    <p>Plan requests create invoices. Where enabled, pay an unpaid USD invoice using hosted Stripe Checkout. Payment does not activate calling or assign a number.</p>
     <label>Monthly plan <select id="plans"></select></label>
     <button id="select-plan" type="button">Request plan</button>
     <p id="subscription"></p>
-    <h3>Invoices</h3><ul id="invoices"></ul>
+    <h3>Invoices</h3><ul id="invoices"></ul><p id="checkout-status" role="status"></p>
     <h3>Account wallet</h3>
     <p id="wallet-balance">Loading wallet…</p>
     <p>Funding and cash-out are unavailable until a verified payment provider is connected. A wallet transfer requires an existing cleared balance.</p>
@@ -580,6 +582,33 @@ root.innerHTML = `
       <ol id="security-events"></ol>
       <p id="group-status" role="status"></p>
     </section>
+    <section id="payment-admin">
+      <h3>Stripe payment gateway</h3><p>Tenant scoped Stripe Checkout for existing USD invoices. Enter a secret API key and webhook signing secret. Stored credentials are encrypted; existing values are never shown again.</p>
+      <p>Webhook URL: <code id="stripe-webhook-url"></code></p>
+      <form id="stripe-settings"><label>Stripe secret key <input name="secretKey" type="password" autocomplete="off" placeholder="Leave blank to keep existing"></label>
+        <label>Webhook signing secret <input name="webhookSecret" type="password" autocomplete="off" placeholder="Leave blank to keep existing"></label>
+        <label><input name="enabled" type="checkbox"> Accept Stripe payments for this tenant</label>
+        <label><input name="confirmLive" type="checkbox"> Confirm live Stripe payments and reconciliation responsibility</label>
+        <button>Save Stripe settings</button></form>
+      <button id="stripe-refresh" type="button">Refresh gateway and payment attempts</button>
+      <p id="stripe-status" role="status"></p><h4>Recent payment attempts</h4><ul id="stripe-attempts"></ul>
+    </section>
+    <section id="cluster-admin">
+      <h3>API capacity</h3><p id="cluster-summary"></p>
+      <form id="cluster-scale"><label>Desired API replicas on this host <input name="apiReplicas" type="number" min="1" max="4" step="1" required></label><button>Request scaling</button></form>
+      <button id="cluster-refresh" type="button">Refresh scaling status</button><p id="cluster-status" role="status"></p>
+      <h4>Recent requests</h4><ul id="cluster-history"></ul>
+    </section>
+    <section id="provider-webhook-admin" hidden>
+      <h3>Provider callback registry</h3><p id="provider-webhook-tenant"></p>
+      <p>Flowroute SMS/MMS callbacks are configured on Messaging webhooks. DIDWW and future providers can be registered here to receive authenticated JSON callbacks for audit. Provider-specific processing requires a verified adapter.</p>
+      <form id="provider-webhook-create"><label>Provider slug <input name="provider" pattern="[a-z][a-z0-9-]{1,39}" placeholder="didww" required></label>
+        <label>Display name <input name="displayName" maxlength="100" required></label><button>Add provider</button></form>
+      <p id="provider-webhook-result" role="status"></p>
+      <button id="provider-webhook-refresh" type="button">Refresh providers and events</button>
+      <ul id="provider-webhook-list"></ul><h4>Recent verified callback receipts</h4><ul id="provider-webhook-events"></ul>
+      <p id="provider-webhook-status" role="status"></p>
+    </section>
     <section id="sip-profile-admin" hidden>
       <h3>SIP profile access</h3><p>Super administrators set tenant defaults, group grants and individual overrides for viewing, adding, editing and deleting SIP profiles.</p>
       <label>Tenant <select id="sip-policy-tenant"></select></label>
@@ -768,9 +797,9 @@ const navigationGroups=[
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
-  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
+  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["mobile-admin","App releases"]]},
-  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"]]}
+  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"]]}
 ];
 let activeRole=null;
 let pageRoutes;
@@ -883,6 +912,8 @@ const support=setupSupport({get:path=>apiGet(path),request:(path,body,method)=>a
 const localeSettings=setupLocaleSettings({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const groupAdmin = setupGroupAdmin();
 const sipProfiles = setupSipProfiles({get:apiGet,request:accountRequest});
+const commerceOps=setupCommerceOps({get:apiGet,request:accountRequest});
+const providerWebhooks=setupProviderWebhookAdmin({get:apiGet,request:accountRequest});
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
 const pbx = setupPbx();
@@ -1255,6 +1286,9 @@ function signedIn(user) {
   refreshSipAccount();
   sipProfiles.refresh();
   $("#sip-profile-admin").hidden=user.role!=="super_admin";
+  $("#provider-webhook-admin").hidden=user.role!=="super_admin";
+  if(user.role==="super_admin")providerWebhooks.refresh();
+  if(["admin","super_admin"].includes(user.role)){commerceOps.refreshPayment();commerceOps.refreshCluster();}
   if(user.role==="super_admin") sipProfiles.refreshAdmin();
   $("#dialplan-marketplace").hidden=!user.features?.billing;
   $("#dialplan-admin-create").hidden=!['admin','super_admin'].includes(user.role);
@@ -1383,7 +1417,14 @@ async function refreshBilling() {
     ? `${subscription.subscription.name}: ${subscription.subscription.status}` : "No plan requested";
   $("#invoices").replaceChildren(...invoices.invoices.map((invoice) => {
     const li = document.createElement("li");
-    li.textContent = `${invoice.description}: ${money(invoice.amount_cents)} — ${invoice.status}`;
+    li.textContent = `${invoice.description}: ${money(invoice.amount_cents)} — ${invoice.status} `;
+    if(invoice.status==='unpaid'&&invoice.currency==='USD'&&Number(invoice.amount_cents)>0){
+      const button=document.createElement('button');button.type='button';button.textContent='Pay with Stripe';
+      button.onclick=async()=>{button.disabled=true;try{const result=await accountRequest('/api/payments/checkout',{invoiceId:invoice.id});
+        const dest=new URL(result.url);if(dest.protocol!=='https:'||dest.hostname!=='checkout.stripe.com')throw new Error('Invalid checkout URL');
+        location.assign(dest.href);
+      }catch(error){$('#checkout-status').textContent=error.message;button.disabled=false;}};li.append(button);
+    }
     return li;
   }));
   $("#ports").replaceChildren(...ports.requests.map((request) => {
