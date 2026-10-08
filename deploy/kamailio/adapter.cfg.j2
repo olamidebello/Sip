@@ -1,0 +1,124 @@
+#!KAMAILIO
+# Staging adapter. Loopback only; production listeners and carriers require cutover tests.
+debug=2
+log_stderror=yes
+children=4
+listen=udp:127.0.0.1:5062
+alias="{{ kamailio_domain }}"
+loadmodule "sl.so"
+loadmodule "tm.so"
+loadmodule "rr.so"
+loadmodule "maxfwd.so"
+loadmodule "textops.so"
+loadmodule "pv.so"
+loadmodule "xlog.so"
+loadmodule "auth.so"
+loadmodule "http_client.so"
+loadmodule "jansson.so"
+loadmodule "registrar.so"
+loadmodule "usrloc.so"
+loadmodule "rtpengine.so"
+modparam("usrloc","db_mode",0)
+modparam("http_client","query_result",0)
+modparam("http_client","connection_timeout",2)
+modparam("rtpengine","rtpengine_sock","udp:127.0.0.1:2223")
+
+request_route {
+    if (!mf_process_maxfwd_header("10")) {
+        sl_send_reply("483","Too Many Hops"); exit;
+    }
+    if (is_method("OPTIONS")) {
+        sl_send_reply("200","OK"); exit;
+    }
+    if (is_method("REGISTER")) {
+        $var(realm)=$td;
+        if (!has_credentials("$var(realm)")) {
+            www_challenge("$var(realm)","1"); exit;
+        }
+        route(LOOKUP_HA1);
+        if (!pv_www_authenticate("$var(realm)","$var(ha1)","1")) {
+            www_challenge("$var(realm)","1"); exit;
+        }
+        if ($tu != "sip:" + $au + "@" + $var(realm)) {
+            sl_send_reply("403","Account mismatch"); exit;
+        }
+        if (!save("location")) sl_send_reply("500","Registration failed");
+        exit;
+    }
+    if (is_method("CANCEL")) {
+        if (t_check_trans()) t_relay();
+        exit;
+    }
+    if (has_totag()) {
+        if (!loose_route()) { sl_send_reply("404","Unknown dialog"); exit; }
+        if (is_method("BYE")) rtpengine_delete();
+        if (!t_relay()) sl_reply_error();
+        exit;
+    }
+    if (!is_method("INVITE")) {
+        sl_send_reply("405","Method Not Allowed"); exit;
+    }
+    $var(realm)=$fd;
+    if (!has_credentials("$var(realm)")) {
+        proxy_challenge("$var(realm)","1"); exit;
+    }
+    route(LOOKUP_HA1);
+    if (!pv_proxy_authenticate("$var(realm)","$var(ha1)","1")) {
+        proxy_challenge("$var(realm)","1"); exit;
+    }
+    if ($fU != $au || $rd != $var(realm)) {
+        sl_send_reply("403","Tenant mismatch"); exit;
+    }
+    if ($rU !~ "^(\\+[1-9][0-9]{7,14}|[0-9]{2,10})$") {
+        sl_send_reply("403","Invalid destination"); exit;
+    }
+    $var(req)="{\"domain\":\"" + $var(realm) + "\",\"caller\":\"" + $au + "\",\"destination\":\"" + $rU + "\"}";
+    http_client_query("{{ kamailio_api_url }}/api/switch/kamailio/route",
+        "$var(req)",
+        "Content-Type: application/json\r\nAuthorization: Bearer {{ kamailio_route_token }}",
+        "$var(body)");
+    if ($rc != 200) { sl_send_reply("403","No route"); exit; }
+    if (!jansson_get("route","$var(body)","$var(route)")) {
+        sl_send_reply("503","Routing unavailable"); exit;
+    }
+    if ($var(route) != "extension") {
+        # Carrier and media server dispatch are not enabled on this staging listener.
+        sl_send_reply("503","Carrier route not commissioned"); exit;
+    }
+    if (!jansson_get("username","$var(body)","$var(target)")) {
+        sl_send_reply("503","Target unavailable"); exit;
+    }
+    if ($var(target) !~ "^[a-z0-9]{2,64}$") {
+        sl_send_reply("503","Invalid target"); exit;
+    }
+    $ru="sip:" + $var(target) + "@" + $var(realm);
+    if (!lookup("location")) { sl_send_reply("404","Extension offline"); exit; }
+    if (has_body("application/sdp") && !rtpengine_offer()) {
+        sl_send_reply("488","Media unavailable"); exit;
+    }
+    record_route();
+    t_on_reply("MEDIA_REPLY");
+    if (!t_relay()) {
+        rtpengine_delete(); sl_reply_error();
+    }
+    exit;
+}
+
+route[LOOKUP_HA1] {
+    if ($au !~ "^[a-z0-9]{2,64}$" || $var(realm) !~ "^[a-z0-9][a-z0-9.-]{1,253}$") {
+        sl_send_reply("403","Invalid account"); exit;
+    }
+    $var(req)="{\"domain\":\"" + $var(realm) + "\",\"username\":\"" + $au + "\"}";
+    http_client_query("{{ kamailio_api_url }}/api/switch/kamailio/auth",
+        "$var(req)",
+        "Content-Type: application/json\r\nAuthorization: Bearer {{ kamailio_route_token }}",
+        "$var(body)");
+    if ($rc != 200 || !jansson_get("ha1","$var(body)","$var(ha1)") ||
+        $var(ha1) !~ "^[a-f0-9]{32}$") {
+        sl_send_reply("403","Account unavailable"); exit;
+    }
+}
+
+onreply_route[MEDIA_REPLY] {
+    if (has_body("application/sdp")) rtpengine_answer();
+}
