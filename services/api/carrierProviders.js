@@ -70,6 +70,11 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
     if(user.role!=='super_admin') return send(res,403,{error:'Super administrator required'});
     const {enabled}=await readJson(req);
     if(typeof enabled!=='boolean')return send(res,400,{error:'Boolean enabled required'});
+    if(!enabled){
+      const active=await pool.query("SELECT 1 FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider=$2 AND status='active'",
+        [user.tenant_id,customMatch[1]]);
+      if(active.rowCount)return send(res,409,{error:'Deactivate this carrier with the switch adapter first'});
+    }
     const result=await pool.query('UPDATE carrier_provider_catalog SET enabled=$1 WHERE tenant_id=$2 AND provider=$3',
       [enabled,user.tenant_id,customMatch[1]]);
     if(!result.rowCount)return send(res,404,{error:'Carrier unavailable'});
@@ -87,6 +92,9 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
       maxConcurrentCalls<1||maxConcurrentCalls>100000||
       !['manual','least_cost','priority'].includes(routingMode))
       return send(res,400,{error:'Valid Flowroute PoP, capacity and routing mode required'});
+    const active=await pool.query("SELECT 1 FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider='flowroute' AND status='active'",
+      [user.tenant_id]);
+    if(active.rowCount)return send(res,409,{error:'Deactivate the current Flowroute trunk before changing its PoP'});
     const db=await pool.connect();
     try{
       await db.query('BEGIN');
@@ -108,7 +116,7 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
     }catch(error){await db.query('ROLLBACK');throw error;}
     finally{db.release();}
   }
-  const match=/^\/api\/admin\/carriers\/([a-z][a-z0-9-]{1,15})(?:\/(verify|activate))?$/.exec(path);
+  const match=/^\/api\/admin\/carriers\/([a-z][a-z0-9-]{1,15})(?:\/(verify|activate|deactivate))?$/.exec(path);
   if(!match) return send(res,404,{error:'Carrier route unavailable'});
   const [,provider,action]=match;
   if(!providers.includes(provider)){
@@ -124,6 +132,9 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
       return send(res,400,{error:'Valid trunk, capacity and routing mode required'});
     const trunk=await pool.query('SELECT id FROM pbx_trunks WHERE id=$1 AND tenant_id=$2',[trunkId,user.tenant_id]);
     if(!trunk.rowCount) return send(res,404,{error:'Tenant trunk unavailable'});
+    const active=await pool.query("SELECT 1 FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider=$2 AND status='active'",
+      [user.tenant_id,provider]);
+    if(active.rowCount)return send(res,409,{error:'Deactivate this carrier before editing its profile'});
     await pool.query("INSERT INTO carrier_provider_profiles(tenant_id,provider,trunk_id,max_concurrent_calls,routing_mode,status,updated_by) VALUES($1,$2,$3,$4,$5,'draft',$6) ON DUPLICATE KEY UPDATE trunk_id=VALUES(trunk_id),max_concurrent_calls=VALUES(max_concurrent_calls),routing_mode=VALUES(routing_mode),status='draft',provisioned_at=NULL,last_error=NULL,updated_by=VALUES(updated_by)",
       [user.tenant_id,provider,trunkId,maxConcurrentCalls,routingMode,user.id]);
     if(!providers.includes(provider))await pool.query('DELETE FROM carrier_provider_verifications WHERE tenant_id=$1 AND provider=$2',
@@ -175,6 +186,24 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
       await pool.query("UPDATE carrier_provider_profiles SET status='error',last_error='Provisioning adapter did not acknowledge activation',updated_by=$1 WHERE tenant_id=$2 AND provider=$3",[user.id,user.tenant_id,provider]);
       return send(res,502,{error:'Carrier provisioning not acknowledged'});
     }
+  }
+  if(action==='deactivate' && req.method==='POST'){
+    if(!adapterReady())return send(res,409,{error:'HTTPS provisioning adapter required'});
+    const found=await pool.query('SELECT trunk_id,status FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider=$2',
+      [user.tenant_id,provider]);
+    const profile=found.rows[0];
+    if(!profile)return send(res,404,{error:'Carrier profile unavailable'});
+    if(profile.status!=='active')return send(res,409,{error:'Carrier is not active'});
+    try{
+      const response=await fetch(process.env.CARRIER_PROVISION_URL,{method:'POST',signal:AbortSignal.timeout(10000),
+        headers:{Authorization:`Bearer ${process.env.CARRIER_PROVISION_TOKEN}`,'Content-Type':'application/json',
+          'Idempotency-Key':`${user.tenant_id}:${provider}:deactivate`},
+        body:JSON.stringify({action:'deactivate',tenantId:user.tenant_id,provider,trunkId:profile.trunk_id})});
+      if(!response.ok||(await response.json()).status!=='inactive')throw Error('Adapter rejected deactivation');
+      await pool.query("UPDATE carrier_provider_profiles SET status='draft',provisioned_at=NULL,updated_by=$1 WHERE tenant_id=$2 AND provider=$3",
+        [user.id,user.tenant_id,provider]);
+      return send(res,200,{provider,status:'draft'});
+    }catch{return send(res,502,{error:'Switch adapter did not acknowledge deactivation'});}
   }
   return send(res,405,{error:'Unsupported carrier action'});
 }
