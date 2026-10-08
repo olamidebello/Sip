@@ -29,9 +29,11 @@ export async function availableNumbers(provider) {
     const key = process.env.DIDWW_API_KEY;
     if (!key || process.env.DIDWW_ACCOUNT_CURRENCY !== "USD")
       throw new Error("DIDWW USD inventory is not configured");
+    if (!["sandbox","production"].includes(process.env.DIDWW_API_ENV))
+      throw new Error("DIDWW environment is not configured");
     const payload = await providerJson(
-      "https://api.didww.com/v3/available_dids?include=did_group.stock_keeping_units&page[size]=20",
-      { "Api-Key": key, Accept: "application/vnd.api+json" }
+      `${process.env.DIDWW_API_ENV === "sandbox" ? "https://sandbox-api.didww.com" : "https://api.didww.com"}/v3/available_dids?include=did_group.stock_keeping_units&page[size]=20`,
+      { "Api-Key": key, Accept: "application/vnd.api+json", "X-DIDWW-Api-Version":"2026-04-16" }
     );
     const included = new Map((payload.included || []).map((item) => [item.id, item]));
     return (payload.data || []).flatMap((item) => {
