@@ -2,6 +2,25 @@
 
 The Ansible role installs FreeSWITCH on dedicated Debian 12 switch nodes, enables authenticated `mod_xml_curl` directory and dialplan lookups, installs a trusted WSS certificate, pins the event socket and node metrics to loopback, configures time synchronization and service restart limits, optionally installs coturn, and applies an opt-in nftables ruleset. The API stores tenant domains, SIP account credentials, tariffs and gateway mappings in MySQL. No carrier traffic is enabled by the role merely installing packages.
 
+## Source installation without a SignalWire package token
+
+On a Debian 12 switch host, the role can build the upstream FreeSWITCH v1.11.3 release from public source. This path compiles the prerequisite libraries, includes `mod_xml_curl`, installs a local systemd service, and then applies the same XML lookup, TLS, gateway and health checks as the package path. It does not use the SignalWire Debian repository or its token. The first run can take substantial time and needs build disk and memory. Dependency repositories are currently fetched from their public default branches; use a reviewed immutable dependency snapshot for reproducible production builds.
+
+The existing private inventory and encrypted Vault still supply `vault_freeswitch_xml_password` and `vault_freeswitch_esl_password`. The package token is ignored in source mode. Do not put passwords in the command line. From the switch host itself, after updating the repository:
+
+```sh
+cd /opt/olamide/repo
+ansible-playbook -i deploy/ansible/inventory.yml deploy/ansible/site.yml \
+  -e ansible_connection=local -e freeswitch_install_method=source \
+  --ask-vault-pass
+systemctl is-active freeswitch
+/usr/local/freeswitch/bin/freeswitch -version
+```
+
+The existing `controller-bootstrap.sh` is still for the package workflow and performs an SSH preflight, so use the playbook directly for a local source installation. If the private Vault was generated with a token previously pasted into a chat, revoke that token in SignalWire. It is not needed for this route. Source mode refuses to mix with an already installed FreeSWITCH Debian package and stops if a preexisting `/etc/freeswitch` directory would be overwritten. The source build is marked by `/usr/local/freeswitch/.olamide-source-v1.11.3`; do not treat a marker alone as a live-call test.
+
+This is the upstream FreeSWITCH engine integrated with the Olamide API, not a completed carrier service. Add real gateways, tariffs, DID ingress and call policies, and verify registration, routing and media before opening production traffic.
+
 ## Supported release and upgrade
 
 The role requires FreeSWITCH **1.11.3 or newer** from the authenticated SignalWire stable Debian repository. With `freeswitch_upgrade: true`, it checks the repository candidate before installation, updates the FreeSWITCH package set, and verifies both installed and running versions. If the stable repository has an older candidate, the playbook stops; it does not silently install an older switch or fetch unreviewed source. The default playbook processes switch nodes one at a time.
