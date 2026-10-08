@@ -1930,7 +1930,7 @@ async function refreshCarriers(){
     verify.onclick=async()=>{try{const result=await accountRequest(`/api/admin/carriers/${profile.provider}/verify`,{});
       $("#carrier-admin-status").textContent=result.adapterVerified?`${result.provider}: carrier adapter verified. No SIP route activated.`:
         `${result.provider}: credentials valid; ${result.sampleCount} inventory results. No SIP route activated.`;
-      catch(error){$("#carrier-admin-status").textContent=error.message;}};
+      }catch(error){$("#carrier-admin-status").textContent=error.message;}};
     const activate=document.createElement('button');activate.type='button';activate.textContent='Provision with switch adapter';
     activate.disabled=!profile.trunk_id||!data.adapterConfigured||
       (['flowroute','didww'].includes(profile.provider)&&!profile.credentialsConfigured);
