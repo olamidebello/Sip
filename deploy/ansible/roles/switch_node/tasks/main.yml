@@ -97,6 +97,101 @@
     state: present
     update_cache: true
 
+- name: Check candidate FreeSWITCH package
+  ansible.builtin.command: apt-cache policy freeswitch
+  register: freeswitch_package_policy
+  changed_when: false
+
+- name: Require a stable package at or above the supported release
+  ansible.builtin.assert:
+    that:
+      - "'Candidate:' in freeswitch_package_policy.stdout"
+      - "'Candidate: (none)' not in freeswitch_package_policy.stdout"
+    fail_msg: "The configured SignalWire stable repository has no FreeSWITCH candidate."
+
+- name: Record candidate FreeSWITCH version
+  ansible.builtin.set_fact:
+    freeswitch_candidate_version: "{{ freeswitch_package_policy.stdout | regex_search('Candidate: ([^ ]+)', '\\1') | first }}"
+
+- name: Compare candidate with minimum supported version
+  ansible.builtin.command:
+    argv:
+      - dpkg
+      - --compare-versions
+      - "{{ freeswitch_candidate_version | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+') }}"
+      - ge
+      - "{{ freeswitch_minimum_version | default('1.11.3') }}"
+  changed_when: false
+
+- name: Check for an existing FreeSWITCH installation
+  ansible.builtin.command: dpkg-query -W -f=${Version} freeswitch
+  register: previous_freeswitch_package
+  changed_when: false
+  failed_when: false
+
+- name: Determine whether a package upgrade is needed
+  ansible.builtin.command:
+    argv: [dpkg, --compare-versions, "{{ previous_freeswitch_package.stdout }}", lt, "{{ freeswitch_candidate_version }}"]
+  register: freeswitch_upgrade_needed
+  changed_when: false
+  failed_when: false
+  when:
+    - previous_freeswitch_package.rc == 0
+    - freeswitch_upgrade | default(true) | bool
+
+- name: Check active calls before replacing an installed switch
+  ansible.builtin.command:
+    argv: [fs_cli, -H, 127.0.0.1, -P, '8021', -p, "{{ freeswitch_esl_password }}", -x, 'show calls count']
+  register: active_calls
+  changed_when: false
+  no_log: true
+  when:
+    - previous_freeswitch_package.rc == 0
+    - freeswitch_upgrade_needed.rc | default(1) == 0
+
+- name: Refuse an upgrade while calls are active
+  ansible.builtin.assert:
+    that:
+      - active_calls.stdout is match('^\\s*0 total')
+    fail_msg: "Active calls remain. Drain this node before upgrading FreeSWITCH."
+  when:
+    - previous_freeswitch_package.rc == 0
+    - freeswitch_upgrade_needed.rc | default(1) == 0
+
+- name: Create switch backup directory
+  ansible.builtin.file:
+    path: /var/backups/olamide-switch
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  when: previous_freeswitch_package.rc == 0
+
+- name: Back up switch configuration before upgrade
+  ansible.builtin.command:
+    argv:
+      - tar
+      - -C
+      - /etc
+      - -czf
+      - "/var/backups/olamide-switch/freeswitch-{{ ansible_date_time.iso8601_basic_short }}.tar.gz"
+      - freeswitch
+  when:
+    - previous_freeswitch_package.rc == 0
+    - freeswitch_upgrade_needed.rc | default(1) == 0
+  changed_when: true
+
+- name: Record previous package version for rollback
+  ansible.builtin.copy:
+    dest: "/var/backups/olamide-switch/freeswitch-{{ ansible_date_time.iso8601_basic_short }}.version"
+    content: "{{ previous_freeswitch_package.stdout }}\n"
+    owner: root
+    group: root
+    mode: '0600'
+  when:
+    - previous_freeswitch_package.rc == 0
+    - freeswitch_upgrade_needed.rc | default(1) == 0
+
 - name: Install FreeSWITCH and XML curl
   ansible.builtin.apt:
     name:
@@ -104,7 +199,17 @@
       - freeswitch-mod-xml-curl
       - freeswitch-sounds-en-us-callie
       - freeswitch-sounds-music
-    state: present
+    state: "{{ 'latest' if freeswitch_upgrade | default(true) | bool else 'present' }}"
+
+- name: Read installed FreeSWITCH package version
+  ansible.builtin.command: dpkg-query -W -f=${Version} freeswitch
+  register: installed_freeswitch_package
+  changed_when: false
+
+- name: Require installed version at or above minimum
+  ansible.builtin.command:
+    argv: [dpkg, --compare-versions, "{{ installed_freeswitch_package.stdout | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+') }}", ge, "{{ freeswitch_minimum_version | default('1.11.3') }}"]
+  changed_when: false
 
 - name: Install local node telemetry exporter
   ansible.builtin.apt:
@@ -277,6 +382,25 @@
     argv: [fs_cli, -H, 127.0.0.1, -P, '8021', -p, "{{ freeswitch_esl_password }}", -x, status]
   changed_when: false
   no_log: true
+  when: not ansible_check_mode
+
+- name: Read running FreeSWITCH version
+  ansible.builtin.command:
+    argv: [fs_cli, -H, 127.0.0.1, -P, '8021', -p, "{{ freeswitch_esl_password }}", -x, 'version short']
+  register: running_freeswitch_version
+  changed_when: false
+  no_log: true
+  when: not ansible_check_mode
+
+- name: Require running FreeSWITCH version at or above minimum
+  ansible.builtin.command:
+    argv:
+      - dpkg
+      - --compare-versions
+      - "{{ running_freeswitch_version.stdout | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+') }}"
+      - ge
+      - "{{ freeswitch_minimum_version | default('1.11.3') }}"
+  changed_when: false
   when: not ansible_check_mode
 
 - name: Verify authenticated XML lookup reaches the API
