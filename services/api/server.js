@@ -14,6 +14,7 @@ import { handleAdapterRegistry } from './adapterRegistry.js';
 import { handleOperatorControl } from './operatorControl.js';
 import { handleSwitchAdmin,handleSwitchXml } from './switch.js';
 import { handleServerFleetAdmin,handleServerFleetRunner } from './serverFleet.js';
+import {handleOperationsPolicy,resolveWss} from './operationsPolicy.js';
 import { handleFlowrouteRates } from './flowrouteRates.js';
 import { handleHelpAgent } from './helpAgent.js';
 import { handleFlowrouteWebhook, handleMessagingWebhookAdmin, handleExternalSms, handleSmsNumberAdmin } from './messagingWebhooks.js';
@@ -217,15 +218,22 @@ async function handler(req, res) {
       return send(res, 200, { plans: result.rows });
     }
     if (path==="/api/help/agent" || path.startsWith("/api/rates/flowroute/") || path.startsWith("/api/external-sms/") || path.startsWith("/api/contacts") || path.startsWith("/api/messages") ||
-        path.startsWith("/api/admin/") || path.startsWith("/api/account/") || path==="/api/background" || path==="/api/catalog-policy" || path.startsWith("/api/billing/") ||
+        path.startsWith("/api/admin/") || path==='/api/redirector' || path.startsWith("/api/account/") || path==="/api/background" || path==="/api/catalog-policy" || path.startsWith("/api/billing/") ||
         path.startsWith("/api/numbers") || path.startsWith("/api/porting") ||
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
         path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") ||
-        path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path==="/api/dashboard" || path==="/api/dashboard/summary" || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
+        path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path.startsWith("/api/dashboard") || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
         path === "/api/admin/cdr" || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if(path==='/api/redirector'&&req.method==='GET'){
+        const region=new URL(req.url,origin).searchParams.get('region')||'global';
+        if(!/^[a-zA-Z0-9 ._-]{1,40}$/.test(region))return send(res,400,{error:'Valid region required'});
+        const target=await resolveWss(pool,user.id,region);
+        return send(res,200,{target,scope:'WSS discovery for healthy switch targets; SIP calls still use the configured switch route.'});
+      }
+      if(path.startsWith('/api/admin/operations'))return await handleOperationsPolicy({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/payments/')) return await handlePaymentAdmin({req,res,path,user,pool,send,readJson});
       if(path==='/api/payments/checkout'&&req.method==='POST') return await handlePaymentCheckout({req,res,user,pool,send,readJson,origin});
       if(path.startsWith('/api/admin/provider-webhooks')) return await handleProviderWebhookAdmin({req,res,path,user,pool,send,readJson,origin});
@@ -257,7 +265,7 @@ async function handler(req, res) {
         return await handleGeofencePolicy({req,res,path,user,pool,send,readJson});
       if (path==="/api/wallet" || path.startsWith("/api/wallet/"))
         return await handleWallet({req,res,path,user,pool,send,readJson});
-      if (path==="/api/dashboard" || path==="/api/dashboard/summary" || path==="/api/admin/dashboard")
+      if (path.startsWith("/api/dashboard") || path==="/api/admin/dashboard")
         return await handleDashboard({req,res,path,user,pool,send,readJson});
       if (path==="/api/catalog-policy" && req.method==="GET") {
         const policy=await catalogPolicy(pool,user.tenant_id);
