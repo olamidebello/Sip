@@ -19,6 +19,7 @@ import { migrateSipProfiles } from './sipProfiles.js';
 import { migratePayments } from './payments.js';
 import { migrateCluster } from './cluster.js';
 import { migrateProviderWebhooks } from './providerWebhooks.js';
+import { migrateDidwwIntegration } from './didwwIntegration.js';
 import { migrateCarrierProviders } from './carrierProviders.js';
 import { migrateMessagingWebhooks } from './messagingWebhooks.js';
 import { migrateFlowrouteRates } from './flowrouteRates.js';
@@ -48,6 +49,7 @@ export async function migrate(pool) {
       ['payments', () => migratePayments(pool)],
       ['cluster', () => migrateCluster(pool)],
       ['provider_webhooks', () => migrateProviderWebhooks(pool)],
+      ['didww_integration', () => migrateDidwwIntegration(pool)],
       ['pbx', () => pool.initialize(awaitSql.pbx)],
       ['carrier_providers', () => migrateCarrierProviders(pool)],
       ['messaging_webhooks', () => migrateMessagingWebhooks(pool)],
