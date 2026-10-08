@@ -1,4 +1,6 @@
 import {randomUUID,timingSafeEqual} from 'node:crypto';
+import {fleetLevel,handleFleetNetwork} from './fleetNetwork.js';
+import {handleFleetFirewall} from './fleetFirewall.js';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const label=/^[a-z][a-z0-9-]{1,39}$/;
@@ -76,7 +78,7 @@ async function queue(pool,nodeId,action,userId){
   const db=await pool.connect();
   try{
     await db.query('START TRANSACTION');
-    const node=(await db.query('SELECT id,role,enabled FROM deployment_nodes WHERE id=$1 FOR UPDATE',[nodeId])).rows[0];
+    const node=(await db.query('SELECT id,role,enabled FROM deployment_nodes WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[nodeId])).rows[0];
     if(!node){await db.query('ROLLBACK');return {code:404,error:'Server unavailable'};}
     if(!node.enabled){await db.query('ROLLBACK');return {code:409,error:'Server disabled'};}
     if(node.role!=='switch'){await db.query('ROLLBACK');return {code:409,error:'Only switch node deployment is configured'};}
@@ -91,18 +93,27 @@ async function queue(pool,nodeId,action,userId){
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
 }
 export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJson}){
-  if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
+  const level=await fleetLevel(pool,user);
+  const granted=needed=>({view:1,manage:2,deploy:3})[level]>=({view:1,manage:2,deploy:3})[needed];
+  if(path==='/api/admin/servers/permissions'&&req.method==='GET')return send(res,200,{accessLevel:level});
+  if(path==='/api/admin/servers/firewall'||/^\/api\/admin\/servers\/[0-9a-f-]{36}\/firewall$/.test(path))
+    return handleFleetFirewall({req,res,path,user,pool,send,readJson,level,queue});
+  if(path.startsWith('/api/admin/servers/devices')||path.startsWith('/api/admin/servers/access'))
+    return handleFleetNetwork({req,res,path,user,pool,send,readJson,level});
+  if(!granted('view'))return send(res,403,{error:'Fleet access required'});
   if(path==='/api/admin/servers'&&req.method==='GET'){
+    if(req.method==='GET'&&!granted('view'))return send(res,403,{error:'Fleet view access required'});
     const [nodes,jobs,settings,schedules,events]=await Promise.all([
-      pool.query('SELECT id,name,role,host,ssh_user,ssh_port,region,capacity,enabled,status,version,metrics,last_seen_at,last_error,created_at FROM deployment_nodes ORDER BY name LIMIT 500'),
+      pool.query('SELECT id,name,role,host,ssh_user,ssh_port,region,capacity,enabled,status,version,metrics,last_seen_at,last_error,sort_order,created_at FROM deployment_nodes WHERE deleted_at IS NULL ORDER BY sort_order,name LIMIT 500'),
       pool.query('SELECT j.id,j.node_id,n.name AS node_name,j.action,j.status,j.attempts,j.created_at,j.started_at,j.finished_at,j.summary FROM deployment_jobs j JOIN deployment_nodes n ON n.id=j.node_id ORDER BY j.created_at DESC LIMIT 100'),
       pool.query('SELECT stale_seconds,warning_latency_ms,retention_days FROM deployment_report_settings WHERE id=1'),
       pool.query('SELECT id,node_id,action,interval_minutes,enabled,next_run_at FROM deployment_schedules ORDER BY next_run_at LIMIT 200'),
       pool.query('SELECT e.id,e.node_id,n.name AS node_name,e.category,e.detail,e.created_at FROM deployment_events e LEFT JOIN deployment_nodes n ON n.id=e.node_id ORDER BY e.created_at DESC LIMIT 100')]);
-    return send(res,200,{nodes:nodes.rows,jobs:jobs.rows,settings:settings.rows[0],schedules:schedules.rows,events:events.rows,
+    return send(res,200,{nodes:nodes.rows,jobs:jobs.rows,settings:settings.rows[0],schedules:schedules.rows,events:events.rows,accessLevel:level,
       runnerConfigured:!!process.env.DEPLOY_RUNNER_TOKEN,scope:'Switch jobs require the private Ansible runner. App capacity remains on the existing Compose cluster control.'});
   }
   if(path==='/api/admin/servers'&&req.method==='POST'){
+    if(!granted('manage'))return send(res,403,{error:'Fleet management access required'});
     const b=await readJson(req);
     if(!validNode(b))return send(res,400,{error:'Valid server name, IPv4 address, SSH user, port, region, role and capacity required'});
     const id=randomUUID();
@@ -124,6 +135,7 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
       note:'Capacity is configured inventory, not measured concurrent call throughput. Health is reported by the private runner.'});
   }
   if(path==='/api/admin/servers/report-settings'&&req.method==='PUT'){
+    if(!granted('manage'))return send(res,403,{error:'Fleet management access required'});
     const b=await readJson(req);
     if(!Number.isInteger(b.staleSeconds)||b.staleSeconds<60||b.staleSeconds>3600||
       !Number.isInteger(b.warningLatencyMs)||b.warningLatencyMs<100||b.warningLatencyMs>30000||
@@ -133,8 +145,27 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
       [b.staleSeconds,b.warningLatencyMs,b.retentionDays,user.id]);
     return send(res,200,{settings:b});
   }
+  if(path==='/api/admin/servers/order'&&req.method==='PUT'){
+    if(!granted('manage'))return send(res,403,{error:'Fleet management access required'});
+    const {ids}=await readJson(req);
+    if(!Array.isArray(ids)||ids.length>500||new Set(ids).size!==ids.length||ids.some(id=>!uuid.test(id)))return send(res,400,{error:'Unique server IDs required'});
+    const db=await pool.connect();try{
+      await db.query('START TRANSACTION');
+      const live=await db.query('SELECT id FROM deployment_nodes WHERE deleted_at IS NULL FOR UPDATE');
+      if(live.rowCount!==ids.length||live.rows.some(row=>!ids.includes(row.id))){await db.query('ROLLBACK');return send(res,409,{error:'Refresh server list before reordering'});}
+      for(let i=0;i<ids.length;i++)await db.query('UPDATE deployment_nodes SET sort_order=$1 WHERE id=$2',[i+1,ids[i]]);
+      await db.query("INSERT INTO deployment_events(id,category,detail) VALUES($1,'servers_reordered',$2)",[randomUUID(),`${ids.length} servers`]);
+      await db.query('COMMIT');return send(res,200,{ordered:true});
+    }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
+  }
+  const dump=/^\/api\/admin\/servers\/([0-9a-f-]{36})\/dump$/.exec(path);
+  if(dump&&uuid.test(dump[1])&&req.method==='GET'){
+    const found=await pool.query('SELECT name,role,host,ssh_user,ssh_port,region,capacity,enabled,version,status FROM deployment_nodes WHERE id=$1 AND deleted_at IS NULL',[dump[1]]);
+    return send(res,found.rowCount?200:404,found.rowCount?{format:'olamide-server-inventory-v1',server:found.rows[0],credentialsIncluded:false}:{error:'Server unavailable'});
+  }
   const scheduleMatch=/^\/api\/admin\/servers\/schedules\/([0-9a-f-]{36})$/.exec(path);
   if(scheduleMatch&&uuid.test(scheduleMatch[1])&&req.method==='PUT'){
+    if(!granted('deploy'))return send(res,403,{error:'Fleet deployment access required'});
     const b=await readJson(req);
     if(typeof b.enabled!=='boolean'||!Number.isInteger(b.intervalMinutes)||b.intervalMinutes<5||b.intervalMinutes>10080)
       return send(res,400,{error:'Valid enabled state and interval of 5 to 10080 minutes required'});
@@ -143,18 +174,34 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
     return send(res,result.rowCount?200:404,result.rowCount?{updated:true}:{error:'Schedule unavailable'});
   }
   if(scheduleMatch&&uuid.test(scheduleMatch[1])&&req.method==='DELETE'){
+    if(!granted('deploy'))return send(res,403,{error:'Fleet deployment access required'});
     const result=await pool.query('DELETE FROM deployment_schedules WHERE id=$1',[scheduleMatch[1]]);
     return send(res,result.rowCount?200:404,result.rowCount?{deleted:true}:{error:'Schedule unavailable'});
   }
   const match=/^\/api\/admin\/servers\/([0-9a-f-]{36})$/.exec(path);
+  if(match&&uuid.test(match[1])&&req.method==='DELETE'){
+    if(!granted('manage'))return send(res,403,{error:'Fleet management access required'});
+    const db=await pool.connect();try{
+      await db.query('START TRANSACTION');
+      const node=await db.query('SELECT id FROM deployment_nodes WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[match[1]]);
+      if(!node.rowCount){await db.query('ROLLBACK');return send(res,404,{error:'Server unavailable'});}
+      const active=await db.query("SELECT id FROM deployment_jobs WHERE node_id=$1 AND (status='pending' OR (status='leased' AND lease_until>UTC_TIMESTAMP(3))) LIMIT 1",[match[1]]);
+      if(active.rowCount){await db.query('ROLLBACK');return send(res,409,{error:'Wait for the active deployment job to finish'});}
+      await db.query('UPDATE deployment_nodes SET deleted_at=UTC_TIMESTAMP(3),enabled=FALSE WHERE id=$1',[match[1]]);
+      await db.query('UPDATE deployment_schedules SET enabled=FALSE WHERE node_id=$1',[match[1]]);
+      await db.query("INSERT INTO deployment_events(id,node_id,category,detail) VALUES($1,$2,'server_retired','Removed from managed inventory')",[randomUUID(),match[1]]);
+      await db.query('COMMIT');return send(res,200,{deleted:true});
+    }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
+  }
   if(match&&uuid.test(match[1])&&req.method==='PUT'){
+    if(!granted('manage'))return send(res,403,{error:'Fleet management access required'});
     const b=await readJson(req);
     if(typeof b.enabled!=='boolean'||!validNode({...b,name:'network-edit',role:'switch'}))
       return send(res,400,{error:'Valid IPv4, SSH user, port, enabled state, region and capacity required'});
     const db=await pool.connect();
     try{
       await db.query('START TRANSACTION');
-      const old=await db.query('SELECT host,ssh_user,ssh_port FROM deployment_nodes WHERE id=$1 FOR UPDATE',[match[1]]);
+      const old=await db.query('SELECT host,ssh_user,ssh_port FROM deployment_nodes WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',[match[1]]);
       if(!old.rowCount){await db.query('ROLLBACK');return send(res,404,{error:'Server unavailable'});}
       const active=await db.query("SELECT id FROM deployment_jobs WHERE node_id=$1 AND (status='pending' OR (status='leased' AND lease_until>UTC_TIMESTAMP(3))) LIMIT 1",[match[1]]);
       if(active.rowCount){await db.query('ROLLBACK');return send(res,409,{error:'Wait for the active deployment job to finish'});}
@@ -167,6 +214,7 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
   }
   const job=/^\/api\/admin\/servers\/([0-9a-f-]{36})\/jobs$/.exec(path);
   if(job&&uuid.test(job[1])&&req.method==='POST'){
+    if(!granted('deploy'))return send(res,403,{error:'Fleet deployment access required'});
     const {action}=await readJson(req);
     if(!['install','upgrade','health'].includes(action))return send(res,400,{error:'Approved job action required'});
     if(!process.env.DEPLOY_RUNNER_TOKEN)return send(res,409,{error:'Private deployment runner is not configured'});
@@ -175,12 +223,13 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
   }
   const schedule=/^\/api\/admin\/servers\/([0-9a-f-]{36})\/schedules$/.exec(path);
   if(schedule&&uuid.test(schedule[1])&&req.method==='POST'){
+    if(!granted('deploy'))return send(res,403,{error:'Fleet deployment access required'});
     const b=await readJson(req);
     if(!['health','upgrade'].includes(b.action)||!Number.isInteger(b.intervalMinutes)||
       b.intervalMinutes<(b.action==='upgrade'?60:5)||b.intervalMinutes>10080)
       return send(res,400,{error:'Health or upgrade schedule with valid interval required'});
     if(!process.env.DEPLOY_RUNNER_TOKEN)return send(res,409,{error:'Private deployment runner is not configured'});
-    const node=await pool.query("SELECT role,enabled FROM deployment_nodes WHERE id=$1",[schedule[1]]);
+    const node=await pool.query("SELECT role,enabled FROM deployment_nodes WHERE id=$1 AND deleted_at IS NULL",[schedule[1]]);
     if(!node.rowCount||node.rows[0].role!=='switch'||!node.rows[0].enabled)
       return send(res,404,{error:'Enabled switch server unavailable'});
     const id=randomUUID();
@@ -194,7 +243,7 @@ export async function handleServerFleetRunner({req,res,path,pool,send,readJson})
   if(!runnerAuthorized(req.headers.authorization,process.env.DEPLOY_RUNNER_TOKEN))
     return send(res,401,{error:'Runner authentication required'});
   if(path==='/api/integrations/deployment/nodes'&&req.method==='GET'){
-    const rows=await pool.query('SELECT id,name,role,host,ssh_user,ssh_port,enabled FROM deployment_nodes WHERE enabled=TRUE AND role=\'switch\' ORDER BY name LIMIT 500');
+    const rows=await pool.query('SELECT id,name,role,host,ssh_user,ssh_port,enabled FROM deployment_nodes WHERE enabled=TRUE AND deleted_at IS NULL AND role=\'switch\' ORDER BY name LIMIT 500');
     return send(res,200,{nodes:rows.rows});
   }
   if(path==='/api/integrations/deployment/claim'&&req.method==='POST'){
@@ -206,7 +255,7 @@ export async function handleServerFleetRunner({req,res,path,pool,send,readJson})
       await db.query("UPDATE deployment_jobs SET status='failed',summary='Runner lease expired after maximum retries',finished_at=UTC_TIMESTAMP(3) WHERE status='leased' AND lease_until<UTC_TIMESTAMP(3) AND attempts>=3");
       await db.query('DELETE FROM deployment_checks WHERE created_at<DATE_SUB(UTC_TIMESTAMP(3),INTERVAL (SELECT retention_days FROM deployment_report_settings WHERE id=1) DAY) LIMIT 200');
       await db.query('DELETE FROM deployment_events WHERE created_at<DATE_SUB(UTC_TIMESTAMP(3),INTERVAL (SELECT retention_days FROM deployment_report_settings WHERE id=1) DAY) LIMIT 200');
-      const due=await db.query("SELECT s.id,s.node_id,s.action,s.interval_minutes,s.created_by FROM deployment_schedules s JOIN deployment_nodes n ON n.id=s.node_id WHERE s.enabled=TRUE AND s.next_run_at<=UTC_TIMESTAMP(3) AND n.enabled=TRUE AND n.role='switch' ORDER BY s.next_run_at LIMIT 20 FOR UPDATE SKIP LOCKED");
+      const due=await db.query("SELECT s.id,s.node_id,s.action,s.interval_minutes,s.created_by FROM deployment_schedules s JOIN deployment_nodes n ON n.id=s.node_id WHERE s.enabled=TRUE AND s.next_run_at<=UTC_TIMESTAMP(3) AND n.enabled=TRUE AND n.deleted_at IS NULL AND n.role='switch' ORDER BY s.next_run_at LIMIT 20 FOR UPDATE SKIP LOCKED");
       for(const schedule of due.rows){
         const active=await db.query("SELECT id FROM deployment_jobs WHERE node_id=$1 AND (status='pending' OR (status='leased' AND lease_until>UTC_TIMESTAMP(3))) LIMIT 1",[schedule.node_id]);
         if(!active.rowCount){
@@ -216,10 +265,14 @@ export async function handleServerFleetRunner({req,res,path,pool,send,readJson})
         }
         await db.query('UPDATE deployment_schedules SET next_run_at=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL interval_minutes MINUTE) WHERE id=$1',[schedule.id]);
       }
-      const found=await db.query("SELECT j.id,j.node_id,j.action,j.attempts,n.name,n.host,n.ssh_user,n.ssh_port,n.region,n.capacity FROM deployment_jobs j JOIN deployment_nodes n ON n.id=j.node_id WHERE n.enabled=TRUE AND n.role='switch' AND j.attempts<3 AND (j.status='pending' OR (j.status='leased' AND j.lease_until<UTC_TIMESTAMP(3))) ORDER BY j.created_at LIMIT 1 FOR UPDATE SKIP LOCKED");
+      const found=await db.query("SELECT j.id,j.node_id,j.action,j.attempts,n.name,n.host,n.ssh_user,n.ssh_port,n.region,n.capacity FROM deployment_jobs j JOIN deployment_nodes n ON n.id=j.node_id WHERE n.enabled=TRUE AND n.deleted_at IS NULL AND n.role='switch' AND j.attempts<3 AND (j.status='pending' OR (j.status='leased' AND j.lease_until<UTC_TIMESTAMP(3))) ORDER BY j.created_at LIMIT 1 FOR UPDATE SKIP LOCKED");
       const job=found.rows[0];
       if(!job){await db.query('COMMIT');return send(res,200,{job:null});}
       await db.query("UPDATE deployment_jobs SET status='leased',runner_id=$1,attempts=attempts+1,started_at=UTC_TIMESTAMP(3),lease_until=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 20 MINUTE) WHERE id=$2",[runnerId,job.id]);
+      if(job.action==='firewall'){
+        const policy=await db.query('SELECT enabled,ssh_cidrs,carrier_cidrs,revision FROM fleet_firewall_policies WHERE node_id=$1',[job.node_id]);
+        job.firewallPolicy=policy.rows[0]||null;
+      }
       await db.query('COMMIT');return send(res,200,{job});
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
