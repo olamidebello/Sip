@@ -1699,6 +1699,16 @@ async function refreshCarriers(){
       $("#carrier-admin-status").textContent=`${result.provider}: ${result.status}`;await refreshCarriers();}
       catch(error){$("#carrier-admin-status").textContent=error.message;await refreshCarriers();}};
     card.append(title,details,target,verify,activate);
+    if(profile.status==='active'){
+      const deactivate=document.createElement('button');deactivate.type='button';
+      deactivate.textContent='Deactivate with switch adapter';
+      deactivate.disabled=!data.adapterConfigured;
+      deactivate.onclick=async()=>{deactivate.disabled=true;try{
+        await accountRequest(`/api/admin/carriers/${profile.provider}/deactivate`,{});
+        await refreshCarriers();$("#carrier-admin-status").textContent=`${profile.displayName} deactivated by the switch adapter.`;
+      }catch(error){$("#carrier-admin-status").textContent=error.message;deactivate.disabled=false;}};
+      card.append(deactivate);
+    }
     if(activeRole==='super_admin'&&!['flowroute','didww'].includes(profile.provider)){
       const toggle=document.createElement('button');toggle.type='button';
       toggle.textContent=profile.enabled?'Disable carrier':'Enable carrier';
