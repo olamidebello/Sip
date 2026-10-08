@@ -3,7 +3,7 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const valid=b=>b&&typeof b.name==='string'&&b.name.trim().length>0&&b.name.length<=100&&typeof b.host==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9.-]{0,253}$/.test(b.host)&&Number.isInteger(b.port)&&b.port>=1&&b.port<=65535&&['udp','tcp','tls'].includes(b.transport)&&Number.isInteger(b.priority)&&b.priority>=1&&b.priority<=1000;
 const snapshot=t=>({name:t.name,host:t.host,port:t.port,transport:t.transport,priority:t.priority,enabled:!!t.enabled,revision:t.revision});
 export async function migrateTrunkManagement(pool){
-  const columns=await pool.query("SELECT column_name FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='pbx_trunks' AND column_name IN ('revision','updated_at')");
+  const columns=await pool.query("SELECT column_name AS column_name FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='pbx_trunks' AND column_name IN ('revision','updated_at')");
   const has=new Set(columns.rows.map(x=>x.column_name));
   if(!has.has('revision'))await pool.query('ALTER TABLE pbx_trunks ADD COLUMN revision INT UNSIGNED NOT NULL DEFAULT 1');
   if(!has.has('updated_at'))await pool.query('ALTER TABLE pbx_trunks ADD COLUMN updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)');
