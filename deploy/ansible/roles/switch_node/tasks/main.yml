@@ -199,9 +199,25 @@
     name:
       - freeswitch-meta-vanilla
       - freeswitch-mod-xml-curl
-      - freeswitch-sounds-en-us-callie
-      - freeswitch-sounds-music
     state: "{{ 'latest' if freeswitch_upgrade | default(true) | bool else 'present' }}"
+
+- name: Check optional sound packages in the authenticated repository
+  ansible.builtin.command:
+    argv: [apt-cache, policy, "{{ item }}"]
+  loop:
+    - freeswitch-sounds-en-us-callie
+    - freeswitch-sounds-music
+  register: freeswitch_sound_policy
+  changed_when: false
+
+- name: Install available FreeSWITCH sound packages
+  ansible.builtin.apt:
+    name: "{{ item.item }}"
+    state: "{{ 'latest' if freeswitch_upgrade | default(true) | bool else 'present' }}"
+  loop: "{{ freeswitch_sound_policy.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: "'Candidate: (none)' not in item.stdout and 'Candidate:' in item.stdout"
 
 - name: Read installed FreeSWITCH package version
   ansible.builtin.command: dpkg-query -W -f=${Version} freeswitch
