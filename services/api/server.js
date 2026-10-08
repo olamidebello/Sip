@@ -15,6 +15,7 @@ import { handleOperatorControl } from './operatorControl.js';
 import { handleSwitchAdmin,handleSwitchXml } from './switch.js';
 import { handleServerFleetAdmin,handleServerFleetRunner } from './serverFleet.js';
 import {handleOperationsPolicy,resolveWss} from './operationsPolicy.js';
+import {handleWorkspaceShortcuts} from './workspaceShortcuts.js';
 import { handleFlowrouteRates } from './flowrouteRates.js';
 import { handleHelpAgent } from './helpAgent.js';
 import { handleFlowrouteWebhook, handleMessagingWebhookAdmin, handleExternalSms, handleSmsNumberAdmin } from './messagingWebhooks.js';
@@ -218,7 +219,7 @@ async function handler(req, res) {
       return send(res, 200, { plans: result.rows });
     }
     if (path==="/api/help/agent" || path.startsWith("/api/rates/flowroute/") || path.startsWith("/api/external-sms/") || path.startsWith("/api/contacts") || path.startsWith("/api/messages") ||
-        path.startsWith("/api/admin/") || path==='/api/redirector' || path.startsWith("/api/account/") || path==="/api/background" || path==="/api/catalog-policy" || path.startsWith("/api/billing/") ||
+        path.startsWith("/api/admin/") || path==='/api/redirector' || path.startsWith('/api/workspace/shortcuts') || path.startsWith("/api/account/") || path==="/api/background" || path==="/api/catalog-policy" || path.startsWith("/api/billing/") ||
         path.startsWith("/api/numbers") || path.startsWith("/api/porting") ||
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
@@ -233,6 +234,7 @@ async function handler(req, res) {
         const target=await resolveWss(pool,user.id,region);
         return send(res,200,{target,scope:'WSS discovery for healthy switch targets; SIP calls still use the configured switch route.'});
       }
+      if(path.startsWith('/api/workspace/shortcuts'))return await handleWorkspaceShortcuts({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/operations'))return await handleOperationsPolicy({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/payments/')) return await handlePaymentAdmin({req,res,path,user,pool,send,readJson});
       if(path==='/api/payments/checkout'&&req.method==='POST') return await handlePaymentCheckout({req,res,user,pool,send,readJson,origin});
