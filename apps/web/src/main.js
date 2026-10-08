@@ -10,6 +10,7 @@ import {setupDidwwAdmin} from "./didwwAdmin.js";
 import {setupAdapterAdmin} from "./adapterAdmin.js";
 import {setupOperatorControl} from "./operatorControl.js";
 import {setupSwitchAdmin} from "./switchAdmin.js";
+import {setupServerFleetAdmin} from "./serverFleetAdmin.js";
 import { setupMobileAdmin } from "./mobileAdmin.js";
 import { setupTenants } from "./tenants.js";
 import { setupPbx } from "./pbx.js";
@@ -674,6 +675,23 @@ root.innerHTML = `
       <button id="cluster-refresh" type="button">Refresh scaling status</button><p id="cluster-status" role="status"></p>
       <h4>Recent requests</h4><ul id="cluster-history"></ul>
     </section>
+    <section id="fleet-admin" hidden>
+      <h3>Server and network operations</h3><p>Register switch hosts, review connectivity and versions, queue approved installations, and schedule health checks or upgrades. The private Ansible runner requires SSH access and passwordless sudo on managed hosts.</p>
+      <p id="fleet-summary"></p><p id="fleet-status" role="status"></p>
+      <form id="fleet-add"><h4>Add a server</h4>
+        <label>Name <input name="name" pattern="[a-z][a-z0-9-]{1,39}" required></label>
+        <label>IPv4 address <input name="host" required></label>
+        <label>Role <select name="role"><option value="switch">Switch</option><option value="app">Application inventory</option></select></label>
+        <label>SSH user <input name="sshUser" required></label><label>SSH port <input name="sshPort" type="number" min="1" max="65535" value="22" required></label>
+        <label>Region <input name="region" value="primary" required></label><label>Configured capacity <input name="capacity" type="number" min="1" max="100000" value="100" required></label>
+        <button>Add server</button></form>
+      <button id="fleet-refresh" type="button">Refresh monitoring</button><h4>Servers</h4><ul id="fleet-nodes"></ul>
+      <h4>Scheduled events</h4><ul id="fleet-schedules"></ul><h4>Deployment jobs</h4><ul id="fleet-jobs"></ul><h4>Event log</h4><ul id="fleet-events"></ul>
+      <form id="fleet-report-settings"><h4>Report thresholds</h4><label>Stale after seconds <input name="staleSeconds" type="number" min="60" max="3600" required></label>
+        <label>Warning latency ms <input name="warningLatencyMs" type="number" min="100" max="30000" required></label>
+        <label>Retention days <input name="retentionDays" type="number" min="7" max="365" required></label><button>Save thresholds</button></form>
+      <label>Report window in days <input id="fleet-report-days" type="number" min="1" max="90" value="7"></label><button id="fleet-report-run" type="button">Generate report</button><p id="fleet-report"></p>
+    </section>
     <section id="provider-webhook-admin" hidden>
       <h3>Provider callback registry</h3><p id="provider-webhook-tenant"></p>
       <p>Flowroute SMS/MMS callbacks are configured on Messaging webhooks. DIDWW API callbacks have a separate signed receiver under DIDWW API. This registry accepts future provider callbacks for audit.</p>
@@ -892,7 +910,7 @@ const navigationGroups=[
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
-  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","FreeSWITCH"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
+  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","FreeSWITCH"],["fleet-admin","Server and network operations"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["mobile-admin","App releases"]]},
   {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"]]}
 ];
@@ -1008,6 +1026,7 @@ const localeSettings=setupLocaleSettings({get:path=>apiGet(path),request:(path,b
 const groupAdmin = setupGroupAdmin();
 const sipProfiles = setupSipProfiles({get:apiGet,request:accountRequest});
 const commerceOps=setupCommerceOps({get:apiGet,request:accountRequest});
+const serverFleet=setupServerFleetAdmin({get:apiGet,request:accountRequest});
 const providerWebhooks=setupProviderWebhookAdmin({get:apiGet,request:accountRequest});
 const didwwAdmin=setupDidwwAdmin({get:apiGet,request:accountRequest});
 const adapterAdmin=setupAdapterAdmin({get:apiGet,request:accountRequest});
@@ -1388,9 +1407,10 @@ function signedIn(user) {
   $("#provider-webhook-admin").hidden=user.role!=="super_admin";
   $("#didww-admin").hidden=user.role!=="super_admin";
   $("#carrier-adapter-admin").hidden=user.role!=="super_admin";
+  $("#fleet-admin").hidden=user.role!=="super_admin";
   $("#flowroute-auto-form").hidden=user.role!=="super_admin";
   $("#carrier-catalog-form").hidden=user.role!=="super_admin";
-  if(user.role==="super_admin"){providerWebhooks.refresh();didwwAdmin.refresh();adapterAdmin.refresh();}
+  if(user.role==="super_admin"){providerWebhooks.refresh();didwwAdmin.refresh();adapterAdmin.refresh();serverFleet.refresh();}
   if(["admin","super_admin"].includes(user.role))operatorAdmin.refresh();
   if(["admin","super_admin"].includes(user.role)){
     switchAdmin.refresh(user.role==="super_admin");
