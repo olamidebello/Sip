@@ -562,7 +562,7 @@ The super admin Carrier adapters screen lists target keys without disclosing
 URLs or tokens. Add one or more nodes for Flowroute, DIDWW, or a catalog carrier;
 set a region, priority, and maximum planned concurrent calls. Nodes start
 disabled. Run Check health, then enable a healthy node. The commissioning API
-selects the lowest-priority eligible healthy node whose configured capacity
+selects the lowest-priority eligible node with a successful health check in the last five minutes whose configured capacity
 covers the carrier profile. It records the node that acknowledged activation,
 then sends deactivation to that same node. Operations and outcomes are audited
 in MySQL. Existing `CARRIER_PROVISION_URL` and
