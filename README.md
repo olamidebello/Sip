@@ -522,3 +522,34 @@ private store, apply switch configuration, and verify the resulting state.
 The app's PBX route previews remain simulations until a real switch and media
 path are connected. Flowroute's existing inventory API check verifies API
 credentials only and does not establish SIP registration.
+
+## DIDWW API v3 and callbacks
+
+The super admin DIDWW API screen uses a tenant-bound server-side API key. Set
+`DIDWW_TENANT_ID`, `DIDWW_API_KEY`, `DIDWW_API_ENV` (`sandbox` or
+`production`), `DIDWW_ACCOUNT_CURRENCY=USD`, and the DIDWW-generated
+`DIDWW_CALLBACK_SECRET` in private deployment configuration. The API version
+is pinned to `2026-04-16`. The browser never receives the key or callback
+secret. The resource console restricts methods and paths to a documented
+allowlist, validates JSON:API resource types and IDs, and records mutation
+metadata in `didww_api_audit`; it does not persist the submitted request
+body. An order or deletion can change live services and charges when the
+environment is production.
+
+For asynchronous Orders, Exports, verification, and outbound trunk status
+callbacks, enable a Callback Secret in DIDWW and use the displayed HTTPS
+`/api/webhooks/didww/<tenant-id>` URL as the resource's `callback_url`.
+The receiver checks `X-DIDWW-Signature` with DIDWW's HMAC-SHA1 URL and payload
+normalization before writing deduplicated event metadata. Choose POST
+callbacks when configuring a resource; GET callbacks are also accepted.
+
+DIDWW Call Events and CDR Streaming are a separate DIDWW service that support
+must enable for the account. Set `DIDWW_CALL_EVENTS_TOKEN` to a random secret
+and configure the DIDWW Call Events panel to send it as `X-Auth-Token` to the
+displayed `/api/webhooks/didww/<tenant-id>/call-events` URL. The receiver
+accepts JSON call events and JSON CDR batches (including gzip encoded
+`text/plain`), deduplicates them, and stores event identifiers and hashes.
+This receipt log does not rate calls, settle carrier charges, or store a full
+CDR payload. Review DIDWW's account settings and test in sandbox before
+switching to production. Actual DIDWW account provisioning and DIDWW support
+enablement must be performed in the DIDWW account.
