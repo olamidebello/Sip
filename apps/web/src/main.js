@@ -993,6 +993,7 @@ root.innerHTML = `
   <audio id="remote" autoplay></audio>
   <p id="status" role="status">Disconnected</p>
   </section>
+  <footer class="site-copyright"><small>© 2026 Olamide Olatayo Bello. All rights reserved. Third-party components retain their own licenses.</small></footer>
 `;
 
 const $ = (selector) => document.querySelector(selector);
