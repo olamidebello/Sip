@@ -1,6 +1,7 @@
 import { generateRegistrationOptions, verifyRegistrationResponse,
   generateAuthenticationOptions, verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { createSessionToken, tokenHash } from './security.js';
+import { effectivePasskeyMode } from './passkeyPolicy.js';
 
 const validEmail = value => typeof value === 'string' && value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 const validCredential = value => value && typeof value === 'object' &&
@@ -77,7 +78,7 @@ export async function handlePasskeys({req,res,path,pool,send,readJson,origin,cur
       if(!verified.verified) throw new Error('Unverified passkey');
       await pool.query('UPDATE passkeys SET counter=$1 WHERE id=$2 AND user_id=$3',[verified.authenticationInfo.newCounter,user.passkey_id,user.id]);
       const token=createSessionToken();
-      await pool.query('INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 7 DAY))',[tokenHash(token),user.id]);
+      await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at,auth_method) VALUES($1,$2,DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 7 DAY),'passkey')",[tokenHash(token),user.id]);
       return send(res,200,{id:user.id,name:user.display_name,email:user.email,role:user.role,
         authSource:'local',tenantId:user.tenant_id,features:await featuresFor(user)},
         {'Set-Cookie':sessionCookie(token,604800)});
@@ -87,6 +88,10 @@ export async function handlePasskeys({req,res,path,pool,send,readJson,origin,cur
   if(match && req.method==='DELETE') {
     const user=await currentUser(req);
     if(!user) return send(res,401,{error:'Sign in required'});
+    if(await effectivePasskeyMode(pool,user)==='required'){
+      const keys=await pool.query('SELECT id FROM passkeys WHERE user_id=$1',[user.id]);
+      if(keys.rows.some(k=>k.id===match[1])&&keys.rows.length<=1)return send(res,409,{error:'A required passkey cannot be the last one removed'});
+    }
     const result=await pool.query('DELETE FROM passkeys WHERE id=$1 AND user_id=$2',[match[1],user.id]);
     return send(res,result.rowCount?200:404,result.rowCount?{status:'removed'}:{error:'Passkey unavailable'});
   }
