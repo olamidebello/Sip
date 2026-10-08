@@ -1,0 +1,32 @@
+#!/usr/sbin/nft -f
+flush ruleset
+table inet olamide_switch {
+  chain input {
+    type filter hook input priority 0; policy drop;
+    iifname "lo" accept
+    ct state established,related accept
+    ct state invalid drop
+    meta l4proto ipv6-icmp accept
+    ip protocol icmp accept
+{% for cidr in freeswitch_ssh_allowed_cidrs %}
+    ip saddr {{ cidr }} tcp dport {{ ansible_port | default(22) }} accept
+{% endfor %}
+    tcp dport 7443 accept
+    udp dport 16384-32768 accept
+{% for cidr in freeswitch_carrier_allowed_cidrs | default([]) %}
+    ip saddr {{ cidr }} udp dport 5080 accept
+    ip saddr {{ cidr }} tcp dport 5080 accept
+{% endfor %}
+{% if coturn_enabled | default(false) | bool %}
+    udp dport 3478 accept
+    tcp dport 3478 accept
+    udp dport 49160-49260 accept
+{% endif %}
+  }
+  chain forward {
+    type filter hook forward priority 0; policy drop;
+  }
+  chain output {
+    type filter hook output priority 0; policy accept;
+  }
+}
