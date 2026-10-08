@@ -4,10 +4,11 @@ export function setupServerFleetAdmin({get,request}){
   const list=(id,rows,render)=>{const el=$(id);el.replaceChildren();for(const row of rows){const item=document.createElement('li');render(item,row);el.append(item);}};
   const button=(parent,title,run)=>{const b=document.createElement('button');b.type='button';b.textContent=title;b.onclick=async()=>{b.disabled=true;try{await run();await refresh();status.textContent=title+' completed.';}catch(e){status.textContent=e.message;}finally{b.disabled=false;}};parent.append(b);};
   async function refresh(){
-    const data=await get('/api/admin/servers');
+    const [data,topology]=await Promise.all([get('/api/admin/servers'),get('/api/admin/servers/topology')]);
     const can=level=>({none:0,view:1,manage:2,deploy:3})[data.accessLevel]>=({view:1,manage:2,deploy:3})[level];
     $('fleet-add').hidden=!can('manage');$('fleet-report-settings').hidden=!can('manage');
     $('fleet-summary').textContent=`${data.nodes.length} registered servers · ${data.jobs.filter(j=>['pending','leased'].includes(j.status)).length} active jobs · runner ${data.runnerConfigured?'configured':'unavailable'}`;
+    $('fleet-topology').textContent=`${topology.healthyWssTargets} healthy WSS targets · ${topology.regions.map(r=>`${r.region} ${r.role}: ${r.fresh_healthy}/${r.nodes} fresh, configured capacity ${r.configured_capacity}`).join('; ')||'No servers registered'}. ${topology.scope}`;
     const settings=data.settings||{};const form=$('fleet-report-settings');
     form.elements.staleSeconds.value=settings.stale_seconds??300;
     form.elements.warningLatencyMs.value=settings.warning_latency_ms??2000;
