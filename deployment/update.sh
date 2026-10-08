@@ -6,6 +6,14 @@ repo=/opt/olamide/repo
 compose_dir=$repo/deployment/docker
 backup_dir=/opt/olamide/backups
 [[ -f "$compose_dir/.env" ]] || { echo 'Deployment secrets missing' >&2; exit 1; }
+# Provision a private URL token on existing deployments before starting the new API.
+if ! grep -q '^FLOWROUTE_WEBHOOK_TOKEN=' /etc/olamide/secrets.env; then
+  umask 077
+  printf 'FLOWROUTE_WEBHOOK_TOKEN=%s\n' "$(openssl rand -hex 32)" >> /etc/olamide/secrets.env
+fi
+if ! grep -q '^FLOWROUTE_WEBHOOK_TOKEN=' "$compose_dir/.env"; then
+  grep '^FLOWROUTE_WEBHOOK_TOKEN=' /etc/olamide/secrets.env >> "$compose_dir/.env"
+fi
 cd "$repo"
 current=$(git rev-parse HEAD)
 candidate=$(bash deployment/verified-sha.sh)
