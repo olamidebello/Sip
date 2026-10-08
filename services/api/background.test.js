@@ -6,9 +6,11 @@ const config={dayPreset:"ocean",nightPreset:"midnight",schedule:true,animate:fal
 const send=(_res,status,body)=>({status,body});
 
 test("background settings accept only known presets and switches",()=>{
-  assert.deepEqual(validateBackground(config),config);
+  assert.deepEqual(validateBackground(config),{...config,colorStart:'#071b36',colorEnd:'#0c4861',angle:135});
   assert.throws(()=>validateBackground({...config,dayPreset:"url(https://example.com)"}),TypeError);
   assert.throws(()=>validateBackground({...config,customCss:"*{display:none}"}),TypeError);
+  assert.equal(validateBackground({...config,dayPreset:'custom',colorStart:'#102030',colorEnd:'#112233',angle:90}).angle,90);
+  assert.throws(()=>validateBackground({...config,dayPreset:'custom',colorStart:'#ffffff'}),TypeError);
 });
 
 test("tenant policy blocks ordinary user override but admin can save policy",async()=>{
