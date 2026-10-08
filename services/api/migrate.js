@@ -33,6 +33,7 @@ import { migrateWorkspaceShortcuts } from './workspaceShortcuts.js';
 import { migrateWorkPlanner } from './workPlanner.js';
 import { migrateCampaigns } from './campaigns.js';
 import { migratePasskeyPolicy } from './passkeyPolicy.js';
+import { migrateTrunkManagement } from './trunkManagement.js';
 import { migrateMessagingWebhooks } from './messagingWebhooks.js';
 import { migrateFlowrouteRates } from './flowrouteRates.js';
 
@@ -64,6 +65,7 @@ export async function migrate(pool) {
       ['didww_integration', () => migrateDidwwIntegration(pool)],
       ['pbx', () => pool.initialize(awaitSql.pbx)],
       ['carrier_providers', () => migrateCarrierProviders(pool)],
+      ['trunk_management', () => migrateTrunkManagement(pool)],
       ['carrier_adapter_registry', () => migrateAdapterRegistry(pool)],
       ['operator_control', () => migrateOperatorControl(pool)],
       ['freeswitch_bridge', () => migrateSwitch(pool)],
