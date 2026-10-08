@@ -63,7 +63,7 @@ export async function handlePasskeys({req,res,path,pool,send,readJson,origin,cur
   if (path==='/api/passkeys/login/verify' && req.method==='POST') {
     const {email,response}=await readJson(req,65536);
     if(!validEmail(email) || !validCredential(response)) return send(res,400,{error:'Invalid passkey response'});
-    const found=await pool.query("SELECT u.id,u.display_name,u.email,u.role,u.tenant_id,p.id AS passkey_id,p.public_key,p.counter,p.transports FROM users u JOIN passkeys p ON p.user_id=u.id JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenant_auth_policy a ON a.tenant_id=u.tenant_id WHERE u.email=$1 AND p.id=$2 AND u.status='active' AND u.auth_source='local' AND (a.local_enabled IS NULL OR a.local_enabled=TRUE OR u.role='super_admin')",
+    const found=await pool.query("SELECT u.id,u.display_name,u.email,u.role,u.tenant_id,u.must_change_password,p.id AS passkey_id,p.public_key,p.counter,p.transports FROM users u JOIN passkeys p ON p.user_id=u.id JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenant_auth_policy a ON a.tenant_id=u.tenant_id WHERE u.email=$1 AND p.id=$2 AND u.status='active' AND u.auth_source='local' AND (a.local_enabled IS NULL OR a.local_enabled=TRUE OR u.role='super_admin')",
       [email.trim().toLowerCase(),response.id]);
     const user=found.rows[0];
     if(!user) return send(res,401,{error:'Passkey sign-in failed'});
@@ -80,7 +80,7 @@ export async function handlePasskeys({req,res,path,pool,send,readJson,origin,cur
       const token=createSessionToken();
       await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at,auth_method) VALUES($1,$2,DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 7 DAY),'passkey')",[tokenHash(token),user.id]);
       return send(res,200,{id:user.id,name:user.display_name,email:user.email,role:user.role,
-        authSource:'local',tenantId:user.tenant_id,features:await featuresFor(user)},
+        authSource:'local',tenantId:user.tenant_id,mustChangePassword:!!user.must_change_password,features:await featuresFor(user)},
         {'Set-Cookie':sessionCookie(token,604800)});
     } catch(error) {console.error('Passkey login failed',error.name);return send(res,401,{error:'Passkey sign-in failed'});}
   }
