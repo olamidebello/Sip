@@ -6,6 +6,7 @@ html[data-background="ocean"]{background-image:linear-gradient(135deg,#071b36,#0
 html[data-background="aurora"]{background-image:linear-gradient(130deg,#101735,#124744 50%,#301b53)}
 html[data-background="sunrise"]{background-image:linear-gradient(130deg,#252248,#74405a 52%,#3d365c)}
 html[data-background="slate"]{background-image:linear-gradient(130deg,#172435,#28394c 50%,#101b2b)}
+html[data-background="custom"]{background-image:linear-gradient(var(--custom-angle,135deg),var(--custom-start,#071b36),var(--custom-end,#0c4861))}
 html[data-background]{background-size:200% 200%;background-attachment:fixed}
 html[data-background-animated="true"]{animation:background-drift 24s ease-in-out infinite alternate}
 @keyframes background-drift{from{background-position:0% 50%}to{background-position:100% 50%}}
