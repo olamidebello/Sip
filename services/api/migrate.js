@@ -21,6 +21,7 @@ import { migrateCluster } from './cluster.js';
 import { migrateProviderWebhooks } from './providerWebhooks.js';
 import { migrateDidwwIntegration } from './didwwIntegration.js';
 import { migrateCarrierProviders } from './carrierProviders.js';
+import { migrateAdapterRegistry } from './adapterRegistry.js';
 import { migrateMessagingWebhooks } from './messagingWebhooks.js';
 import { migrateFlowrouteRates } from './flowrouteRates.js';
 
@@ -52,6 +53,7 @@ export async function migrate(pool) {
       ['didww_integration', () => migrateDidwwIntegration(pool)],
       ['pbx', () => pool.initialize(awaitSql.pbx)],
       ['carrier_providers', () => migrateCarrierProviders(pool)],
+      ['carrier_adapter_registry', () => migrateAdapterRegistry(pool)],
       ['messaging_webhooks', () => migrateMessagingWebhooks(pool)],
       ['flowroute_rates', () => migrateFlowrouteRates(pool)],
       ['cdr', () => pool.initialize(awaitSql.cdr)],
