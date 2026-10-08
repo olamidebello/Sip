@@ -31,6 +31,35 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
       ...(rows.rows.find(row=>row.provider===provider)||{status:'not_configured',routing_mode:'disabled',max_concurrent_calls:0})})),
       adapterConfigured:!!(process.env.CARRIER_PROVISION_URL&&process.env.CARRIER_PROVISION_TOKEN)});
   }
+  if(path==='/api/admin/carriers/flowroute/auto-provision' && req.method==='POST'){
+    if(user.role!=='super_admin') return send(res,403,{error:'Super administrator required'});
+    const {pop,maxConcurrentCalls,routingMode}=await readJson(req);
+    const hosts={'US-East-VA':'us-east-va.sip.flowroute.com','US-West-OR':'us-west-or.sip.flowroute.com'};
+    if(!Object.hasOwn(hosts,pop)||!Number.isSafeInteger(maxConcurrentCalls)||
+      maxConcurrentCalls<1||maxConcurrentCalls>100000||
+      !['manual','least_cost','priority'].includes(routingMode))
+      return send(res,400,{error:'Valid Flowroute PoP, capacity and routing mode required'});
+    const db=await pool.connect();
+    try{
+      await db.query('BEGIN');
+      const name='Flowroute '+pop,host=hosts[pop];
+      const prior=await db.query('SELECT id FROM pbx_trunks WHERE tenant_id=$1 AND name=$2 FOR UPDATE',[user.tenant_id,name]);
+      const trunkId=prior.rows[0]?.id||randomUUID();
+      if(prior.rowCount)
+        await db.query('UPDATE pbx_trunks SET host=$1,port=5060,transport=\'udp\',priority=100,enabled=FALSE WHERE id=$2 AND tenant_id=$3',[host,trunkId,user.tenant_id]);
+      else
+        await db.query('INSERT INTO pbx_trunks(id,tenant_id,name,host,port,transport,priority,enabled) VALUES($1,$2,$3,$4,5060,\'udp\',100,FALSE)',[trunkId,user.tenant_id,name,host]);
+      await db.query("INSERT INTO carrier_provider_profiles(tenant_id,provider,trunk_id,max_concurrent_calls,routing_mode,status,updated_by) VALUES($1,'flowroute',$2,$3,$4,'draft',$5) ON DUPLICATE KEY UPDATE trunk_id=VALUES(trunk_id),max_concurrent_calls=VALUES(max_concurrent_calls),routing_mode=VALUES(routing_mode),status='draft',provisioned_at=NULL,last_error=NULL,updated_by=VALUES(updated_by)",
+        [user.tenant_id,trunkId,maxConcurrentCalls,routingMode,user.id]);
+      await db.query("INSERT INTO security_events(id,tenant_id,actor_id,target_id,action) VALUES($1,$2,$3,$4,'carrier_profile_flowroute_auto_setup')",
+        [randomUUID(),user.tenant_id,user.id,trunkId]);
+      await db.query('COMMIT');
+      return send(res,200,{provider:'flowroute',pop,trunkId,host,port:5060,status:'draft',
+        nextAction:'/api/admin/carriers/flowroute/activate',
+        note:'Trunk configuration staged. The SIP switch and Flowroute account route must be configured and verified before traffic is enabled.'});
+    }catch(error){await db.query('ROLLBACK');throw error;}
+    finally{db.release();}
+  }
   const match=/^\/api\/admin\/carriers\/(flowroute|didww)(?:\/(verify|activate))?$/.exec(path);
   if(!match) return send(res,404,{error:'Carrier route unavailable'});
   const [,provider,action]=match;
