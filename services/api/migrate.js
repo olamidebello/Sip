@@ -23,6 +23,7 @@ import { migrateDidwwIntegration } from './didwwIntegration.js';
 import { migrateCarrierProviders } from './carrierProviders.js';
 import { migrateAdapterRegistry } from './adapterRegistry.js';
 import { migrateOperatorControl } from './operatorControl.js';
+import { migrateSwitch } from './switch.js';
 import { migrateMessagingWebhooks } from './messagingWebhooks.js';
 import { migrateFlowrouteRates } from './flowrouteRates.js';
 
@@ -56,6 +57,7 @@ export async function migrate(pool) {
       ['carrier_providers', () => migrateCarrierProviders(pool)],
       ['carrier_adapter_registry', () => migrateAdapterRegistry(pool)],
       ['operator_control', () => migrateOperatorControl(pool)],
+      ['freeswitch_bridge', () => migrateSwitch(pool)],
       ['messaging_webhooks', () => migrateMessagingWebhooks(pool)],
       ['flowroute_rates', () => migrateFlowrouteRates(pool)],
       ['cdr', () => pool.initialize(awaitSql.cdr)],
