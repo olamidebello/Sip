@@ -8,6 +8,7 @@ import { handleSipProfiles } from './sipProfiles.js';
 import {handlePaymentAdmin,handlePaymentCheckout,handleStripeWebhook} from './payments.js';
 import {handleCluster} from './cluster.js';
 import {handleProviderWebhook,handleProviderWebhookAdmin} from './providerWebhooks.js';
+import {handleDidwwCallback,handleDidwwAdmin} from './didwwIntegration.js';
 import { handleCarrierProviders, carrierActive } from './carrierProviders.js';
 import { handleFlowrouteRates } from './flowrouteRates.js';
 import { handleHelpAgent } from './helpAgent.js';
@@ -130,15 +131,17 @@ async function handler(req, res) {
   const flowrouteWebhook = path.startsWith("/api/webhooks/flowroute/");
   const stripeWebhook = path.startsWith("/api/webhooks/stripe/");
   const providerWebhook=path.startsWith("/api/webhooks/providers/");
+  const didwwWebhook=path.startsWith("/api/webhooks/didww/");
   const cdrIngest = req.method === "POST" && path === "/api/integrations/cdr";
-  if (req.method !== "GET" && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && req.headers.origin !== origin)
+  if (req.method !== "GET" && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
     return send(res, 403, { error: "Invalid origin" });
-  if (req.method !== "GET" && !limit(req,(cdrIngest || flowrouteWebhook || stripeWebhook || providerWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
+  if (req.method !== "GET" && !limit(req,(cdrIngest || flowrouteWebhook || stripeWebhook || providerWebhook || didwwWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
     return send(res, 429, { error: "Too many requests" });
   try {
     if (flowrouteWebhook) return await handleFlowrouteWebhook({req,res,path,pool,send});
     if (stripeWebhook) return await handleStripeWebhook({req,res,path,pool,send});
     if (providerWebhook) return await handleProviderWebhook({req,res,path,pool,send});
+    if (didwwWebhook) return await handleDidwwCallback({req,res,path,pool,send,origin});
     if (cdrIngest) return await handleCdrIngest({req,res,pool,send,keys:cdrKeys});
     if (currentToken(req) && !['/api/account/password','/api/me','/api/logout','/api/login'].includes(path)) {
       const sessionAccount=await currentUser(req);
@@ -218,6 +221,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/payments/')) return await handlePaymentAdmin({req,res,path,user,pool,send,readJson});
       if(path==='/api/payments/checkout'&&req.method==='POST') return await handlePaymentCheckout({req,res,user,pool,send,readJson,origin});
       if(path.startsWith('/api/admin/provider-webhooks')) return await handleProviderWebhookAdmin({req,res,path,user,pool,send,readJson,origin});
+      if(path.startsWith('/api/admin/didww/')) return await handleDidwwAdmin({req,res,path,user,pool,send,readJson,origin});
       if(path.startsWith('/api/admin/cluster')) return await handleCluster({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/sip-profiles') || path.startsWith('/api/admin/sip-profile-policy'))
         return await handleSipProfiles({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin)});
