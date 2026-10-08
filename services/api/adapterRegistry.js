@@ -51,7 +51,7 @@ export async function migrateAdapterRegistry(pool){
 export async function adapterFor(pool,tenant,provider,capacity,assigned=false){
   const sql=assigned?
     'SELECT n.* FROM carrier_adapter_assignments a JOIN carrier_adapter_nodes n ON n.id=a.adapter_id WHERE a.tenant_id=$1 AND a.provider=$2 AND n.tenant_id=$3':
-    "SELECT * FROM carrier_adapter_nodes WHERE tenant_id=$1 AND provider=$2 AND enabled=TRUE AND health='healthy' AND max_concurrent_calls >= $3 ORDER BY priority,id LIMIT 1";
+    "SELECT * FROM carrier_adapter_nodes WHERE tenant_id=$1 AND provider=$2 AND enabled=TRUE AND health='healthy' AND last_check_at > DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 5 MINUTE) AND max_concurrent_calls >= $3 ORDER BY priority,id LIMIT 1";
   const found=await pool.query(sql,assigned?[tenant,provider,tenant]:[tenant,provider,capacity]);
   return found.rows[0]||null;
 }
