@@ -16,6 +16,9 @@ import { handleSwitchAdmin,handleSwitchXml } from './switch.js';
 import { handleServerFleetAdmin,handleServerFleetRunner } from './serverFleet.js';
 import {handleOperationsPolicy,resolveWss} from './operationsPolicy.js';
 import {handleWorkspaceShortcuts} from './workspaceShortcuts.js';
+import {handleWorkPlanner} from './workPlanner.js';
+import {handleCampaigns} from './campaigns.js';
+import {effectivePasskeyMode,passkeyGate,handlePasskeyPolicy} from './passkeyPolicy.js';
 import { handleFlowrouteRates } from './flowrouteRates.js';
 import { handleHelpAgent } from './helpAgent.js';
 import { handleFlowrouteWebhook, handleMessagingWebhookAdmin, handleExternalSms, handleSmsNumberAdmin } from './messagingWebhooks.js';
@@ -114,11 +117,12 @@ async function currentUser(req) {
   const token = currentToken(req);
   if (!token) return null;
   const result = await pool.query(
-    "SELECT u.id,u.display_name,u.email,u.role,u.auth_source,u.must_change_password, CASE WHEN u.role='super_admin' AND selected.id IS NOT NULL THEN selected.id ELSE u.tenant_id END AS tenant_id FROM sessions s JOIN users u ON u.id=s.user_id AND u.status='active' JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenant_ldap_settings ldap ON ldap.tenant_id=u.tenant_id LEFT JOIN tenant_auth_policy auth ON auth.tenant_id=u.tenant_id LEFT JOIN tenants selected ON selected.id=s.selected_tenant_id AND selected.status='active' WHERE s.token_hash=$1 AND s.expires_at>now() AND ((u.auth_source='local' AND (auth.local_enabled IS NULL OR auth.local_enabled=TRUE OR u.role='super_admin')) OR (u.auth_source='ldap' AND ldap.enabled=TRUE))",
+    "SELECT u.id,u.display_name,u.email,u.role,u.auth_source,u.must_change_password,s.auth_method, CASE WHEN u.role='super_admin' AND selected.id IS NOT NULL THEN selected.id ELSE u.tenant_id END AS tenant_id FROM sessions s JOIN users u ON u.id=s.user_id AND u.status='active' JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenant_ldap_settings ldap ON ldap.tenant_id=u.tenant_id LEFT JOIN tenant_auth_policy auth ON auth.tenant_id=u.tenant_id LEFT JOIN tenants selected ON selected.id=s.selected_tenant_id AND selected.status='active' WHERE s.token_hash=$1 AND s.expires_at>now() AND ((u.auth_source='local' AND (auth.local_enabled IS NULL OR auth.local_enabled=TRUE OR u.role='super_admin')) OR (u.auth_source='ldap' AND ldap.enabled=TRUE))",
     [tokenHash(token)]
   );
   const user = result.rows[0];
   if (!user) return null;
+  user.passkeyGate=await passkeyGate(pool,user);
   user.features = await featuresFor(user);
   return user;
 }
@@ -156,6 +160,7 @@ async function handler(req, res) {
     if (currentToken(req) && !['/api/account/password','/api/me','/api/logout','/api/login'].includes(path)) {
       const sessionAccount=await currentUser(req);
       if(sessionAccount?.must_change_password) return send(res,403,{error:'Change your temporary password before continuing'});
+      if(sessionAccount?.passkeyGate && !((sessionAccount.passkeyGate==='enroll') && (path==='/api/passkeys'||path.startsWith('/api/passkeys/register/')))) return send(res,403,{error:sessionAccount.passkeyGate==='enroll'?'Register a passkey, then sign in with it':'Passkey sign-in required'});
     }
     if (path.startsWith('/api/register')) return await handleOnboarding({req,res,path,pool,send,readJson,origin});
     if (path.startsWith('/api/passkeys')) return await handlePasskeys({req,res,path,pool,send,readJson,origin,currentUser,featuresFor,sessionCookie});
@@ -171,13 +176,16 @@ async function handler(req, res) {
       const user = result.rows[0];
       if (!user || !await verifyPassword(password, user.password_salt, user.password_hash))
         return send(res, 401, { error: "Invalid credentials" });
+      const passkeyMode=await effectivePasskeyMode(pool,{...user,auth_source:'local'});
+      const keys=passkeyMode==='required'?await pool.query('SELECT 1 FROM passkeys WHERE user_id=$1 LIMIT 1',[user.id]):null;
+      if(keys?.rowCount)return send(res,403,{error:'Use passkey sign-in for this account'});
       const token = createSessionToken();
       await pool.query(
         "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1,$2,DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 7 DAY))",
         [tokenHash(token), user.id]
       );
       return send(res, 200, { id: user.id, name: user.display_name, email: user.email,
-        role: user.role, authSource:"local",mustChangePassword:!!user.must_change_password,tenantId:user.tenant_id, features:await featuresFor(user) },
+        role: user.role, authSource:"local",mustChangePassword:!!user.must_change_password,passkeyEnrollmentRequired:passkeyMode==='required',tenantId:user.tenant_id, features:await featuresFor(user) },
         { "Set-Cookie": sessionCookie(token, 604800) });
     }
     if (req.method==="POST" && path==="/api/login/ldap") {
@@ -197,7 +205,7 @@ async function handler(req, res) {
       const user = await currentUser(req);
       return user
         ? send(res, 200, { id: user.id, name: user.display_name, email: user.email,authSource:user.auth_source,
-            role: user.role, tenantId:user.tenant_id,mustChangePassword:!!user.must_change_password, features:user.features })
+            role: user.role, tenantId:user.tenant_id,mustChangePassword:!!user.must_change_password,passkeyEnrollmentRequired:user.passkeyGate==='enroll',passkeySigninRequired:user.passkeyGate==='signin', features:user.features })
         : send(res, 401, { error: "Session expired" });
     }
     if (req.method === "POST" && path === "/api/logout") {
@@ -219,7 +227,7 @@ async function handler(req, res) {
       return send(res, 200, { plans: result.rows });
     }
     if (path==="/api/help/agent" || path.startsWith("/api/rates/flowroute/") || path.startsWith("/api/external-sms/") || path.startsWith("/api/contacts") || path.startsWith("/api/messages") ||
-        path.startsWith("/api/admin/") || path==='/api/redirector' || path.startsWith('/api/workspace/shortcuts') || path.startsWith("/api/account/") || path==="/api/background" || path==="/api/catalog-policy" || path.startsWith("/api/billing/") ||
+        path.startsWith("/api/admin/") || path==='/api/redirector' || path.startsWith('/api/workspace/shortcuts') || path.startsWith('/api/work/items') || path.startsWith('/api/campaigns/') || path.startsWith("/api/account/") || path==="/api/background" || path==="/api/catalog-policy" || path.startsWith("/api/billing/") ||
         path.startsWith("/api/numbers") || path.startsWith("/api/porting") ||
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
@@ -235,6 +243,9 @@ async function handler(req, res) {
         return send(res,200,{target,scope:'WSS discovery for healthy switch targets; SIP calls still use the configured switch route.'});
       }
       if(path.startsWith('/api/workspace/shortcuts'))return await handleWorkspaceShortcuts({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/work/items'))return await handleWorkPlanner({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/campaigns/')||path.startsWith('/api/admin/campaigns'))return await handleCampaigns({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/admin/passkey-policy'))return await handlePasskeyPolicy({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/operations'))return await handleOperationsPolicy({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/payments/')) return await handlePaymentAdmin({req,res,path,user,pool,send,readJson});
       if(path==='/api/payments/checkout'&&req.method==='POST') return await handlePaymentCheckout({req,res,user,pool,send,readJson,origin});
