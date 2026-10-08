@@ -6,6 +6,7 @@ import { setupGroupAdmin } from "./groups.js";
 import { setupSipProfiles } from "./sipProfiles.js";
 import {setupCommerceOps} from "./commerceOps.js";
 import {setupProviderWebhookAdmin} from "./providerWebhookAdmin.js";
+import {setupDidwwAdmin} from "./didwwAdmin.js";
 import { setupMobileAdmin } from "./mobileAdmin.js";
 import { setupTenants } from "./tenants.js";
 import { setupPbx } from "./pbx.js";
@@ -613,13 +614,33 @@ root.innerHTML = `
     </section>
     <section id="provider-webhook-admin" hidden>
       <h3>Provider callback registry</h3><p id="provider-webhook-tenant"></p>
-      <p>Flowroute SMS/MMS callbacks are configured on Messaging webhooks. DIDWW and future providers can be registered here to receive authenticated JSON callbacks for audit. Provider-specific processing requires a verified adapter.</p>
+      <p>Flowroute SMS/MMS callbacks are configured on Messaging webhooks. DIDWW API callbacks have a separate signed receiver under DIDWW API. This registry accepts future provider callbacks for audit.</p>
       <form id="provider-webhook-create"><label>Provider slug <input name="provider" pattern="[a-z][a-z0-9-]{1,39}" placeholder="didww" required></label>
         <label>Display name <input name="displayName" maxlength="100" required></label><button>Add provider</button></form>
       <p id="provider-webhook-result" role="status"></p>
       <button id="provider-webhook-refresh" type="button">Refresh providers and events</button>
       <ul id="provider-webhook-list"></ul><h4>Recent verified callback receipts</h4><ul id="provider-webhook-events"></ul>
       <p id="provider-webhook-status" role="status"></p>
+    </section>
+    <section id="didww-admin" hidden>
+      <h3>DIDWW API and signed callbacks</h3>
+      <p id="didww-config"></p>
+      <label>Callback URL <input id="didww-callback-url" readonly></label>
+      <button id="didww-copy-url" type="button">Copy callback URL</button>
+      <p>Set a callback secret in DIDWW, enable it, and configure this URL on each supported resource. The server verifies DIDWW signatures. API keys and callback secrets are private server settings.</p>
+      <label>Call Events URL <input id="didww-call-events-url" readonly></label>
+      <p>Call Events require DIDWW support to enable the service. Configure X-Auth-Token in the DIDWW Call Events panel to match the private server token.</p>
+      <form id="didww-resource-form">
+        <label>Resource <select name="resource" required></select></label>
+        <label>Method <select name="method" required></select></label>
+        <label>Resource ID for one item <input name="resourceId" pattern="[0-9a-fA-F-]{36}" placeholder="UUID"></label>
+        <label>JSON:API request body for POST/PATCH <textarea name="payload" rows="8" spellcheck="false" placeholder='{"data":{"type":"voice_in_trunks","attributes":{}}}'></textarea></label>
+        <button type="submit">Send DIDWW request</button>
+      </form>
+      <p id="didww-status" role="status"></p><pre id="didww-response"></pre>
+      <button id="didww-refresh" type="button">Refresh callback events</button>
+      <h4>Signed API callbacks</h4><ul id="didww-events"></ul>
+      <h4>Call Events</h4><ul id="didww-call-events"></ul>
     </section>
     <section id="sip-profile-admin" hidden>
       <h3>SIP profile access</h3><p>Super administrators set tenant defaults, group grants and individual overrides for viewing, adding, editing and deleting SIP profiles.</p>
@@ -811,7 +832,7 @@ const navigationGroups=[
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
   {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["mobile-admin","App releases"]]},
-  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"]]}
+  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"]]}
 ];
 let activeRole=null;
 let pageRoutes;
@@ -926,6 +947,7 @@ const groupAdmin = setupGroupAdmin();
 const sipProfiles = setupSipProfiles({get:apiGet,request:accountRequest});
 const commerceOps=setupCommerceOps({get:apiGet,request:accountRequest});
 const providerWebhooks=setupProviderWebhookAdmin({get:apiGet,request:accountRequest});
+const didwwAdmin=setupDidwwAdmin({get:apiGet,request:accountRequest});
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
 const pbx = setupPbx();
@@ -1299,9 +1321,10 @@ function signedIn(user) {
   sipProfiles.refresh();
   $("#sip-profile-admin").hidden=user.role!=="super_admin";
   $("#provider-webhook-admin").hidden=user.role!=="super_admin";
+  $("#didww-admin").hidden=user.role!=="super_admin";
   $("#flowroute-auto-form").hidden=user.role!=="super_admin";
   $("#carrier-catalog-form").hidden=user.role!=="super_admin";
-  if(user.role==="super_admin")providerWebhooks.refresh();
+  if(user.role==="super_admin"){providerWebhooks.refresh();didwwAdmin.refresh();}
   if(["admin","super_admin"].includes(user.role)){commerceOps.refreshPayment();commerceOps.refreshCluster();}
   if(user.role==="super_admin") sipProfiles.refreshAdmin();
   $("#dialplan-marketplace").hidden=!user.features?.billing;
