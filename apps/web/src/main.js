@@ -27,7 +27,12 @@ const root = document.querySelector("#app");
 root.innerHTML = `
   <header class="brand" id="top">
     <a class="brand-mark" href="#top" aria-label="Olamide home"><img src="/olamide-icon.svg" alt="" width="48" height="48"><span>Olamide<span class="brand-dot">.</span></span></a>
-    <nav class="public-nav" aria-label="Public navigation"><a href="#experience">Explore</a><a href="#downloads">Downloads</a><a class="nav-signin" href="#account">Sign in</a></nav>
+    <nav class="public-nav" aria-label="Public navigation"><a href="#experience">Explore</a><a href="#downloads">Downloads</a><a href="#help" id="public-help">Help</a>
+      <details class="login-menu"><summary id="login-menu-label">Sign in</summary><div class="login-options"><div id="login-options-auth">
+        <button id="signin-user" type="button">User sign in</button><button id="signin-admin" type="button">Administrator sign in</button><button id="signin-super" type="button">Super administrator sign in</button>
+        <a href="/pages/ldap-login">Directory sign in</a><a href="/pages/signup">Create an account</a><a href="/pages/signup-verify">Verify email</a></div>
+        <div id="login-options-account" hidden><button id="menu-account" type="button">Account settings</button><button id="menu-logout" type="button">Sign out</button></div>
+      </div></details></nav>
   </header>
   <section class="hero" aria-labelledby="hero-title">
     <div class="hero-copy"><p class="eyebrow"><span class="signal-dot"></span> YOUR CALLING SPACE</p>
@@ -54,10 +59,36 @@ root.innerHTML = `
     </div>
   </section>
   <nav id="app-nav" aria-label="Application" hidden></nav>
+  <section id="help" aria-labelledby="help-title"><h2 id="help-title">Help center</h2>
+    <p>Find a quick answer, follow a guided tour, or contact support.</p>
+    <nav class="help-links" aria-label="Help topics"><a href="#help-faq">FAQs</a><a href="#help-user">User tutorial</a><a href="#help-admin">Administrator tutorial</a><a href="#help-agent">AI support</a><a href="#support">Support tickets</a></nav>
+    <section id="help-faq"><h3>Frequently asked questions</h3>
+      <details><summary>How do I register and sign in?</summary><p>Choose Create an account in the Sign in menu, enter your details, then verify the email code. Return to Sign in with your email or assigned username.</p></details>
+      <details><summary>How do I make a call?</summary><p>Open Dialer, enter the secure SIP WebSocket server and your provisioned SIP account, connect, and dial an allowed number. Your administrator must activate the account on a real switch.</p></details>
+      <details><summary>Why can I not send an external text?</summary><p>Your administrator must assign an SMS enabled Flowroute number, set a daily allowance, and configure the carrier account. Check Communications → Text messages for your sender.</p></details>
+      <details><summary>How do I buy a number or plan?</summary><p>Open Plans, numbers & billing. Requests create an invoice; payment, number assignment and carrier activation need operational review.</p></details>
+      <details><summary>What does biometric sign in do?</summary><p>Passkeys use a device fingerprint, face, or PIN check. Your device keeps the private key; Olamide stores a public key.</p></details>
+      <details><summary>Where can I get technical help?</summary><p>Sign in and open Support tickets. The AI support guide is available when your administrator configures it.</p></details>
+    </section>
+    <section id="help-user"><h3>User tutorial</h3><ol>
+      <li>Register, confirm your email, and sign in.</li><li>Open Account & security to set a passkey and check your SIP identity.</li>
+      <li>Open Dialer and connect only after your SIP service is activated.</li><li>Use Account messages for Olamide contacts or Text messages for assigned external SMS.</li>
+      <li>Review plan and number requests under Commerce, then open Support tickets if activation needs help.</li></ol></section>
+    <section id="help-admin" hidden><h3>Administrator tutorial</h3><ol>
+      <li>Open Users & groups to manage tenant access. Super administrators use Tenants & roles to select a tenant and control administrators.</li>
+      <li>Set the actual SIP WSS URL in Overview & SIP server and configure authenticated carrier profiles.</li>
+      <li>Verify number ownership before assigning messaging numbers; copy webhook URLs to Flowroute Manage.</li>
+      <li>Import the carrier rate file under Carrier rate deck and review rate quotes. Switch charging and settlement require separate integrations.</li>
+      <li>Review tickets, security events, reports, and tenant policy before enabling services.</li></ol></section>
+    <section id="help-agent" hidden><h3>AI support guide</h3><p>Answers general Olamide usage questions. Do not enter passwords, OTPs, payment details, or identification numbers.</p>
+      <form id="help-ask"><label>Your question <textarea name="question" maxlength="1200" minlength="3" required></textarea></label><button>Ask support guide</button></form>
+      <div id="help-answer" role="status" aria-live="polite"></div><p id="help-agent-status" role="status"></p>
+      <button id="help-ticket" type="button">Open a support ticket</button>
+    </section>
+  </section>
   <section id="account">
     <h2>Welcome to Olamide</h2>
     <p>Email verification creates an account and SIP identity. Calling needs an activated switch account; no number or plan is assigned at signup.</p>
-    <div class="signin-choices" aria-label="Sign-in destinations"><button id="signin-user" type="button">User sign in</button><button id="signin-admin" type="button">Administrator sign in</button><button id="signin-super" type="button">Super administrator sign in</button></div>
     <p id="signin-role-help">Your assigned role controls which menus appear after sign-in.</p>
     <nav class="auth-pages" aria-label="Account pages"><a href="/pages/login">Sign in</a><a href="/pages/signup">Register</a><a href="/pages/signup-verify">Verify email</a><a href="/pages/ldap-login">Directory sign in</a></nav>
     <form id="signup">
@@ -82,7 +113,7 @@ root.innerHTML = `
       <button id="signup-resend" type="button">Resend code</button>
     </form>
     <form id="login">
-      <label>Email <input name="email" type="email" autocomplete="username" required></label>
+      <label>Email or username <input name="email" autocomplete="username" required></label>
       <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
       <button>Sign in</button>
       <button type="button" id="passkey-login">Sign in with passkey</button>
@@ -197,6 +228,21 @@ root.innerHTML = `
       <button>Send</button>
     </form>
     <p id="chat-status" role="status"></p>
+  </section>
+  <section id="external-sms" hidden>
+    <h2>Text messages</h2><p>Send SMS to external mobile numbers using an assigned, messaging-enabled Flowroute number. Carrier delivery and fees depend on the provider. Ask your administrator to assign a sender and daily allowance.</p>
+    <button id="sms-refresh" type="button">Refresh inbox and sent</button>
+    <form id="sms-send"><h3>New text</h3>
+      <label>From <select name="from" id="sms-senders" required></select></label>
+      <label>To (international format) <input name="to" type="tel" placeholder="+12065550123" pattern="\+[1-9][0-9]{7,14}" required></label>
+      <label>Message <textarea name="body" maxlength="1600" required></textarea></label>
+      <button>Send SMS</button></form>
+    <p id="sms-status" role="status"></p><h3>Inbox</h3><div id="sms-inbox"></div><h3>Sent</h3><div id="sms-sent"></div>
+  </section>
+  <section id="outbound-rates" hidden><h2>Outbound calling rates</h2>
+    <p>Look up the current Flowroute customer rate by destination digits. Prices are USD per minute; this is a rate quote, not a live call charge.</p>
+    <form id="outbound-rate-search"><label>Destination digits <input name="prefix" inputmode="numeric" pattern="[0-9]{1,15}" placeholder="12065551234" required></label><button>Find rate</button></form>
+    <p id="outbound-rate-result" role="status"></p>
   </section>
   <section id="billing" hidden>
     <h2>Plans and billing</h2>
@@ -444,6 +490,24 @@ root.innerHTML = `
         <button>Save provider profile</button>
       </form><div id="carrier-profiles"></div><p id="carrier-admin-status" role="status"></p>
     </section>
+    <section id="flowroute-rate-admin"><h3>Flowroute outbound rate deck</h3>
+      <p>Import a Flowroute outbound_rates.csv. The server validates every prefix and applies a fixed 30% markup at six decimal places before atomically activating the new database deck. Live switch rating is separate.</p>
+      <form id="flowroute-rate-import"><label>Carrier rate CSV <input name="rateFile" type="file" accept=".csv,text/csv" required></label><button>Import and activate rate deck</button></form>
+      <button id="flowroute-rate-refresh" type="button">Refresh rate decks</button><div id="flowroute-rate-decks"></div>
+      <p id="flowroute-rate-status" role="status"></p>
+    </section>
+    <section id="messaging-webhooks"><h3>Flowroute messaging callbacks</h3>
+      <p>Paste each private URL into its matching SMS, MMS, SMS DLR or MMS DLR field in Flowroute Manage. Treat the URL as a password. Received events are kept for this carrier tenant.</p>
+      <button id="webhooks-refresh" type="button">Refresh callbacks and events</button>
+      <div id="webhooks-urls"></div><h4>Assign a messaging number</h4>
+      <p>Confirm the number is on your Flowroute account and enabled for SMS before allowing sends. Zero daily allowance disables sending.</p>
+      <form id="sms-number-admin"><label>Flowroute number <input name="number" type="tel" placeholder="+12065550123" required></label>
+        <label>User ID <input name="userId" placeholder="User UUID" required></label>
+        <label>Daily SMS limit <input name="dailyLimit" type="number" min="0" max="10000" value="0" required></label>
+        <label>Enabled <input name="enabled" type="checkbox"></label><button>Assign number</button></form>
+      <div id="sms-number-list"></div><h4>Recent events</h4><div id="webhooks-events"></div>
+      <p id="webhooks-status" role="status"></p>
+    </section>
     <section id="charging-admin"><h3>Charging operations</h3>
       <p>Tenant billing and rate inventory. Live call rating, prepaid cutoff and carrier settlement require authoritative switch integration.</p>
       <button id="charging-refresh" type="button">Refresh charging overview</button>
@@ -685,17 +749,17 @@ setupFormGroups();
 setupDownloads();
 setupCarrierControl();
 const navigationGroups=[
-  {label:"Workspace",items:[["dashboard","Dashboard"],["search-panel","Search"],["support","Support tickets"]]},
-  {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Messages"],["meetings","Meetings"],["agent-panel","Call center"]]},
+  {label:"Workspace",items:[["dashboard","Dashboard"],["search-panel","Search"],["support","Support tickets"],["help","Help & tutorials"]]},
+  {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
-  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["charging-admin","Charging operations"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
+  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["mobile-admin","App releases"]]},
   {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"]]}
 ];
 let activeRole=null;
 let pageRoutes;
-const workspaceViews=["account","dashboard","search-panel","support","locale-settings","background-user","chat","billing","dialplan-marketplace","meetings","admin","agent-panel","calling-workspace","downloads"];
+const workspaceViews=["account","help","dashboard","search-panel","support","locale-settings","background-user","chat","external-sms","outbound-rates","billing","dialplan-marketplace","meetings","admin","agent-panel","calling-workspace","downloads"];
 let activeView="dashboard";
 function showWorkspace(target) {
   if(!activeRole) return;
@@ -777,7 +841,8 @@ document.addEventListener("click",event=>{
   for(const menu of $("#app-nav").querySelectorAll("details[open]")) menu.open=false;
 });
 $(".public-nav a[href='#downloads']").addEventListener("click",()=>showWorkspace("downloads"));
-$(".nav-signin").addEventListener("click",()=>{if(activeRole) showWorkspace("dashboard");});
+$('#public-help').addEventListener('click',()=>{if(activeRole) showWorkspace('help');});
+$(".login-menu").addEventListener('click',event=>{if(event.target.closest('button,a'))$(".login-menu").open=false;});
 $(".brand-mark").addEventListener("click",()=>{if(activeRole) showWorkspace("dashboard");});
 window.addEventListener("hashchange",()=>{
   const target=decodeURIComponent(location.hash.slice(1));
@@ -792,6 +857,8 @@ for(const [id,label] of [["signin-user","user"],["signin-admin","administrator"]
     $("#login").elements.email.focus({preventScroll:true});
   };
 }
+$('#menu-account').onclick=()=>showWorkspace('account');
+$('#menu-logout').onclick=()=>$('#logout').click();
 const connectForm = $("#connect");
 const dialForm = $("#dial");
 const meetings = setupMeetings();
@@ -1140,6 +1207,22 @@ async function loadMessages() {
   }
 }
 function signedIn(user) {
+  if(user.mustChangePassword){
+    activeRole='pending_password_change';
+    $('#account-password-group').open=true;
+    $('#account-login-group').hidden=true;
+    $('#account-signup-group').hidden=true;
+    $('#account-directory-group').hidden=true;
+    $('#account-verify-group').hidden=true;
+    document.body.classList.add('workspace-mode');
+    $('#account').hidden=false;$('#password-change').hidden=false;
+    $('#account-password-group').hidden=false;
+    $('#logout').hidden=false;
+    $('#app-nav').hidden=true;
+    $('#account-status').textContent='Temporary password: change it now before using administrator controls.';
+    showWorkspace('account');
+    return;
+  }
   activeRole=["admin","super_admin"].includes(user.role)?user.role:"user";
   document.body.classList.add("workspace-mode");
   refreshSoftphoneState(user).catch(error=>{$("#account-status").textContent=error.message;});
@@ -1157,9 +1240,14 @@ function signedIn(user) {
   $("#dialplan-admin-create").hidden=!['admin','super_admin'].includes(user.role);
   if(user.features?.billing) refreshDialplans();
   $("#account-password-group").hidden=user.authSource==="ldap";
-  $(".signin-choices").hidden=true;
+  $('#help-agent').hidden=false;
+  apiGet('/api/help/agent').then(({available})=>{
+    $('#help-ask').querySelector('button').disabled=!available;
+    $('#help-agent-status').textContent=available?'Ask a question about using Olamide.':'AI support is not configured. Open a support ticket for help.';
+  }).catch(error=>{$('#help-agent-status').textContent=error.message;});
+  $('#help-admin').hidden=!['admin','super_admin'].includes(user.role);
   $("#signin-role-help").textContent=`Signed in with ${activeRole==="super_admin"?"super administrator":activeRole==="admin"?"administrator":"user"} access.`;
-  $(".nav-signin").textContent="My workspace";$(".nav-signin").href="#dashboard";
+  $('#login-menu-label').textContent='My account';$('#login-options-auth').hidden=true;$('#login-options-account').hidden=false;
   $("#background-user").hidden = false;
   $("#calling-workspace").hidden=false;
   $("#dashboard").hidden=false;
@@ -1185,6 +1273,9 @@ function signedIn(user) {
     .then((result)=>{$("#nin-status").textContent=result.note;})
     .catch((error)=>{$("#nin-status").textContent=error.message;});
   if (user.features?.messaging)
+    refreshExternalSms().catch(error=>{$("#sms-status").textContent=error.message;});
+  $("#external-sms").hidden=!user.features?.messaging;
+  if (user.features?.messaging)
     loadContacts().catch((error) => { $("#chat-status").textContent = error.message; });
   $("#agent-panel").hidden = !user.features?.call_center;
   pbx.refreshSelf(user).catch((error) => { $("#agent-status-result").textContent = error.message; });
@@ -1207,6 +1298,8 @@ function signedIn(user) {
     refreshInhouse().catch((error) => { $("#inhouse-status").textContent = error.message; });
     refreshNigeria().catch((error) => { $("#nigeria-status").textContent = error.message; });
     refreshCarriers().catch(error=>{$("#carrier-admin-status").textContent=error.message;});
+    refreshFlowrouteRateDeck().catch(error=>{$("#flowroute-rate-status").textContent=error.message;});
+    refreshMessagingWebhooks().catch(error=>{$("#webhooks-status").textContent=error.message;});
     refreshCharging().catch(error=>{$("#charging-status").textContent=error.message;});
     refreshCdr().catch((error) => { $("#cdr-status").textContent = error.message; });
     pbx.refreshAdmin().catch((error) => { $("#pbx-status").textContent = error.message; });
@@ -1556,7 +1649,7 @@ $("#passkey-login").onclick=async()=>{
   try {const options=await accountRequest('/api/passkeys/login/options',{email});
     const response=await startAuthentication({optionsJSON:options});
     const user=await accountRequest('/api/passkeys/login/verify',{email,response});
-    signedIn(user);history.replaceState(null,'','/#dashboard');pageRoutes.render();showWorkspace('dashboard');}
+    signedIn(user);if(!user.mustChangePassword){history.replaceState(null,'','/#dashboard');pageRoutes.render();showWorkspace('dashboard');}}
   catch(error){$("#account-status").textContent=error.message;}
 };
 $("#login").addEventListener("submit", async (event) => {
@@ -1566,7 +1659,7 @@ $("#login").addEventListener("submit", async (event) => {
     const user = await accountRequest("/api/login", Object.fromEntries(new FormData(form)));
     form.reset();
     signedIn(user);
-    history.replaceState(null,'','/#dashboard');pageRoutes.render();showWorkspace('dashboard');
+    if(!user.mustChangePassword){history.replaceState(null,'','/#dashboard');pageRoutes.render();showWorkspace('dashboard');}
   } catch (error) { $("#account-status").textContent = error.message; }
 });
 $("#ldap-login").addEventListener("submit",async(event)=>{
@@ -1597,8 +1690,8 @@ $("#logout").onclick = async () => {
     $("#sip-account-panel").hidden=true;$("#sip-credentials-result").textContent='';
     $("#dialplan-marketplace").hidden=true;$("#dialplan-offers").replaceChildren();$("#dialplan-orders").replaceChildren();
     $("#account-password-group").hidden=true;
-    activeRole=null;resetWorkspace();$(".signin-choices").hidden=false;$("#signin-role-help").textContent="Your assigned role controls which menus appear after sign-in.";
-    $(".nav-signin").textContent="Sign in";$(".nav-signin").href="#account";
+    activeRole=null;resetWorkspace();$("#help-agent").hidden=true;$("#help-admin").hidden=true;$("#signin-role-help").textContent="Your assigned role controls which menus appear after sign-in.";
+    $('#login-menu-label').textContent='Sign in';$('#login-options-auth').hidden=false;$('#login-options-account').hidden=true;
     $("#password-change").hidden = true;
     $("#background-user").hidden = true;
     $("#calling-workspace").hidden=true;
@@ -1624,6 +1717,7 @@ $("#password-change").onsubmit=async(event)=>{
     const form=event.currentTarget;
     const result=await accountRequest("/api/account/password",Object.fromEntries(new FormData(form)));
     form.reset();$("#account-status").textContent=result.status;
+    const fresh=await apiGet("/api/me");signedIn(fresh);
   } catch(error) {$("#account-status").textContent=error.message;}
 };
 fetch("/api/me", { credentials: "same-origin" })
@@ -1754,3 +1848,96 @@ $("#disconnect").onclick = async () => {
     status("Disconnected");
   } catch (error) { report(error); }
 };
+
+async function refreshMessagingWebhooks(){
+  const data=await apiGet('/api/admin/messaging/webhooks');
+  await refreshSmsNumberAdmin();
+  const urls=$('#webhooks-urls');urls.replaceChildren();
+  if(!data.configured){$('#webhooks-status').textContent='Private webhook token is not configured. Rerun deployment/bootstrap.sh on the server.';return;}
+  $('#webhooks-status').textContent='Callbacks ready. Add these URLs in Flowroute Manage to receive messages.';
+  for(const [kind,url] of Object.entries(data.urls)){
+    const line=document.createElement('p'),label=document.createElement('strong'),input=document.createElement('input'),copy=document.createElement('button');
+    label.textContent=kind.toUpperCase()+' ';input.value=url;input.readOnly=true;input.setAttribute('aria-label',kind+' callback URL');input.size=60;
+    copy.type='button';copy.textContent='Copy';copy.onclick=async()=>{try{await navigator.clipboard.writeText(url);$('#webhooks-status').textContent=kind.toUpperCase()+' URL copied';}catch(error){input.select();$('#webhooks-status').textContent='Select and copy the URL';}};
+    line.append(label,input,copy);urls.append(line);
+  }
+  const events=$('#webhooks-events');events.replaceChildren();
+  for(const event of data.events){
+    const item=document.createElement('p');
+    item.textContent=`${event.received_at} · ${event.kind.toUpperCase()} · ${event.sender} → ${event.recipient} · ${event.status||event.body||'(media)'}`;
+    events.append(item);
+  }
+  if(!data.events.length) events.textContent='No callbacks received yet.';
+}
+$('#webhooks-refresh').onclick=()=>refreshMessagingWebhooks().catch(error=>{$('#webhooks-status').textContent=error.message;});
+
+async function refreshExternalSms(){
+  const [numbers,inbox,sent]=await Promise.all([apiGet('/api/external-sms/numbers'),apiGet('/api/external-sms/inbox'),apiGet('/api/external-sms/sent')]);
+  const senders=$('#sms-senders'),selected=senders.value;senders.replaceChildren();
+  for(const number of numbers.numbers.filter(n=>n.enabled)){
+    const option=document.createElement('option');option.value=number.number_e164;
+    option.textContent=`${number.number_e164} · ${number.used_today}/${number.daily_limit} today`;senders.append(option);
+  }
+  if([...senders.options].some(n=>n.value===selected))senders.value=selected;
+  $('#sms-status').textContent=senders.length?'':'No assigned messaging number yet.';
+  for(const [target,records,direction] of [['#sms-inbox',inbox.messages,'from'],['#sms-sent',sent.messages,'to']]){
+    const node=$(target);node.replaceChildren();
+    for(const message of records){const item=document.createElement('p');
+      item.textContent=`${new Date(message.received_at||message.created_at).toLocaleString()} · ${direction==='from'?'From':'To'} ${message[direction==='from'?'sender':'recipient']} · ${message.body||'(media)'} ${message.status||''}`;
+      node.append(item);
+    }
+    if(!records.length)node.textContent='No messages yet.';
+  }
+}
+$('#sms-refresh').onclick=()=>refreshExternalSms().catch(error=>{$('#sms-status').textContent=error.message;});
+$('#sms-send').onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget;const input=Object.fromEntries(new FormData(form));
+  try{const result=await accountRequest('/api/external-sms/send',input);$('#sms-status').textContent=`Carrier accepted SMS ${result.providerId}`;form.elements.body.value='';await refreshExternalSms();}
+  catch(error){$('#sms-status').textContent=error.message;}
+};
+async function refreshSmsNumberAdmin(){
+  const data=await apiGet('/api/admin/messaging/numbers'),node=$('#sms-number-list');node.replaceChildren();
+  for(const number of data.numbers){const row=document.createElement('p');row.textContent=`${number.number_e164} · ${number.display_name} · ${number.enabled?'enabled':'disabled'} · ${number.used_today}/${number.daily_limit} today`;node.append(row);}
+}
+$('#sms-number-admin').onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,values=Object.fromEntries(new FormData(form));
+  try{await accountRequest('/api/admin/messaging/numbers',{number:values.number,userId:values.userId,dailyLimit:Number(values.dailyLimit),enabled:form.elements.enabled.checked});
+    $('#webhooks-status').textContent='Messaging number assigned.';await refreshSmsNumberAdmin();}
+  catch(error){$('#webhooks-status').textContent=error.message;}
+};
+
+async function refreshFlowrouteRateDeck(){
+  const result=await apiGet('/api/admin/rates/flowroute');const list=$('#flowroute-rate-decks');list.replaceChildren();
+  for(const deck of result.decks){const row=document.createElement('p');
+    row.textContent=`${deck.active?'Active':'Archived'} · ${deck.row_count} prefixes · ${Number(deck.markup_bps)/100}% markup · imported ${new Date(deck.imported_at).toLocaleString()} · SHA-256 ${deck.source_sha256}`;
+    list.append(row);
+  }
+  if(!result.decks.length)list.textContent='No imported carrier rates.';
+}
+$('#flowroute-rate-refresh').onclick=()=>refreshFlowrouteRateDeck().catch(error=>{$('#flowroute-rate-status').textContent=error.message;});
+$('#flowroute-rate-import').onsubmit=async event=>{
+  event.preventDefault();const file=event.currentTarget.elements.rateFile.files?.[0];
+  if(!file)return;
+  const status=$('#flowroute-rate-status');status.textContent='Validating and importing carrier rates…';
+  try{
+    const response=await fetch('/api/admin/rates/flowroute/import',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'text/csv'},body:file});
+    const result=await response.json();if(!response.ok)throw Error(result.error||'Rate import failed');
+    status.textContent=`${result.count} prefixes ${result.active?'active':'unchanged'} with 30% markup. Live switch not provisioned.`;
+    await refreshFlowrouteRateDeck();
+  }catch(error){status.textContent=error.message;}
+};
+$('#outbound-rate-search').onsubmit=async event=>{
+  event.preventDefault();const prefix=event.currentTarget.elements.prefix.value;
+  try{const {rate}=await apiGet('/api/rates/flowroute/search?prefix='+encodeURIComponent(prefix));
+    $('#outbound-rate-result').textContent=rate?`${rate.destination} · +${rate.prefix} · $${rate.price_usd_per_minute}/minute · ${rate.first_interval}s first, ${rate.sub_interval}s thereafter`:'No active Flowroute rate for this destination.';
+  }catch(error){$('#outbound-rate-result').textContent=error.message;}
+};
+
+$('#help-ask').onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,question=form.elements.question.value;
+  const button=form.querySelector('button');button.disabled=true;$('#help-answer').textContent='Checking the Olamide help guide…';
+  try{const result=await accountRequest('/api/help/agent',{question});$('#help-answer').textContent=result.answer;$('#help-agent-status').textContent='AI generated answer. Open a ticket for account specific help.';}
+  catch(error){$('#help-answer').textContent='';$('#help-agent-status').textContent=error.message;}
+  finally{button.disabled=false;}
+};
+$('#help-ticket').onclick=()=>showWorkspace('support');
