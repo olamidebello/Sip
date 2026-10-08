@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isAdmin } from "./tenancy.js";
+import {handleTrunks} from "./trunkManagement.js";
 const uuid = /^[0-9a-f-]{36}$/i;
 const extensionNumber = /^\d{2,10}$/;
 const e164 = /^\+[1-9]\d{7,14}$/;
@@ -41,6 +42,7 @@ export async function handlePbx({req,res,path,user,pool,send,readJson}) {
     return send(res,200,{agents:rows.rows});
   }
   if (!admin) return send(res,403,{error:"Administrator required"});
+  if(path.startsWith("/api/pbx/trunks"))return handleTrunks({req,res,path,user,pool,send,readJson});
   if (path === "/api/pbx/overview" && req.method === "GET") {
     const [result,switchState] = await Promise.all([
       pool.query("SELECT (SELECT COUNT(*) FROM pbx_destinations WHERE tenant_id=$1 AND kind='extension') AS extensions,(SELECT COUNT(*) FROM pbx_destinations WHERE tenant_id=$2 AND kind='queue') AS queues,(SELECT COUNT(*) FROM pbx_inbound_routes WHERE tenant_id=$3) AS inbound_routes,(SELECT COUNT(*) FROM pbx_trunks WHERE tenant_id=$4) AS trunks",[tenant,tenant,tenant,tenant]),
@@ -146,35 +148,6 @@ export async function handlePbx({req,res,path,user,pool,send,readJson}) {
     await pool.query("INSERT INTO pbx_inbound_routes(id,tenant_id,did_e164,destination_id) VALUES($1,$2,$3,$4) ON DUPLICATE KEY UPDATE destination_id=$5",
       [id,tenant,did,destinationId,destinationId]);
     return send(res,200,{did,destinationId});
-  }
-  if (path === "/api/pbx/trunks" && req.method === "GET") {
-    const found = await pool.query("SELECT id,name,host,port,transport,priority,enabled FROM pbx_trunks WHERE tenant_id=$1 ORDER BY priority,name",[tenant]);
-    return send(res,200,{trunks:found.rows});
-  }
-  if (path === "/api/pbx/trunks" && req.method === "POST") {
-    const body = await readJson(req);
-    if (!validName(body.name) || typeof body.host !== "string" ||
-        !/^[a-zA-Z0-9][a-zA-Z0-9.-]{0,253}$/.test(body.host) ||
-        !Number.isInteger(body.port) || body.port < 1 || body.port > 65535 ||
-        !["udp","tcp","tls"].includes(body.transport) ||
-        !Number.isInteger(body.priority) || body.priority < 1 || body.priority > 1000)
-      return send(res,400,{error:"Valid trunk name, host, port, transport and priority required"});
-    const id = randomUUID();
-    try {
-      await pool.query("INSERT INTO pbx_trunks(id,tenant_id,name,host,port,transport,priority) VALUES($1,$2,$3,$4,$5,$6,$7)",
-        [id,tenant,body.name.trim(),body.host.toLowerCase(),body.port,body.transport,body.priority]);
-    } catch (error) {
-      if (error.code === "ER_DUP_ENTRY") return send(res,409,{error:"Trunk name exists"});
-      throw error;
-    }
-    return send(res,201,{id,enabled:false});
-  }
-  const trunkMatch = /^\/api\/pbx\/trunks\/([0-9a-f-]{36})\/status$/i.exec(path);
-  if (trunkMatch && req.method === "PUT") {
-    const {enabled} = await readJson(req);
-    if (typeof enabled !== "boolean") return send(res,400,{error:"Boolean enabled required"});
-    const result = await pool.query("UPDATE pbx_trunks SET enabled=$1 WHERE id=$2 AND tenant_id=$3",[enabled,trunkMatch[1],tenant]);
-    return send(res,result.rowCount ? 200 : 404,result.rowCount ? {enabled,simulationOnly:true} : {error:"Trunk unavailable"});
   }
   if (path === "/api/pbx/rates" && req.method === "GET") {
     const found = await pool.query("SELECT r.id,r.prefix,r.cost_cents_per_minute,r.price_cents_per_minute,r.enabled,t.name AS trunk_name,r.trunk_id FROM pbx_rates r JOIN pbx_trunks t ON t.id=r.trunk_id WHERE r.tenant_id=$1 ORDER BY r.prefix,t.priority LIMIT 500",[tenant]);
