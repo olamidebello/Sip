@@ -871,16 +871,21 @@ root.innerHTML = `
         <label>Destination <select id="pbx-route-destination" name="destinationId"></select></label>
         <button>Save DID route</button>
       </form><ul id="pbx-route-list"></ul>
-      <h4>Trunk plans and rate deck</h4>
-      <p>Trunks and rates are for preview. No live trunk is provisioned.</p>
+      <h4>Trunk management and rate deck</h4>
+      <p>These trunk records drive route previews. Carrier activation and switch configuration use the separate provider and FreeSWITCH controls; a saved trunk alone does not provision a live SIP connection.</p>
       <form id="pbx-trunk-form">
+        <input name="trunkId" type="hidden"><input name="revision" type="hidden">
         <label>Name <input name="name" required></label>
         <label>Host <input name="host" placeholder="sip.provider.example" required></label>
         <label>Port <input name="port" type="number" min="1" max="65535" value="5061" required></label>
         <label>Transport <select name="transport"><option value="tls">TLS</option><option value="udp">UDP</option><option value="tcp">TCP</option></select></label>
         <label>Priority <input name="priority" type="number" min="1" max="1000" value="100" required></label>
-        <button>Add trunk plan</button>
-      </form><ul id="pbx-trunk-list"></ul>
+        <button>Save trunk</button><button id="pbx-trunk-cancel" type="button">Clear form</button>
+      </form>
+      <button id="pbx-trunks-refresh" type="button">Refresh trunks</button>
+      <button id="pbx-trunks-enable" type="button">Enable selected for preview</button>
+      <button id="pbx-trunks-disable" type="button">Disable selected for preview</button>
+      <ul id="pbx-trunk-list"></ul><p id="pbx-trunk-detail" role="status"></p>
       <form id="pbx-rate-form">
         <label>Digits prefix <input name="prefix" pattern="[0-9]{1,15}" required></label>
         <label>Trunk <select name="trunkId" id="pbx-rate-trunk"></select></label>
