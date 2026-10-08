@@ -11,6 +11,10 @@ import {setupAdapterAdmin} from "./adapterAdmin.js";
 import {setupOperatorControl} from "./operatorControl.js";
 import {setupSwitchAdmin} from "./switchAdmin.js";
 import {setupServerFleetAdmin} from "./serverFleetAdmin.js";
+import {setupFleetNetworkAdmin} from "./fleetNetworkAdmin.js";
+import {setupFleetAccessAdmin} from "./fleetAccessAdmin.js";
+import {setupFleetFirewallAdmin} from "./fleetFirewallAdmin.js";
+import {setupOperationsAdmin} from "./operationsAdmin.js";
 import { setupMobileAdmin } from "./mobileAdmin.js";
 import { setupTenants } from "./tenants.js";
 import { setupPbx } from "./pbx.js";
@@ -69,7 +73,7 @@ root.innerHTML = `
   <nav id="app-nav" aria-label="Application" hidden></nav>
   <section id="help" aria-labelledby="help-title"><h2 id="help-title">Help center</h2>
     <p>Find a quick answer, follow a guided tour, or contact support.</p>
-    <nav class="help-links" aria-label="Help topics"><a href="#help-faq">FAQs</a><a href="#help-user">User tutorial</a><a href="#help-admin">Administrator tutorial</a><a href="#help-agent">AI support</a><a href="#support">Support tickets</a></nav>
+    <nav class="help-links" aria-label="Help topics"><a href="#help-faq">FAQs</a><a href="#help-user">User tutorial</a><a href="#help-admin">Administrator tutorial</a><a href="#help-technical">Technical guide</a><a href="#help-agent">AI support</a><a href="#support">Support tickets</a></nav>
     <section id="help-faq"><h3>Frequently asked questions</h3>
       <details><summary>How do I register and sign in?</summary><p>Choose Create an account in the Sign in menu, enter your details, then verify the email code. Return to Sign in with your email or assigned username.</p></details>
       <details><summary>How do I make a call?</summary><p>Open Dialer, enter the secure SIP WebSocket server and your provisioned SIP account, connect, and dial an allowed number. Your administrator must activate the account on a real switch.</p></details>
@@ -77,6 +81,10 @@ root.innerHTML = `
       <details><summary>How do I buy a number or plan?</summary><p>Open Plans, numbers & billing. Requests create an invoice; payment, number assignment and carrier activation need operational review.</p></details>
       <details><summary>What does biometric sign in do?</summary><p>Passkeys use a device fingerprint, face, or PIN check. Your device keeps the private key; Olamide stores a public key.</p></details>
       <details><summary>Where can I get technical help?</summary><p>Sign in and open Support tickets. The AI support guide is available when your administrator configures it.</p></details>
+      <details><summary>Why is registration blocked?</summary><p>A super administrator may close public signup or limit it to approved email domains. Ask your tenant administrator for access.</p></details>
+      <details><summary>What does a network device configuration save do?</summary><p>It creates a versioned desired configuration and an audit event. Router and firewall vendor changes need a supported adapter; saving a draft does not change the device.</p></details>
+      <details><summary>Why is a deployment job pending?</summary><p>The private Ansible runner may be offline or waiting for SSH, Vault or a previous job. An operator can inspect the controller timer and job history.</p></details>
+      <details><summary>How do named dashboards and backgrounds work?</summary><p>Save a personal dashboard view or choose a tenant view. Drag tiles to change their order. In My background, choose a preset or dark custom colors. Tenant administrators can lock personal overrides.</p></details>
     </section>
     <section id="help-user"><h3>User tutorial</h3><ol>
       <li>Register, confirm your email, and sign in.</li><li>Open Account & security to set a passkey and check your SIP identity.</li>
@@ -87,7 +95,16 @@ root.innerHTML = `
       <li>Set the actual SIP WSS URL in Overview & SIP server and configure authenticated carrier profiles.</li>
       <li>Verify number ownership before assigning messaging numbers; copy webhook URLs to Flowroute Manage.</li>
       <li>Import the carrier rate file under Carrier rate deck and review rate quotes. Switch charging and settlement require separate integrations.</li>
-      <li>Review tickets, security events, reports, and tenant policy before enabling services.</li></ol></section>
+      <li>Review tickets, security events, reports, and tenant policy before enabling services.</li>
+      <li>Publish named tenant dashboard views, arrange tiles, and set the tenant background and personal override policy.</li>
+      <li>Super administrators can grant fleet view, manage or deploy access to selected users and groups. Review the shared infrastructure scope before granting access.</li>
+      <li>For dedicated Linux switches, review SSH and carrier CIDRs, then queue the firewall apply job and confirm health. WSS discovery only selects healthy, recent targets.</li></ol></section>
+    <section id="help-technical"><h3>Technical and operations guide</h3>
+      <p>Read the <a href="/operations-manual.md" target="_blank" rel="noopener noreferrer">user, administrator and operations manual</a> for fleet permissions, installation, firewall recovery, WSS discovery, dashboards, training exercises and troubleshooting.</p>
+      <ol><li>Use the fleet view to check server health, version, jobs and events.</li>
+        <li>Keep the private controller online for scheduled work. A token configured in the API does not prove the timer is running.</li>
+        <li>Save a structured device configuration, inspect its revision and export a credential-free dump before applying any supported change.</li>
+        <li>For a failed switch or firewall job, inspect the controller journal and attach a sanitized job ID to a support ticket.</li></ol></section>
     <section id="help-agent" hidden><h3>AI support guide</h3><p>Answers general Olamide usage questions. Do not enter passwords, OTPs, payment details, or identification numbers.</p>
       <form id="help-ask"><label>Your question <textarea name="question" maxlength="1200" minlength="3" required></textarea></label><button>Ask support guide</button></form>
       <div id="help-answer" role="status" aria-live="polite"></div><p id="help-agent-status" role="status"></p>
@@ -160,6 +177,11 @@ root.innerHTML = `
   <section id="dashboard" hidden>
     <h2>Dashboard</h2><button id="dashboard-refresh" type="button">Refresh dashboard</button>
     <p id="dashboard-updated"></p><div id="dashboard-tiles" class="dashboard-tiles"></div>
+    <details><summary>My dashboard views</summary><p>Create named layouts for yourself. Administrators can publish a layout to the selected tenant.</p>
+      <form id="dashboard-view-create"><label>View name <input name="name" maxlength="60" required></label>
+        <label>Visibility <select name="visibility"><option value="personal">Only me</option><option value="tenant">Selected tenant</option></select></label><button>Save current layout as a view</button></form>
+      <button id="dashboard-view-default" type="button">Use default layout</button><ul id="dashboard-view-list"></ul>
+      <p id="dashboard-view-status" role="status"></p></details>
     <details><summary>Customize my dashboard</summary>
       <div id="dashboard-personal-options"></div>
       <button id="dashboard-save" type="button">Save my layout</button>
@@ -185,6 +207,7 @@ root.innerHTML = `
   </section>
   <section id="support" hidden>
     <h2>Technical support</h2>
+    <p>For fleet issues, include the node name, job ID, UTC time and sanitized error summary. Do not paste SSH keys, Vault passwords, SIP credentials or raw private configuration.</p>
     <form id="support-create"><h3>New ticket</h3>
       <label>Subject <input name="subject" maxlength="160" required></label>
       <label>Category <select name="category"><option>technical</option><option>calling</option><option>numbers</option><option>account</option><option>billing</option><option>other</option></select></label>
@@ -213,10 +236,12 @@ root.innerHTML = `
   <section id="background-user" hidden>
     <h2>My background</h2>
     <form id="background-user-form">
-      <label>Day background <select name="dayPreset"><option value="ocean">Ocean</option><option value="midnight">Midnight</option><option value="aurora">Aurora</option><option value="sunrise">Sunrise</option><option value="slate">Slate</option></select></label>
-      <label>Night background <select name="nightPreset"><option value="midnight">Midnight</option><option value="ocean">Ocean</option><option value="aurora">Aurora</option><option value="sunrise">Sunrise</option><option value="slate">Slate</option></select></label>
+      <label>Day background <select name="dayPreset"><option value="ocean">Ocean</option><option value="midnight">Midnight</option><option value="aurora">Aurora</option><option value="sunrise">Sunrise</option><option value="slate">Slate</option><option value="custom">Custom colors</option></select></label>
+      <label>Night background <select name="nightPreset"><option value="midnight">Midnight</option><option value="ocean">Ocean</option><option value="aurora">Aurora</option><option value="sunrise">Sunrise</option><option value="slate">Slate</option><option value="custom">Custom colors</option></select></label>
       <label><input name="schedule" type="checkbox"> Switch at 6 AM and 6 PM on this device</label>
       <label><input name="animate" type="checkbox"> Gentle movement</label>
+      <label>Custom start color <input name="colorStart" type="color" value="#071b36"></label><label>Custom end color <input name="colorEnd" type="color" value="#0c4861"></label>
+      <label>Gradient angle <input name="angle" type="number" min="0" max="359" value="135"></label>
       <button>Save my background</button>
     </form>
     <button id="background-reset" type="button">Use tenant background</button>
@@ -409,10 +434,12 @@ root.innerHTML = `
     <section id="background-admin" hidden>
       <h3>Tenant background policy</h3>
       <form id="background-admin-form">
-        <label>Day background <select name="dayPreset"><option value="ocean">Ocean</option><option value="midnight">Midnight</option><option value="aurora">Aurora</option><option value="sunrise">Sunrise</option><option value="slate">Slate</option></select></label>
-        <label>Night background <select name="nightPreset"><option value="midnight">Midnight</option><option value="ocean">Ocean</option><option value="aurora">Aurora</option><option value="sunrise">Sunrise</option><option value="slate">Slate</option></select></label>
+        <label>Day background <select name="dayPreset"><option value="ocean">Ocean</option><option value="midnight">Midnight</option><option value="aurora">Aurora</option><option value="sunrise">Sunrise</option><option value="slate">Slate</option><option value="custom">Custom colors</option></select></label>
+        <label>Night background <select name="nightPreset"><option value="midnight">Midnight</option><option value="ocean">Ocean</option><option value="aurora">Aurora</option><option value="sunrise">Sunrise</option><option value="slate">Slate</option><option value="custom">Custom colors</option></select></label>
         <label><input name="schedule" type="checkbox"> Switch at 6 AM and 6 PM on each device</label>
         <label><input name="animate" type="checkbox"> Gentle movement</label>
+        <label>Custom start color <input name="colorStart" type="color" value="#071b36"></label><label>Custom end color <input name="colorEnd" type="color" value="#0c4861"></label>
+        <label>Gradient angle <input name="angle" type="number" min="0" max="359" value="135"></label>
         <label><input name="allowUserOverride" type="checkbox" checked> Allow users to choose their own background</label>
         <button>Save tenant background</button>
       </form>
@@ -691,6 +718,45 @@ root.innerHTML = `
         <label>Warning latency ms <input name="warningLatencyMs" type="number" min="100" max="30000" required></label>
         <label>Retention days <input name="retentionDays" type="number" min="7" max="365" required></label><button>Save thresholds</button></form>
       <label>Report window in days <input id="fleet-report-days" type="number" min="1" max="90" value="7"></label><button id="fleet-report-run" type="button">Generate report</button><p id="fleet-report"></p>
+      <section id="fleet-device-panel"><h3>Network devices and configuration versions</h3>
+        <p>Drag devices to reorder them. Router, firewall and load balancer configurations are stored as reviewed intent; only linked Linux switch hosts have an installation adapter.</p>
+        <button id="fleet-device-refresh" type="button">Refresh devices</button><button id="fleet-device-new" type="button">New device</button>
+        <p id="fleet-device-status" role="status"></p><ul id="fleet-devices"></ul>
+        <form id="fleet-device-form"><h4 id="fleet-device-editor-title">Add a network device</h4><input name="deviceId" type="hidden"><input name="expectedVersion" type="hidden">
+          <label>Name <input name="name" pattern="[a-z][a-z0-9-]{1,39}" required></label>
+          <label>Kind <select name="kind"><option value="server">Server</option><option value="switch">Switch</option><option value="router">Router</option><option value="firewall">Firewall</option><option value="load_balancer">Load balancer</option></select></label>
+          <label>Management IPv4 <input name="host" required></label><label>Port <input name="port" type="number" min="1" max="65535" value="22" required></label>
+          <label>Site <input name="site" maxlength="60" required></label><label><input name="enabled" type="checkbox" checked> Enabled</label>
+          <label>Linked switch <select name="nodeId"><option value="">No linked switch</option></select></label>
+          <p id="fleet-device-drop-note">Drop a small JSON file onto the editor, then review and save.</p>
+          <label>Structured desired configuration <textarea name="config" rows="12" spellcheck="false" required>{"hostname":"device-1","vlans":[],"interfaces":[],"routes":[]}</textarea></label>
+          <button>Save configuration version</button></form>
+        <h4>Configuration versions</h4><ul id="fleet-device-versions"></ul><h4>Device audit events</h4><ul id="fleet-device-events"></ul>
+      </section>
+      <section id="fleet-access-panel" hidden><h3>Fleet access grants</h3><p>View, manage, or deploy access can be assigned to a user or group in the selected tenant. A grant applies to the shared fleet.</p>
+        <form id="fleet-access-form"><label>Principal <select name="type"><option value="user">User</option><option value="group">Group</option></select></label>
+          <label>User or group <select name="principalId" required></select></label>
+          <label>Access <select name="level"><option value="view">View and export</option><option value="manage">Manage inventory and configuration</option><option value="deploy">Deploy and schedule</option></select></label><button>Save access</button></form>
+        <p id="fleet-access-status" role="status"></p><ul id="fleet-access-grants"></ul></section>
+      <section id="fleet-firewall-panel"><h3>Dedicated switch firewall policy</h3>
+        <p>Save CIDR allowlists, then queue a separate apply job. The controller checks that its SSH source is still allowed. The application and Docker host is excluded.</p>
+        <form id="fleet-firewall-form"><label>Switch <select name="nodeId" required></select></label>
+          <label><input name="enabled" type="checkbox"> Enable policy for apply</label>
+          <label>SSH source CIDRs, one per line <textarea name="sshCidrs" rows="4" required></textarea></label>
+          <label>Carrier SIP source CIDRs, one per line <textarea name="carrierCidrs" rows="4"></textarea></label><button type="submit">Save policy</button></form>
+        <p id="fleet-firewall-preview"></p><button id="fleet-firewall-apply" type="button">Apply reviewed policy</button><p id="fleet-firewall-status" role="status"></p>
+      </section>
+      <section id="fleet-operations-panel" hidden><h3>Registration and switch discovery</h3>
+        <form id="registration-policy"><h4>User registration policy</h4><label><input name="openSignup" type="checkbox"> Allow new public registrations</label>
+          <label>Allowed email domains, one per line (empty allows any domain) <textarea name="allowedDomains" rows="4"></textarea></label><button>Save registration policy</button></form>
+        <h4>Healthy WSS discovery targets</h4><p id="redirector-scope"></p><button id="redirector-new" type="button">New target</button>
+        <form id="redirector-form"><input name="targetId" type="hidden"><label>Name <input name="name" required></label>
+          <label>Region <input name="region" value="global" required></label><label>Linked switch <select name="nodeId" required></select></label>
+          <label>WSS URL <input name="wssUrl" type="url" placeholder="wss://sip.example.com/" required></label>
+          <label>Weight <input name="weight" type="number" min="1" max="100" value="1" required></label>
+          <label><input name="enabled" type="checkbox"> Enabled</label><button>Save WSS target</button></form>
+        <p id="operations-status" role="status"></p><ul id="redirector-targets"></ul><h4>Operations audit</h4><ul id="operations-events"></ul>
+      </section>
     </section>
     <section id="provider-webhook-admin" hidden>
       <h3>Provider callback registry</h3><p id="provider-webhook-tenant"></p>
@@ -902,6 +968,7 @@ root.innerHTML = `
 `;
 
 const $ = (selector) => document.querySelector(selector);
+root.append($('#fleet-admin'));
 setupFormGroups();
 setupDownloads();
 setupCarrierControl();
@@ -912,11 +979,12 @@ const navigationGroups=[
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
   {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","FreeSWITCH"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["mobile-admin","App releases"]]},
-  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["fleet-admin","Server and network operations"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"]]}
+  {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
+  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"]]}
 ];
 let activeRole=null;
 let pageRoutes;
-const workspaceViews=["account","help","dashboard","search-panel","support","locale-settings","background-user","chat","external-sms","outbound-rates","billing","dialplan-marketplace","meetings","admin","agent-panel","calling-workspace","downloads"];
+const workspaceViews=["account","help","dashboard","search-panel","support","locale-settings","background-user","chat","external-sms","outbound-rates","billing","dialplan-marketplace","meetings","admin","fleet-admin","agent-panel","calling-workspace","downloads"];
 let activeView="dashboard";
 function showWorkspace(target) {
   if(!activeRole) return;
@@ -1027,6 +1095,10 @@ const groupAdmin = setupGroupAdmin();
 const sipProfiles = setupSipProfiles({get:apiGet,request:accountRequest});
 const commerceOps=setupCommerceOps({get:apiGet,request:accountRequest});
 const serverFleet=setupServerFleetAdmin({get:apiGet,request:accountRequest});
+const fleetNetwork=setupFleetNetworkAdmin({get:apiGet,request:accountRequest});
+const fleetGrants=setupFleetAccessAdmin({get:apiGet,request:accountRequest});
+const fleetFirewall=setupFleetFirewallAdmin({get:apiGet,request:accountRequest});
+const operationsAdmin=setupOperationsAdmin({get:apiGet,request:accountRequest});
 const providerWebhooks=setupProviderWebhookAdmin({get:apiGet,request:accountRequest});
 const didwwAdmin=setupDidwwAdmin({get:apiGet,request:accountRequest});
 const adapterAdmin=setupAdapterAdmin({get:apiGet,request:accountRequest});
@@ -1390,6 +1462,7 @@ function signedIn(user) {
     return;
   }
   activeRole=["admin","super_admin"].includes(user.role)?user.role:"user";
+  apiGet('/api/redirector').then(({target})=>{if(target?.wssUrl&&!onCall)$("#connect [name=server]").value=target.wssUrl;}).catch(()=>{});
   document.body.classList.add("workspace-mode");
   refreshSoftphoneState(user).catch(error=>{$("#account-status").textContent=error.message;});
   loadGeofencePolicy().catch(error=>{$("#geo-policy").textContent=error.message+". Outgoing calls are blocked.";});
@@ -1408,9 +1481,11 @@ function signedIn(user) {
   $("#didww-admin").hidden=user.role!=="super_admin";
   $("#carrier-adapter-admin").hidden=user.role!=="super_admin";
   $("#fleet-admin").hidden=user.role!=="super_admin";
+  $("#fleet-access-panel").hidden=user.role!=="super_admin";
+  $("#fleet-operations-panel").hidden=user.role!=="super_admin";
   $("#flowroute-auto-form").hidden=user.role!=="super_admin";
   $("#carrier-catalog-form").hidden=user.role!=="super_admin";
-  if(user.role==="super_admin"){providerWebhooks.refresh();didwwAdmin.refresh();adapterAdmin.refresh();serverFleet.refresh();}
+  if(user.role==="super_admin"){providerWebhooks.refresh();didwwAdmin.refresh();adapterAdmin.refresh();serverFleet.refresh();fleetNetwork.refresh();fleetGrants.refresh();fleetFirewall.refresh();operationsAdmin.refresh();}
   if(["admin","super_admin"].includes(user.role))operatorAdmin.refresh();
   if(["admin","super_admin"].includes(user.role)){
     switchAdmin.refresh(user.role==="super_admin");
@@ -1464,6 +1539,12 @@ function signedIn(user) {
   pbx.refreshSelf(user).catch((error) => { $("#agent-status-result").textContent = error.message; });
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
   updateNavigation();
+  if(user.role!=="super_admin")apiGet("/api/admin/servers/permissions").then(({accessLevel})=>{
+    if(!activeRole||activeRole==="pending_password_change")return;
+    $("#fleet-admin").hidden=accessLevel==="none";
+    if(accessLevel!=="none"){serverFleet.refresh();fleetNetwork.refresh();fleetFirewall.refresh();}
+    updateNavigation();
+  }).catch(()=>{});
   const requested=decodeURIComponent(location.hash.slice(1));
   showWorkspace(pageId(location.pathname) ? document.getElementById(pageId(location.pathname))?.closest('section[id]')?.id || 'dashboard' : $("#app-nav").querySelector(`a[href="#${CSS.escape(requested)}"]`)?requested:"dashboard");
   pageRoutes.render();
