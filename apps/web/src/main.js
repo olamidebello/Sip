@@ -491,6 +491,12 @@ root.innerHTML = `
     </section>
     <section id="carrier-admin"><h3>Carrier provider commissioning</h3>
       <p>Link a tenant trunk, set capacity, verify private provider credentials, then ask the switch adapter to activate. A provider remains blocked from DID requests until activation is acknowledged.</p>
+      <form id="carrier-catalog-form" hidden><h4>Add a future carrier</h4>
+        <label>Carrier ID <input name="provider" pattern="[a-z][a-z0-9-]{1,15}" maxlength="16" required placeholder="carrier-name"></label>
+        <label>Display name <input name="displayName" maxlength="80" required></label>
+        <button type="submit">Add carrier</button>
+      </form>
+      <p id="carrier-catalog-status" role="status"></p>
       <form id="flowroute-auto-form" hidden><h4>Flowroute PoP setup</h4>
         <label>Point of presence <select name="pop"><option value="US-East-VA">US East, Virginia</option><option value="US-West-OR">US West, Oregon</option></select></label>
         <label>Maximum concurrent calls <input name="maxConcurrentCalls" type="number" min="1" max="100000" value="10" required></label>
@@ -1294,6 +1300,7 @@ function signedIn(user) {
   $("#sip-profile-admin").hidden=user.role!=="super_admin";
   $("#provider-webhook-admin").hidden=user.role!=="super_admin";
   $("#flowroute-auto-form").hidden=user.role!=="super_admin";
+  $("#carrier-catalog-form").hidden=user.role!=="super_admin";
   if(user.role==="super_admin")providerWebhooks.refresh();
   if(["admin","super_admin"].includes(user.role)){commerceOps.refreshPayment();commerceOps.refreshCluster();}
   if(user.role==="super_admin") sipProfiles.refreshAdmin();
@@ -1660,27 +1667,61 @@ async function refreshDialplans(){
 }
 async function refreshCarriers(){
   const [data,trunks]=await Promise.all([apiGet('/api/admin/carriers'),apiGet('/api/pbx/trunks')]);
+  const providerSelect=$("#carrier-profile-form").elements.provider,priorProvider=providerSelect.value;
+  providerSelect.replaceChildren();
+  for(const profile of data.providers){const option=document.createElement('option');
+    option.value=profile.provider;option.textContent=profile.displayName;
+    option.disabled=!profile.enabled;providerSelect.append(option);}
+  if(data.providers.some(profile=>profile.provider===priorProvider&&profile.enabled))providerSelect.value=priorProvider;
   const selection=$("#carrier-profile-form").elements.trunkId,priorTrunk=selection.value;selection.replaceChildren();
   for(const trunk of trunks.trunks){const option=document.createElement('option');option.value=trunk.id;
     option.textContent=`${trunk.name} (${trunk.host})`;selection.append(option);}
   if(trunks.trunks.some(trunk=>trunk.id===priorTrunk)) selection.value=priorTrunk;
   const list=$("#carrier-profiles");list.replaceChildren();
   for(const profile of data.providers){const card=document.createElement('article');
-    const title=document.createElement('h4');title.textContent=`${profile.provider}: ${profile.status}`;
-    const details=document.createElement('p');details.textContent=`Credentials: ${profile.credentialsConfigured?'configured':'missing'} · capacity: ${profile.max_concurrent_calls??0} · routing: ${profile.routing_mode} · adapter: ${data.adapterConfigured?'configured':'missing'}`;
+    const title=document.createElement('h4');title.textContent=`${profile.displayName}: ${profile.enabled?profile.status:'disabled'}`;
+    const details=document.createElement('p');details.textContent=`${['flowroute','didww'].includes(profile.provider)?'Provider API credentials: '+(profile.credentialsConfigured?'configured':'missing'):'Carrier adapter verification: '+(profile.adapterVerified?'verified':'pending')} · capacity: ${profile.max_concurrent_calls??0} · routing: ${profile.routing_mode} · adapter: ${data.adapterConfigured?'configured':'missing'}`;
     const trunk=trunks.trunks.find(item=>item.id===profile.trunk_id);
     const target=document.createElement('p');target.textContent=trunk?`Trunk: ${trunk.name} (${trunk.host}:${trunk.port}/${trunk.transport}) · ${trunk.enabled?'enabled':'disabled'}`:'No trunk selected';
     const verify=document.createElement('button');verify.type='button';verify.textContent='Verify inventory API';
+    verify.disabled=!profile.enabled||(!['flowroute','didww'].includes(profile.provider)?!data.adapterConfigured:!profile.credentialsConfigured);
+    if(!['flowroute','didww'].includes(profile.provider))verify.textContent='Verify carrier adapter';
     verify.onclick=async()=>{try{const result=await accountRequest(`/api/admin/carriers/${profile.provider}/verify`,{});
-      $("#carrier-admin-status").textContent=`${result.provider}: credentials valid; ${result.sampleCount} inventory results. No SIP route activated.`;}
+      $("#carrier-admin-status").textContent=result.adapterVerified?`${result.provider}: carrier adapter verified. No SIP route activated.`:
+        `${result.provider}: credentials valid; ${result.sampleCount} inventory results. No SIP route activated.`;
       catch(error){$("#carrier-admin-status").textContent=error.message;}};
     const activate=document.createElement('button');activate.type='button';activate.textContent='Provision with switch adapter';
-    activate.disabled=!profile.trunk_id||!profile.credentialsConfigured||!data.adapterConfigured;
+    activate.disabled=!profile.trunk_id||!data.adapterConfigured||
+      (['flowroute','didww'].includes(profile.provider)&&!profile.credentialsConfigured);
+    if(!['flowroute','didww'].includes(profile.provider))activate.disabled ||= !profile.adapterVerified;
+    activate.disabled ||= !profile.enabled;
     activate.onclick=async()=>{try{const result=await accountRequest(`/api/admin/carriers/${profile.provider}/activate`,{});
       $("#carrier-admin-status").textContent=`${result.provider}: ${result.status}`;await refreshCarriers();}
       catch(error){$("#carrier-admin-status").textContent=error.message;await refreshCarriers();}};
-    card.append(title,details,target,verify,activate);list.append(card);}
+    card.append(title,details,target,verify,activate);
+    if(activeRole==='super_admin'&&!['flowroute','didww'].includes(profile.provider)){
+      const toggle=document.createElement('button');toggle.type='button';
+      toggle.textContent=profile.enabled?'Disable carrier':'Enable carrier';
+      toggle.onclick=async()=>{toggle.disabled=true;try{
+        await accountRequest(`/api/admin/carriers/catalog/${profile.provider}`,{enabled:!profile.enabled},'PUT');
+        await refreshCarriers();$("#carrier-catalog-status").textContent=`${profile.displayName} ${profile.enabled?'disabled':'enabled'}.`;
+      }catch(error){$("#carrier-catalog-status").textContent=error.message;toggle.disabled=false;}};
+      card.append(toggle);
+    }
+    list.append(card);}
 }
+$("#carrier-catalog-form").onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button');
+  button.disabled=true;
+  try{
+    const {provider,displayName}=Object.fromEntries(new FormData(form));
+    await accountRequest('/api/admin/carriers/catalog',{provider,displayName});
+    await refreshCarriers();$("#carrier-profile-form").elements.provider.value=provider;
+    $("#carrier-catalog-status").textContent=`${displayName} added. Create a tenant trunk and save its carrier profile.`;
+    form.reset();
+  }catch(error){$("#carrier-catalog-status").textContent=error.message;}
+  finally{button.disabled=false;}
+};
 $("#flowroute-auto-form").onsubmit=async event=>{
   event.preventDefault();const form=event.currentTarget,button=form.querySelector('button[type="submit"]');
   button.disabled=true;
