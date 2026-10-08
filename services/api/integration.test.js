@@ -313,7 +313,7 @@ test("registered users can create and join a room; host controls it", {
   assert.equal((await post("/api/pbx/rates",{
     prefix:"1",trunkId:trunk.body.id,costCentsPerMinute:2,priceCentsPerMinute:3
   },hostCookie)).status,201);
-  const enableTrunk = await put(`/api/pbx/trunks/${trunk.body.id}/status`,{enabled:true});
+  const enableTrunk = await put(`/api/pbx/trunks/${trunk.body.id}/status`,{enabled:true,revision:trunk.body.revision});
   assert.equal(enableTrunk.status,200,JSON.stringify(enableTrunk.body));
   const ratePreview = await fetch(base + "/api/pbx/route-preview?number=%2B12125550124",{
     headers:{Cookie:hostCookie}
