@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+certificate_root={{ ((caddy_volume.stdout | from_json | first).Mountpoint ~ '/caddy/certificates') | quote }}
+domain={{ freeswitch_domain | quote }}
+crt="$(find "$certificate_root" -type f -name "$domain.crt" -printf '%T@ %p\n' | sort -nr | head -n1 | cut -d' ' -f2-)"
+if [[ -z "$crt" ]]; then exit 1; fi
+key="${crt%.crt}.key"
+test -s "$key"
+openssl x509 -in "$crt" -noout -checkend 86400 >/dev/null
+openssl x509 -in "$crt" -noout -ext subjectAltName | grep -F "DNS:$domain" >/dev/null
+if cmp -s "$crt" /etc/freeswitch/tls/wss.crt && cmp -s "$key" /etc/freeswitch/tls/wss.key; then exit 0; fi
+install -o freeswitch -g freeswitch -m 0640 "$crt" /etc/freeswitch/tls/wss.crt
+install -o freeswitch -g freeswitch -m 0600 "$key" /etc/freeswitch/tls/wss.key
+fs_cli -H 127.0.0.1 -P 8021 -p {{ freeswitch_esl_password | quote }} -x reloadcert >/dev/null
