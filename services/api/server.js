@@ -5,6 +5,9 @@ import { handleOnboarding } from './onboarding.js';
 import { handlePasskeys } from './passkeys.js';
 import { handleSipMarketplace } from './sipMarketplace.js';
 import { handleCarrierProviders, carrierActive } from './carrierProviders.js';
+import { handleFlowrouteRates } from './flowrouteRates.js';
+import { handleHelpAgent } from './helpAgent.js';
+import { handleFlowrouteWebhook, handleMessagingWebhookAdmin, handleExternalSms, handleSmsNumberAdmin } from './messagingWebhooks.js';
 import { handleCharging } from './charging.js';
 import { createDatabase } from "./db.js";
 import { handleMobileAdmin } from "./mobileAdmin.js";
@@ -100,7 +103,7 @@ async function currentUser(req) {
   const token = currentToken(req);
   if (!token) return null;
   const result = await pool.query(
-    "SELECT u.id,u.display_name,u.email,u.role,u.auth_source, CASE WHEN u.role='super_admin' AND selected.id IS NOT NULL THEN selected.id ELSE u.tenant_id END AS tenant_id FROM sessions s JOIN users u ON u.id=s.user_id AND u.status='active' JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenant_ldap_settings ldap ON ldap.tenant_id=u.tenant_id LEFT JOIN tenant_auth_policy auth ON auth.tenant_id=u.tenant_id LEFT JOIN tenants selected ON selected.id=s.selected_tenant_id AND selected.status='active' WHERE s.token_hash=$1 AND s.expires_at>now() AND ((u.auth_source='local' AND (auth.local_enabled IS NULL OR auth.local_enabled=TRUE OR u.role='super_admin')) OR (u.auth_source='ldap' AND ldap.enabled=TRUE))",
+    "SELECT u.id,u.display_name,u.email,u.role,u.auth_source,u.must_change_password, CASE WHEN u.role='super_admin' AND selected.id IS NOT NULL THEN selected.id ELSE u.tenant_id END AS tenant_id FROM sessions s JOIN users u ON u.id=s.user_id AND u.status='active' JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenant_ldap_settings ldap ON ldap.tenant_id=u.tenant_id LEFT JOIN tenant_auth_policy auth ON auth.tenant_id=u.tenant_id LEFT JOIN tenants selected ON selected.id=s.selected_tenant_id AND selected.status='active' WHERE s.token_hash=$1 AND s.expires_at>now() AND ((u.auth_source='local' AND (auth.local_enabled IS NULL OR auth.local_enabled=TRUE OR u.role='super_admin')) OR (u.auth_source='ldap' AND ldap.enabled=TRUE))",
     [tokenHash(token)]
   );
   const user = result.rows[0];
@@ -120,13 +123,19 @@ async function handler(req, res) {
   const path = new URL(req.url, origin).pathname;
   if (req.method === "GET" && path === "/api/health")
     return send(res, 200, { status: "ok" });
+  const flowrouteWebhook = path.startsWith("/api/webhooks/flowroute/");
   const cdrIngest = req.method === "POST" && path === "/api/integrations/cdr";
-  if (req.method !== "GET" && !cdrIngest && req.headers.origin !== origin)
+  if (req.method !== "GET" && !cdrIngest && !flowrouteWebhook && req.headers.origin !== origin)
     return send(res, 403, { error: "Invalid origin" });
-  if (req.method !== "GET" && !limit(req,cdrIngest ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
+  if (req.method !== "GET" && !limit(req,(cdrIngest || flowrouteWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
     return send(res, 429, { error: "Too many requests" });
   try {
+    if (flowrouteWebhook) return await handleFlowrouteWebhook({req,res,path,pool,send});
     if (cdrIngest) return await handleCdrIngest({req,res,pool,send,keys:cdrKeys});
+    if (currentToken(req) && !['/api/account/password','/api/me','/api/logout','/api/login'].includes(path)) {
+      const sessionAccount=await currentUser(req);
+      if(sessionAccount?.must_change_password) return send(res,403,{error:'Change your temporary password before continuing'});
+    }
     if (path.startsWith('/api/register')) return await handleOnboarding({req,res,path,pool,send,readJson,origin});
     if (path.startsWith('/api/passkeys')) return await handlePasskeys({req,res,path,pool,send,readJson,origin,currentUser,featuresFor,sessionCookie});
     if (req.method === "POST" && path === "/api/login") {
@@ -135,7 +144,7 @@ async function handler(req, res) {
           email.length > 254 || password.length > 1024)
         return send(res, 400, { error: "Invalid credentials" });
       const result = await pool.query(
-        "SELECT u.id, u.display_name, u.email, u.role, u.tenant_id, u.password_salt, u.password_hash FROM users u JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenant_auth_policy auth ON auth.tenant_id=u.tenant_id WHERE u.email=$1 AND u.status='active' AND u.auth_source='local' AND (auth.local_enabled IS NULL OR auth.local_enabled=TRUE OR u.role='super_admin')",
+        "SELECT u.id, u.display_name, u.email, u.role, u.tenant_id,u.must_change_password, u.password_salt, u.password_hash FROM users u JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenant_auth_policy auth ON auth.tenant_id=u.tenant_id WHERE (u.email=$1 OR u.username=$1) AND u.status='active' AND u.auth_source='local' AND (auth.local_enabled IS NULL OR auth.local_enabled=TRUE OR u.role='super_admin')",
         [email.trim().toLowerCase()]
       );
       const user = result.rows[0];
@@ -147,7 +156,7 @@ async function handler(req, res) {
         [tokenHash(token), user.id]
       );
       return send(res, 200, { id: user.id, name: user.display_name, email: user.email,
-        role: user.role, authSource:"local",tenantId:user.tenant_id, features:await featuresFor(user) },
+        role: user.role, authSource:"local",mustChangePassword:!!user.must_change_password,tenantId:user.tenant_id, features:await featuresFor(user) },
         { "Set-Cookie": sessionCookie(token, 604800) });
     }
     if (req.method==="POST" && path==="/api/login/ldap") {
@@ -167,7 +176,7 @@ async function handler(req, res) {
       const user = await currentUser(req);
       return user
         ? send(res, 200, { id: user.id, name: user.display_name, email: user.email,authSource:user.auth_source,
-            role: user.role, tenantId:user.tenant_id, features:user.features })
+            role: user.role, tenantId:user.tenant_id,mustChangePassword:!!user.must_change_password, features:user.features })
         : send(res, 401, { error: "Session expired" });
     }
     if (req.method === "POST" && path === "/api/logout") {
@@ -188,7 +197,7 @@ async function handler(req, res) {
       );
       return send(res, 200, { plans: result.rows });
     }
-    if (path.startsWith("/api/contacts") || path.startsWith("/api/messages") ||
+    if (path==="/api/help/agent" || path.startsWith("/api/rates/flowroute/") || path.startsWith("/api/external-sms/") || path.startsWith("/api/contacts") || path.startsWith("/api/messages") ||
         path.startsWith("/api/admin/") || path.startsWith("/api/account/") || path==="/api/background" || path==="/api/catalog-policy" || path.startsWith("/api/billing/") ||
         path.startsWith("/api/numbers") || path.startsWith("/api/porting") ||
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
@@ -200,6 +209,12 @@ async function handler(req, res) {
       if (!user) return send(res, 401, { error: "Sign in required" });
       if(path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/'))
         return await handleSipMarketplace({req,res,path,user,pool,send,readJson});
+      if(path==='/api/help/agent') return await handleHelpAgent({req,res,user,send,readJson});
+      if(path.startsWith('/api/admin/rates/flowroute') || path==='/api/rates/flowroute/search')
+        return await handleFlowrouteRates({req,res,path,user,pool,send});
+      if(path==='/api/admin/messaging/numbers') return await handleSmsNumberAdmin({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/external-sms/')) return await handleExternalSms({req,res,path,user,pool,send,readJson});
+      if(path==='/api/admin/messaging/webhooks') return await handleMessagingWebhookAdmin({req,res,user,pool,send,origin});
       if(path.startsWith('/api/admin/carriers')) return await handleCarrierProviders({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/charging/overview') return await handleCharging({req,res,user,pool,send});
       if (path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales")

@@ -11,6 +11,7 @@ if [[ ! -e /etc/olamide/secrets.env ]]; then
   root_password=$(openssl rand -hex 32)
   otp_secret=$(openssl rand -hex 32)
   sip_key=$(openssl rand -hex 32)
+  webhook_token=$(openssl rand -hex 32)
   umask 077
   cat > /etc/olamide/secrets.env <<ENV
 DOMAIN=$DOMAIN
@@ -21,9 +22,14 @@ MYSQL_ROOT_PASSWORD=$root_password
 MYSQL_URL=mysql://olamide_app:$app_password@mysql:3306/olamide
 OTP_HMAC_SECRET=$otp_secret
 SIP_CREDENTIAL_KEY=$sip_key
+FLOWROUTE_WEBHOOK_TOKEN=$webhook_token
 MEETING_ICE_SERVERS_JSON=[]
 ENV
   chmod 0600 /etc/olamide/secrets.env
+fi
+# Existing installations receive a private callback token during the next bootstrap.
+if ! grep -q '^FLOWROUTE_WEBHOOK_TOKEN=' /etc/olamide/secrets.env; then
+  printf 'FLOWROUTE_WEBHOOK_TOKEN=%s\n' "$(openssl rand -hex 32)" >> /etc/olamide/secrets.env
 fi
 validated_ref=$(bash "$SCRIPT_DIR/verified-sha.sh")
 OLAMIDE_DOMAIN="$DOMAIN" ansible-playbook -i 'localhost,' -c local \
