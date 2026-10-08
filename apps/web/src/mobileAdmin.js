@@ -12,11 +12,12 @@ export function setupMobileAdmin() {
   const apps = $("#mobile-apps");
   const releases = $("#mobile-releases");
   const events = $("#mobile-events");
-  let selected;
+  let selected,selectedReleases=[];
   async function refresh() {
     const [overview, appData, releaseData] = await Promise.all([
       request("/api/admin/mobile/overview"),request("/api/admin/mobile/apps"),request("/api/admin/mobile/releases")
     ]);
+    selectedReleases=releaseData.releases;
     status.textContent = overview.message;
     const appId = apps.value;
     apps.replaceChildren();
@@ -36,6 +37,9 @@ export function setupMobileAdmin() {
       releases.append(option);
     }
     if (releaseData.releases.some((release) => release.id === prior)) releases.value = prior;
+    const batch = $("#mobile-batch-releases");batch.replaceChildren();
+    for(const release of releaseData.releases){const option=document.createElement("option");option.value=release.id;
+      option.textContent=`${release.display_name} ${release.version_name} · ${release.status} · ${release.track}`;batch.append(option);}
     selected = releaseData.releases.find((release) => release.id === releases.value);
     fillSelected();
   }
@@ -87,6 +91,16 @@ export function setupMobileAdmin() {
         await request(`/api/admin/mobile/releases/${selected.id}/${action}`,"POST",{ revision:selected.revision });
         await refresh(); status.textContent = `Release ${action} completed internally. No store submission occurred.`;
       } catch (error) { status.textContent = error.message; }
+    });
+  }
+  for (const action of ["approve","reopen","archive"]) {
+    $(`#mobile-batch-${action}`).addEventListener("click",async()=>{
+      const ids=[...$("#mobile-batch-releases").selectedOptions].map(option=>option.value);
+      if(!ids.length){status.textContent="Select releases first.";return;}
+      try {const data=await request("/api/admin/mobile/releases/batch","POST",{action,
+        releases:ids.map(id=>{const row=selectedReleases.find(r=>r.id===id);return {id,revision:Number(row?.revision)};})});
+        await refresh();status.textContent=`${data.updated} releases processed internally. No store submission occurred.`;
+      } catch(error){status.textContent=error.message;}
     });
   }
   return { refresh };
