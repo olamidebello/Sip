@@ -1,0 +1,22 @@
+all:
+  children:
+    switch_nodes:
+      hosts:
+        sip-switch-1:
+          ansible_host: 192.0.2.10
+          ansible_user: deploy
+      vars:
+        freeswitch_domain: sip.example.com
+        freeswitch_xml_url: https://api.example.com/api/switch/xml
+        freeswitch_public_ip: 192.0.2.10
+        freeswitch_signalwire_token: "{{ vault_signalwire_token }}"
+        freeswitch_xml_password: "{{ vault_freeswitch_xml_password }}"
+        freeswitch_esl_password: "{{ vault_freeswitch_esl_password }}"
+        freeswitch_wss_certificate: files/fullchain.pem
+        freeswitch_wss_key: files/privkey.pem
+        freeswitch_gateways: []
+        manage_firewall: true
+        freeswitch_ssh_allowed_cidrs: [198.51.100.0/24]
+        freeswitch_carrier_allowed_cidrs: []
+        coturn_enabled: false
+        coturn_secret: "{{ vault_coturn_secret | default('') }}"
