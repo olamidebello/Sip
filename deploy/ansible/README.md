@@ -84,3 +84,13 @@ renewal needs an operator managed certificate deployment process. The API does n
 accept arbitrary cron expressions, shell commands, firewall changes or credentials
 from the browser. Application nodes can be registered for inventory but the
 existing Compose capacity controller handles app replica requests on one host.
+
+### Reviewed firewall jobs
+
+The super administrator can save SSH and carrier SIP CIDR allowlists for a dedicated
+Debian switch in the fleet dashboard. A separate `firewall` job runs
+`deploy/ansible/firewall.yml`. The private worker checks that its current SSH
+source is within the SSH allowlist before applying the validated nftables
+ruleset. It rejects a co-located Caddy/Docker host. Keep console access and
+verify new SSH, WSS, RTP and carrier SIP connections after a change. A saved
+policy is not applied until a deploy-authorized operator queues the job.
