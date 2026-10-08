@@ -67,6 +67,31 @@ export async function handleMobileAdmin({ req, res, path, user, pool, send, read
       : await pool.query("SELECT r.*,a.platform,a.display_name FROM mobile_releases r JOIN mobile_apps a ON a.id=r.app_id WHERE a.tenant_id=$1 ORDER BY r.created_at DESC LIMIT 200",[user.tenant_id]);
     return send(res,200,{ releases:result.rows });
   }
+  if (path === "/api/admin/mobile/releases/batch" && req.method === "POST") {
+    const { action, releases } = await readJson(req);
+    if (!["approve","reopen","archive"].includes(action) || !Array.isArray(releases) ||
+        releases.length < 1 || releases.length > 50 || new Set(releases.map(x => x?.id)).size !== releases.length ||
+        releases.some(x => !idPattern.test(x?.id || "") || !Number.isSafeInteger(x.revision) || x.revision < 1))
+      return send(res,400,{error:"Select 1–50 releases with current revisions"});
+    const db=await pool.connect();
+    try {
+      await db.query("BEGIN");
+      for (const entry of [...releases].sort((a,b)=>a.id.localeCompare(b.id))) {
+        const found=await db.query("SELECT r.status,r.revision FROM mobile_releases r JOIN mobile_apps a ON a.id=r.app_id WHERE r.id=$1 AND a.tenant_id=$2 FOR UPDATE",[entry.id,user.tenant_id]);
+        const row=found.rows[0];
+        if (!row || Number(row.revision)!==entry.revision ||
+            !(action==="approve" ? row.status==="draft" : action==="reopen" ? row.status==="approved" : row.status!=="archived")) {
+          await db.query("ROLLBACK");return send(res,409,{error:"A selected release changed or cannot make this transition; refresh and retry"});
+        }
+        const status={approve:"approved",reopen:"draft",archive:"archived"}[action];
+        await db.query("UPDATE mobile_releases SET status=$1,revision=revision+1,approved_by=$2,approved_at=$3 WHERE id=$4",
+          [status,action==="approve"?user.id:null,action==="approve"?new Date():null,entry.id]);
+        await db.query("INSERT INTO mobile_release_events(id,release_id,actor_id,action,revision) VALUES($1,$2,$3,$4,$5)",
+          [randomUUID(),entry.id,user.id,action,entry.revision+1]);
+      }
+      await db.query("COMMIT");return send(res,200,{updated:releases.length,action});
+    } catch(error){await db.query("ROLLBACK");throw error;}finally{db.release();}
+  }
   if (path === "/api/admin/mobile/releases" && req.method === "POST") {
     const body = await readJson(req);
     if (!idPattern.test(body.appId || "")) return send(res,400,{ error:"Invalid app ID" });
