@@ -13,7 +13,7 @@ import { handleCarrierProviders, carrierActive } from './carrierProviders.js';
 import { handleAdapterRegistry } from './adapterRegistry.js';
 import { handleOperatorControl } from './operatorControl.js';
 import { handleSwitchAdmin,handleSwitchXml } from './switch.js';
-import {handleKamailioRoute} from './kamailio.js';
+import {handleKamailioRoute,handleKamailioAuth} from './kamailio.js';
 import { handleServerFleetAdmin,handleServerFleetRunner } from './serverFleet.js';
 import {handleOperationsPolicy,resolveWss} from './operationsPolicy.js';
 import {handleWorkspaceShortcuts} from './workspaceShortcuts.js';
@@ -146,14 +146,16 @@ async function handler(req, res) {
   const cdrIngest = req.method === "POST" && path === "/api/integrations/cdr";
   const switchXml = path === "/api/switch/xml";
   const kamailioRoute = path === "/api/switch/kamailio/route";
+  const kamailioAuth = path === "/api/switch/kamailio/auth";
   const deployRunner = path.startsWith('/api/integrations/deployment/');
-  if (req.method !== "GET" && !deployRunner && !switchXml && !kamailioRoute && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
+  if (req.method !== "GET" && !deployRunner && !switchXml && !kamailioRoute && !kamailioAuth && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
     return send(res, 403, { error: "Invalid origin" });
-  if (req.method !== "GET" && !limit(req,switchXml ? 3000 : (kamailioRoute || deployRunner || cdrIngest || flowrouteWebhook || stripeWebhook || providerWebhook || didwwWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
+  if (req.method !== "GET" && !limit(req,(switchXml || kamailioRoute || kamailioAuth) ? 3000 : (deployRunner || cdrIngest || flowrouteWebhook || stripeWebhook || providerWebhook || didwwWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
     return send(res, 429, { error: "Too many requests" });
   try {
     if (switchXml) return await handleSwitchXml({req,res,pool});
     if (kamailioRoute) return await handleKamailioRoute({req,res,pool});
+    if (kamailioAuth) return await handleKamailioAuth({req,res,pool});
     if (deployRunner) return await handleServerFleetRunner({req,res,path,pool,send,readJson});
     if (flowrouteWebhook) return await handleFlowrouteWebhook({req,res,path,pool,send});
     if (stripeWebhook) return await handleStripeWebhook({req,res,path,pool,send});
