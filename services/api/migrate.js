@@ -24,6 +24,7 @@ import { migrateCarrierProviders } from './carrierProviders.js';
 import { migrateAdapterRegistry } from './adapterRegistry.js';
 import { migrateOperatorControl } from './operatorControl.js';
 import { migrateSwitch } from './switch.js';
+import { migrateKamailio } from './kamailio.js';
 import { migrateServerFleet } from './serverFleet.js';
 import { migrateOperationsPolicy } from './operationsPolicy.js';
 import { migrateFleetNetwork } from './fleetNetwork.js';
@@ -69,6 +70,7 @@ export async function migrate(pool) {
       ['carrier_adapter_registry', () => migrateAdapterRegistry(pool)],
       ['operator_control', () => migrateOperatorControl(pool)],
       ['freeswitch_bridge', () => migrateSwitch(pool)],
+      ['kamailio_bridge', () => migrateKamailio(pool)],
       ['server_fleet', () => migrateServerFleet(pool)],
       ['fleet_network', () => migrateFleetNetwork(pool)],
       ['fleet_firewall', () => migrateFleetFirewall(pool)],
