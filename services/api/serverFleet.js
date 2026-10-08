@@ -149,11 +149,21 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
   const match=/^\/api\/admin\/servers\/([0-9a-f-]{36})$/.exec(path);
   if(match&&uuid.test(match[1])&&req.method==='PUT'){
     const b=await readJson(req);
-    if(typeof b.enabled!=='boolean'||!region.test(b.region||'')||!Number.isInteger(b.capacity)||b.capacity<1||b.capacity>100000)
-      return send(res,400,{error:'Valid enabled state, region and capacity required'});
-    const result=await pool.query('UPDATE deployment_nodes SET enabled=$1,region=$2,capacity=$3 WHERE id=$4',
-      [b.enabled,b.region,b.capacity,match[1]]);
-    return send(res,result.rowCount?200:404,result.rowCount?{updated:true}:{error:'Server unavailable'});
+    if(typeof b.enabled!=='boolean'||!validNode({...b,name:'network-edit',role:'switch'}))
+      return send(res,400,{error:'Valid IPv4, SSH user, port, enabled state, region and capacity required'});
+    const db=await pool.connect();
+    try{
+      await db.query('START TRANSACTION');
+      const old=await db.query('SELECT host,ssh_user,ssh_port FROM deployment_nodes WHERE id=$1 FOR UPDATE',[match[1]]);
+      if(!old.rowCount){await db.query('ROLLBACK');return send(res,404,{error:'Server unavailable'});}
+      const active=await db.query("SELECT id FROM deployment_jobs WHERE node_id=$1 AND (status='pending' OR (status='leased' AND lease_until>UTC_TIMESTAMP(3))) LIMIT 1",[match[1]]);
+      if(active.rowCount){await db.query('ROLLBACK');return send(res,409,{error:'Wait for the active deployment job to finish'});}
+      await db.query('UPDATE deployment_nodes SET enabled=$1,region=$2,capacity=$3,host=$4,ssh_user=$5,ssh_port=$6 WHERE id=$7',
+        [b.enabled,b.region,b.capacity,b.host,b.sshUser,b.sshPort,match[1]]);
+      await db.query('INSERT INTO deployment_events(id,node_id,category,detail) VALUES($1,$2,$3,$4)',
+        [randomUUID(),match[1],'inventory_changed',`Network endpoint ${old.rows[0].host}:${old.rows[0].ssh_port} → ${b.host}:${b.sshPort}`]);
+      await db.query('COMMIT');return send(res,200,{updated:true});
+    }catch(error){await db.query('ROLLBACK');if(error.code==='ER_DUP_ENTRY')return send(res,409,{error:'Host already registered for this role'});throw error;}finally{db.release();}
   }
   const job=/^\/api\/admin\/servers\/([0-9a-f-]{36})\/jobs$/.exec(path);
   if(job&&uuid.test(job[1])&&req.method==='POST'){
