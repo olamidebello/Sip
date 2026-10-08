@@ -3,3 +3,6 @@ deployment/docker/.env
 node_modules/
 apps/web/dist/
 deployment/ansible/inventory.ini
+deploy/ansible/inventory.yml
+deploy/ansible/group_vars/switch_nodes/vault.yml
+deploy/ansible/files/
