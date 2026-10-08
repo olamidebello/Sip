@@ -1,5 +1,5 @@
-const presets=["midnight","ocean","aurora","sunrise","slate"];
-const defaults={dayPreset:"ocean",nightPreset:"midnight",schedule:false,animate:false};
+const presets=["midnight","ocean","aurora","sunrise","slate","custom"];
+const defaults={dayPreset:"ocean",nightPreset:"midnight",schedule:false,animate:false,colorStart:'#071b36',colorEnd:'#0c4861',angle:135};
 
 export function activePreset(config,hour) {
   if (!config || !presets.includes(config.dayPreset) || !presets.includes(config.nightPreset)) return "midnight";
@@ -18,6 +18,9 @@ export function setupBackground() {
     if (!active) return;
     document.documentElement.dataset.background=activePreset(effective,new Date().getHours());
     document.documentElement.dataset.backgroundAnimated=effective.animate?"true":"false";
+    document.documentElement.style.setProperty('--custom-start',effective.colorStart||defaults.colorStart);
+    document.documentElement.style.setProperty('--custom-end',effective.colorEnd||defaults.colorEnd);
+    document.documentElement.style.setProperty('--custom-angle',`${effective.angle??135}deg`);
   }
   setInterval(apply,60000);
   async function request(path,method="GET",body) {
@@ -32,10 +35,15 @@ export function setupBackground() {
     form.elements.nightPreset.value=config.nightPreset;
     form.elements.schedule.checked=config.schedule;
     form.elements.animate.checked=config.animate;
+    form.elements.colorStart.value=config.colorStart||defaults.colorStart;
+    form.elements.colorEnd.value=config.colorEnd||defaults.colorEnd;
+    form.elements.angle.value=String(config.angle??135);
   }
   function values(form) {return {
     dayPreset:form.elements.dayPreset.value,nightPreset:form.elements.nightPreset.value,
-    schedule:form.elements.schedule.checked,animate:form.elements.animate.checked
+    schedule:form.elements.schedule.checked,animate:form.elements.animate.checked,
+    colorStart:form.elements.colorStart.value,colorEnd:form.elements.colorEnd.value,
+    angle:Number(form.elements.angle.value)
   };}
   async function refresh(isAdmin=false) {
     active=true;
@@ -74,5 +82,6 @@ export function setupBackground() {
   };
   return {refresh,clear(){generation++;active=false;effective=defaults;delete document.documentElement.dataset.background;
     delete document.documentElement.dataset.backgroundAnimated;
+    document.documentElement.style.removeProperty('--custom-start');document.documentElement.style.removeProperty('--custom-end');document.documentElement.style.removeProperty('--custom-angle');
     document.querySelector("#background-admin").hidden=true;}};
 }
