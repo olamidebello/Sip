@@ -34,7 +34,7 @@ A super administrator assigns a fleet grant to a user or group in the selected t
 
 ## Super administrator fleet training
 
-1. On a persistent Debian/Ubuntu controller, run `deployment/bootstrap.sh`. On Windows, `deployment/install-class5.bat` invokes WSL. Provide the DNS name, public IPv4 address, SSH access, SignalWire token and Vault password. The script generates private application secrets, installs the app and switch, and installs a systemd runner timer when supported.
+1. On a persistent Debian/Ubuntu controller, run `deployment/controller-bootstrap.sh`. On Windows, `deployment/install-class5.bat` invokes WSL. Provide the DNS name, public IPv4 address, SSH access, SignalWire token and Vault password. The script generates private application secrets, installs the app and switch, and installs a systemd runner timer when supported.
 2. Keep the controller online with Ansible Vault, the private runner token and SSH keys. Never enter these credentials into the browser. Check `systemctl status olamide-fleet-runner.timer` and `journalctl -u olamide-fleet-runner.service`.
 3. Open **Fleet operations → Server and network operations**. Add a Debian 12 switch with the reviewed management IPv4 address, SSH user and port. Register SSH host keys, passwordless sudo, DNS and a trusted WSS certificate before queuing installation.
 4. Use **Health**, **Install** or **Upgrade** for supported switch hosts. A job is queued, leased by the controller, run one host at a time and recorded in MySQL. Watch job history, events, switch version and last check. An active job prevents changing or retiring its server inventory.
