@@ -43,7 +43,7 @@ export async function carrierActive(pool,tenant,provider){
 export async function handleCarrierProviders({req,res,path,user,pool,send,readJson}){
   if(!isAdmin(user)) return send(res,403,{error:'Administrator required'});
   const configured=provider=>provider==='flowroute'?!!(process.env.FLOWROUTE_ACCESS_KEY&&process.env.FLOWROUTE_SECRET_KEY):
-    provider==='didww' ? !!(process.env.DIDWW_API_KEY&&process.env.DIDWW_ACCOUNT_CURRENCY==='USD') : adapterReady();
+    provider==='didww' ? !!(process.env.DIDWW_API_KEY&&process.env.DIDWW_ACCOUNT_CURRENCY==='USD'&&['sandbox','production'].includes(process.env.DIDWW_API_ENV)) : adapterReady();
   if(path==='/api/admin/carriers' && req.method==='GET'){
     const [rows,custom,verified]=await Promise.all([
       pool.query('SELECT provider,trunk_id,max_concurrent_calls,routing_mode,status,last_error,provisioned_at,updated_at FROM carrier_provider_profiles WHERE tenant_id=$1 ORDER BY provider',[user.tenant_id]),
