@@ -1,0 +1,17 @@
+---
+- name: Restart FreeSWITCH
+  ansible.builtin.service:
+    name: freeswitch
+    state: restarted
+- name: Restart coturn
+  ansible.builtin.service:
+    name: coturn
+    state: restarted
+- name: Restart nftables
+  ansible.builtin.service:
+    name: nftables
+    state: restarted
+- name: Restart node exporter
+  ansible.builtin.service:
+    name: prometheus-node-exporter
+    state: restarted
