@@ -7,6 +7,7 @@ import { setupSipProfiles } from "./sipProfiles.js";
 import {setupCommerceOps} from "./commerceOps.js";
 import {setupProviderWebhookAdmin} from "./providerWebhookAdmin.js";
 import {setupDidwwAdmin} from "./didwwAdmin.js";
+import {setupAdapterAdmin} from "./adapterAdmin.js";
 import { setupMobileAdmin } from "./mobileAdmin.js";
 import { setupTenants } from "./tenants.js";
 import { setupPbx } from "./pbx.js";
@@ -512,6 +513,22 @@ root.innerHTML = `
         <button>Save provider profile</button>
       </form><div id="carrier-profiles"></div><p id="carrier-admin-status" role="status"></p>
     </section>
+    <section id="carrier-adapter-admin" hidden>
+      <h3>Carrier adapter nodes</h3>
+      <p>Assign multiple private adapter targets to Flowroute, DIDWW, or a future carrier. Health and capacity determine which node commissions a carrier; the active assignment stays pinned until deactivation. Define target URLs and tokens only on the server.</p>
+      <form id="adapter-create">
+        <label>Carrier <select name="provider" required></select></label>
+        <label>Adapter name <input name="name" maxlength="80" required></label>
+        <label>Private target key <select name="targetKey" required></select></label>
+        <label>Region <input name="region" maxlength="40" placeholder="US East" required></label>
+        <label>Priority <input name="priority" type="number" min="1" max="1000" value="100" required></label>
+        <label>Maximum concurrent calls <input name="maxConcurrentCalls" type="number" min="1" max="100000" value="100" required></label>
+        <button type="submit">Add adapter</button>
+      </form>
+      <button id="adapter-refresh" type="button">Refresh adapter health and activity</button>
+      <p id="adapter-status" role="status"></p><div id="adapter-list"></div>
+      <h4>Recent adapter operations</h4><ul id="adapter-history"></ul>
+    </section>
     <section id="flowroute-rate-admin"><h3>Flowroute outbound rate deck</h3>
       <p>Import a Flowroute outbound_rates.csv. The server validates every prefix and applies a fixed 30% markup at six decimal places before atomically activating the new database deck. Live switch rating is separate.</p>
       <form id="flowroute-rate-import"><label>Carrier rate CSV <input name="rateFile" type="file" accept=".csv,text/csv" required></label><button>Import and activate rate deck</button></form>
@@ -832,7 +849,7 @@ const navigationGroups=[
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
   {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["mobile-admin","App releases"]]},
-  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"]]}
+  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"]]}
 ];
 let activeRole=null;
 let pageRoutes;
@@ -948,6 +965,7 @@ const sipProfiles = setupSipProfiles({get:apiGet,request:accountRequest});
 const commerceOps=setupCommerceOps({get:apiGet,request:accountRequest});
 const providerWebhooks=setupProviderWebhookAdmin({get:apiGet,request:accountRequest});
 const didwwAdmin=setupDidwwAdmin({get:apiGet,request:accountRequest});
+const adapterAdmin=setupAdapterAdmin({get:apiGet,request:accountRequest});
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
 const pbx = setupPbx();
@@ -1322,9 +1340,10 @@ function signedIn(user) {
   $("#sip-profile-admin").hidden=user.role!=="super_admin";
   $("#provider-webhook-admin").hidden=user.role!=="super_admin";
   $("#didww-admin").hidden=user.role!=="super_admin";
+  $("#carrier-adapter-admin").hidden=user.role!=="super_admin";
   $("#flowroute-auto-form").hidden=user.role!=="super_admin";
   $("#carrier-catalog-form").hidden=user.role!=="super_admin";
-  if(user.role==="super_admin"){providerWebhooks.refresh();didwwAdmin.refresh();}
+  if(user.role==="super_admin"){providerWebhooks.refresh();didwwAdmin.refresh();adapterAdmin.refresh();}
   if(["admin","super_admin"].includes(user.role)){commerceOps.refreshPayment();commerceOps.refreshCluster();}
   if(user.role==="super_admin") sipProfiles.refreshAdmin();
   $("#dialplan-marketplace").hidden=!user.features?.billing;
