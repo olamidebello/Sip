@@ -1,0 +1,32 @@
+name: Kamailio adapter syntax
+on:
+  push:
+    branches: [kamailio-rebuild]
+  pull_request:
+    paths:
+      - 'deploy/kamailio/**'
+      - '.github/workflows/kamailio-syntax.yml'
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    container: debian:12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Kamailio adapters
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends kamailio kamailio-extra-modules kamailio-utils-modules kamailio-json-modules kamailio-websocket-modules kamailio-tls-modules python3-jinja2
+      - name: Render sample loopback configuration
+        run: |
+          python3 - <<'PY'
+          from jinja2 import Environment, StrictUndefined
+          from pathlib import Path
+          template = Path('deploy/kamailio/adapter.cfg.j2').read_text()
+          config = Environment(undefined=StrictUndefined).from_string(template).render(
+              kamailio_domain='sip.example.invalid',
+              kamailio_api_url='http://127.0.0.1:3000',
+              kamailio_route_token='x' * 48)
+          Path('/tmp/kamailio-adapter.cfg').write_text(config)
+          PY
+      - name: Parse Kamailio configuration
+        run: kamailio -c -f /tmp/kamailio-adapter.cfg
