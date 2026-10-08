@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { isAdmin } from './tenancy.js';
 import { availableNumbers } from './providers.js';
+import {adapterTargets,commissionCarrier} from './adapterRegistry.js';
 
 const providers=['flowroute','didww'];
 const slug=/^[a-z][a-z0-9-]{1,15}$/;
-const adapterReady=()=>!!(process.env.CARRIER_PROVISION_URL?.startsWith('https://')&&process.env.CARRIER_PROVISION_TOKEN);
+const adapterReady=()=>Object.keys(adapterTargets()).length>0;
 async function catalog(pool,tenant){
   const rows=await pool.query('SELECT provider,display_name,enabled FROM carrier_provider_catalog WHERE tenant_id=$1 ORDER BY display_name',[tenant]);
   return rows.rows;
@@ -149,10 +150,7 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
       const profile=await pool.query('SELECT trunk_id FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider=$2',[user.tenant_id,provider]);
       if(!profile.rowCount)return send(res,409,{error:'Save a carrier profile first'});
       try{
-        const response=await fetch(process.env.CARRIER_PROVISION_URL,{method:'POST',signal:AbortSignal.timeout(10000),
-          headers:{Authorization:`Bearer ${process.env.CARRIER_PROVISION_TOKEN}`,'Content-Type':'application/json'},
-          body:JSON.stringify({action:'verify',tenantId:user.tenant_id,provider,trunkId:profile.rows[0].trunk_id})});
-        if(!response.ok||(await response.json()).status!=='verified')throw Error('Verification rejected');
+        await commissionCarrier(pool,user,provider,'verify',{trunkId:profile.rows[0].trunk_id});
         await pool.query('INSERT INTO carrier_provider_verifications(tenant_id,provider,verified_at,verified_by) VALUES($1,$2,UTC_TIMESTAMP(3),$3) ON DUPLICATE KEY UPDATE verified_at=VALUES(verified_at),verified_by=VALUES(verified_by)',
           [user.tenant_id,provider,user.id]);
         return send(res,200,{provider,adapterVerified:true,note:'Provisioning adapter verified the carrier configuration.'});
@@ -164,7 +162,6 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
     }catch(error){return send(res,502,{error:'Provider inventory check failed'});}
   }
   if(action==='activate' && req.method==='POST'){
-    const endpoint=process.env.CARRIER_PROVISION_URL,token=process.env.CARRIER_PROVISION_TOKEN;
     if(!configured(provider)||!adapterReady())
       return send(res,409,{error:'Carrier credentials and HTTPS provisioning adapter required'});
     const found=await pool.query("SELECT trunk_id,max_concurrent_calls,routing_mode,status FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider=$2",[user.tenant_id,provider]);
@@ -175,13 +172,11 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
         [user.tenant_id,provider]);
       if(!verified.rowCount)return send(res,409,{error:'Verify this carrier adapter before activation'});
     }
-    try {const response=await fetch(endpoint,{method:'POST',signal:AbortSignal.timeout(10000),
-      headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json','Idempotency-Key':`${user.tenant_id}:${provider}`},
-      body:JSON.stringify({action:'activate',tenantId:user.tenant_id,provider,trunkId:profile.trunk_id,
-        maxConcurrentCalls:profile.max_concurrent_calls,routingMode:profile.routing_mode})});
-      if(!response.ok||(await response.json()).status!=='active') throw new Error('Adapter rejected provisioning');
+    try {
+      const result=await commissionCarrier(pool,user,provider,'activate',{trunkId:profile.trunk_id,
+        maxConcurrentCalls:profile.max_concurrent_calls,routingMode:profile.routing_mode});
       await pool.query("UPDATE carrier_provider_profiles SET status='active',last_error=NULL,provisioned_at=UTC_TIMESTAMP(3),updated_by=$1 WHERE tenant_id=$2 AND provider=$3",[user.id,user.tenant_id,provider]);
-      return send(res,200,{provider,status:'active'});
+      return send(res,200,{provider,status:'active',adapterId:result.adapterId});
     }catch(error){
       await pool.query("UPDATE carrier_provider_profiles SET status='error',last_error='Provisioning adapter did not acknowledge activation',updated_by=$1 WHERE tenant_id=$2 AND provider=$3",[user.id,user.tenant_id,provider]);
       return send(res,502,{error:'Carrier provisioning not acknowledged'});
@@ -195,11 +190,7 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
     if(!profile)return send(res,404,{error:'Carrier profile unavailable'});
     if(profile.status!=='active')return send(res,409,{error:'Carrier is not active'});
     try{
-      const response=await fetch(process.env.CARRIER_PROVISION_URL,{method:'POST',signal:AbortSignal.timeout(10000),
-        headers:{Authorization:`Bearer ${process.env.CARRIER_PROVISION_TOKEN}`,'Content-Type':'application/json',
-          'Idempotency-Key':`${user.tenant_id}:${provider}:deactivate`},
-        body:JSON.stringify({action:'deactivate',tenantId:user.tenant_id,provider,trunkId:profile.trunk_id})});
-      if(!response.ok||(await response.json()).status!=='inactive')throw Error('Adapter rejected deactivation');
+      await commissionCarrier(pool,user,provider,'deactivate',{trunkId:profile.trunk_id});
       await pool.query("UPDATE carrier_provider_profiles SET status='draft',provisioned_at=NULL,updated_by=$1 WHERE tenant_id=$2 AND provider=$3",
         [user.id,user.tenant_id,provider]);
       return send(res,200,{provider,status:'draft'});
