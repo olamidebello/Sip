@@ -28,14 +28,10 @@ clone https://github.com/freeswitch/sofia-sip.git sofia-sip
 clone https://github.com/freeswitch/spandsp.git spandsp
 clone https://github.com/signalwire/signalwire-c.git signalwire-c
 clone https://github.com/signalwire/freeswitch.git freeswitch "$version"
-cmake -S libks -B libks/build -DCMAKE_INSTALL_PREFIX=/usr
-cmake --build libks/build -j "$(nproc)"
-cmake --install libks/build
+(cd libks && cmake . -DCMAKE_INSTALL_PREFIX=/usr && make -j "$(nproc)" && make install)
 (cd sofia-sip && ./bootstrap.sh && ./configure --with-pic --with-glib=no --without-doxygen --disable-stun --prefix=/usr && make -j "$(nproc)" && make install)
 (cd spandsp && ./bootstrap.sh && ./configure --with-pic --prefix=/usr && make -j "$(nproc)" && make install)
-cmake -S signalwire-c -B signalwire-c/build -DCMAKE_INSTALL_PREFIX=/usr
-cmake --build signalwire-c/build -j "$(nproc)"
-cmake --install signalwire-c/build
+(cd signalwire-c && cmake . -DCMAKE_INSTALL_PREFIX=/usr && make -j "$(nproc)" && make install)
 ldconfig
 cd freeswitch
 sed -i 's|^#xml_int/mod_xml_curl$|xml_int/mod_xml_curl|' build/modules.conf.in
