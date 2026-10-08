@@ -3,6 +3,7 @@ import { validateRegistration, hashPassword } from './security.js';
 import { randomUUID } from 'node:crypto';
 import { defaultTenantId } from './tenancy.js';
 import { createSipAccount, provisionSipAccount } from './sipMarketplace.js';
+import { registrationAllowed } from './operationsPolicy.js';
 
 const codeHash = (id, code, secret) => createHash('sha256').update(`${id}:${code}:${secret}`).digest('hex');
 const emailAddress = value => typeof value === 'string' && value.length <= 254 ? value.trim().toLowerCase() : '';
@@ -57,6 +58,7 @@ export async function handleOnboarding({req,res,path,pool,send,readJson,origin})
   if (path === '/api/register' && req.method === 'POST') {
     if (!configured()) return send(res,503,{error:'Email verification is not configured'});
     const data = validateRegistration(await readJson(req));
+    if(!await registrationAllowed(pool,data.email))return send(res,403,{error:'Registration is closed or this email domain is not permitted'});
     const {salt,hash} = await hashPassword(data.password);
     const id=randomUUID(), code=String(randomInt(0,1000000)).padStart(6,'0');
     const db=await pool.connect();
