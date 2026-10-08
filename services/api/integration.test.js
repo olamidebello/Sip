@@ -68,7 +68,7 @@ test("registered users can create and join a room; host controls it", {
   const guestCookie = guestLogin.cookie.split(";")[0];
   assert.equal(guestLogin.body.features.remote_assist, false);
   const created = await post("/api/meetings", { title:"Team call" }, hostCookie);
-  assert.equal(created.status, 201);
+  assert.equal(created.status, 201, JSON.stringify(created.body) + "\nAPI stderr: " + log);
   const id = created.body.id;
   const socket = (cookie) => new WebSocket(`ws://127.0.0.1:${port}/api/meetings/${id}/socket`,
     { headers: { Origin:origin, Cookie:cookie } });
