@@ -595,3 +595,9 @@ The [user, administrator and operations manual](docs/operations-manual.md) cover
 The super administrator fleet screen manages approved FreeSWITCH installation, health, upgrade and dedicated switch nftables policy jobs through a private Ansible controller. It also stores router, firewall and load balancer inventory and configuration drafts; vendor-specific apply/rollback is not available. Registration policy can close public signup or restrict email domains. Healthy WSS discovery targets can be selected by region and weight for new browser connections; this is not SIP 3xx redirection or call failover.
 
 Named dashboard views and up to eight quick links are scoped to a tenant or user. A keyboard command palette (Ctrl/Command K) searches visible pages; previously saved links are filtered against current access. Tenant administrators can publish shared views and control personal overrides. Fleet grants expose shared infrastructure across tenants, so grant them only to trusted operators. API capacity controls still scale only 1–4 API replicas on a single Docker Compose host; MySQL and media are not clustered.
+
+### Workspace planning and announcements
+
+The workspace includes scheduled and parked tasks and events with tenant-limited sharing and change history. Administrators can create scheduled in-app announcement campaigns and process selected campaigns in batches. Super administrators can announce across tenants. Users acknowledge messages in the Announcements inbox. The mobile release console also supports atomic batch approval, reopening, and archiving of internal release records; it does not build binaries or submit to app stores.
+
+Local account passkey requirements can be set at tenant, group, and user levels. Required users enroll and sign in with a user-verified WebAuthn credential. LDAP policy stays with the directory provider. See `docs/operations-manual.md` for the operating flow.
