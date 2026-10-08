@@ -1,0 +1,7 @@
+---
+- name: Provision Olamide FreeSWITCH nodes
+  hosts: switch_nodes
+  become: true
+  gather_facts: true
+  roles:
+    - switch_node
