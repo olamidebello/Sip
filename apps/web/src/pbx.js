@@ -71,16 +71,14 @@ export function setupPbx() {
     const trunkList = $("#pbx-trunk-list"); trunkList.replaceChildren();
     for (const trunk of trunks) {
       const item = document.createElement("li");
-      const button = document.createElement("button");
-      button.type = "button";
-      button.textContent = trunk.enabled ? "Disable for preview" : "Enable for preview";
-      button.onclick = async () => {
-        try {
-          await api(`/api/pbx/trunks/${trunk.id}/status`,"PUT",{enabled:!trunk.enabled});
-          await refreshAdmin(); status.textContent = "Trunk preview status updated; no live SIP connection was made.";
-        } catch (error) {report(error);}
-      };
-      item.append(document.createTextNode(`${trunk.name} ${trunk.host}:${trunk.port} (${trunk.transport}) — `),button);
+      const check=document.createElement('input');check.type='checkbox';check.value=trunk.id;check.setAttribute('aria-label',`Select ${trunk.name}`);
+      item.append(check,document.createTextNode(` ${trunk.name} · ${trunk.host}:${trunk.port}/${trunk.transport} · priority ${trunk.priority} · ${trunk.enabled?'preview enabled':'preview disabled'} · ${trunk.rate_count} rates · ${trunk.carrier_count} carrier links · revision ${trunk.revision} `));
+      const button=(label,fn)=>{const el=document.createElement('button');el.type='button';el.textContent=label;el.onclick=async()=>{el.disabled=true;try{await fn();}catch(error){report(error);}finally{el.disabled=false;}};item.append(el);};
+      button('Edit',async()=>{const form=$('#pbx-trunk-form');for(const [key,value] of Object.entries({trunkId:trunk.id,revision:trunk.revision,name:trunk.name,host:trunk.host,port:trunk.port,transport:trunk.transport,priority:trunk.priority}))form.elements[key].value=value;form.scrollIntoView({block:'center'});$('#pbx-trunk-detail').textContent=`Editing ${trunk.name}; save to apply a new revision.`;});
+      button(trunk.enabled?'Disable preview':'Enable preview',async()=>{await api(`/api/pbx/trunks/${trunk.id}/status`,'PUT',{enabled:!trunk.enabled,revision:Number(trunk.revision)});await refreshAdmin();status.textContent='Preview status saved. No live carrier change was made.';});
+      button('History',async()=>{const data=await api(`/api/pbx/trunks/${trunk.id}/history`);$('#pbx-trunk-detail').textContent=data.events.map(e=>`${e.action} · ${new Date(e.created_at).toLocaleString()} · ${e.actor_id}`).join(' | ')||'No events.';});
+      button('Export',async()=>{const data=await api(`/api/pbx/trunks/${trunk.id}/export`),blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`trunk-${trunk.id}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);$('#pbx-trunk-detail').textContent='Downloaded a credential-free trunk record.';});
+      button('Delete',async()=>{if(!window.confirm(`Delete ${trunk.name}? Linked rates and carrier profiles must be removed first.`))return;await api(`/api/pbx/trunks/${trunk.id}`,'DELETE');await refreshAdmin();status.textContent='Unlinked trunk deleted. History remains available by ID.';});
       trunkList.append(item);
     }
     renderMembers();
@@ -129,10 +127,16 @@ export function setupPbx() {
   formHandler("#pbx-route-form","/api/pbx/inbound-routes",(form) => ({
     did:form.elements.did.value,destinationId:form.elements.destinationId.value
   }));
-  formHandler("#pbx-trunk-form","/api/pbx/trunks",(form) => ({
-    name:form.elements.name.value,host:form.elements.host.value,port:Number(form.elements.port.value),
-    transport:form.elements.transport.value,priority:Number(form.elements.priority.value)
-  }));
+  const trunkForm=$('#pbx-trunk-form');
+  $('#pbx-trunk-cancel').onclick=()=>{trunkForm.reset();trunkForm.elements.trunkId.value='';trunkForm.elements.revision.value='';$('#pbx-trunk-detail').textContent='New trunk draft.';};
+  trunkForm.onsubmit=async e=>{e.preventDefault();const f=e.currentTarget,body={name:f.elements.name.value,host:f.elements.host.value,port:Number(f.elements.port.value),transport:f.elements.transport.value,priority:Number(f.elements.priority.value)};
+    try{const id=f.elements.trunkId.value;if(id)await api(`/api/pbx/trunks/${id}`,'PUT',{...body,revision:Number(f.elements.revision.value)});else await api('/api/pbx/trunks','POST',body);
+      $('#pbx-trunk-cancel').click();await refreshAdmin();status.textContent='Trunk plan saved; no live SIP connection was made.';
+    }catch(error){report(error);}};
+  $('#pbx-trunks-refresh').onclick=()=>refreshAdmin().catch(report);
+  for(const [id,enabled] of [['pbx-trunks-enable',true],['pbx-trunks-disable',false]])$("#"+id).onclick=async()=>{const rows=[...$('#pbx-trunk-list').querySelectorAll('input:checked')].map(x=>{const t=trunks.find(t=>t.id===x.value);return{id:t.id,revision:Number(t.revision)};});
+    if(!rows.length){status.textContent='Select trunks first.';return;}
+    try{await api('/api/pbx/trunks/batch','PUT',{trunks:rows,enabled});await refreshAdmin();status.textContent=`${rows.length} trunk preview states saved atomically. No switch change was made.`;}catch(error){report(error);}};
   formHandler("#pbx-rate-form","/api/pbx/rates",(form) => ({
     prefix:form.elements.prefix.value,trunkId:form.elements.trunkId.value,
     costCentsPerMinute:Number(form.elements.cost.value),priceCentsPerMinute:Number(form.elements.price.value)
