@@ -1478,15 +1478,6 @@ async function loadMessages() {
   }
 }
 function signedIn(user) {
-  if(user.passkeyEnrollmentRequired||user.passkeySigninRequired){
-    activeRole='pending_passkey';document.body.classList.add('workspace-mode');
-    $('#account').hidden=false;$('#logout').hidden=false;$('#app-nav').hidden=true;
-    $('#account-login-group').hidden=true;$('#account-signup-group').hidden=true;$('#account-directory-group').hidden=true;$('#account-verify-group').hidden=true;
-    $('#password-change').hidden=true;$('#passkey-settings').hidden=!!user.passkeySigninRequired;
-    if(user.passkeyEnrollmentRequired)refreshPasskeys();
-    $('#account-status').textContent=user.passkeySigninRequired?'Sign out and use passkey sign-in to continue.':'Register a passkey, then sign out and use passkey sign-in.';
-    showWorkspace('account');return;
-  }
   if(user.mustChangePassword){
     activeRole='pending_password_change';
     $('#account-password-group').open=true;
@@ -1502,6 +1493,15 @@ function signedIn(user) {
     $('#account-status').textContent='Temporary password: change it now before using administrator controls.';
     showWorkspace('account');
     return;
+  }
+  if(user.passkeyEnrollmentRequired||user.passkeySigninRequired){
+    activeRole='pending_passkey';document.body.classList.add('workspace-mode');
+    $('#account').hidden=false;$('#logout').hidden=false;$('#app-nav').hidden=true;
+    $('#account-login-group').hidden=true;$('#account-signup-group').hidden=true;$('#account-directory-group').hidden=true;$('#account-verify-group').hidden=true;
+    $('#password-change').hidden=true;$('#passkey-settings').hidden=!!user.passkeySigninRequired;
+    if(user.passkeyEnrollmentRequired)refreshPasskeys();
+    $('#account-status').textContent=user.passkeySigninRequired?'Sign out and use passkey sign-in to continue.':'Register a passkey, then sign out and use passkey sign-in.';
+    showWorkspace('account');return;
   }
   activeRole=["admin","super_admin"].includes(user.role)?user.role:"user";
   apiGet('/api/redirector').then(({target})=>{if(target?.wssUrl&&!onCall)$("#connect [name=server]").value=target.wssUrl;}).catch(()=>{});
