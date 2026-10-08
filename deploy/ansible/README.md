@@ -2,6 +2,14 @@
 
 The Ansible role installs FreeSWITCH on dedicated Debian 12 switch nodes, enables authenticated `mod_xml_curl` directory and dialplan lookups, installs a trusted WSS certificate, pins the event socket and node metrics to loopback, configures time synchronization and service restart limits, optionally installs coturn, and applies an opt-in nftables ruleset. The API stores tenant domains, SIP account credentials, tariffs and gateway mappings in MySQL. No carrier traffic is enabled by the role merely installing packages.
 
+## Supported release and upgrade
+
+The role requires FreeSWITCH **1.11.3 or newer** from the authenticated SignalWire stable Debian repository. With `freeswitch_upgrade: true`, it checks the repository candidate before installation, updates the FreeSWITCH package set, and verifies both installed and running versions. If the stable repository has an older candidate, the playbook stops; it does not silently install an older switch or fetch unreviewed source. The default playbook processes switch nodes one at a time.
+
+On an existing node, the role checks `show calls count` and stops when calls are active, then saves `/etc/freeswitch` and the previous package version under `/var/backups/olamide-switch` before a package upgrade. It does not automatically drain calls or move traffic to another node. Schedule a maintenance window for a single-node system; for a cluster, remove one node from new-call selection, wait for active calls to reach zero, run the playbook, and verify a test call before moving to the next node. Other configuration changes may also restart FreeSWITCH; treat every playbook run as a maintenance operation.
+
+For rollback, disable new calls to the node, inspect the saved `.version` file and package availability with `apt-cache policy freeswitch`, install the previous package set if still available, restore the matching configuration archive, restart FreeSWITCH, and verify registration, routing, and media. Keep a VM snapshot when the package repository does not retain older versions. No automatic package downgrade is attempted.
+
 ## Prepare
 
 1. Create a SignalWire Personal Access Token for FreeSWITCH package downloads.
