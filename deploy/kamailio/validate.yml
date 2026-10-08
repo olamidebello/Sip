@@ -1,0 +1,40 @@
+---
+- name: Validate isolated Kamailio adapter on Debian 12
+  hosts: switch_nodes
+  become: true
+  gather_facts: true
+  serial: 1
+  vars:
+    kamailio_domain: "{{ sip_domain | default('sip.example.invalid') }}"
+    kamailio_api_url: "http://127.0.0.1:3000"
+    kamailio_route_token: "staging-syntax-only-000000000000000000000000"
+  tasks:
+    - name: Require Debian 12
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version == '12'
+    - name: Validate configuration without starting Kamailio
+      block:
+        - name: Render disposable loopback configuration
+          ansible.builtin.template:
+            src: adapter.cfg.j2
+            dest: /tmp/olamide-kamailio-adapter-check.cfg
+            owner: root
+            group: root
+            mode: '0600'
+          changed_when: false
+        - name: Parse configuration
+          ansible.builtin.command:
+            argv:
+              - /usr/sbin/kamailio
+              - -c
+              - -f
+              - /tmp/olamide-kamailio-adapter-check.cfg
+          changed_when: false
+      always:
+        - name: Delete disposable configuration
+          ansible.builtin.file:
+            path: /tmp/olamide-kamailio-adapter-check.cfg
+            state: absent
+          changed_when: false
