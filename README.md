@@ -70,7 +70,7 @@ For cross-network meetings, configure `MEETING_ICE_SERVERS_JSON` or the optional
 
 ## Limits before service launch
 
-The repository is a development foundation. PBX and call center configuration is a planning control plane; no SIP switch or live call routing is connected by default. It has no class 5 switch, carrier routes, live billing/settlement, DID purchase automation, native Android/iOS clients, Zoom-scale media server, meeting recording, remote keyboard/mouse control, or production telecom deployment. Email OTP and passkeys require the configuration described below. The wallet starts with zero balance and has no funding or payout integration. Browser-only geofencing and group flags cannot enforce policies on an external SIP server or inspect peer-to-peer media. Add a trusted SIP/media service, backups, operational monitoring, abuse controls, migrations, and security review before accepting real users or payments. No Acrobits, WhatsApp, Cash App, Zoom, or Zoiper code or branding is included.
+The repository is a development foundation. PBX and call center configuration is a planning control plane; no SIP switch or live call routing is connected by default. It includes a Debian FreeSWITCH installation foundation and browser controls, but live carrier routing, rated billing/settlement, DID purchase automation, full network device adapters, distributed database failover, and production telecom acceptance remain incomplete. Email OTP and passkeys require the configuration described below. The wallet starts with zero balance and has no funding or payout integration. Browser-only geofencing and group flags cannot enforce policies on an external SIP server or inspect peer-to-peer media. Add a trusted SIP/media service, backups, operational monitoring, abuse controls, migrations, and security review before accepting real users or payments. No Acrobits, WhatsApp, Cash App, Zoom, or Zoiper code or branding is included.
 
 ## Feature status and boundaries
 
@@ -587,3 +587,11 @@ only after observing the resulting state. The registry scales the control
 plane and planned capacity; live load distribution, SIP media, and automatic
 call failover require the actual switch implementation. Health checks are
 manual in the GUI until a monitoring worker is deployed.
+
+## Operations, dashboards and training
+
+The [user, administrator and operations manual](docs/operations-manual.md) covers registration, named tenant and personal dashboard views, drag and drop tile ordering, dark custom backgrounds, fleet grants, network device inventory, versioned desired configuration and credential-free exports. The same guide is available from the in-app Help center.
+
+The super administrator fleet screen manages approved FreeSWITCH installation, health, upgrade and dedicated switch nftables policy jobs through a private Ansible controller. It also stores router, firewall and load balancer inventory and configuration drafts; vendor-specific apply/rollback is not available. Registration policy can close public signup or restrict email domains. Healthy WSS discovery targets can be selected by region and weight for new browser connections; this is not SIP 3xx redirection or call failover.
+
+Named dashboard views are scoped to a tenant or user. Tenant administrators can publish shared views and control personal overrides. Fleet grants expose shared infrastructure across tenants, so grant them only to trusted operators. API capacity controls still scale only 1–4 API replicas on a single Docker Compose host; MySQL and media are not clustered.
