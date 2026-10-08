@@ -1,5 +1,5 @@
 import {fleetLevel} from './fleetNetwork.js';
-const all=new Set(['dashboard','support','account','calling-workspace','help','chat','external-sms','meetings','billing','agent-panel','admin','report-admin','fleet-admin','cluster-admin','tenant-admin','background-user','locale-settings']);
+const all=new Set(['dashboard','planner','campaign-inbox-panel','support','account','calling-workspace','help','chat','external-sms','meetings','billing','agent-panel','admin','report-admin','fleet-admin','cluster-admin','tenant-admin','background-user','locale-settings']);
 export async function migrateWorkspaceShortcuts(pool){
   await pool.query(`CREATE TABLE IF NOT EXISTS workspace_shortcuts (
     user_id CHAR(36) NOT NULL,tenant_id CHAR(36) NOT NULL,targets JSON NOT NULL,
@@ -9,7 +9,7 @@ export async function migrateWorkspaceShortcuts(pool){
   ) ENGINE=InnoDB`);
 }
 async function available(pool,user){
-  const allowed=new Set(['dashboard','support','account','calling-workspace','help','background-user','locale-settings']);
+  const allowed=new Set(['dashboard','planner','campaign-inbox-panel','support','account','calling-workspace','help','background-user','locale-settings']);
   for(const [feature,targets] of [['messaging',['chat','external-sms']],['meetings',['meetings']],['billing',['billing']],['call_center',['agent-panel']]])
     if(user.features?.[feature])targets.forEach(t=>allowed.add(t));
   if(['admin','super_admin'].includes(user.role))['admin','report-admin','cluster-admin'].forEach(t=>allowed.add(t));
