@@ -131,3 +131,12 @@ body.workspace-mode #app>section:not(.workspace-inactive){max-width:100%}
 #sip-profile-list li span{flex:1 1 240px;overflow-wrap:anywhere}
 #sip-profile-admin [id$="-choices"]{display:flex;flex-wrap:wrap;gap:.6rem;margin:.65rem 0 1rem}
 #sip-profile-admin [id$="-choices"] label{min-width:125px}
+#command-palette{width:min(560px,calc(100vw - 2rem));max-height:75vh;overflow:auto;border:1px solid #578caa;border-radius:16px;background:#102439;color:#eef4ff;padding:1.2rem;box-shadow:0 30px 80px #000a}
+#command-palette::backdrop{background:#020c19bd;backdrop-filter:blur(4px)}
+#command-palette input{width:100%}#command-results{list-style:none;padding:0;max-height:42vh;overflow:auto}
+#command-results li button{width:100%;text-align:left;margin:.15rem 0}
+#workspace-shortcuts{border:1px solid #ffffff26;border-radius:14px;padding:1rem;margin:1rem 0}
+#workspace-shortcut-list{display:flex;flex-wrap:wrap;gap:.5rem;list-style:none;padding:0}
+#workspace-shortcut-list li{display:flex;gap:.3rem}
+.dashboard-option[draggable="true"],#fleet-nodes li[draggable="true"],#fleet-devices li[draggable="true"]{cursor:grab}
+.dashboard-option[draggable="true"]:active,#fleet-nodes li[draggable="true"]:active,#fleet-devices li[draggable="true"]:active{cursor:grabbing}
