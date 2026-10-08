@@ -25,6 +25,10 @@ import { migrateAdapterRegistry } from './adapterRegistry.js';
 import { migrateOperatorControl } from './operatorControl.js';
 import { migrateSwitch } from './switch.js';
 import { migrateServerFleet } from './serverFleet.js';
+import { migrateOperationsPolicy } from './operationsPolicy.js';
+import { migrateFleetNetwork } from './fleetNetwork.js';
+import { migrateFleetFirewall } from './fleetFirewall.js';
+import { migrateDashboardViews } from './dashboard.js';
 import { migrateMessagingWebhooks } from './messagingWebhooks.js';
 import { migrateFlowrouteRates } from './flowrouteRates.js';
 
@@ -60,6 +64,9 @@ export async function migrate(pool) {
       ['operator_control', () => migrateOperatorControl(pool)],
       ['freeswitch_bridge', () => migrateSwitch(pool)],
       ['server_fleet', () => migrateServerFleet(pool)],
+      ['fleet_network', () => migrateFleetNetwork(pool)],
+      ['fleet_firewall', () => migrateFleetFirewall(pool)],
+      ['operations_policy', () => migrateOperationsPolicy(pool)],
       ['messaging_webhooks', () => migrateMessagingWebhooks(pool)],
       ['flowroute_rates', () => migrateFlowrouteRates(pool)],
       ['cdr', () => pool.initialize(awaitSql.cdr)],
@@ -74,6 +81,7 @@ export async function migrate(pool) {
       ['geofence', () => migrateGeofencePolicy(pool)],
       ['wallet', () => migrateWallet(pool)],
       ['dashboard', () => migrateDashboard(pool)],
+      ['dashboard_views', () => migrateDashboardViews(pool)],
       ['support', () => migrateSupport(pool)],
       ['locales', () => migrateLocales(pool)]
     ];
