@@ -3,6 +3,7 @@ import { startRegistration, startAuthentication } from '@simplewebauthn/browser'
 import { checkCurrentLocation } from "./geofence.js";
 import { setupMeetings } from "./meetings.js";
 import { setupGroupAdmin } from "./groups.js";
+import { setupSipProfiles } from "./sipProfiles.js";
 import { setupMobileAdmin } from "./mobileAdmin.js";
 import { setupTenants } from "./tenants.js";
 import { setupPbx } from "./pbx.js";
@@ -141,6 +142,12 @@ root.innerHTML = `
     <section id="sip-account-panel" hidden><h3>My SIP account</h3><p id="sip-account-status" role="status"></p>
       <form id="sip-credentials"><label>Account password to reveal SIP credentials <input name="password" type="password" autocomplete="current-password" required></label><button>Reveal SIP credentials</button></form>
       <p id="sip-credentials-result" role="status"></p>
+      <h3>Saved SIP connection profiles</h3><p>Save connection settings without storing your SIP password.</p>
+      <form id="sip-profile-create"><label>Profile name <input name="label" maxlength="100" required></label>
+        <label>Authorization username <input name="username" maxlength="128" required></label>
+        <label>SIP domain <input name="domain" maxlength="255" required></label>
+        <label>Secure WebSocket URL <input name="wssUrl" type="url" placeholder="wss://sip.example.com:7443" required></label>
+        <button>Save profile</button></form><ul id="sip-profile-list"></ul><p id="sip-profile-status" role="status"></p>
     </section>
   </section>
   <section id="dashboard" hidden>
@@ -573,6 +580,14 @@ root.innerHTML = `
       <ol id="security-events"></ol>
       <p id="group-status" role="status"></p>
     </section>
+    <section id="sip-profile-admin" hidden>
+      <h3>SIP profile access</h3><p>Super administrators set tenant defaults, group grants and individual overrides for viewing, adding, editing and deleting SIP profiles.</p>
+      <label>Tenant <select id="sip-policy-tenant"></select></label>
+      <h4>Tenant defaults</h4><div id="sip-tenant-choices"></div><button type="button" id="sip-tenant-save">Save tenant defaults</button>
+      <h4>Group grants</h4><label>Group <select id="sip-policy-group"></select></label><div id="sip-group-choices"></div><button type="button" id="sip-group-save">Save group grants</button>
+      <h4>User overrides</h4><label>User <select id="sip-policy-user"></select></label><div id="sip-user-choices"></div><button type="button" id="sip-user-save">Save user overrides</button>
+      <p id="sip-policy-status" role="status"></p>
+    </section>
     <section id="tenant-admin">
       <h3>Tenants and administrators</h3>
       <div id="tenant-super" hidden>
@@ -755,7 +770,7 @@ const navigationGroups=[
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
   {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["mobile-admin","App releases"]]},
-  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"]]}
+  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"]]}
 ];
 let activeRole=null;
 let pageRoutes;
@@ -815,6 +830,7 @@ function updateNavigation() {
     }
     details.append(links);groups.append(details);
   }
+  const signout=document.createElement("button");signout.type="button";signout.className="nav-signout";signout.textContent="Sign out";signout.onclick=()=>$("#logout").click();nav.append(signout);
   const quickMenu=document.createElement("details");quickMenu.className="menu-group locale-menu";
   const quickTitle=document.createElement("summary");quickTitle.textContent="Language & currency";quickMenu.append(quickTitle);
   const quick=document.createElement("form");quick.id="quick-locale";quick.className="quick-locale";
@@ -866,6 +882,7 @@ const dashboard=setupDashboard({get:path=>apiGet(path),request:(path,body,method
 const support=setupSupport({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const localeSettings=setupLocaleSettings({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const groupAdmin = setupGroupAdmin();
+const sipProfiles = setupSipProfiles({get:apiGet,request:accountRequest});
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
 const pbx = setupPbx();
@@ -1236,6 +1253,9 @@ function signedIn(user) {
   if(user.authSource==="local") refreshPasskeys();
   $("#sip-account-panel").hidden=false;
   refreshSipAccount();
+  sipProfiles.refresh();
+  $("#sip-profile-admin").hidden=user.role!=="super_admin";
+  if(user.role==="super_admin") sipProfiles.refreshAdmin();
   $("#dialplan-marketplace").hidden=!user.features?.billing;
   $("#dialplan-admin-create").hidden=!['admin','super_admin'].includes(user.role);
   if(user.features?.billing) refreshDialplans();
