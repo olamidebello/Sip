@@ -15,6 +15,7 @@ import { migrateSupport } from './support.js';
 import { migrateLocales } from './locales.js';
 import { migrateOnboarding } from './onboarding.js';
 import { migrateSipMarketplace } from './sipMarketplace.js';
+import { migrateSipProfiles } from './sipProfiles.js';
 import { migrateCarrierProviders } from './carrierProviders.js';
 import { migrateMessagingWebhooks } from './messagingWebhooks.js';
 import { migrateFlowrouteRates } from './flowrouteRates.js';
@@ -40,6 +41,7 @@ export async function migrate(pool) {
       ['access', () => migrateAccess(pool)],
       ['onboarding', () => migrateOnboarding(pool)],
       ['sip_marketplace', () => migrateSipMarketplace(pool)],
+      ['sip_profiles', () => migrateSipProfiles(pool)],
       ['pbx', () => pool.initialize(awaitSql.pbx)],
       ['carrier_providers', () => migrateCarrierProviders(pool)],
       ['messaging_webhooks', () => migrateMessagingWebhooks(pool)],
