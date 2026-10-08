@@ -72,3 +72,30 @@ test('authenticated gzip CDR batch is recorded without storing call payload',asy
     if(old.token===undefined)delete process.env.DIDWW_CALL_EVENTS_TOKEN;else process.env.DIDWW_CALL_EVENTS_TOKEN=old.token;
   }
 });
+
+test('admin API sends a versioned sandbox request with server-side key',async()=>{
+  const tenant='00000000-0000-4000-8000-000000000001';
+  const old={tenant:process.env.DIDWW_TENANT_ID,env:process.env.DIDWW_API_ENV,
+    key:process.env.DIDWW_API_KEY,fetch:globalThis.fetch};
+  process.env.DIDWW_TENANT_ID=tenant;process.env.DIDWW_API_ENV='sandbox';process.env.DIDWW_API_KEY='private-test-key';
+  let outbound;
+  globalThis.fetch=async(url,options)=>{
+    outbound={url:String(url),options};
+    return new Response(JSON.stringify({data:{type:'balance',attributes:{balance:'10.00'}}}),
+      {status:200,headers:{'content-type':'application/vnd.api+json'}});
+  };
+  try{
+    const result=await handleDidwwAdmin({req:{method:'GET',url:'/api/admin/didww/resources/balance'},
+      path:'/api/admin/didww/resources/balance',user:{role:'super_admin',tenant_id:tenant},
+      pool:{query:()=>{throw Error('read-only request must not write audit');}},
+      origin:'https://sip.example.com',send:(_res,status,body)=>({status,body})});
+    assert.equal(result.status,200);
+    assert.equal(outbound.url,'https://sandbox-api.didww.com/v3/balance');
+    assert.equal(outbound.options.headers['Api-Key'],'private-test-key');
+    assert.equal(outbound.options.headers['X-DIDWW-Api-Version'],'2026-04-16');
+  }finally{
+    globalThis.fetch=old.fetch;
+    for(const [key,value] of [['DIDWW_TENANT_ID',old.tenant],['DIDWW_API_ENV',old.env],['DIDWW_API_KEY',old.key]])
+      if(value===undefined)delete process.env[key];else process.env[key]=value;
+  }
+});
