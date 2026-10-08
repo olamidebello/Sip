@@ -1,16 +1,28 @@
 import { isAdmin } from "./tenancy.js";
 import { randomUUID } from "node:crypto";
 
-export const BACKGROUND_PRESETS=["midnight","ocean","aurora","sunrise","slate"];
-export const DEFAULT_BACKGROUND=Object.freeze({dayPreset:"ocean",nightPreset:"midnight",schedule:false,animate:false});
+export const BACKGROUND_PRESETS=["midnight","ocean","aurora","sunrise","slate","custom"];
+export const DEFAULT_BACKGROUND=Object.freeze({dayPreset:"ocean",nightPreset:"midnight",schedule:false,animate:false,colorStart:'#071b36',colorEnd:'#0c4861',angle:135});
+const darkColor=value=>{
+  if(typeof value!=='string'||!/^#[0-9a-fA-F]{6}$/.test(value))return false;
+  const rgb=[1,3,5].map(i=>parseInt(value.slice(i,i+2),16)/255);
+  const lum=rgb.map(c=>c<=0.04045?c/12.92:((c+0.055)/1.055)**2.4);
+  return lum[0]*0.2126+lum[1]*0.7152+lum[2]*0.0722<=0.16;
+};
 export function validateBackground(value) {
   if (!value || typeof value!=="object" || Array.isArray(value) ||
-      Object.keys(value).some(key=>!["dayPreset","nightPreset","schedule","animate"].includes(key)) ||
+      Object.keys(value).some(key=>!["dayPreset","nightPreset","schedule","animate","colorStart","colorEnd","angle"].includes(key)) ||
       !BACKGROUND_PRESETS.includes(value.dayPreset) || !BACKGROUND_PRESETS.includes(value.nightPreset) ||
-      typeof value.schedule!=="boolean" || typeof value.animate!=="boolean")
+      typeof value.schedule!=="boolean" || typeof value.animate!=="boolean" ||
+      !darkColor(value.colorStart??DEFAULT_BACKGROUND.colorStart)||
+      !darkColor(value.colorEnd??DEFAULT_BACKGROUND.colorEnd)||
+      !Number.isInteger(value.angle??DEFAULT_BACKGROUND.angle)||
+      (value.angle??DEFAULT_BACKGROUND.angle)<0||(value.angle??DEFAULT_BACKGROUND.angle)>359)
     throw new TypeError("Choose valid presets, schedule, and animation settings");
   return {dayPreset:value.dayPreset,nightPreset:value.nightPreset,
-    schedule:value.schedule,animate:value.animate};
+    schedule:value.schedule,animate:value.animate,
+    colorStart:(value.colorStart??DEFAULT_BACKGROUND.colorStart).toLowerCase(),
+    colorEnd:(value.colorEnd??DEFAULT_BACKGROUND.colorEnd).toLowerCase(),angle:value.angle??DEFAULT_BACKGROUND.angle};
 }
 export async function migrateBackground(pool) {
   await pool.query(`CREATE TABLE IF NOT EXISTS tenant_backgrounds (
