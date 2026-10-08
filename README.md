@@ -493,3 +493,32 @@ The panel displays the exact tenant webhook URL: `https://<DOMAIN>/api/webhooks/
 ### Local API capacity control
 
 **Administration → API capacity** shows the desired and last applied API replica counts and recent requests to tenant administrators. Super administrators may request one to four API replicas. The API records the requested revision in `cluster_state` and `cluster_actions`; it never receives Docker socket access. On the deployment host, `olamide-cluster.timer` runs a root-only service every minute. It reads the bounded request from MySQL through the API container, runs `docker compose up -d --no-build --scale api=N api`, and reports the applied revision or failure. Reapply Ansible or run `bash /opt/olamide/repo/deployment/install-cluster-timer.sh` after updating older installations if the timer is missing. Review `systemctl status olamide-cluster.timer olamide-cluster.service` and `journalctl -u olamide-cluster.service -n 100 --no-pager` when a request remains pending. This scales API processes on one Docker Compose host; MySQL, Caddy, SIP/media, TURN, and multi-host failover require separate infrastructure and are not clustered by this control.
+
+## Carrier commissioning and future providers
+
+The administrator Carrier providers screen is backed by the tenant-scoped
+`carrier_provider_catalog`, `carrier_provider_profiles`, and
+`carrier_provider_verifications` MySQL tables. Startup migration creates them.
+Super admins can register a new carrier ID (2–16 lowercase letters, digits or
+hyphens), then create a PBX trunk, save its profile, verify its adapter, and
+activate it. Disabling a custom carrier requires adapter deactivation first.
+Changing an active carrier profile or Flowroute PoP also requires deactivation.
+
+Flowroute PoP setup creates or updates an initially disabled tenant trunk for
+US-East-VA or US-West-OR on UDP 5060 and saves a draft profile. It never stores
+the SIP password or API secret in the database or browser. Keep provider secrets
+in private server configuration and rotate any credentials shared in documents.
+
+`CARRIER_PROVISION_URL` must be an HTTPS endpoint controlled by the switch
+integration; `CARRIER_PROVISION_TOKEN` authenticates requests. The API sends
+JSON `action` values `verify`, `activate`, and `deactivate` with
+`tenantId`, `provider`, and `trunkId` (activation also sends capacity and
+routing mode). A custom carrier's verification must return
+`{"status":"verified"}`; activation must return `{"status":"active"}`;
+deactivation must return `{"status":"inactive"}`. Non-2xx responses or
+missing acknowledgement leave the carrier unactivated in the app. The adapter
+must independently validate tenant/trunk ownership, load credentials from its
+private store, apply switch configuration, and verify the resulting state.
+The app's PBX route previews remain simulations until a real switch and media
+path are connected. Flowroute's existing inventory API check verifies API
+credentials only and does not establish SIP registration.
