@@ -55,7 +55,7 @@ Disable the tenant switch lookup in the GUI to stop new directory and dialplan r
 
 ## Fleet operations from the super administrator dashboard
 
-`deployment/bootstrap.sh` installs the application and switch, then enables the private
+`deployment/controller-bootstrap.sh` installs the application and switch, then enables the private
 `olamide-fleet-runner.timer` on a Linux controller with active systemd. The Windows
 `deployment/install-class5.bat` starts the same bootstrap through WSL; a WSL instance
 without systemd requires a persistent Linux controller for scheduled jobs.
