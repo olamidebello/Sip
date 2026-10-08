@@ -46,6 +46,17 @@ export async function syncKamailioCredential(pool,{accountId,username,domain,pas
     ON DUPLICATE KEY UPDATE username=VALUES(username),domain=VALUES(domain),ha1=VALUES(ha1)`,
     [accountId,username,domain,ha1]);
 }
+export async function handleKamailioAuth({req,res,pool}){
+  if(req.method!=='POST'||!authorized(req))return reply(res,401,{error:'Unauthorized'});
+  let b;try{b=await input(req);}catch{return reply(res,400,{error:'Invalid request'});}
+  const {domain,username}=b||{};
+  if(!domainPattern.test(domain||'')||!userPattern.test(username||''))
+    return reply(res,400,{error:'Invalid account'});
+  const found=await pool.query('SELECT ha1 FROM kamailio_active_subscribers WHERE domain=$1 AND username=$2 LIMIT 1',
+    [domain,username]);
+  if(!found.rowCount)return reply(res,404,{error:'Account unavailable'});
+  return reply(res,200,{ha1:found.rows[0].ha1});
+}
 export async function handleKamailioRoute({req,res,pool}){
   if(req.method!=='POST'||!authorized(req))return reply(res,401,{error:'Unauthorized'});
   let b;try{b=await input(req);}catch{return reply(res,400,{error:'Invalid request'});}
