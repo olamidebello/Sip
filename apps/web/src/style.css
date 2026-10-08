@@ -140,3 +140,5 @@ body.workspace-mode #app>section:not(.workspace-inactive){max-width:100%}
 #workspace-shortcut-list li{display:flex;gap:.3rem}
 .dashboard-option[draggable="true"],#fleet-nodes li[draggable="true"],#fleet-devices li[draggable="true"]{cursor:grab}
 .dashboard-option[draggable="true"]:active,#fleet-nodes li[draggable="true"]:active,#fleet-devices li[draggable="true"]:active{cursor:grabbing}
+
+.site-copyright{padding:1.5rem 1rem 2rem;text-align:center;color:#aebdd1;font-size:.82rem;border-top:1px solid #ffffff18}
