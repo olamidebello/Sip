@@ -11,6 +11,7 @@ import {handleProviderWebhook,handleProviderWebhookAdmin} from './providerWebhoo
 import {handleDidwwCallback,handleDidwwAdmin} from './didwwIntegration.js';
 import { handleCarrierProviders, carrierActive } from './carrierProviders.js';
 import { handleAdapterRegistry } from './adapterRegistry.js';
+import { handleOperatorControl } from './operatorControl.js';
 import { handleFlowrouteRates } from './flowrouteRates.js';
 import { handleHelpAgent } from './helpAgent.js';
 import { handleFlowrouteWebhook, handleMessagingWebhookAdmin, handleExternalSms, handleSmsNumberAdmin } from './messagingWebhooks.js';
@@ -235,6 +236,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/external-sms/')) return await handleExternalSms({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/messaging/webhooks') return await handleMessagingWebhookAdmin({req,res,user,pool,send,origin});
       if(path.startsWith('/api/admin/carrier-adapters')) return await handleAdapterRegistry({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/admin/operator')) return await handleOperatorControl({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/carriers')) return await handleCarrierProviders({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/charging/overview') return await handleCharging({req,res,user,pool,send});
       if (path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales")
