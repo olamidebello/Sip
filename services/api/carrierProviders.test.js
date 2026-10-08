@@ -20,6 +20,7 @@ test('a user cannot manage carrier provisioning',async()=>{
 test('Flowroute auto setup stages the selected PoP and leaves traffic disabled',async()=>{
   const calls=[];
   const pool={
+    query:async(sql,params)=>{calls.push({sql,params});return {rowCount:0,rows:[]};},
     connect:async()=>({query:async(sql,params)=>{
       calls.push({sql,params});
       if(sql.startsWith('SELECT id FROM pbx_trunks')) return {rowCount:0,rows:[]};
