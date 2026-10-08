@@ -2,6 +2,12 @@
 
 Olamide is a development browser softphone with a Node.js account API and MySQL 8.4 database. See the deployment checks below for the current server state.
 
+## FreeSWITCH and Class 5 deployment
+
+A FreeSWITCH XML bridge now serves tenant-scoped SIP credentials and authenticated internal/outbound dialplans from MySQL. The **Administration → FreeSWITCH** screen manages domains, tariff selection, Sofia gateway mappings, and account activation. A [Debian 12 Ansible role](deploy/ansible/README.md) installs FreeSWITCH, XML curl, WSS certificates, local event socket protection, node telemetry, time synchronization, optional TURN, and a configurable switch firewall. Multiple hosts can share the backend.
+
+This is an installable switch foundation, not a completed carrier-grade Class 5 service. The role needs a SignalWire package token, trusted WSS certificate, private network API URL, SIP carrier settings, and vaulted secrets. It has not been deployed to a server. Public DID ingress, live CDR rating, prepaid enforcement, concurrent call limits, emergency routing, fraud settlement and regulatory controls require further implementation and acceptance testing.
+
 ## Generate the MySQL database
 
 Docker Compose creates the database and runs every implemented migration automatically. For an external MySQL installation, install MySQL 8.4 and Node.js 22 or newer, create the database and grants as an administrator, then run the migration command:
