@@ -24,6 +24,7 @@ import { migrateCarrierProviders } from './carrierProviders.js';
 import { migrateAdapterRegistry } from './adapterRegistry.js';
 import { migrateOperatorControl } from './operatorControl.js';
 import { migrateSwitch } from './switch.js';
+import { migrateServerFleet } from './serverFleet.js';
 import { migrateMessagingWebhooks } from './messagingWebhooks.js';
 import { migrateFlowrouteRates } from './flowrouteRates.js';
 
@@ -58,6 +59,7 @@ export async function migrate(pool) {
       ['carrier_adapter_registry', () => migrateAdapterRegistry(pool)],
       ['operator_control', () => migrateOperatorControl(pool)],
       ['freeswitch_bridge', () => migrateSwitch(pool)],
+      ['server_fleet', () => migrateServerFleet(pool)],
       ['messaging_webhooks', () => migrateMessagingWebhooks(pool)],
       ['flowroute_rates', () => migrateFlowrouteRates(pool)],
       ['cdr', () => pool.initialize(awaitSql.cdr)],
