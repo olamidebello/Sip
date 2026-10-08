@@ -1,6 +1,7 @@
 import { randomUUID, randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
 import { verifyPassword } from './security.js';
 import { defaultTenantId, isAdmin } from './tenancy.js';
+import { sipProfilePermissions } from './sipProfiles.js';
 
 export async function migrateSipMarketplace(pool) {
   await pool.query(`CREATE TABLE IF NOT EXISTS sip_accounts (
@@ -69,6 +70,8 @@ export async function provisionSipAccount(pool,userId){
 export async function handleSipMarketplace({req,res,path,user,pool,send,readJson}) {
   if(path.startsWith('/api/dialplan/') && !user.features?.billing && !isAdmin(user))
     return send(res,403,{error:'Billing unavailable for your groups'});
+  if(path.startsWith('/api/sip-account') && !(await sipProfilePermissions(pool,user)).view)
+    return send(res,403,{error:'SIP profile view permission required'});
   if(path==='/api/sip-account' && req.method==='GET') {
     const account=await pool.query('SELECT id,username,domain,status,created_at FROM sip_accounts WHERE user_id=$1 AND tenant_id=$2',[user.id,user.tenant_id]);
     return send(res,200,{account:account.rows[0]||null,

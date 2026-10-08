@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { handleOnboarding } from './onboarding.js';
 import { handlePasskeys } from './passkeys.js';
 import { handleSipMarketplace } from './sipMarketplace.js';
+import { handleSipProfiles } from './sipProfiles.js';
 import { handleCarrierProviders, carrierActive } from './carrierProviders.js';
 import { handleFlowrouteRates } from './flowrouteRates.js';
 import { handleHelpAgent } from './helpAgent.js';
@@ -204,9 +205,11 @@ async function handler(req, res) {
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
         path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") ||
         path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path==="/api/dashboard" || path==="/api/dashboard/summary" || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
-        path === "/api/admin/cdr" || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
+        path === "/api/admin/cdr" || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if(path.startsWith('/api/sip-profiles') || path.startsWith('/api/admin/sip-profile-policy'))
+        return await handleSipProfiles({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin)});
       if(path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/'))
         return await handleSipMarketplace({req,res,path,user,pool,send,readJson});
       if(path==='/api/help/agent') return await handleHelpAgent({req,res,user,send,readJson});
