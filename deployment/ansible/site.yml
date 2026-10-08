@@ -177,6 +177,9 @@
         daemon_reload: true
         enabled: true
         state: started
+    - name: Install local scaling timer
+      ansible.builtin.command: bash {{ app_dir }}/repo/deployment/install-cluster-timer.sh
+      changed_when: false
     - name: Verify the API container is serving health requests
       ansible.builtin.command: docker compose exec -T api node -e "fetch('http://127.0.0.1:8080/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
       args:

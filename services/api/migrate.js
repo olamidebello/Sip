@@ -16,6 +16,9 @@ import { migrateLocales } from './locales.js';
 import { migrateOnboarding } from './onboarding.js';
 import { migrateSipMarketplace } from './sipMarketplace.js';
 import { migrateSipProfiles } from './sipProfiles.js';
+import { migratePayments } from './payments.js';
+import { migrateCluster } from './cluster.js';
+import { migrateProviderWebhooks } from './providerWebhooks.js';
 import { migrateCarrierProviders } from './carrierProviders.js';
 import { migrateMessagingWebhooks } from './messagingWebhooks.js';
 import { migrateFlowrouteRates } from './flowrouteRates.js';
@@ -42,6 +45,9 @@ export async function migrate(pool) {
       ['onboarding', () => migrateOnboarding(pool)],
       ['sip_marketplace', () => migrateSipMarketplace(pool)],
       ['sip_profiles', () => migrateSipProfiles(pool)],
+      ['payments', () => migratePayments(pool)],
+      ['cluster', () => migrateCluster(pool)],
+      ['provider_webhooks', () => migrateProviderWebhooks(pool)],
       ['pbx', () => pool.initialize(awaitSql.pbx)],
       ['carrier_providers', () => migrateCarrierProviders(pool)],
       ['messaging_webhooks', () => migrateMessagingWebhooks(pool)],

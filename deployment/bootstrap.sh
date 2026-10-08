@@ -22,12 +22,16 @@ MYSQL_ROOT_PASSWORD=$root_password
 MYSQL_URL=mysql://olamide_app:$app_password@mysql:3306/olamide
 OTP_HMAC_SECRET=$otp_secret
 SIP_CREDENTIAL_KEY=$sip_key
+PAYMENT_CONFIG_KEY=$(openssl rand -hex 32)
 FLOWROUTE_WEBHOOK_TOKEN=$webhook_token
 MEETING_ICE_SERVERS_JSON=[]
 ENV
   chmod 0600 /etc/olamide/secrets.env
 fi
 # Existing installations receive a private callback token during the next bootstrap.
+if ! grep -q '^PAYMENT_CONFIG_KEY=' /etc/olamide/secrets.env; then
+  printf 'PAYMENT_CONFIG_KEY=%s\n' "$(openssl rand -hex 32)" >> /etc/olamide/secrets.env
+fi
 if ! grep -q '^FLOWROUTE_WEBHOOK_TOKEN=' /etc/olamide/secrets.env; then
   printf 'FLOWROUTE_WEBHOOK_TOKEN=%s\n' "$(openssl rand -hex 32)" >> /etc/olamide/secrets.env
 fi

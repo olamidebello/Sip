@@ -7,6 +7,15 @@ compose_dir=$repo/deployment/docker
 backup_dir=/opt/olamide/backups
 [[ -f "$compose_dir/.env" ]] || { echo 'Deployment secrets missing' >&2; exit 1; }
 # Provision a private URL token on existing deployments before starting the new API.
+if ! grep -q '^PAYMENT_CONFIG_KEY=' /etc/olamide/secrets.env; then
+  umask 077
+  printf 'PAYMENT_CONFIG_KEY=%s\n' "$(openssl rand -hex 32)" >> /etc/olamide/secrets.env
+fi
+env_changed=0
+if ! grep -q '^PAYMENT_CONFIG_KEY=' "$compose_dir/.env"; then
+  grep '^PAYMENT_CONFIG_KEY=' /etc/olamide/secrets.env >> "$compose_dir/.env"
+  env_changed=1
+fi
 if ! grep -q '^FLOWROUTE_WEBHOOK_TOKEN=' /etc/olamide/secrets.env; then
   umask 077
   printf 'FLOWROUTE_WEBHOOK_TOKEN=%s\n' "$(openssl rand -hex 32)" >> /etc/olamide/secrets.env
@@ -16,8 +25,13 @@ if ! grep -q '^FLOWROUTE_WEBHOOK_TOKEN=' "$compose_dir/.env"; then
 fi
 cd "$repo"
 current=$(git rev-parse HEAD)
+# Existing hosts acquire the local scaling timer after their first application update.
+if [[ -f deployment/install-cluster-timer.sh ]]; then bash deployment/install-cluster-timer.sh; fi
 candidate=$(bash deployment/verified-sha.sh)
-[[ "$candidate" != "$current" ]] || exit 0
+if [[ "$candidate" == "$current" ]]; then
+  if (( env_changed )); then (cd "$compose_dir" && docker compose up -d --no-build api); fi
+  exit 0
+fi
 git diff --quiet && git diff --cached --quiet || { echo 'Tracked local changes; update paused' >&2; exit 1; }
 git fetch --quiet origin main
 git cat-file -e "$candidate^{commit}"
