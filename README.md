@@ -605,3 +605,7 @@ Local account passkey requirements can be set at tenant, group, and user levels.
 ## Copyright
 
 Copyright © 2026 Olamide Olatayo Bello. All rights reserved. The original Sip application code and documentation are not offered under an open-source license in this repository. Third-party packages, fonts, images, and other components retain their own licenses; review their notices before redistribution. See [COPYRIGHT.md](COPYRIGHT.md).
+
+### Trunk management
+
+Tenant administrators can create, edit, inspect, export, and delete PBX trunk plans, review their audit history and linked dependency counts, and update up to 50 preview states atomically. Revision checks reject stale edits. Active carrier-linked trunks must be deactivated through the carrier adapter before changing endpoint settings. Saving a plan or toggling its preview state does not provision, register, or disconnect a live SIP trunk; see the operations manual for commissioning steps.
