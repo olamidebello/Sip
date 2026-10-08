@@ -16,6 +16,8 @@ import { migrateLocales } from './locales.js';
 import { migrateOnboarding } from './onboarding.js';
 import { migrateSipMarketplace } from './sipMarketplace.js';
 import { migrateCarrierProviders } from './carrierProviders.js';
+import { migrateMessagingWebhooks } from './messagingWebhooks.js';
+import { migrateFlowrouteRates } from './flowrouteRates.js';
 
 const sql = filename => fs.readFile(new URL(filename, import.meta.url), 'utf8');
 
@@ -40,6 +42,8 @@ export async function migrate(pool) {
       ['sip_marketplace', () => migrateSipMarketplace(pool)],
       ['pbx', () => pool.initialize(awaitSql.pbx)],
       ['carrier_providers', () => migrateCarrierProviders(pool)],
+      ['messaging_webhooks', () => migrateMessagingWebhooks(pool)],
+      ['flowroute_rates', () => migrateFlowrouteRates(pool)],
       ['cdr', () => pool.initialize(awaitSql.cdr)],
       ['dids', () => pool.initialize(awaitSql.dids)],
       ['nigeria', () => pool.initialize(awaitSql.nigeria)],
