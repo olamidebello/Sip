@@ -147,10 +147,11 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
     if(!configured(provider)) return send(res,409,{error:providers.includes(provider)?'Provider credentials missing from private server configuration':'HTTPS provisioning adapter required'});
     if(!providers.includes(provider)){
       if(!adapterReady())return send(res,409,{error:'HTTPS provisioning adapter required'});
-      const profile=await pool.query('SELECT trunk_id FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider=$2',[user.tenant_id,provider]);
+      const profile=await pool.query('SELECT trunk_id,max_concurrent_calls FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider=$2',[user.tenant_id,provider]);
       if(!profile.rowCount)return send(res,409,{error:'Save a carrier profile first'});
       try{
-        await commissionCarrier(pool,user,provider,'verify',{trunkId:profile.rows[0].trunk_id});
+        await commissionCarrier(pool,user,provider,'verify',{trunkId:profile.rows[0].trunk_id,
+          maxConcurrentCalls:profile.rows[0].max_concurrent_calls});
         await pool.query('INSERT INTO carrier_provider_verifications(tenant_id,provider,verified_at,verified_by) VALUES($1,$2,UTC_TIMESTAMP(3),$3) ON DUPLICATE KEY UPDATE verified_at=VALUES(verified_at),verified_by=VALUES(verified_by)',
           [user.tenant_id,provider,user.id]);
         return send(res,200,{provider,adapterVerified:true,note:'Provisioning adapter verified the carrier configuration.'});
