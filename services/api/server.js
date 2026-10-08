@@ -5,6 +5,9 @@ import { handleOnboarding } from './onboarding.js';
 import { handlePasskeys } from './passkeys.js';
 import { handleSipMarketplace } from './sipMarketplace.js';
 import { handleSipProfiles } from './sipProfiles.js';
+import {handlePaymentAdmin,handlePaymentCheckout,handleStripeWebhook} from './payments.js';
+import {handleCluster} from './cluster.js';
+import {handleProviderWebhook,handleProviderWebhookAdmin} from './providerWebhooks.js';
 import { handleCarrierProviders, carrierActive } from './carrierProviders.js';
 import { handleFlowrouteRates } from './flowrouteRates.js';
 import { handleHelpAgent } from './helpAgent.js';
@@ -125,13 +128,17 @@ async function handler(req, res) {
   if (req.method === "GET" && path === "/api/health")
     return send(res, 200, { status: "ok" });
   const flowrouteWebhook = path.startsWith("/api/webhooks/flowroute/");
+  const stripeWebhook = path.startsWith("/api/webhooks/stripe/");
+  const providerWebhook=path.startsWith("/api/webhooks/providers/");
   const cdrIngest = req.method === "POST" && path === "/api/integrations/cdr";
-  if (req.method !== "GET" && !cdrIngest && !flowrouteWebhook && req.headers.origin !== origin)
+  if (req.method !== "GET" && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && req.headers.origin !== origin)
     return send(res, 403, { error: "Invalid origin" });
-  if (req.method !== "GET" && !limit(req,(cdrIngest || flowrouteWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
+  if (req.method !== "GET" && !limit(req,(cdrIngest || flowrouteWebhook || stripeWebhook || providerWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
     return send(res, 429, { error: "Too many requests" });
   try {
     if (flowrouteWebhook) return await handleFlowrouteWebhook({req,res,path,pool,send});
+    if (stripeWebhook) return await handleStripeWebhook({req,res,path,pool,send});
+    if (providerWebhook) return await handleProviderWebhook({req,res,path,pool,send});
     if (cdrIngest) return await handleCdrIngest({req,res,pool,send,keys:cdrKeys});
     if (currentToken(req) && !['/api/account/password','/api/me','/api/logout','/api/login'].includes(path)) {
       const sessionAccount=await currentUser(req);
@@ -205,9 +212,13 @@ async function handler(req, res) {
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
         path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") ||
         path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path==="/api/dashboard" || path==="/api/dashboard/summary" || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
-        path === "/api/admin/cdr" || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
+        path === "/api/admin/cdr" || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if(path.startsWith('/api/admin/payments/')) return await handlePaymentAdmin({req,res,path,user,pool,send,readJson});
+      if(path==='/api/payments/checkout'&&req.method==='POST') return await handlePaymentCheckout({req,res,user,pool,send,readJson,origin});
+      if(path.startsWith('/api/admin/provider-webhooks')) return await handleProviderWebhookAdmin({req,res,path,user,pool,send,readJson,origin});
+      if(path.startsWith('/api/admin/cluster')) return await handleCluster({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/sip-profiles') || path.startsWith('/api/admin/sip-profile-policy'))
         return await handleSipProfiles({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin)});
       if(path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/'))
