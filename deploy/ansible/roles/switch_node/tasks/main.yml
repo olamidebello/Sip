@@ -455,6 +455,15 @@
   no_log: true
   notify: Restart FreeSWITCH
 
+- name: Remove bundled demonstration SIP accounts and dialplan
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/freeswitch/directory/default
+    - /etc/freeswitch/dialplan/default
+  notify: Restart FreeSWITCH
+
 - name: Configure public SIP and RTP addresses
   ansible.builtin.lineinfile:
     path: /etc/freeswitch/vars.xml
