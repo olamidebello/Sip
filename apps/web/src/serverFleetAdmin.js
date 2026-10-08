@@ -13,10 +13,13 @@ export function setupServerFleetAdmin({get,request}){
     list('fleet-nodes',data.nodes,(li,n)=>{
       const p=document.createElement('p');p.textContent=`${n.name} · ${n.role} · ${n.host}:${n.ssh_port} · ${n.region} · ${n.status} · version ${n.version||'unknown'} · capacity ${n.capacity} · last check ${n.last_seen_at||'never'}${n.last_error?' · '+n.last_error:''}`;li.append(p);
       const controls=document.createElement('div');controls.className='form-row';li.append(controls);
+      const host=document.createElement('input');host.value=n.host;host.setAttribute('aria-label',`${n.name} IPv4 address`);controls.append(host);
+      const sshUser=document.createElement('input');sshUser.value=n.ssh_user;sshUser.setAttribute('aria-label',`${n.name} SSH user`);controls.append(sshUser);
+      const sshPort=document.createElement('input');sshPort.type='number';sshPort.min='1';sshPort.max='65535';sshPort.value=n.ssh_port;sshPort.setAttribute('aria-label',`${n.name} SSH port`);controls.append(sshPort);
       const region=document.createElement('input');region.value=n.region;region.maxLength=40;region.setAttribute('aria-label',`${n.name} region`);controls.append(region);
       const capacity=document.createElement('input');capacity.type='number';capacity.min='1';capacity.max='100000';capacity.value=n.capacity;capacity.setAttribute('aria-label',`${n.name} capacity`);controls.append(capacity);
       const enabled=document.createElement('input');enabled.type='checkbox';enabled.checked=!!n.enabled;enabled.setAttribute('aria-label',`${n.name} enabled`);controls.append(enabled);
-      button(controls,'Save network inventory',()=>request(`/api/admin/servers/${n.id}`,{region:region.value,capacity:Number(capacity.value),enabled:enabled.checked},'PUT'));
+      button(controls,'Save network inventory',()=>request(`/api/admin/servers/${n.id}`,{host:host.value,sshUser:sshUser.value,sshPort:Number(sshPort.value),region:region.value,capacity:Number(capacity.value),enabled:enabled.checked},'PUT'));
       if(n.role==='switch'){
         for(const action of ['health','install','upgrade'])button(controls,action,()=>request(`/api/admin/servers/${n.id}/jobs`,{action}));
         const interval=document.createElement('input');interval.type='number';interval.min='5';interval.max='10080';interval.value='60';interval.setAttribute('aria-label',`${n.name} schedule interval minutes`);controls.append(interval);
