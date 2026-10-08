@@ -22,7 +22,8 @@ A super administrator assigns a fleet grant to a user or group in the selected t
 3. Open **Dialer**. Check the WSS URL and SIP identity. Healthy WSS discovery can select a regional target on sign-in; the URL can be changed before connecting. Calling requires an activated switch account and permitted route.
 4. Use **Account messages**, **Text messages**, **Meetings** and **Plans, numbers & billing** according to your group's enabled features. A number request or invoice is not carrier activation.
 5. Open **Dashboard → My dashboard views** to save named personal layouts. Drag tiles or use the arrow buttons to order them. In **My background**, choose a built-in theme or two dark custom colors and a gradient angle. Select **Use** to activate a view, or **Use default layout** to return to tenant defaults. Administrators may lock personal overrides.
-6. Open **Support tickets**, choose the relevant category and describe the symptom, time, affected account and what you tried. Never include SIP passwords, API keys, OTP codes or Vault secrets.
+6. Press **Ctrl K** or **Command K** to search visible workspace pages. Save up to eight quick links on Dashboard; **Continue** returns to a recent page. These links are stored per user and tenant and disappear when access is revoked.
+7. Open **Support tickets**, choose the relevant category and describe the symptom, time, affected account and what you tried. Never include SIP passwords, API keys, OTP codes or Vault secrets.
 
 ## Tenant administrator training
 
@@ -52,7 +53,7 @@ A super administrator assigns a fleet grant to a user or group in the selected t
 - The runner accepts only `health`, `install`, `upgrade` and `firewall` jobs. It uses strict SSH host key checking, passwordless sudo and an Ansible Vault password file on the controller. It renews a 20-minute job lease while running. A failed or expired job is retried at most three times.
 - A dedicated firewall job applies `deploy/ansible/firewall.yml` with nftables. SSH CIDRs and carrier CIDRs are bounded and validated. The initial app/switch co-host keeps host firewall management disabled because Docker networking needs separate review.
 - WSS discovery resolves only enabled targets linked to healthy, recently checked nodes. A missing target leaves the configured tenant WSS URL in place. Verify certificates, DNS, SIP registration, inbound and outbound calls and media on every target independently.
-- Named dashboard views are tenant-scoped or personal. A tenant administrator can publish shared views; user selections are stored per user and tenant. The existing tenant default and personal layout continue to work.
+- Named dashboard views and workspace quick links are tenant-scoped or personal. A tenant administrator can publish shared views; user selections are stored per user and tenant. The existing tenant default and personal layout continue to work.
 
 ## Practice exercises
 
