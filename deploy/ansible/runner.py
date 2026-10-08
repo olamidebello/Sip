@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Private, allowlisted fleet worker. Run on the trusted Ansible controller."""
 import argparse
+import ipaddress
 import json
 import os
 import pathlib
@@ -13,7 +14,7 @@ import urllib.request
 import urllib.error
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-ALLOWED = {'health', 'install', 'upgrade'}
+ALLOWED = {'health', 'install', 'upgrade', 'firewall'}
 
 
 def secrets_file(path):
@@ -63,12 +64,34 @@ def deploy(node, inventory, vault_password):
     local_hosts = {str(host.get('ansible_host')) for host in hosts.values()}
     if node['host'] not in local_hosts and vars_.get('freeswitch_wss_certificate_source') == 'caddy':
         raise RuntimeError('Remote switch requires controller certificate/key configuration in the private inventory')
+    firewall = node.get('firewallPolicy') if node['action'] == 'firewall' else None
+    if node['action'] == 'firewall':
+        if not firewall or not firewall['enabled']:
+            raise RuntimeError('Firewall policy is unavailable or disabled')
+        if vars_.get('freeswitch_wss_certificate_source') == 'caddy':
+            raise RuntimeError('Co-located Caddy and Docker host firewall is managed outside this runner')
+        cidrs = firewall['ssh_cidrs']
+        peers = firewall['carrier_cidrs']
+        if isinstance(cidrs, str):
+            cidrs = json.loads(cidrs)
+        if isinstance(peers, str):
+            peers = json.loads(peers)
+        source = subprocess.run(['ssh', '-p', str(node['ssh_port']), '-o', 'BatchMode=yes',
+            '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8',
+            node['ssh_user'] + '@' + node['host'], 'printf', '%s', '"$SSH_CONNECTION"'],
+            capture_output=True, text=True, timeout=15, check=True).stdout.split()[0]
+        if not any(ipaddress.ip_address(source) in ipaddress.ip_network(cidr, strict=False) for cidr in cidrs):
+            raise RuntimeError('Controller SSH source is outside the policy SSH allowlist')
+        vars_['manage_firewall'] = True
+        vars_['freeswitch_ssh_allowed_cidrs'] = cidrs
+        vars_['freeswitch_carrier_allowed_cidrs'] = peers
     group['hosts'] = {'fleet-target': {'ansible_host': node['host'], 'ansible_user': node['ssh_user'],
                                       'ansible_port': node['ssh_port']}}
     with tempfile.TemporaryDirectory(prefix='olamide-fleet-') as tmp:
         path = pathlib.Path(tmp) / 'inventory.json'
         path.write_text(json.dumps(source))
-        cmd = ['ansible-playbook', '-i', str(path), str(ROOT / 'deploy/ansible/site.yml'),
+        playbook = 'firewall.yml' if node['action'] == 'firewall' else 'site.yml'
+        cmd = ['ansible-playbook', '-i', str(path), str(ROOT / 'deploy/ansible' / playbook),
                '--vault-password-file', vault_password]
         result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=3600)
         # Do not persist Ansible output: tasks could print private configuration.
@@ -112,7 +135,8 @@ def run_once(base, token, runner_id, inventory, vault_password):
             if check['status'] != 'healthy':
                 raise RuntimeError('Switch did not pass post-deployment health probe')
         result = ('succeeded', 'Approved ' + claimed['action'] + ' job completed; switch active')
-    except (OSError, subprocess.TimeoutExpired, RuntimeError, KeyError, urllib.error.URLError) as error:
+    except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError,
+            RuntimeError, KeyError, IndexError, ValueError, urllib.error.URLError) as error:
         result = ('failed', str(error)[:900])
     finally:
         done.set()
