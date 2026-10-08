@@ -36,7 +36,7 @@ export function setupFleetNetworkAdmin({get,request}){
       act(li,'View versions',async()=>{const result=await get(`/api/admin/servers/devices/${d.id}/revisions`);const view=$('fleet-device-versions');view.replaceChildren();for(const r of result.revisions){const row=item(view,`Version ${r.version} · ${r.created_at}`);act(row,'Download version',async()=>dump(`${d.name}-v${r.version}`,{format:'olamide-fleet-intent-v1',device:d.name,version:r.version,config:r.configuration}));}});
       act(li,'Dump configuration',async()=>dump(d.name,await get(`/api/admin/servers/devices/${d.id}/dump`)));
       if(can('manage'))act(li,'Delete',async()=>{if(window.confirm(`Remove ${d.name} from managed inventory?`))await request(`/api/admin/servers/devices/${d.id}`,{},'DELETE');});
-      if(can('deploy')&&d.node_id)act(li,'Install linked switch',()=>request(`/api/admin/servers/${d.node_id}/jobs`,{action:'install'}));
+      if(can('deploy')&&d.node_id&&['switch','server'].includes(d.kind))act(li,'Install linked switch',()=>request(`/api/admin/servers/${d.node_id}/jobs`,{action:'install'}));
     });
   }
   async function refresh(){
