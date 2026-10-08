@@ -36,7 +36,7 @@ export function validDevice(b){
   return !!b&&name.test(b.name||'')&&kinds.includes(b.kind)&&ipv4(b.host)&&
     Number.isInteger(b.port)&&b.port>=1&&b.port<=65535&&typeof b.site==='string'&&
     b.site.length>=1&&b.site.length<=60&&short.test(b.site)&&typeof b.enabled==='boolean'&&
-    (!b.nodeId||uuid.test(b.nodeId))&&validConfig(b.config);
+    (!b.nodeId||(['switch','server'].includes(b.kind)&&uuid.test(b.nodeId)))&&validConfig(b.config);
 }
 export async function migrateFleetNetwork(pool){
   const columns=await pool.query("SELECT column_name AS column_name FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='deployment_nodes' AND column_name IN ('sort_order','deleted_at')");
