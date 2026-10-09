@@ -2,13 +2,13 @@
 # Read-only commissioning report. No services are started and no secrets are printed.
 set -euo pipefail
 failed=0
-check_package() { if [[ "$(dpkg-query -W -f='\${Status}' "$1" 2>/dev/null || true)" == 'install ok installed' ]]; then
+check_package() { if [[ "$(dpkg-query -W -f='${Status}' "$1" 2>/dev/null || true)" == 'install ok installed' ]]; then
   echo "PASS package $1"; else echo "BLOCKED package $1"; failed=1; fi; }
 if [[ "$(id -u)" != 0 ]]; then echo "Run as root on the switch host" >&2; exit 2; fi
 echo "Kamailio SIP commissioning report"
 echo "Host: $(hostname -f 2>/dev/null || hostname)"
 for package in kamailio kamailio-extra-modules kamailio-json-modules kamailio-websocket-modules kamailio-tls-modules rtpengine-daemon; do
-  check dpkg-query -W -f='${Status}' "$package"
+  check_package "$package"
 done
 for service in kamailio rtpengine-daemon; do
   state="$(systemctl is-active "$service" 2>/dev/null || true)"
