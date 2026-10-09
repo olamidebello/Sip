@@ -517,7 +517,7 @@ The **Provider API credentials** form stores keys for number inventory and the D
 2. Save the API key pair under **Provider API credentials → Flowroute** and click **Verify inventory API** on its carrier card. This checks inventory access only. It does not verify SIP authentication.
 3. For the repo's shortcut, use **Flowroute PoP setup** (US-East-VA or US-West-OR) to create a disabled UDP 5060 trunk and draft profile. Otherwise create the trunk manually with the Flowroute endpoint and transport assigned to your account. Review it in **PBX**, then link it in **Carrier provider commissioning**.
 4. Configure your Flowroute account's outbound SIP authentication and inbound DID route to the tested public SIP edge, according to the chosen interconnection method. Flowroute documents inbound [registration, host-based, and SIP URI routing](https://flowroute.com/blog/choosing-between-sip-registration-and-host-based-routing/). Associate the test DID with that route in the provider account.
-5. Keep the app's **Provision with switch adapter** action disabled until the private adapter is implemented, health-checked, and able to verify the real SIP setup. **Verify inventory API** alone is insufficient. Messaging callback URLs are set separately under **Messaging webhooks**.
+5. Do not invoke **Provision with switch adapter** until the private adapter is implemented, health-checked, and able to verify the real SIP setup. **Verify inventory API** alone is insufficient. Messaging callback URLs are set separately under **Messaging webhooks**.
 
 ### DIDWW outbound and inbound
 
@@ -562,9 +562,11 @@ credentials only and does not establish SIP registration.
 ## DIDWW API v3 and callbacks
 
 The super admin DIDWW API screen uses a tenant-bound server-side API key. Set
-`DIDWW_TENANT_ID`, `DIDWW_API_KEY`, `DIDWW_API_ENV` (`sandbox` or
-`production`), `DIDWW_ACCOUNT_CURRENCY=USD`, and the DIDWW-generated
-`DIDWW_CALLBACK_SECRET` in private deployment configuration. The API version
+`DIDWW_TENANT_ID`, `DIDWW_ACCOUNT_CURRENCY=USD`, and the DIDWW-generated
+`DIDWW_CALLBACK_SECRET` in private deployment configuration. Save the API key and
+sandbox/production environment in the encrypted Provider API credentials section
+(with a stable `PROVIDER_CREDENTIAL_KEY`), or set legacy `DIDWW_API_KEY` and
+`DIDWW_API_ENV` privately on the API server. The API version
 is pinned to `2026-04-16`. The browser never receives the key or callback
 secret. The resource console restricts methods and paths to a documented
 allowlist, validates JSON:API resource types and IDs, and records mutation
