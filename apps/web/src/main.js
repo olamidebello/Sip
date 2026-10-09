@@ -603,6 +603,20 @@ root.innerHTML = `
         <label>Configured Sofia gateway name <input name="gatewayName" pattern="[a-z][a-z0-9_-]{1,63}" required></label>
         <label><input name="enabled" type="checkbox"> Enable gateway route</label><button>Save gateway mapping</button>
       </form>
+      <section aria-labelledby="kamailio-readiness-title">
+        <h4 id="kamailio-readiness-title">Kamailio commissioning</h4>
+        <p>This panel checks tenant data and credentials. It cannot verify the host services, media, call tests, or billing.</p>
+        <button id="kamailio-readiness-refresh" type="button">Check Kamailio readiness</button>
+        <p id="kamailio-readiness-summary" role="status"></p>
+        <ul id="kamailio-readiness-blockers"></ul>
+        <nav aria-label="Switch commissioning">
+          <a href="#operator-admin">Tariffs and destination blocks</a>
+          <a href="#carrier-admin">Carrier profiles</a>
+          <a href="#pbx-admin">PBX routes</a>
+          <a href="#cdr-admin">Call records</a>
+          <a href="#server-admin">Server operations</a>
+        </nav>
+      </section>
       <h4>Gateway mappings</h4><ul id="switch-gateways"></ul>
       <h4>SIP accounts</h4><ul id="switch-accounts"></ul>
       <button id="switch-refresh" type="button">Refresh switch configuration</button>
