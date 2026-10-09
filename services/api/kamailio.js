@@ -97,7 +97,14 @@ export async function handleKamailioRoute({req,res,pool}){
   const quote=selectQuote({number:destination,at:Date.now(),mode:rates.rows[0]?.mode||'least_cost',
     rates:normalized,blocks:blocks.rows,carriers:carriers.rows});
   if(quote.blocked||!quote.selected)return reply(res,404,{route:'reject'});
-  const gateway=carriers.rows.find(row=>row.provider===quote.selected.provider)?.gateway_name;
-  if(!gatewayPattern.test(gateway||''))return reply(res,404,{route:'reject'});
-  return reply(res,200,{route:'carrier',gateway,destination,provider:quote.selected.provider});
+  const ranked=[];
+  for(const candidate of quote.candidates){
+    const gateway=carriers.rows.find(row=>row.provider===candidate.provider)?.gateway_name;
+    if(!gatewayPattern.test(gateway||'')||ranked.some(row=>row.provider===candidate.provider))continue;
+    ranked.push({provider:candidate.provider,gateway});
+    if(ranked.length===4)break;
+  }
+  if(!ranked.length)return reply(res,404,{route:'reject'});
+  return reply(res,200,{route:'carrier',gateway:ranked[0].gateway,
+    destination,provider:ranked[0].provider,alternates:ranked.slice(1)});
 }
