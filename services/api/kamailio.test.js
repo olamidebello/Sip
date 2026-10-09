@@ -48,3 +48,29 @@ test('authentication adapter returns HA1 only for an active subscriber',async()=
   assert.equal(res.status,200);
   assert.deepEqual(res.body,{ha1:'b1726872c344b6dc8365b774f8fd6412'});
 });
+
+test('carrier quote returns ranked, enabled, tenant-scoped alternates',async()=>{
+  process.env.KAMAILIO_ROUTE_TOKEN=token;
+  const res=response();
+  const carriers=[
+    {provider:'first',status:'active',routing_mode:'outbound',gateway_name:'gw_first'},
+    {provider:'second',status:'active',routing_mode:'outbound',gateway_name:'gw_second'},
+    {provider:'disabled',status:'draft',routing_mode:'disabled',gateway_name:'gw_disabled'}
+  ];
+  const rate=(provider,cost)=>({provider,prefix:'1',cost_cents:cost,price_cents:cost+2,
+    priority:1,effective_at:'2020-01-01T00:00:00Z',expires_at:null,enabled:true,mode:'least_cost'});
+  const pool={query:async(sql)=>{
+    if(sql.includes('FROM switch_tenants t'))return {rows:[{tenant_id:'tenant',tariff_id:'tariff'}],rowCount:1};
+    if(sql.includes('FROM pbx_outbound_policies'))return {rows:[],rowCount:0};
+    if(sql.includes('FROM operator_tariff_rates'))return {rows:[rate('second',4),rate('first',2),rate('disabled',1)],rowCount:3};
+    if(sql.includes('FROM operator_fraud_rules'))return {rows:[],rowCount:0};
+    if(sql.includes('FROM carrier_provider_profiles'))return {rows:carriers,rowCount:3};
+    throw Error('Unexpected query');
+  }};
+  await handleKamailioRoute({req:req({domain:'sip.example.com',caller:'alice',
+    destination:'+12125551234'}),res,pool});
+  assert.equal(res.status,200);
+  assert.deepEqual(res.body,{route:'carrier',gateway:'gw_first',
+    destination:'+12125551234',provider:'first',
+    alternates:[{provider:'second',gateway:'gw_second'}]});
+});
