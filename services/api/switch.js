@@ -71,6 +71,34 @@ export async function handleSwitchAdmin({req,res,path,user,pool,send,readJson}){
     return send(res,200,{configured:!!process.env.FREESWITCH_XML_PASSWORD&&!!credentialKey(),
       config:config.rows[0]||null,gateways:gateways.rows,accounts:accounts.rows[0]});
   }
+  if(path==='/api/admin/switch/kamailio/readiness'&&req.method==='GET'){
+    const [configuration,accounts,credentials,carriers]=await Promise.all([
+      pool.query('SELECT domain,enabled,tariff_id FROM switch_tenants WHERE tenant_id=$1',[tenant]),
+      pool.query("SELECT COUNT(*) AS total FROM sip_accounts WHERE tenant_id=$1 AND status='active'",[tenant]),
+      pool.query(`SELECT COUNT(*) AS total FROM kamailio_credentials c
+        JOIN sip_accounts a ON a.id=c.account_id
+        WHERE a.tenant_id=$1 AND a.status='active'`,[tenant]),
+      pool.query(`SELECT COUNT(*) AS total FROM carrier_provider_profiles p
+        JOIN switch_gateways g ON g.tenant_id=p.tenant_id AND g.provider=p.provider
+        WHERE p.tenant_id=$1 AND p.status='active' AND p.routing_mode<>'disabled'
+          AND g.enabled=TRUE`,[tenant])
+    ]);
+    const config=configuration.rows[0]||null;
+    const active=Number(accounts.rows[0]?.total||0);
+    const synced=Number(credentials.rows[0]?.total||0);
+    const enabledCarriers=Number(carriers.rows[0]?.total||0);
+    const blockers=[];
+    if(!config?.enabled)blockers.push('Tenant switch lookup is disabled');
+    if(!credentialKey())blockers.push('SIP credential encryption key is unavailable');
+    if(Buffer.byteLength(process.env.KAMAILIO_ROUTE_TOKEN||'')<32)
+      blockers.push('Kamailio API token is unavailable');
+    if(!active)blockers.push('No active SIP accounts');
+    if(synced<active)blockers.push('Some active SIP accounts lack Kamailio digest credentials');
+    if(!enabledCarriers)blockers.push('No commissioned carrier gateway mappings');
+    blockers.push('Live SIP, media, charging and failover tests are still required');
+    return send(res,200,{domain:config?.domain||null,activeAccounts:active,
+      syncedCredentials:synced,enabledCarriers,blockers,productionReady:false});
+  }
   if(path==='/api/admin/switch/accounts'&&req.method==='GET'){
     const found=await pool.query('SELECT user_id,username,domain,status FROM sip_accounts WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200',[tenant]);
     return send(res,200,{accounts:found.rows});
