@@ -13,6 +13,7 @@ async function providerJson(url, headers) {
 
 export async function availableNumbers(provider,context={}) {
   const stored=await providerCredentials(context.pool,context.tenant,provider);
+  if(stored?.disabled)throw new Error('Provider credentials disabled');
   if (provider === "flowroute") {
     const key = stored?.accessKey || process.env.FLOWROUTE_ACCESS_KEY;
     const secret = stored?.secretKey || process.env.FLOWROUTE_SECRET_KEY;
