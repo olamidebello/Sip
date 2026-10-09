@@ -751,6 +751,14 @@ root.innerHTML = `
       <a href="#fleet-admin">Open server inventory and deployment jobs</a>
       <h4>Capacity policy revisions</h4><ul id="cluster-capacity-history"></ul>
       <h4>Recent requests</h4><ul id="cluster-history"></ul>
+      <section id="kamailio-monitor" hidden>
+        <h4>Kamailio and RTPengine hosts</h4>
+        <p>Service states are reported by the private runner. A loopback test verifies SIP challenges; it does not place a carrier call.</p>
+        <button id="kamailio-monitor-refresh" type="button">Refresh Kamailio hosts</button>
+        <p id="kamailio-monitor-status" role="status"></p>
+        <ul id="kamailio-monitor-nodes"></ul>
+        <a href="#fleet-admin">Open fleet deployment and schedules</a>
+      </section>
     </section>
     <section id="fleet-admin" hidden>
       <h3>Server and network operations</h3><p>Register switch hosts, review connectivity and versions, queue approved installations, and schedule health checks or upgrades. The private Ansible runner requires SSH access and passwordless sudo on managed hosts.</p>
