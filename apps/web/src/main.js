@@ -6,6 +6,7 @@ import { setupGroupAdmin } from "./groups.js";
 import { setupSipProfiles } from "./sipProfiles.js";
 import {setupCommerceOps} from "./commerceOps.js";
 import {setupProviderWebhookAdmin} from "./providerWebhookAdmin.js";
+import {setupProviderCredentialsAdmin} from "./providerCredentialsAdmin.js";
 import {setupDidwwAdmin} from "./didwwAdmin.js";
 import {setupAdapterAdmin} from "./adapterAdmin.js";
 import {setupOperatorControl} from "./operatorControl.js";
@@ -552,6 +553,20 @@ root.innerHTML = `
         <button type="submit">Add carrier</button>
       </form>
       <p id="carrier-catalog-status" role="status"></p>
+      <section id="provider-credentials-admin" hidden>
+        <h4>Provider API credentials</h4>
+        <p>Super administrators can save tenant credentials. Secret values are never displayed again. Provider verification calls the inventory API; SIP trunk activation is separate.</p>
+        <form id="provider-credentials-form" autocomplete="off">
+          <label>Provider <select name="provider"><option value="flowroute">Flowroute</option><option value="didww">DIDWW</option></select></label>
+          <label id="provider-access-label">Flowroute access key <input name="accessKey" maxlength="256"></label>
+          <label id="provider-secret-label">Flowroute secret key <input name="secretKey" type="password" maxlength="256"></label>
+          <label id="provider-api-label" hidden>DIDWW API key <input name="apiKey" type="password" maxlength="256"></label>
+          <label id="provider-env-label" hidden>DIDWW environment <select name="environment"><option value="sandbox">Sandbox</option><option value="production">Production</option></select></label>
+          <button type="submit">Save credentials</button>
+        </form>
+        <button id="provider-credentials-refresh" type="button">Refresh credential status</button>
+        <p id="provider-credentials-status" role="status"></p><ul id="provider-credentials-list"></ul>
+      </section>
       <form id="flowroute-auto-form" hidden><h4>Flowroute PoP setup</h4>
         <label>Point of presence <select name="pop"><option value="US-East-VA">US East, Virginia</option><option value="US-West-OR">US West, Oregon</option></select></label>
         <label>Maximum concurrent calls <input name="maxConcurrentCalls" type="number" min="1" max="100000" value="10" required></label>
@@ -1188,6 +1203,7 @@ const workPlanner=setupWorkPlanner({get:apiGet,request:accountRequest});
 const campaigns=setupCampaigns();
 const passkeyPolicy=setupPasskeyPolicy();
 const providerWebhooks=setupProviderWebhookAdmin({get:apiGet,request:accountRequest});
+const providerCredentialsAdmin=setupProviderCredentialsAdmin({get:apiGet,request:accountRequest});
 const didwwAdmin=setupDidwwAdmin({get:apiGet,request:accountRequest});
 const adapterAdmin=setupAdapterAdmin({get:apiGet,request:accountRequest});
 const operatorAdmin=setupOperatorControl();
