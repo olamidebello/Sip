@@ -2,7 +2,8 @@
 # Read-only commissioning report. No services are started and no secrets are printed.
 set -euo pipefail
 failed=0
-check() { if "$@" >/dev/null 2>&1; then echo "PASS $*"; else echo "BLOCKED $*"; failed=1; fi; }
+check_package() { if [[ "$(dpkg-query -W -f='\${Status}' "$1" 2>/dev/null || true)" == 'install ok installed' ]]; then
+  echo "PASS package $1"; else echo "BLOCKED package $1"; failed=1; fi; }
 if [[ "$(id -u)" != 0 ]]; then echo "Run as root on the switch host" >&2; exit 2; fi
 echo "Kamailio SIP commissioning report"
 echo "Host: $(hostname -f 2>/dev/null || hostname)"
