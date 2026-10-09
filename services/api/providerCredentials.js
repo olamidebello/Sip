@@ -30,11 +30,13 @@ export async function migrateProviderCredentials(pool){
 }
 export async function providerCredentials(pool,tenant,provider){
   const key=masterKey();
-  if(!key||!pool||!tenant)return null;
+  if(!pool||!tenant)return null;
   const result=await pool.query('SELECT ciphertext,enabled FROM provider_api_credentials WHERE tenant_id=$1 AND provider=$2',
     [tenant,provider]);
   if(!result.rowCount)return null;
-  return result.rows[0].enabled?unseal(result.rows[0].ciphertext,key,tenant,provider):{disabled:true};
+  if(!result.rows[0].enabled)return {disabled:true};
+  if(!key)return {disabled:true};
+  return unseal(result.rows[0].ciphertext,key,tenant,provider);
 }
 export async function handleProviderCredentials({req,res,path,user,pool,send,readJson}){
   if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
