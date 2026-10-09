@@ -49,6 +49,14 @@ export async function migrateServerFleet(pool){
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     FOREIGN KEY(node_id) REFERENCES deployment_nodes(id),INDEX node_check_time(node_id,created_at)
   ) ENGINE=InnoDB`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS kamailio_node_checks (
+    id CHAR(36) PRIMARY KEY,node_id CHAR(36) NOT NULL,
+    signaling_status VARCHAR(16) NOT NULL,media_status VARCHAR(16) NOT NULL,
+    version VARCHAR(80) NULL,latency_ms INT UNSIGNED NULL,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    FOREIGN KEY(node_id) REFERENCES deployment_nodes(id),
+    INDEX kamailio_node_time(node_id,created_at)
+  ) ENGINE=InnoDB`);
   await pool.query(`CREATE TABLE IF NOT EXISTS deployment_schedules (
     id CHAR(36) PRIMARY KEY,node_id CHAR(36) NOT NULL,action VARCHAR(16) NOT NULL,
     interval_minutes INT UNSIGNED NOT NULL,enabled BOOLEAN NOT NULL DEFAULT TRUE,
@@ -95,6 +103,16 @@ async function queue(pool,nodeId,action,userId){
 export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJson}){
   const level=await fleetLevel(pool,user);
   const granted=needed=>({view:1,manage:2,deploy:3})[level]>=({view:1,manage:2,deploy:3})[needed];
+  if(path==='/api/admin/servers/kamailio'&&req.method==='GET'){
+    if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
+    const result=await pool.query(`SELECT n.id,n.name,n.region,n.capacity,n.enabled,
+      c.signaling_status,c.media_status,c.version,c.latency_ms,c.created_at
+      FROM deployment_nodes n LEFT JOIN kamailio_node_checks c ON c.id=(
+        SELECT c2.id FROM kamailio_node_checks c2 WHERE c2.node_id=n.id
+        ORDER BY c2.created_at DESC,c2.id DESC LIMIT 1)
+      WHERE n.role='switch' AND n.deleted_at IS NULL ORDER BY n.name LIMIT 500`);
+    return send(res,200,{nodes:result.rows,scope:'Reported systemd service state only; calls and RTP quality are not measured'});
+  }
   if(path==='/api/admin/servers/permissions'&&req.method==='GET')return send(res,200,{accessLevel:level});
   if(path==='/api/admin/servers/firewall'||/^\/api\/admin\/servers\/[0-9a-f-]{36}\/firewall$/.test(path))
     return handleFleetFirewall({req,res,path,user,pool,send,readJson,level,queue});
@@ -306,6 +324,20 @@ export async function handleServerFleetRunner({req,res,path,pool,send,readJson})
         [randomUUID(),found.rows[0].node_id,b.jobId,'job_'+b.status,b.summary.slice(0,500)]);
       await db.query('COMMIT');return send(res,200,{accepted:true});
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
+  if(path==='/api/integrations/deployment/kamailio-check'&&req.method==='POST'){
+    const b=await readJson(req);
+    if(!uuid.test(b.nodeId||'')||
+      !['active','inactive','unreachable'].includes(b.signalingStatus)||
+      !['active','inactive','unreachable'].includes(b.mediaStatus)||
+      (b.version!=null&&(typeof b.version!=='string'||b.version.length>80))||
+      (b.latencyMs!=null&&(!Number.isInteger(b.latencyMs)||b.latencyMs<0||b.latencyMs>300000)))
+      return send(res,400,{error:'Valid Kamailio service report required'});
+    const found=await pool.query("SELECT id FROM deployment_nodes WHERE id=$1 AND enabled=TRUE AND deleted_at IS NULL AND role='switch'",[b.nodeId]);
+    if(!found.rowCount)return send(res,404,{error:'Switch node unavailable'});
+    await pool.query('INSERT INTO kamailio_node_checks(id,node_id,signaling_status,media_status,version,latency_ms) VALUES($1,$2,$3,$4,$5,$6)',
+      [randomUUID(),b.nodeId,b.signalingStatus,b.mediaStatus,b.version||null,b.latencyMs??null]);
+    return send(res,200,{accepted:true});
   }
   if(path==='/api/integrations/deployment/check'&&req.method==='POST'){
     const b=await readJson(req);
