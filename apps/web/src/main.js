@@ -587,7 +587,7 @@ root.innerHTML = `
       <ul id="operator-blocks"></ul>
       <form id="operator-quote-form"><h4>Route quote</h4>
         <label>E.164 destination <input name="number" placeholder="+12125550123" required></label><button>Preview route</button></form>
-      <p id="operator-quote" role="status"></p><p id="operator-status" role="status"></p>
+      <p id="operator-quote" role="status"></p><ol id="operator-quote-candidates" aria-label="Ranked carrier routes"></ol><p id="operator-status" role="status"></p>
     </section>
     <section id="switch-admin">
       <h3>FreeSWITCH</h3>
