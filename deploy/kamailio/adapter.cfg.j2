@@ -5,8 +5,8 @@ log_stderror=yes
 children=4
 listen=udp:127.0.0.1:5062
 alias="{{ kamailio_domain }}"
-loadmodule "sl.so"
 loadmodule "tm.so"
+loadmodule "sl.so"
 loadmodule "rr.so"
 loadmodule "maxfwd.so"
 loadmodule "textops.so"
@@ -15,8 +15,8 @@ loadmodule "xlog.so"
 loadmodule "auth.so"
 loadmodule "http_client.so"
 loadmodule "jansson.so"
-loadmodule "registrar.so"
 loadmodule "usrloc.so"
+loadmodule "registrar.so"
 loadmodule "rtpengine.so"
 modparam("usrloc","db_mode",0)
 modparam("http_client","query_result",0)
