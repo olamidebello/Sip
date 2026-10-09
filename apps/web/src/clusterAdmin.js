@@ -2,6 +2,36 @@ export function setupClusterAdmin({get,request}){
   const $=id=>document.getElementById(id);
   const status=$('cluster-status'),capacityStatus=$('cluster-capacity-status');
   let editable=false;
+  async function refreshKamailio(){
+    const panel=$('kamailio-monitor'),status=$('kamailio-monitor-status');
+    panel.hidden=!editable;
+    if(!editable)return;
+    try{
+      const data=await get('/api/admin/servers/kamailio');
+      const list=$('kamailio-monitor-nodes');list.replaceChildren();
+      for(const node of data.nodes){
+        const li=document.createElement('li');
+        const fresh=node.created_at&&Date.now()-new Date(node.created_at).getTime()<300000;
+        li.append(document.createTextNode(node.name+' · '+node.region+
+          ' · Kamailio '+(fresh?node.signaling_status:'unverified')+
+          ' · RTPengine '+(fresh?node.media_status:'unverified')+
+          ' · version '+(node.version||'unknown')+' · '+(fresh?'recent':'stale or absent')+' '));
+        const test=document.createElement('button');
+        test.type='button';test.textContent='Test loopback SIP';test.disabled=!node.enabled;
+        test.onclick=async()=>{
+          test.disabled=true;
+          try{
+            const job=await request('/api/admin/servers/'+node.id+'/jobs',{action:'kamailio_test'});
+            status.textContent='SIP test queued as job '+job.id+'. Refresh to view its result in Server operations.';
+          }catch(error){status.textContent=error.message;}
+          finally{test.disabled=!node.enabled;}
+        };
+        li.append(test);list.append(li);
+      }
+      if(!data.nodes.length)status.textContent='No switch hosts are registered in Server operations.';
+      else status.textContent=data.scope;
+    }catch(error){status.textContent=error.message;}
+  }
   async function refresh(){
     try{
       const [cluster,capacity]=await Promise.all([
@@ -40,6 +70,7 @@ export function setupClusterAdmin({get,request}){
       }
       status.textContent='';
       capacityStatus.textContent='';
+      await refreshKamailio();
     }catch(error){status.textContent=error.message;}
   }
   $('cluster-scale').onsubmit=async event=>{
@@ -71,5 +102,6 @@ export function setupClusterAdmin({get,request}){
   };
   $('cluster-refresh').onclick=refresh;
   $('cluster-capacity-refresh').onclick=refresh;
+  $('kamailio-monitor-refresh').onclick=refreshKamailio;
   return {refresh};
 }
