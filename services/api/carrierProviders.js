@@ -46,6 +46,7 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
   if(!isAdmin(user)) return send(res,403,{error:'Administrator required'});
   const configured=async provider=>{
     const stored=await providerCredentials(pool,user.tenant_id,provider);
+    if(stored?.disabled)return false;
     return provider==='flowroute'?!!(stored?.accessKey&&stored?.secretKey||process.env.FLOWROUTE_ACCESS_KEY&&process.env.FLOWROUTE_SECRET_KEY):
       provider==='didww'?!!((stored?.apiKey||process.env.DIDWW_API_KEY)&&process.env.DIDWW_ACCOUNT_CURRENCY==='USD'&&
         ['sandbox','production'].includes(stored?.environment||process.env.DIDWW_API_ENV)):adapterReady();
