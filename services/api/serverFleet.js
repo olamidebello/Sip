@@ -57,6 +57,26 @@ export async function migrateServerFleet(pool){
     FOREIGN KEY(node_id) REFERENCES deployment_nodes(id),
     INDEX kamailio_node_time(node_id,created_at)
   ) ENGINE=InnoDB`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS kamailio_node_configs (
+    node_id CHAR(36) PRIMARY KEY,sip_domain VARCHAR(255) NOT NULL,
+    listen_ip VARCHAR(45) NOT NULL DEFAULT '127.0.0.1',
+    listen_port SMALLINT UNSIGNED NOT NULL DEFAULT 5062,
+    api_url VARCHAR(255) NOT NULL DEFAULT 'http://127.0.0.1:18080',
+    media_socket VARCHAR(80) NOT NULL DEFAULT 'udp:127.0.0.1:2223',
+    max_concurrent_calls INT UNSIGNED NOT NULL DEFAULT 100,
+    revision INT UNSIGNED NOT NULL DEFAULT 1,
+    updated_by CHAR(36) NOT NULL,updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    FOREIGN KEY(node_id) REFERENCES deployment_nodes(id),
+    FOREIGN KEY(updated_by) REFERENCES users(id)
+  ) ENGINE=InnoDB`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS kamailio_node_config_audit (
+    id CHAR(36) PRIMARY KEY,node_id CHAR(36) NOT NULL,revision INT UNSIGNED NOT NULL,
+    sip_domain VARCHAR(255) NOT NULL,max_concurrent_calls INT UNSIGNED NOT NULL,
+    actor_id CHAR(36) NULL,created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    FOREIGN KEY(node_id) REFERENCES deployment_nodes(id),
+    FOREIGN KEY(actor_id) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX kamailio_config_history(node_id,created_at)
+  ) ENGINE=InnoDB`);
   await pool.query(`CREATE TABLE IF NOT EXISTS deployment_schedules (
     id CHAR(36) PRIMARY KEY,node_id CHAR(36) NOT NULL,action VARCHAR(16) NOT NULL,
     interval_minutes INT UNSIGNED NOT NULL,enabled BOOLEAN NOT NULL DEFAULT TRUE,
@@ -112,6 +132,50 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
         ORDER BY c2.created_at DESC,c2.id DESC LIMIT 1)
       WHERE n.role='switch' AND n.deleted_at IS NULL ORDER BY n.name LIMIT 500`);
     return send(res,200,{nodes:result.rows,scope:'Reported systemd service state only; calls and RTP quality are not measured'});
+  }
+  if(path==='/api/admin/servers/kamailio-config'&&req.method==='GET'){
+    if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
+    const configs=await pool.query(`SELECT c.node_id,n.name,n.region,c.sip_domain,c.listen_ip,c.listen_port,
+      c.api_url,c.media_socket,c.max_concurrent_calls,c.revision,c.updated_at
+      FROM kamailio_node_configs c JOIN deployment_nodes n ON n.id=c.node_id
+      WHERE n.deleted_at IS NULL ORDER BY n.name`);
+    const history=await pool.query(`SELECT a.node_id,a.revision,a.sip_domain,a.max_concurrent_calls,a.created_at
+      FROM kamailio_node_config_audit a ORDER BY a.created_at DESC LIMIT 50`);
+    return send(res,200,{configs:configs.rows,history:history.rows,
+      scope:'Saved loopback adapter intent only; live SIP services and carrier routes are unchanged'});
+  }
+  const kamailioConfig=/^\/api\/admin\/servers\/([0-9a-f-]{36})\/kamailio-config$/.exec(path);
+  if(kamailioConfig&&req.method==='PUT'){
+    if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
+    const b=await readJson(req);
+    if(!/^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$/i.test(b.sipDomain||'')||
+       !Number.isSafeInteger(b.maxConcurrentCalls)||b.maxConcurrentCalls<1||b.maxConcurrentCalls>5000||
+       !Number.isSafeInteger(b.expectedRevision)||b.expectedRevision<0)
+      return send(res,400,{error:'Valid SIP domain, call capacity, and expected revision required'});
+    const db=await pool.connect();
+    try{
+      await db.query('START TRANSACTION');
+      const node=await db.query("SELECT role,enabled FROM deployment_nodes WHERE id=$1 AND deleted_at IS NULL FOR UPDATE",[kamailioConfig[1]]);
+      if(!node.rowCount||node.rows[0].role!=='switch'||!node.rows[0].enabled){
+        await db.query('ROLLBACK');return send(res,404,{error:'Enabled switch node unavailable'});
+      }
+      const existing=await db.query('SELECT revision FROM kamailio_node_configs WHERE node_id=$1 FOR UPDATE',[kamailioConfig[1]]);
+      const previous=Number(existing.rows[0]?.revision||0);
+      if(previous!==b.expectedRevision){
+        await db.query('ROLLBACK');return send(res,409,{error:'Configuration changed; refresh before saving'});
+      }
+      const revision=previous+1;
+      await db.query(`INSERT INTO kamailio_node_configs(node_id,sip_domain,max_concurrent_calls,revision,updated_by)
+        VALUES($1,$2,$3,$4,$5) ON DUPLICATE KEY UPDATE sip_domain=VALUES(sip_domain),
+        max_concurrent_calls=VALUES(max_concurrent_calls),revision=VALUES(revision),
+        updated_by=VALUES(updated_by)`,
+        [kamailioConfig[1],b.sipDomain.toLowerCase(),b.maxConcurrentCalls,revision,user.id]);
+      await db.query(`INSERT INTO kamailio_node_config_audit(id,node_id,revision,sip_domain,max_concurrent_calls,actor_id)
+        VALUES($1,$2,$3,$4,$5,$6)`,
+        [randomUUID(),kamailioConfig[1],revision,b.sipDomain.toLowerCase(),b.maxConcurrentCalls,user.id]);
+      await db.query('COMMIT');
+      return send(res,200,{nodeId:kamailioConfig[1],revision,state:'staged'});
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
   if(path==='/api/admin/servers/permissions'&&req.method==='GET')return send(res,200,{accessLevel:level});
   if(path==='/api/admin/servers/firewall'||/^\/api\/admin\/servers\/[0-9a-f-]{36}\/firewall$/.test(path))
