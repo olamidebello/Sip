@@ -31,3 +31,20 @@ The API exposes `POST /api/switch/kamailio/route` with a private bearer token. K
 Set `KAMAILIO_ROUTE_TOKEN` as a private random value of at least 32 characters in the API runtime and Kamailio adapter. It must not be committed or placed in a URL. Use a separate MySQL user limited to `SELECT` on the active subscriber view for Kamailio authentication. Apply schema migration before running the backfill, with `MYSQL_URL` and `SIP_CREDENTIAL_KEY` supplied privately to the API container.
 
 The leaked SignalWire token used in earlier package attempts is unrelated to this rebuild and should be revoked.
+
+## Staging on the switch host
+
+The repository tracks `deploy/ansible/inventory.example.yml`, not `deploy/ansible/inventory.yml`. A locally generated inventory in a different worktree is not automatically present here. Ansible reports a successful zero-host play when its inventory cannot be parsed, so verify the recap names `sip-switch-1`.
+
+On the Debian 12 switch as root, from the existing isolated worktree:
+
+```bash
+cd /opt/olamide/kamailio-staging
+printf '[switch_nodes]\nsip-switch-1 ansible_connection=local\n' > /tmp/olamide-kamailio-inventory.ini
+ansible-inventory -i /tmp/olamide-kamailio-inventory.ini --graph
+ansible-playbook -i /tmp/olamide-kamailio-inventory.ini deploy/kamailio/stage.yml
+ansible-playbook -i /tmp/olamide-kamailio-inventory.ini deploy/kamailio/validate.yml
+rm -f /tmp/olamide-kamailio-inventory.ini
+```
+
+These staging playbooks do not need the production Vault password and do not enable the services. Check a nonempty PLAY RECAP and the parser result; do not switch live signaling or run the Kamailio database migration.
