@@ -29,6 +29,6 @@ jobs:
           Path('/tmp/kamailio-adapter.cfg').write_text(config)
           PY
       - name: Check preflight shell syntax
-        run: bash -n deploy/kamailio/preflight.sh
+        run: bash -n deploy/kamailio/preflight.sh deploy/kamailio/run-pilot.sh
       - name: Parse Kamailio configuration
         run: kamailio -c -f /tmp/kamailio-adapter.cfg
