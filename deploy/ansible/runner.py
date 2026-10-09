@@ -44,7 +44,7 @@ def probe(node):
         if status == 'healthy':
             package = subprocess.run(['ssh', '-p', str(node['ssh_port']), '-o', 'BatchMode=yes',
                 '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8', target,
-                'dpkg-query', '-W', '-f=${Version}', 'freeswitch'], capture_output=True,
+                'dpkg-query', '-W', '-f=\\${Version}', 'freeswitch'], capture_output=True,
                 text=True, timeout=15)
             if package.returncode == 0:
                 version = package.stdout.strip()[:80]
@@ -66,7 +66,7 @@ def probe_kamailio(node):
                                 capture_output=True, text=True, timeout=15)
         media = subprocess.run(ssh + ['sudo', '-n', 'systemctl', 'is-active', 'rtpengine-daemon'],
                                capture_output=True, text=True, timeout=15)
-        version = subprocess.run(ssh + ['dpkg-query', '-W', '-f=${Version}', 'kamailio'],
+        version = subprocess.run(ssh + ['dpkg-query', '-W', '-f=\\${Version}', 'kamailio'],
                                  capture_output=True, text=True, timeout=15)
         signaling_status = ('unreachable' if signal.returncode == 255 else
                             'active' if signal.returncode == 0 and signal.stdout.strip() == 'active'
