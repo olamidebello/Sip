@@ -57,6 +57,9 @@ services:
       CARRIER_PROVISION_URL: ${CARRIER_PROVISION_URL:-}
       CARRIER_PROVISION_TOKEN: ${CARRIER_PROVISION_TOKEN:-}
       CARRIER_ADAPTER_TARGETS_JSON: ${CARRIER_ADAPTER_TARGETS_JSON:-}
+    # Host-only bridge for the staged SIP authorization adapter.
+    ports:
+      - "127.0.0.1:18080:8080"
     depends_on:
       mysql:
         condition: service_healthy
