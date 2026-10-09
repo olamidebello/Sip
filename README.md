@@ -609,3 +609,9 @@ Copyright © 2026 Olamide Olatayo Bello. All rights reserved. The original Sip a
 ### Trunk management
 
 Tenant administrators can create, edit, inspect, export, and delete PBX trunk plans, review their audit history and linked dependency counts, and update up to 50 preview states atomically. Revision checks reject stale edits. Active carrier-linked trunks must be deactivated through the carrier adapter before changing endpoint settings. Saving a plan or toggling its preview state does not provision, register, or disconnect a live SIP trunk; see the operations manual for commissioning steps.
+
+### Carrier API credentials
+
+The super admin Carrier provider commissioning page stores Flowroute access and secret keys or a DIDWW API key and sandbox/production environment for the selected tenant. Set a stable `PROVIDER_CREDENTIAL_KEY` (32 random bytes encoded as 64 hex characters) in the API container environment before saving credentials. Keep it in server secrets, never in Git. Losing or changing this key makes stored ciphertext unusable; restore the original key or replace the provider credentials through the GUI. The browser sees status, revision and update time, never the saved secret.
+
+Create, replace, enable, disable and remove operations are tenant scoped and audited. Disabling a stored entry blocks use of that provider even if legacy environment credentials remain configured. Inventory verification and number search use the selected tenant's stored credentials; the DIDWW management proxy also uses its stored key. DIDWW callbacks still require their separate tenant binding and callback secret. Carrier activation, account routing, and a live call require their own commissioning checks.
