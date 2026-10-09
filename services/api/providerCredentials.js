@@ -18,24 +18,27 @@ function unseal(value,key,tenant,provider){
 export async function migrateProviderCredentials(pool){
   await pool.query(`CREATE TABLE IF NOT EXISTS provider_api_credentials (
     tenant_id CHAR(36) NOT NULL,provider VARCHAR(16) NOT NULL,
-    ciphertext BLOB NOT NULL,revision INT UNSIGNED NOT NULL DEFAULT 1,
+    ciphertext BLOB NOT NULL,enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    revision INT UNSIGNED NOT NULL DEFAULT 1,
     updated_by CHAR(36) NOT NULL,updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
       ON UPDATE CURRENT_TIMESTAMP(3),
     PRIMARY KEY(tenant_id,provider),
     FOREIGN KEY(tenant_id) REFERENCES tenants(id),FOREIGN KEY(updated_by) REFERENCES users(id)
   ) ENGINE=InnoDB`);
+  const cols=await pool.query("SHOW COLUMNS FROM provider_api_credentials LIKE 'enabled'");
+  if(!cols.rowCount)await pool.query('ALTER TABLE provider_api_credentials ADD COLUMN enabled BOOLEAN NOT NULL DEFAULT TRUE');
 }
 export async function providerCredentials(pool,tenant,provider){
   const key=masterKey();
   if(!key||!pool||!tenant)return null;
-  const result=await pool.query('SELECT ciphertext FROM provider_api_credentials WHERE tenant_id=$1 AND provider=$2',
+  const result=await pool.query('SELECT ciphertext FROM provider_api_credentials WHERE tenant_id=$1 AND provider=$2 AND enabled=TRUE',
     [tenant,provider]);
   return result.rowCount?unseal(result.rows[0].ciphertext,key,tenant,provider):null;
 }
 export async function handleProviderCredentials({req,res,path,user,pool,send,readJson}){
   if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
   if(path==='/api/admin/carriers/credentials'&&req.method==='GET'){
-    const rows=await pool.query('SELECT provider,revision,updated_at FROM provider_api_credentials WHERE tenant_id=$1',
+    const rows=await pool.query('SELECT provider,revision,enabled,updated_at FROM provider_api_credentials WHERE tenant_id=$1',
       [user.tenant_id]);
     return send(res,200,{entries:rows.rows,keyReady:!!masterKey(),
       note:'Secrets are write-only; verification uses the provider inventory API.'});
@@ -43,10 +46,39 @@ export async function handleProviderCredentials({req,res,path,user,pool,send,rea
   const match=/^\/api\/admin\/carriers\/credentials\/(flowroute|didww)$/.exec(path);
   if(!match)return send(res,404,{error:'Provider credentials route unavailable'});
   const provider=match[1];
+  if(req.method==='PATCH'){
+    const value=await readJson(req);
+    if(typeof value.enabled!=='boolean'||!Number.isSafeInteger(value.expectedRevision)||
+      value.expectedRevision<1||Object.keys(value).some(name=>!['enabled','expectedRevision'].includes(name)))
+      return send(res,400,{error:'Enabled state and current revision required'});
+    const db=await pool.connect();
+    try{
+      await db.query('START TRANSACTION');
+      const old=await db.query('SELECT revision FROM provider_api_credentials WHERE tenant_id=$1 AND provider=$2 FOR UPDATE',
+        [user.tenant_id,provider]);
+      if(!old.rowCount){await db.query('ROLLBACK');return send(res,404,{error:'No stored credentials'});}
+      if(Number(old.rows[0].revision)!==value.expectedRevision){
+        await db.query('ROLLBACK');return send(res,409,{error:'Credentials changed; refresh before updating'});
+      }
+      const revision=value.expectedRevision+1;
+      await db.query('UPDATE provider_api_credentials SET enabled=$1,revision=$2,updated_by=$3 WHERE tenant_id=$4 AND provider=$5',
+        [value.enabled,revision,user.id,user.tenant_id,provider]);
+      await db.query('INSERT INTO security_events(id,tenant_id,actor_id,action) VALUES($1,$2,$3,$4)',
+        [globalThis.crypto.randomUUID(),user.tenant_id,user.id,'provider_credentials_'+provider+(value.enabled?'_enabled':'_disabled')]);
+      await db.query('COMMIT');return send(res,200,{provider,enabled:value.enabled,revision});
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
   if(req.method==='DELETE'){
-    const result=await pool.query('DELETE FROM provider_api_credentials WHERE tenant_id=$1 AND provider=$2',
-      [user.tenant_id,provider]);
-    return send(res,result.rowCount?200:404,result.rowCount?{removed:true}:{error:'No stored credentials'});
+    const db=await pool.connect();
+    try{
+      await db.query('START TRANSACTION');
+      const result=await db.query('DELETE FROM provider_api_credentials WHERE tenant_id=$1 AND provider=$2',
+        [user.tenant_id,provider]);
+      if(result.rowCount)await db.query('INSERT INTO security_events(id,tenant_id,actor_id,action) VALUES($1,$2,$3,$4)',
+        [globalThis.crypto.randomUUID(),user.tenant_id,user.id,'provider_credentials_'+provider+'_removed']);
+      await db.query('COMMIT');
+      return send(res,result.rowCount?200:404,result.rowCount?{removed:true}:{error:'No stored credentials'});
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
   if(req.method!=='PUT')return send(res,405,{error:'PUT required'});
   const key=masterKey();
