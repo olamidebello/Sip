@@ -23,6 +23,24 @@ export async function migrateOperationsPolicy(pool){
     updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
     FOREIGN KEY(node_id) REFERENCES deployment_nodes(id),FOREIGN KEY(updated_by) REFERENCES users(id)
   ) ENGINE=InnoDB`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS wss_balancer_policy (
+    id TINYINT PRIMARY KEY,enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    strategy VARCHAR(16) NOT NULL DEFAULT 'sticky',
+    allow_global_fallback BOOLEAN NOT NULL DEFAULT TRUE,
+    revision INT UNSIGNED NOT NULL DEFAULT 0,
+    updated_by CHAR(36) NULL,updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+      ON UPDATE CURRENT_TIMESTAMP(3),
+    FOREIGN KEY(updated_by) REFERENCES users(id)
+  ) ENGINE=InnoDB`);
+  await pool.query("INSERT IGNORE INTO wss_balancer_policy(id) VALUES(1)");
+  await pool.query(`CREATE TABLE IF NOT EXISTS wss_balancer_policy_history (
+    id CHAR(36) PRIMARY KEY,revision INT UNSIGNED NOT NULL,
+    enabled BOOLEAN NOT NULL,strategy VARCHAR(16) NOT NULL,
+    allow_global_fallback BOOLEAN NOT NULL,actor_id CHAR(36) NOT NULL,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    FOREIGN KEY(actor_id) REFERENCES users(id),
+    INDEX balancer_history(created_at)
+  ) ENGINE=InnoDB`);
   await pool.query(`CREATE TABLE IF NOT EXISTS operations_audit (
     id CHAR(36) PRIMARY KEY,actor_id CHAR(36) NOT NULL,action VARCHAR(40) NOT NULL,
     detail VARCHAR(250) NOT NULL,created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -38,12 +56,42 @@ export async function registrationAllowed(pool,email){
 export async function handleOperationsPolicy({req,res,path,user,pool,send,readJson}){
   if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
   if(path==='/api/admin/operations'&&req.method==='GET'){
-    const [policy,targets,audit]=await Promise.all([
+    const [policy,targets,audit,balancer,history]=await Promise.all([
       pool.query('SELECT open_signup,allowed_domains,updated_at FROM registration_policy WHERE id=1'),
       pool.query('SELECT t.id,t.name,t.region,t.node_id,t.wss_url,t.weight,t.enabled,t.updated_at,n.status AS node_status FROM redirector_targets t JOIN deployment_nodes n ON n.id=t.node_id ORDER BY t.region,t.name LIMIT 200'),
-      pool.query('SELECT action,detail,created_at FROM operations_audit ORDER BY created_at DESC LIMIT 100')]);
+      pool.query('SELECT action,detail,created_at FROM operations_audit ORDER BY created_at DESC LIMIT 100'),
+      pool.query('SELECT enabled,strategy,allow_global_fallback,revision,updated_at FROM wss_balancer_policy WHERE id=1'),
+      pool.query('SELECT revision,enabled,strategy,allow_global_fallback,created_at FROM wss_balancer_policy_history ORDER BY created_at DESC LIMIT 20')]);
     return send(res,200,{registration:policy.rows[0],targets:targets.rows,audit:audit.rows,
+      balancer:balancer.rows[0],balancerHistory:history.rows,
       scope:'HTTPS WSS discovery selects healthy registered switch targets; it does not implement SIP 3xx signaling or call routing.'});
+  }
+  if(path==='/api/admin/operations/balancer'&&req.method==='PUT'){
+    const b=await readJson(req);
+    if(typeof b.enabled!=='boolean'||!['sticky','rotating'].includes(b.strategy)||
+      typeof b.allowGlobalFallback!=='boolean'||!Number.isSafeInteger(b.expectedRevision)||
+      b.expectedRevision<0)return send(res,400,{error:'Valid WSS balancer policy and revision required'});
+    const db=await pool.connect();
+    try{
+      await db.query('START TRANSACTION');
+      const current=(await db.query('SELECT revision FROM wss_balancer_policy WHERE id=1 FOR UPDATE')).rows[0];
+      if(Number(current.revision)!==b.expectedRevision){
+        await db.query('ROLLBACK');return send(res,409,{error:'Balancer policy changed; refresh before saving'});
+      }
+      const revision=b.expectedRevision+1;
+      await db.query('UPDATE wss_balancer_policy SET enabled=$1,strategy=$2,allow_global_fallback=$3,revision=$4,updated_by=$5 WHERE id=1',
+        [b.enabled,b.strategy,b.allowGlobalFallback,revision,user.id]);
+      await db.query('INSERT INTO wss_balancer_policy_history(id,revision,enabled,strategy,allow_global_fallback,actor_id) VALUES($1,$2,$3,$4,$5,$6)',
+        [randomUUID(),revision,b.enabled,b.strategy,b.allowGlobalFallback,user.id]);
+      await db.query('COMMIT');return send(res,200,{revision,enabled:b.enabled});
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
+  if(path==='/api/admin/operations/balancer/preview'&&req.method==='GET'){
+    const requested=new URL(req.url,'http://localhost').searchParams.get('region')||'global';
+    if(!region.test(requested))return send(res,400,{error:'Valid region required'});
+    const selection=await resolveWss(pool,user.id,requested);
+    return send(res,200,{selection,region:requested,
+      scope:'Current discovery decision for this account; this does not establish a SIP or media session'});
   }
   if(path==='/api/admin/operations/registration'&&req.method==='PUT'){
     const b=await readJson(req);
@@ -86,11 +134,15 @@ export async function handleOperationsPolicy({req,res,path,user,pool,send,readJs
   }
   return send(res,404,{error:'Operations route unavailable'});
 }
-export async function resolveWss(pool,userId,region){
-  const results=await pool.query("SELECT t.name,t.region,t.wss_url,t.weight FROM redirector_targets t JOIN deployment_nodes n ON n.id=t.node_id JOIN deployment_report_settings s ON s.id=1 WHERE t.enabled=TRUE AND n.enabled=TRUE AND n.deleted_at IS NULL AND n.status='healthy' AND n.last_seen_at>=DATE_SUB(UTC_TIMESTAMP(3),INTERVAL s.stale_seconds SECOND) AND (t.region=$1 OR t.region='global') ORDER BY t.name LIMIT 100",[region]);
-  const rows=results.rows, total=rows.reduce((sum,row)=>sum+Number(row.weight),0);
+export async function resolveWss(pool,userId,regionName){
+  const policy=(await pool.query('SELECT enabled,strategy,allow_global_fallback FROM wss_balancer_policy WHERE id=1')).rows[0];
+  if(!policy?.enabled)return null;
+  const results=await pool.query("SELECT t.name,t.region,t.wss_url,t.weight FROM redirector_targets t JOIN deployment_nodes n ON n.id=t.node_id JOIN deployment_report_settings s ON s.id=1 WHERE t.enabled=TRUE AND n.enabled=TRUE AND n.deleted_at IS NULL AND n.status='healthy' AND n.last_seen_at>=DATE_SUB(UTC_TIMESTAMP(3),INTERVAL s.stale_seconds SECOND) AND (t.region=$1 OR ($2=TRUE AND t.region='global')) ORDER BY t.name LIMIT 100",
+    [regionName,!!policy.allow_global_fallback]);
+  const rows=results.rows,total=rows.reduce((sum,row)=>sum+Number(row.weight),0);
   if(!total)return null;
-  let index=createHash('sha256').update(userId+':'+region).digest().readUInt32BE(0)%total;
+  const bucket=policy.strategy==='rotating'?':'+Math.floor(Date.now()/60000):'';
+  let index=createHash('sha256').update(userId+':'+regionName+bucket).digest().readUInt32BE(0)%total;
   for(const row of rows){index-=Number(row.weight);if(index<0)return {name:row.name,region:row.region,wssUrl:row.wss_url};}
   return null;
 }
