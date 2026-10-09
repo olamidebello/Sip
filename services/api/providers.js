@@ -1,4 +1,5 @@
 import { parseUsdCents } from "./billing.js";
+import {providerCredentials} from "./providerCredentials.js";
 
 const uuid = /^[0-9a-f-]{36}$/i;
 async function providerJson(url, headers) {
@@ -10,10 +11,11 @@ async function providerJson(url, headers) {
   return response.json();
 }
 
-export async function availableNumbers(provider) {
+export async function availableNumbers(provider,context={}) {
+  const stored=await providerCredentials(context.pool,context.tenant,provider);
   if (provider === "flowroute") {
-    const key = process.env.FLOWROUTE_ACCESS_KEY;
-    const secret = process.env.FLOWROUTE_SECRET_KEY;
+    const key = stored?.accessKey || process.env.FLOWROUTE_ACCESS_KEY;
+    const secret = stored?.secretKey || process.env.FLOWROUTE_SECRET_KEY;
     if (!key || !secret) throw new Error("Flowroute is not configured");
     const payload = await providerJson("https://api.flowroute.com/v2.1/numbers/available?limit=20", {
       Authorization: "Basic " + Buffer.from(key + ":" + secret).toString("base64"),
@@ -26,10 +28,10 @@ export async function availableNumbers(provider) {
     }));
   }
   if (provider === "didww") {
-    const key = process.env.DIDWW_API_KEY;
+    const key = stored?.apiKey || process.env.DIDWW_API_KEY;
     if (!key || process.env.DIDWW_ACCOUNT_CURRENCY !== "USD")
       throw new Error("DIDWW USD inventory is not configured");
-    if (!["sandbox","production"].includes(process.env.DIDWW_API_ENV))
+    if (!["sandbox","production"].includes((stored?.environment || process.env.DIDWW_API_ENV)))
       throw new Error("DIDWW environment is not configured");
     const payload = await providerJson(
       `${process.env.DIDWW_API_ENV === "sandbox" ? "https://sandbox-api.didww.com" : "https://api.didww.com"}/v3/available_dids?include=did_group.stock_keeping_units&page[size]=20`,
