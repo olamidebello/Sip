@@ -54,8 +54,8 @@ export function setupSwitchAdmin(){
         button.onclick=async()=>{button.disabled=true;try{await api('/api/admin/switch/activate','POST',{userId:account.user_id});await refresh();}
           catch(e){status.textContent=e.message;button.disabled=false;}};li.append(button);list.append(li);
       }
-      status.textContent=(cfg?.enabled?'Tenant switch enabled':'Tenant switch disabled')+
-        ' · '+(switchState.configured?'XML credentials configured':'XML credentials missing')+
+      status.textContent=(cfg?.enabled?'Tenant SIP lookups enabled':'Tenant SIP lookups disabled')+
+        ' · '+(switchState.configured?'Kamailio credentials configured':'Kamailio credentials missing')+
         ' · '+Number(switchState.accounts.active)+' active of '+Number(switchState.accounts.total)+' SIP accounts.';
       await readiness();
     }catch(e){status.textContent=e.message;}
