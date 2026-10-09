@@ -15,6 +15,7 @@ const navigationHints = {
   billing:'Plans, wallet and number inventory.',
   'dialplan-marketplace':'Browse and publish dial plans.',
   account:'Profile, password and sign-in security.',
+  'help-preferences':'Choose when hints, field tips and guide buttons appear.',
   'locale-settings':'Your language and currency preferences.',
   'background-user':'Personalize your workspace.',
   downloads:'Get available desktop and mobile apps.',
@@ -73,15 +74,36 @@ const formHints = {
 
 const clean = value => String(value || '').replace(/\s+/g,' ').trim();
 const adminGuide = id => /admin|carrier|switch|operator|cluster|fleet|pricing|charging|payment|ldap|webhook|didww|adapter|server/.test(id);
+let preferences={showHints:true,showGuides:true,showFieldHints:true,detail:'standard',overrides:{}};
+const hintFor=(id,fallback)=>preferences.overrides?.[id]?.hint||fallback;
+const displayHint=(value)=>preferences.detail==='brief'?value.split(/(?<=[.!?])\s/)[0]:value;
+
+export function applyUiPreferences(next,root=document){
+  preferences=next;
+  root.body.classList.toggle('ui-no-hints',!next.showHints);
+  root.body.classList.toggle('ui-no-guides',!next.showGuides);
+  root.body.classList.toggle('ui-no-field-hints',!next.showFieldHints);
+  for(const small of root.querySelectorAll('.nav-hint')){
+    const link=small.closest('a'),id=link?.hash?.slice(1)||decodeURIComponent(link?.getAttribute('href')?.replace('/pages/','')||'');
+    const hint=displayHint(hintFor(id,navigationHints[id]||formHints[id]||'Open this page to review its controls.'));
+    small.textContent=hint;if(link?.dataset.autoHintTitle)link.title=next.showHints?hint:'';
+  }
+  for(const p of root.querySelectorAll('p.form-hint')){
+    const form=p.closest('form'),id=form?.id;
+    if(!id)continue;
+    const fallback=form.dataset.defaultHint||'';
+    const copy=p.querySelector('.hint-copy');if(copy)copy.textContent=displayHint(hintFor(id,fallback));
+  }
+}
 
 export function guideFor(id,form){
   const heading=clean(form?.querySelector(':scope > h2, :scope > h3, :scope > h4')?.textContent);
   const action=clean(form?.querySelector('button[type="submit"],button:not([type])')?.textContent);
   const title=heading||clean(form?.getAttribute('aria-label'))||id.replaceAll('-',' ');
-  const description=formHints[id]||navigationHints[id]||'Review this page and its available controls before making changes.';
+  const description=hintFor(id,formHints[id]||navigationHints[id]||'Review this page and its available controls before making changes.');
   const fields=form?[...form.querySelectorAll('input:not([type="hidden"]),select,textarea')]
     .map(input=>clean(input.closest('label')?.childNodes[0]?.textContent)).filter(Boolean).slice(0,8):[];
-  return {title,description,fields,action,related:adminGuide(id)?'help-admin':'help-user'};
+  return {title,description,fields,action,related:preferences.overrides?.[id]?.guide||(adminGuide(id)?'help-admin':'help-user')};
 }
 
 function addGuideControl(link,id){
@@ -95,19 +117,19 @@ function addGuideControl(link,id){
 
 export function describeNavigation(nav) {
   for(const link of nav.querySelectorAll('.menu-links a[href^="#"]')) {
-    const id=link.hash.slice(1),hint=navigationHints[id];
+    const id=link.hash.slice(1),hint=hintFor(id,navigationHints[id]);
     if(!hint || link.querySelector('.nav-hint')) continue;
     const small=document.createElement('small');small.className='nav-hint';small.textContent=hint;
     link.append(small);
-    link.title=hint;
+    link.title=hint;link.dataset.autoHintTitle='true';
   }
   for(const link of nav.querySelectorAll('a[href^="#"]'))addGuideControl(link,link.hash.slice(1));
   for(const link of nav.querySelectorAll('.page-links a[href^="/pages/"]')) {
     if(link.querySelector('.nav-hint')) continue;
     const id=decodeURIComponent(link.getAttribute('href').slice('/pages/'.length));
-    const hint=formHints[id] || 'Open this form to review its fields and action.';
+    const hint=hintFor(id,formHints[id] || 'Open this form to review its fields and action.');
     const small=document.createElement('small');small.className='nav-hint';small.textContent=hint;
-    link.append(small);link.title=hint;
+    link.append(small);link.title=hint;link.dataset.autoHintTitle='true';
   }
   for(const link of nav.querySelectorAll('.page-links a[href^="/pages/"]'))
     addGuideControl(link,decodeURIComponent(link.getAttribute('href').slice('/pages/'.length)));
@@ -129,7 +151,9 @@ function describeForm(form) {
   const hint=formHints[form.id] ||
     (action ? `Review the fields, then choose “${action}”. Required fields are checked before submission.` :
       'Review the fields and required values before saving.');
-  const p=document.createElement('p');p.className='form-hint';p.id=`${form.id}-hint`;p.textContent=hint;
+  form.dataset.defaultHint=hint;
+  const p=document.createElement('p');p.className='form-hint';p.id=`${form.id}-hint`;
+  const copy=document.createElement('span');copy.className='hint-copy';copy.textContent=displayHint(hintFor(form.id,hint));p.append(copy);
   const guide=document.createElement('button');guide.type='button';guide.className='contextual-guide-link';
   guide.dataset.guideTarget=form.id;guide.textContent='Open form guide';p.append(' ',guide);
   const heading=form.querySelector(':scope > h2, :scope > h3, :scope > h4');

@@ -47,6 +47,7 @@ import {migratePrepaidAuthorizer} from './prepaidAuthorizer.js';
 import {migrateBillingControl} from './billingControl.js';
 import {migrateMeetingInvitations} from './meetingInvitations.js';
 import {migrateMeetingPolicy} from './meetingPolicy.js';
+import {migrateHelpPreferences} from './helpPreferences.js';
 
 const sql = filename => fs.readFile(new URL(filename, import.meta.url), 'utf8');
 
@@ -68,6 +69,7 @@ export async function migrate(pool) {
       ['tenancy', () => migrateTenancy(pool)],
       ['meeting_invitations', () => migrateMeetingInvitations(pool)],
       ['meeting_policy', () => migrateMeetingPolicy(pool)],
+      ['help_preferences', () => migrateHelpPreferences(pool)],
       ['access', () => migrateAccess(pool)],
       ['onboarding', () => migrateOnboarding(pool)],
       ['sip_marketplace', () => migrateSipMarketplace(pool)],

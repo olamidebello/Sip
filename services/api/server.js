@@ -57,6 +57,7 @@ import { availableNumbers } from "./providers.js";
 import { attachMeetingSignaling } from "./meetings.js";
 import {inviteMeeting} from './meetingInvitations.js';
 import {meetingPolicy,saveMeetingPolicy} from './meetingPolicy.js';
+import {handleHelpPreferences} from './helpPreferences.js';
 import { validateFeatures, effectiveFeatures } from "./permissions.js";
 import {
   verifyPassword, createSessionToken, tokenHash
@@ -352,6 +353,7 @@ async function handler(req, res) {
         }
         return send(res,405,{error:'GET or PUT required'});
       }
+      if(path==='/api/help/preferences')return await handleHelpPreferences({req,res,user,pool,send,readJson});
       if(path==='/api/admin/meeting-rooms'&&req.method==='GET'){
         if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
         const rows=await pool.query(`SELECT m.id,m.title,m.locked,m.created_at,m.host_id,u.display_name AS host_name

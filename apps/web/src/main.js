@@ -35,7 +35,7 @@ import { setupInstall } from "./install.js";
 import { setupDownloads } from "./downloads.js";
 import { setupCarrierControl } from "./carrierControl.js";
 import { setupFormGroups } from "./formGroups.js";
-import { setupUiHints,guideFor } from "./uiHints.js";
+import { setupUiHints,guideFor,applyUiPreferences } from "./uiHints.js";
 import { setupPageRoutes, pageId } from "./pageRoutes.js";
 import { contactEmailsFromCsv, contactsToCsv } from "./contactsCsv.js";
 import { setupDashboard } from "./dashboard.js";
@@ -171,6 +171,24 @@ root.innerHTML = `
     </form>
     <button id="logout" hidden>Sign out</button>
     <p id="account-status" role="status">Not signed in</p>
+    <section id="help-preferences" hidden><h3>Hints and guide links</h3>
+      <p>Choose how guidance appears in your workspace. Your choices are saved to your account.</p>
+      <form id="help-preferences-form">
+        <label><input name="showHints" type="checkbox"> Show navigation and form hints</label>
+        <label><input name="showGuides" type="checkbox"> Show guide buttons</label>
+        <label><input name="showFieldHints" type="checkbox"> Show field tips</label>
+        <label>Hint detail <select name="detail"><option value="standard">Detailed</option><option value="brief">Brief</option></select></label>
+        <button type="submit">Save display settings</button>
+      </form>
+      <form id="help-override-form"><h4>Customize one hint and guide</h4>
+        <label>Page or form <select name="target" required></select></label>
+        <label>Custom hint <textarea name="hint" maxlength="240" placeholder="Write a short helpful description"></textarea></label>
+        <label>Guide destination <select name="guide"><option value="help-user">User tutorial</option><option value="help-admin">Administrator tutorial</option><option value="help-technical">Technical guide</option></select></label>
+        <button type="submit">Save custom guidance</button><button id="help-override-remove" type="button">Restore this hint</button>
+      </form>
+      <button id="help-preferences-reset" type="button">Restore all guidance defaults</button>
+      <p id="help-preferences-status" role="status"></p>
+    </section>
     <form id="password-change" hidden>
       <h3>Change password</h3>
       <label>Current password <input name="currentPassword" type="password" autocomplete="current-password" required></label>
@@ -1169,7 +1187,7 @@ const navigationGroups=[
   {label:"Workspace",items:[["dashboard","Dashboard"],["campaign-inbox-panel","Announcements"],["planner","Events & tasks"],["search-panel","Search"],["support","Support tickets"],["help","Help & tutorials"]]},
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
-  {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
+  {label:"My settings",items:[["account","Account & security"],["help-preferences","Hints & guides"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
   {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio SIP"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["rating-admin","Call rating"],["settlement-admin","Carrier settlements"],["payment-admin","Stripe gateway"],["cluster-admin","Cluster & capacity"],["live-calls-admin","Live calls"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
@@ -1316,6 +1334,59 @@ const authProviders = setupAuthProviders();
 const catalogControl = setupCatalogControl();
 setupInstall();
 setupUiHints(document,{openGuide:showContextGuide});
+let helpPreferences={showHints:true,showGuides:true,showFieldHints:true,detail:'standard',overrides:{}};
+function renderHelpPreferences(){
+  applyUiPreferences(helpPreferences);
+  const form=$('#help-preferences-form');
+  for(const key of ['showHints','showGuides','showFieldHints'])form.elements[key].checked=helpPreferences[key];
+  form.elements.detail.value=helpPreferences.detail;
+  const select=$('#help-override-form').elements.target,current=select.value;
+  {
+    for(const item of document.querySelectorAll('#app-nav a[href^="#"],form[id]')){
+      const id=item.tagName==='FORM'?item.id:item.hash.slice(1);
+      if(!/^[a-z][a-z0-9-]{0,79}$/.test(id)||select.querySelector(`option[value="${id}"]`))continue;
+      const option=document.createElement('option');option.value=id;option.textContent=id.replaceAll('-',' ');select.append(option);
+    }
+  }
+  if(current)select.value=current;
+  showSelectedHelpOverride();
+}
+function showSelectedHelpOverride(){
+  const form=$('#help-override-form'),value=helpPreferences.overrides?.[form.elements.target.value];
+  form.elements.hint.value=value?.hint||'';
+  form.elements.guide.value=value?.guide||'help-user';
+}
+async function refreshHelpPreferences(){
+  helpPreferences=await apiGet('/api/help/preferences');renderHelpPreferences();
+}
+$('#help-override-form').elements.target.onchange=showSelectedHelpOverride;
+$('#help-preferences-form').onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget;
+  const next={...helpPreferences,showHints:form.elements.showHints.checked,showGuides:form.elements.showGuides.checked,
+    showFieldHints:form.elements.showFieldHints.checked,detail:form.elements.detail.value};
+  try{helpPreferences=await accountRequest('/api/help/preferences',next,'PUT');renderHelpPreferences();
+    $('#help-preferences-status').textContent='Display settings saved';}
+  catch(error){$('#help-preferences-status').textContent=error.message;}
+};
+$('#help-override-form').onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,id=form.elements.target.value;
+  const next={...helpPreferences,overrides:{...helpPreferences.overrides,[id]:{
+    hint:form.elements.hint.value.trim(),guide:form.elements.guide.value}}};
+  try{helpPreferences=await accountRequest('/api/help/preferences',next,'PUT');renderHelpPreferences();
+    $('#help-preferences-status').textContent='Custom hint and guide saved';}
+  catch(error){$('#help-preferences-status').textContent=error.message;}
+};
+$('#help-override-remove').onclick=async()=>{
+  const id=$('#help-override-form').elements.target.value,overrides={...helpPreferences.overrides};delete overrides[id];
+  try{helpPreferences=await accountRequest('/api/help/preferences',{...helpPreferences,overrides},'PUT');
+    renderHelpPreferences();$('#help-preferences-status').textContent='Default hint restored';}
+  catch(error){$('#help-preferences-status').textContent=error.message;}
+};
+$('#help-preferences-reset').onclick=async()=>{
+  try{helpPreferences=await accountRequest('/api/help/preferences',undefined,'DELETE');renderHelpPreferences();
+    $('#help-preferences-status').textContent='All guidance defaults restored';}
+  catch(error){$('#help-preferences-status').textContent=error.message;}
+};
 function showContextGuide(id){
   const target=document.getElementById(id);
   if(!target)return;
@@ -1328,8 +1399,10 @@ function showContextGuide(id){
     guide.action?`Review your entries, then choose “${guide.action}” when ready.`:'Read the available actions and choose the one you need.',
     'Check the result or status message. If service activation is required, verify it separately before relying on it.'];
   $('#help-context-steps').replaceChildren(...steps.map(step=>{const li=document.createElement('li');li.textContent=step;return li;}));
-  const tutorial=$('#help-context-tutorial');tutorial.href=`#${guide.related==='help-admin'&&activeRole?guide.related:'help-user'}`;
-  tutorial.textContent=tutorial.hash==='#help-admin'?'Read the administrator tutorial':'Read the user tutorial';
+  const tutorial=$('#help-context-tutorial');
+  tutorial.href=`#${guide.related==='help-admin'&&!['admin','super_admin'].includes(activeRole)?'help-user':guide.related}`;
+  tutorial.textContent=tutorial.hash==='#help-admin'?'Read the administrator tutorial':
+    tutorial.hash==='#help-technical'?'Read the technical guide':'Read the user tutorial';
   if(activeRole)showWorkspace('help');
   context.scrollIntoView({behavior:'smooth',block:'start'});context.focus({preventScroll:true});
 }
@@ -1753,6 +1826,8 @@ function signedIn(user) {
   background.refresh(["admin","super_admin"].includes(user.role));
   $("#password-change").hidden = user.authSource==="ldap";
   $("#account-status").textContent = `Signed in as ${user.name}`;
+  $('#help-preferences').hidden=false;
+  refreshHelpPreferences().catch(error=>{$('#help-preferences-status').textContent=error.message;});
   $("#chat").hidden = !user.features?.messaging;
   $("#billing").hidden = !user.features?.billing;
   if (user.features?.meetings) meetings.show();
@@ -2385,6 +2460,8 @@ $("#logout").onclick = async () => {
     meetings.hide();
     $("#agent-panel").hidden = true;
     $("#admin").hidden = true;
+    $('#help-preferences').hidden=true;
+    applyUiPreferences({showHints:true,showGuides:true,showFieldHints:true,detail:'standard',overrides:{}});
     $("#message-list").replaceChildren();
     $("#account-status").textContent = "Signed out";
     updateNavigation();
