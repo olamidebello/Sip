@@ -92,8 +92,9 @@ export async function handleLiveCallsAdmin({req,res,path,user,pool,send,readJson
     const totals=await pool.query(`SELECT COUNT(*) AS recent_events,MAX(received_at) AS last_received
       FROM live_call_events e JOIN live_call_sessions s ON s.id=e.session_id
       WHERE s.tenant_id=$1 AND e.received_at >= UTC_TIMESTAMP(3)-INTERVAL 5 MINUTE`,[user.tenant_id]);
-    return send(res,200,{calls:active.rows,source:{recentEvents:Number(totals.rows[0]?.recent_events||0),
-      lastReceived:totals.rows[0]?.last_received||null},note:'Only signed switch events appear here. Calls without a heartbeat for two minutes are excluded; no switch control is available.'});
+    const recentEvents=Number(totals.rows[0]?.recent_events||0);
+    return send(res,200,{calls:active.rows,source:{recentEvents,
+      lastReceived:totals.rows[0]?.last_received||null,feedReady:recentEvents>0},note:'Only signed switch events appear here. Calls without a heartbeat for two minutes are excluded; no switch control is available.'});
   }
   const match=/^\/api\/admin\/live-calls\/([0-9a-f-]{36})\/(notes|history)$/.exec(path);
   if(!match||!uuid.test(match[1]))return send(res,404,{error:'Call unavailable'});

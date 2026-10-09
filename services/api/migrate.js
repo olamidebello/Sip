@@ -40,6 +40,7 @@ import { migrateMessagingWebhooks } from './messagingWebhooks.js';
 import { migrateFlowrouteRates } from './flowrouteRates.js';
 import {migrateAiConfiguration} from './aiConfiguration.js';
 import {migrateLiveCalls} from './liveCalls.js';
+import {migrateSettlements} from './settlements.js';
 
 const sql = filename => fs.readFile(new URL(filename, import.meta.url), 'utf8');
 
@@ -101,6 +102,7 @@ export async function migrate(pool) {
       ['support', () => migrateSupport(pool)],
       ['ai_support_configuration', () => migrateAiConfiguration(pool)],
       ['live_call_monitor', () => migrateLiveCalls(pool)],
+      ['carrier_settlements', () => migrateSettlements(pool)],
       ['locales', () => migrateLocales(pool)]
     ];
     for (const [name, action] of steps) {

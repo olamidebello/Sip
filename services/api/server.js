@@ -26,6 +26,7 @@ import { handleHelpAgent } from './helpAgent.js';
 import {handleAiConfiguration} from './aiConfiguration.js';
 import { handleFlowrouteWebhook, handleMessagingWebhookAdmin, handleExternalSms, handleSmsNumberAdmin } from './messagingWebhooks.js';
 import { handleCharging } from './charging.js';
+import { handleSettlements } from './settlements.js';
 import { createDatabase } from "./db.js";
 import { handleMobileAdmin } from "./mobileAdmin.js";
 import { handlePbx } from "./pbx.js";
@@ -280,6 +281,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/carriers/credentials')) return await handleProviderCredentials({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/carriers')) return await handleCarrierProviders({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/charging/overview') return await handleCharging({req,res,user,pool,send});
+      if(path.startsWith('/api/admin/settlements')) return await handleSettlements({req,res,path,user,pool,send,readJson});
       if (path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales")
         return await handleLocales({req,res,path,user,pool,send,readJson});
       if (path==="/api/search") return await handleSearch({req,res,user,pool,send});

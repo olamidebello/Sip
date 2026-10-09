@@ -701,6 +701,17 @@ root.innerHTML = `
       <nav class="auth-pages" aria-label="Charging administration"><a href="#pbx-admin">Rate deck and routing</a><a href="#cdr-admin">Call records</a><a href="#pricing-admin">DID pricing</a><a href="#report-admin">Reports</a><a href="#carrier-admin">Carriers</a></nav>
       <p id="charging-status" role="status"></p>
     </section>
+    <section id="settlement-admin"><h3>Carrier statement reconciliation</h3>
+      <p>Record a carrier statement against your independently reviewed expected amount. Approval requires a second super administrator and matching totals. This does not pay the carrier or bill subscribers.</p>
+      <form id="settlement-create"><label>Carrier ID <input name="provider" required pattern="[a-z][a-z0-9-]{1,15}" placeholder="flowroute"></label>
+        <label>Statement reference <input name="externalReference" required maxlength="100" placeholder="Carrier invoice ID"></label>
+        <label>From (UTC) <input name="periodFrom" type="date" required></label><label>To (UTC) <input name="periodTo" type="date" required></label>
+        <label>Expected USD cents <input name="expectedCents" type="number" min="0" step="1" required></label>
+        <label>Carrier USD cents <input name="carrierCents" type="number" min="0" step="1" required></label>
+        <label>Review note <textarea name="note" maxlength="1000" required></textarea></label><button>Create draft</button></form>
+      <button id="settlement-refresh" type="button">Refresh statements</button><ol id="settlement-list"></ol><h4>Disputes</h4><ol id="settlement-disputes"></ol>
+      <p id="settlement-status" role="status"></p>
+    </section>
     <section id="cdr-admin">
       <h3>Imported call records</h3>
       <p>Verified switch records only. These are unrated and never charge a customer.</p>
@@ -1114,7 +1125,7 @@ const navigationGroups=[
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
-  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio SIP"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","Cluster & capacity"],["live-calls-admin","Live calls"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
+  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio SIP"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["settlement-admin","Carrier settlements"],["payment-admin","Stripe gateway"],["cluster-admin","Cluster & capacity"],["live-calls-admin","Live calls"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
   {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"]]}
@@ -2149,6 +2160,33 @@ async function refreshCharging(){
   $("#charging-status").textContent=summary.note;
 }
 $("#charging-refresh").onclick=()=>refreshCharging().catch(error=>{$("#charging-status").textContent=error.message;});
+async function refreshSettlements(){
+  const data=await apiGet('/api/admin/settlements');
+  const list=$("#settlement-list");list.replaceChildren();
+  for(const item of data.settlements){
+    const li=document.createElement('li');
+    li.append(document.createTextNode(`${item.provider} · ${item.external_reference} · ${String(item.period_from).slice(0,10)} to ${String(item.period_to).slice(0,10)} · expected ${item.expected_cents} / carrier ${item.carrier_cents} ${item.currency} cents · ${item.status} `));
+    const actions=item.status==='draft'?['submit']:item.status==='in_review'?['approve','dispute']:item.status==='disputed'?['resolve']:[];
+    for(const action of actions){const button=document.createElement('button');button.type='button';button.textContent=action[0].toUpperCase()+action.slice(1);
+      button.onclick=async()=>{let body={};if(action==='dispute'||action==='resolve'){
+        const value=window.prompt(action==='dispute'?'Reason for dispute':'Resolution note');
+        if(value===null)return;body=action==='dispute'?{reason:value}:{resolution:value};
+      }
+      button.disabled=true;try{await accountRequest(`/api/admin/settlements/${item.id}/${action}`,body);await refreshSettlements();}
+      catch(error){$("#settlement-status").textContent=error.message;button.disabled=false;}};li.append(button);}
+    list.append(li);
+  }
+  $("#settlement-disputes").replaceChildren(...data.disputes.map(dispute=>{
+    const li=document.createElement('li');li.textContent=`${dispute.status}: ${dispute.reason}${dispute.resolution?' — '+dispute.resolution:''}`;return li;}));
+  $("#settlement-status").textContent=data.note;
+}
+$("#settlement-create").onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,input=Object.fromEntries(new FormData(form));
+  try{await accountRequest('/api/admin/settlements',{...input,expectedCents:Number(input.expectedCents),carrierCents:Number(input.carrierCents)});
+    form.reset();await refreshSettlements();}
+  catch(error){$("#settlement-status").textContent=error.message;}
+};
+$("#settlement-refresh").onclick=()=>refreshSettlements().catch(error=>{$("#settlement-status").textContent=error.message;});
 $("#dialplan-refresh").onclick=refreshDialplans;
 $("#dialplan-admin-create").onsubmit=async event=>{
   event.preventDefault();const form=event.currentTarget;const data=Object.fromEntries(new FormData(form));

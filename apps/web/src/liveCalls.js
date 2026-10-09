@@ -16,7 +16,7 @@ export function setupLiveCalls({get,request}){
     const data=await get('/api/admin/live-calls');
     const calls=data.calls||[];
     $('live-call-summary').textContent=`${calls.length} recently reported calls · ${calls.filter(call=>call.status==='answered').length} answered · ${data.source.recentEvents} signed events in five minutes`;
-    status.textContent=data.source.recentEvents?data.note:'No recent signed switch events. Live monitoring is waiting for the switch event feed; this is not proof that calls are idle.';
+    status.textContent=data.source.feedReady?data.note:'Feed offline or idle: no signed events in five minutes. Check the local event forwarder and switch event producer; this is not proof that calls are idle.';
     list.replaceChildren(...calls.map(call=>{
       const li=document.createElement('li'),button=document.createElement('button');button.type='button';
       button.textContent=`${call.status} · ${call.direction} · ${call.caller} → ${call.callee} · ${call.source} · ${new Date(call.started_at).toLocaleString()}`;
