@@ -629,3 +629,9 @@ Discovery returns only enabled targets attached to fresh healthy switch nodes. T
 ### Trunk management updates
 
 The PBX trunk list now has name, host and transport search, a detail view with linked carrier profiles and rates, and the existing edit, history, export, batch preview enable/disable and guarded delete actions. Trunk toggles update planning state only. Carrier activation through the private adapter and live SIP verification remain separate.
+
+### SIP and carrier commissioning gate
+
+Run `bash deploy/kamailio/commission-check.sh` as root from the updated staging checkout on the target Debian host. The report is read-only and lists installed packages, systemd state, private API health, installed Kamailio syntax, loopback-only listener and the carrier dispatch blocker. An exit code of zero means host checks passed; it is **not** a successful carrier call or traffic cutover.
+
+The current `adapter.cfg.j2` binds only `127.0.0.1:5062` and deliberately returns 503 for carrier destinations. The pilot API and loopback challenge smoke test do not prove live registration, trunk authentication, RTP, NAT, inbound routing, CDR or charging. To commission external traffic, obtain the carrier's documented SIP peering details, IP allowlists or credentials, DID destinations and codec requirements; configure a public SIP edge and RTPengine network interfaces and ports; then test authenticated registrations, outbound and inbound calls, two-way audio, failover and reconciled CDRs with a real carrier test account before enabling production routing. Keep provider keys in the encrypted admin store or server secrets, not in Git.
