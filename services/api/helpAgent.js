@@ -1,5 +1,6 @@
 const maxQuestion=1200;
 const attempts=new Map();
+import {aiSupportKey} from './aiConfiguration.js';
 export const helpFacts=`Olamide is a browser SIP account workspace. Calling needs an activated SIP account and a real WSS switch endpoint; the website does not itself provide a telephone carrier.
 Registration verifies email before account activation. A SIP identity may be created, but switch credentials require a configured provisioning adapter. A temporary super administrator password must be changed before privileged operations.
 Account messages are between Olamide users. External SMS uses an administrator-assigned Flowroute messaging-enabled number, an allowance, and private Flowroute API credentials. MMS attachment download is not implemented.
@@ -16,8 +17,8 @@ export function extractAnswer(payload){
   if(!text||text.length>5000)throw new Error('Invalid assistant reply');
   return text;
 }
-export async function handleHelpAgent({req,res,user,send,readJson,fetchImpl=fetch}){
-  const key=process.env.OPENAI_SUPPORT_API_KEY||process.env.OPENAI_API_KEY;
+export async function handleHelpAgent({req,res,user,pool,send,readJson,fetchImpl=fetch}){
+  const key=pool?await aiSupportKey(pool):process.env.OPENAI_SUPPORT_API_KEY||process.env.OPENAI_API_KEY;
   if(req.method==='GET')return send(res,200,{available:!!key});
   if(req.method!=='POST')return send(res,405,{error:'Unsupported help action'});
   if(!key)return send(res,503,{error:'AI support is not configured. Open a support ticket for help.'});

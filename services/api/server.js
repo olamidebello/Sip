@@ -23,6 +23,7 @@ import {handleCampaigns} from './campaigns.js';
 import {effectivePasskeyMode,passkeyGate,handlePasskeyPolicy} from './passkeyPolicy.js';
 import { handleFlowrouteRates } from './flowrouteRates.js';
 import { handleHelpAgent } from './helpAgent.js';
+import {handleAiConfiguration} from './aiConfiguration.js';
 import { handleFlowrouteWebhook, handleMessagingWebhookAdmin, handleExternalSms, handleSmsNumberAdmin } from './messagingWebhooks.js';
 import { handleCharging } from './charging.js';
 import { createDatabase } from "./db.js";
@@ -262,7 +263,8 @@ async function handler(req, res) {
         return await handleSipProfiles({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin)});
       if(path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/'))
         return await handleSipMarketplace({req,res,path,user,pool,send,readJson});
-      if(path==='/api/help/agent') return await handleHelpAgent({req,res,user,send,readJson});
+      if(path==='/api/admin/ai-support')return await handleAiConfiguration({req,res,user,pool,send,readJson});
+      if(path==='/api/help/agent') return await handleHelpAgent({req,res,user,pool,send,readJson});
       if(path.startsWith('/api/admin/rates/flowroute') || path==='/api/rates/flowroute/search')
         return await handleFlowrouteRates({req,res,path,user,pool,send});
       if(path==='/api/admin/messaging/numbers') return await handleSmsNumberAdmin({req,res,path,user,pool,send,readJson});

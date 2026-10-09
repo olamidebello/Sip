@@ -38,6 +38,7 @@ import { migratePasskeyPolicy } from './passkeyPolicy.js';
 import { migrateTrunkManagement } from './trunkManagement.js';
 import { migrateMessagingWebhooks } from './messagingWebhooks.js';
 import { migrateFlowrouteRates } from './flowrouteRates.js';
+import {migrateAiConfiguration} from './aiConfiguration.js';
 
 const sql = filename => fs.readFile(new URL(filename, import.meta.url), 'utf8');
 
@@ -97,6 +98,7 @@ export async function migrate(pool) {
       ['campaigns', () => migrateCampaigns(pool)],
       ['passkey_policy', () => migratePasskeyPolicy(pool)],
       ['support', () => migrateSupport(pool)],
+      ['ai_support_configuration', () => migrateAiConfiguration(pool)],
       ['locales', () => migrateLocales(pool)]
     ];
     for (const [name, action] of steps) {

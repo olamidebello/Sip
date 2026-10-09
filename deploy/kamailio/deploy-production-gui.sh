@@ -25,6 +25,11 @@ image=$(docker inspect -f '{{.Config.Image}}' docker-api-1 2>/dev/null || true)
 [[ $image == olamide-api:local ]] || {
   echo 'Expected the existing docker-api-1 production project' >&2; exit 2;
 }
+if ! grep -q '^AI_CONFIG_KEY=' "$env_file"; then
+  umask 077
+  printf 'AI_CONFIG_KEY=%s\n' "$(openssl rand -hex 32)" >> "$env_file"
+  chmod 0600 "$env_file"
+fi
 compose() { docker compose --project-name "$project" --env-file "$env_file" -f "$staging/deployment/docker/compose.yml" "$@"; }
 old_compose() { docker compose --project-name "$project" --env-file "$env_file" -f "$production/deployment/docker/compose.yml" "$@"; }
 compose config --quiet

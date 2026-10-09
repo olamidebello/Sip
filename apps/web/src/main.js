@@ -121,6 +121,10 @@ root.innerHTML = `
       <form id="help-automation"><label>Automation goal <textarea name="question" maxlength="1200" minlength="3" placeholder="For example: schedule a tenant announcement and a follow-up task" required></textarea></label><button>Draft setup steps</button></form>
       <div id="help-automation-answer" role="status" aria-live="polite" class="automation-answer"></div>
       <nav class="help-links" aria-label="Automation controls"><a href="#planner">Events &amp; tasks</a><a href="#campaign-admin" class="automation-admin-link">Tenant campaigns</a><a href="#fleet-admin" class="automation-admin-link">Server operations</a><a href="#support">Support tickets</a></nav>
+      <section id="help-ai-config" hidden><h4>Super admin AI setup</h4><p>Enter an OpenAI API key after deployment. It is encrypted on the server and never shown again. Existing keys are replaced when you save a new one.</p>
+        <form id="help-ai-key-form" autocomplete="off"><label>OpenAI API key <input name="apiKey" type="password" autocomplete="new-password" minlength="20" maxlength="256" required></label><button>Save AI key</button></form>
+        <button id="help-ai-key-refresh" type="button">Refresh key status</button><button id="help-ai-key-remove" type="button">Remove stored key</button><p id="help-ai-key-status" role="status"></p>
+      </section>
       <button id="help-ticket" type="button">Open a support ticket</button>
     </section>
   </section>
@@ -1639,6 +1643,8 @@ function signedIn(user) {
     $('#help-agent-status').textContent=available?'Ask a question about using Olamide.':'AI support is not configured. Open a support ticket for help.';
   }).catch(error=>{$('#help-agent-status').textContent=error.message;});
   document.querySelectorAll('.automation-admin-link').forEach(link=>link.hidden=!['admin','super_admin'].includes(user.role));
+  $('#help-ai-config').hidden=user.role!=='super_admin';
+  if(user.role==='super_admin')refreshAiKeyStatus();
   $('#help-admin').hidden=!['admin','super_admin'].includes(user.role);
   $("#signin-role-help").textContent=`Signed in with ${activeRole==="super_admin"?"super administrator":activeRole==="admin"?"administrator":"user"} access.`;
   $('#login-menu-label').textContent='My account';$('#login-options-auth').hidden=true;$('#login-options-account').hidden=false;
@@ -2417,5 +2423,26 @@ $('#help-automation').onsubmit=async event=>{
   try{const result=await accountRequest('/api/help/agent',{question:form.elements.question.value,mode:'automation'});
     output.textContent=result.answer+'\n\nReview each step in the linked controls before applying it.';
   }catch(error){output.textContent=error.message;}finally{button.disabled=false;}
+};
+async function refreshAiKeyStatus(){
+  try{const result=await apiGet('/api/admin/ai-support');
+    $('#help-ai-key-status').textContent=result.configured?`Stored key: ${result.enabled?'enabled':'disabled'}. Secret is write-only.`:
+      result.environmentFallback?'A server environment key is active. Save a key here to manage it in the GUI.':
+      result.encryptionReady?'No AI key saved. Enter one above.':'Server encryption is not configured. Redeploy the production GUI.';
+    $('#help-ai-key-remove').disabled=!result.configured;
+  }catch(error){$('#help-ai-key-status').textContent=error.message;}
+}
+$('#help-ai-key-form').onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button');button.disabled=true;
+  try{await accountRequest('/api/admin/ai-support',{apiKey:form.elements.apiKey.value},'PUT');
+    form.reset();await refreshAiKeyStatus();$('#help-ask').querySelector('button').disabled=false;$('#help-automation').querySelector('button').disabled=false;
+  }catch(error){$('#help-ai-key-status').textContent=error.message;}finally{button.disabled=false;}
+};
+$('#help-ai-key-refresh').onclick=()=>refreshAiKeyStatus();
+$('#help-ai-key-remove').onclick=async()=>{
+  if(!confirm('Remove the stored AI key? The assistant will become unavailable unless a server environment key exists.'))return;
+  try{await accountRequest('/api/admin/ai-support',undefined,'DELETE');await refreshAiKeyStatus();
+    const {available}=await apiGet('/api/help/agent');$('#help-ask').querySelector('button').disabled=!available;$('#help-automation').querySelector('button').disabled=!available;
+  }catch(error){$('#help-ai-key-status').textContent=error.message;}
 };
 $('#help-ticket').onclick=()=>showWorkspace('support');
