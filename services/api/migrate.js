@@ -21,6 +21,7 @@ import { migrateCluster } from './cluster.js';
 import { migrateProviderWebhooks } from './providerWebhooks.js';
 import { migrateDidwwIntegration } from './didwwIntegration.js';
 import { migrateCarrierProviders } from './carrierProviders.js';
+import { migrateProviderCredentials } from './providerCredentials.js';
 import { migrateAdapterRegistry } from './adapterRegistry.js';
 import { migrateOperatorControl } from './operatorControl.js';
 import { migrateSwitch } from './switch.js';
@@ -66,6 +67,7 @@ export async function migrate(pool) {
       ['didww_integration', () => migrateDidwwIntegration(pool)],
       ['pbx', () => pool.initialize(awaitSql.pbx)],
       ['carrier_providers', () => migrateCarrierProviders(pool)],
+      ['provider_api_credentials', () => migrateProviderCredentials(pool)],
       ['trunk_management', () => migrateTrunkManagement(pool)],
       ['carrier_adapter_registry', () => migrateAdapterRegistry(pool)],
       ['operator_control', () => migrateOperatorControl(pool)],
