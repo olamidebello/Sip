@@ -615,3 +615,17 @@ Tenant administrators can create, edit, inspect, export, and delete PBX trunk pl
 The super admin Carrier provider commissioning page stores Flowroute access and secret keys or a DIDWW API key and sandbox/production environment for the selected tenant. Set a stable `PROVIDER_CREDENTIAL_KEY` (32 random bytes encoded as 64 hex characters) in the API container environment before saving credentials. Keep it in server secrets, never in Git. Losing or changing this key makes stored ciphertext unusable; restore the original key or replace the provider credentials through the GUI. The browser sees status, revision and update time, never the saved secret.
 
 Create, replace, enable, disable and remove operations are tenant scoped and audited. Disabling a stored entry blocks use of that provider even if legacy environment credentials remain configured. Inventory verification and number search use the selected tenant's stored credentials; the DIDWW management proxy also uses its stored key. DIDWW callbacks still require their separate tenant binding and callback secret. Carrier activation, account routing, and a live call require their own commissioning checks.
+
+### Kamailio adapter node configuration
+
+Super administrators can select an enabled switch node, save its SIP domain and planned concurrent call capacity, and inspect the revision history. The database records a staged configuration with optimistic revision checks. The host monitor reports recent Kamailio and RTPengine service states, and the private runner can queue a loopback SIP challenge test. Saving a node configuration does not render or deploy the host's Kamailio configuration. Use the isolated pilot, syntax validation and actual call testing before putting traffic on a node.
+
+### WSS load balancer and discovery
+
+Under Super admin → Operations, configure the WSS discovery policy, create or edit weighted targets, view the linked host and health, enable or disable a target, delete it, and preview the choice for the current account and a region. Policy controls include an overall enable switch, sticky per-account selection or one-minute rotation, and an option to include global targets in regional selection. Saves use a revision check and append policy history. Target changes appear in the operations audit.
+
+Discovery returns only enabled targets attached to fresh healthy switch nodes. The policy is used by `/api/account/redirector` for browser WSS discovery. It is not a SIP load balancer, a media relay, high availability across hosts, or an external proxy configuration. For live failover, commission multiple real switch nodes and test registration and calls.
+
+### Trunk management updates
+
+The PBX trunk list now has name, host and transport search, a detail view with linked carrier profiles and rates, and the existing edit, history, export, batch preview enable/disable and guarded delete actions. Trunk toggles update planning state only. Carrier activation through the private adapter and live SIP verification remain separate.
