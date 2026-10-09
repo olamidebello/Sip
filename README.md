@@ -413,8 +413,7 @@ In **Administration → Carrier providers**, an administrator selects an existin
 tenant trunk, a concurrent call capacity, and a routing intent for Flowroute
 or DIDWW. The server stores the profile in `carrier_provider_profiles`. The
 **Verify inventory API** action checks the provider's private server
-credentials without showing the key in the browser. Credentials remain in
-`/etc/olamide/secrets.env`. **Provision with switch adapter** requires
+credentials without showing the key in the browser. Credentials may be saved in the encrypted tenant credential store when `PROVIDER_CREDENTIAL_KEY` is configured, or supplied through private server environment variables. **Provision with switch adapter** requires
 `CARRIER_PROVISION_URL` (HTTPS) and `CARRIER_PROVISION_TOKEN`; the adapter
 receives `{tenantId,provider,trunkId,maxConcurrentCalls,routingMode}` with an
 idempotency header. Only a response `{ "status": "active" }` marks the tenant
@@ -500,6 +499,38 @@ The panel displays the exact tenant webhook URL: `https://<DOMAIN>/api/webhooks/
 
 **Administration → API capacity** shows the desired and last applied API replica counts and recent requests to tenant administrators. Super administrators may request one to four API replicas. The API records the requested revision in `cluster_state` and `cluster_actions`; it never receives Docker socket access. On the deployment host, `olamide-cluster.timer` runs a root-only service every minute. It reads the bounded request from MySQL through the API container, runs `docker compose up -d --no-build --scale api=N api`, and reports the applied revision or failure. Reapply Ansible or run `bash /opt/olamide/repo/deployment/install-cluster-timer.sh` after updating older installations if the timer is missing. Review `systemctl status olamide-cluster.timer olamide-cluster.service` and `journalctl -u olamide-cluster.service -n 100 --no-pager` when a request remains pending. This scales API processes on one Docker Compose host; MySQL, Caddy, SIP/media, TURN, and multi-host failover require separate infrastructure and are not clustered by this control.
 
+## Administrator guide: Flowroute and DIDWW trunks
+
+The **Provider API credentials** form stores keys for number inventory and the DIDWW API. A provider's **SIP trunk credentials and peering settings are separate**. A PBX trunk record, rate quote, or API inventory verification does not register or connect Kamailio. On the current staged Kamailio adapter, carrier INVITEs return 503. Complete the host and media commissioning gate below before sending live calls.
+
+### Shared preparation
+
+1. Sign in as super administrator and select the intended tenant. Ensure `PROVIDER_CREDENTIAL_KEY` is set to a stable 64-character hex value in the API server's private environment; restart the API after adding it. Do not paste provider secrets in the README, Git, screenshots, or support tickets.
+2. In **Carrier provider commissioning → Provider API credentials**, select Flowroute or DIDWW. Save the full key set. **Refresh credential status** shows the revision and enabled state but never reveals the secret. **Edit / rotate** replaces the entire set; **Disable** blocks stored credentials and provider inventory even if legacy environment keys exist.
+3. In **PBX → Trunk management and rate deck**, create a tenant trunk with the actual provider signaling host, port, transport, and priority. Use **View** for linked rates and carrier profiles; **Edit** requires the current revision. The **Enable preview** control changes planning state only.
+4. In **Carrier provider commissioning**, select the provider and trunk, choose capacity and routing intent, and save the draft profile. Set up an HTTPS carrier provisioning adapter in private server configuration, then use **Carrier adapter nodes → Check health** and enable a healthy node. The adapter must acknowledge and verify actual provider and switch state; the GUI cannot create a live Kamailio carrier route on its own.
+5. Add eligible tariff rates, outbound destination policy, fraud blocks and a carrier route key in **Kamailio tenant SIP settings**. Confirm tenant SIP domain and accounts. Test with a provider test number, check signaling, two-way RTP, call teardown, failover, and CDR/billing reconciliation before directing production traffic.
+
+### Flowroute outbound and inbound
+
+1. In the Flowroute account, obtain the **API access key and secret** for inventory and choose the **SIP interconnection method**: registration or IP authentication. Record the provider-approved signaling endpoints, source IP ranges, codecs, caller ID rules, and any technical prefix. Flowroute describes both interconnection methods in its [integration overview](https://flowroute.com/blog/faq/how-do-i-integrate-with-flowroute/).
+2. Save the API key pair under **Provider API credentials → Flowroute** and click **Verify inventory API** on its carrier card. This checks inventory access only. It does not verify SIP authentication.
+3. For the repo's shortcut, use **Flowroute PoP setup** (US-East-VA or US-West-OR) to create a disabled UDP 5060 trunk and draft profile. Otherwise create the trunk manually with the Flowroute endpoint and transport assigned to your account. Review it in **PBX**, then link it in **Carrier provider commissioning**.
+4. Configure your Flowroute account's outbound SIP authentication and inbound DID route to the tested public SIP edge, according to the chosen interconnection method. Flowroute documents inbound [registration, host-based, and SIP URI routing](https://flowroute.com/blog/choosing-between-sip-registration-and-host-based-routing/). Associate the test DID with that route in the provider account.
+5. Keep the app's **Provision with switch adapter** action disabled until the private adapter is implemented, health-checked, and able to verify the real SIP setup. **Verify inventory API** alone is insufficient. Messaging callback URLs are set separately under **Messaging webhooks**.
+
+### DIDWW outbound and inbound
+
+1. Confirm DIDWW has approved **Outbound Trunks** for the account. DIDWW says access is required before placing outbound calls; see its [outbound trunk access guide](https://doc.didww.com/voice/outbound-trunks/get-access.html). In the DIDWW User Panel, open **Voice → Outbound Trunks → Create New** and configure authentication, allowed SIP and RTP addresses, caller ID, capacity, media options, and a test destination according to the [outbound setup guide](https://doc.didww.com/voice/outbound-trunks/how-to-guides/create-outbound-trunk.html). Keep the SIP digest username/password private.
+2. In **Provider API credentials → DIDWW**, save the **API key** and choose **Sandbox** or **Production** for the correct account. The API key is not the outbound SIP digest password. Set `DIDWW_ACCOUNT_CURRENCY=USD` and `DIDWW_TENANT_ID` privately for the tenant-bound API console. The DIDWW API console can list or manage permitted `voice_out_trunks` and `voice_in_trunks` resources, subject to provider access. Use **Verify inventory API** to test the key against DID inventory.
+3. Copy the signaling endpoint and port shown for the approved DIDWW outbound trunk into a new PBX trunk. Link the draft profile in **Carrier provider commissioning**. DIDWW's [outbound credentials guide](https://doc.didww.com/voice/outbound-trunks/how-to-guides/view-outbound-trunk-credentials.html) explains where to view the SIP-specific values.
+4. For inbound DIDs, create a DIDWW **Voice In Trunk** pointed at the tested public SIP URI and assign the DID to it in DIDWW. An inbound trunk is a separate resource that delivers calls to your SIP system; see [DIDWW inbound trunks](https://doc.didww.com/api3/2026-04-16/inventory-resources/voice-in-trunks/index.html). Configure the matching tenant DID route in Olamide and test an inbound call.
+5. DIDWW API callbacks and Call Events require their own signed receiver and tokens as described below. The API key does not configure callbacks, SIP peering, RTP, or charging.
+
+### Before carrier activation
+
+Run `bash deploy/kamailio/commission-check.sh` on the switch host and resolve every blocked host gate. The current `adapter.cfg.j2` binds only to loopback and explicitly rejects carrier routes; the existing GUI cannot make that path live. The private adapter's `active` acknowledgment is a control-plane record, not evidence of an outbound call. Require successful authenticated SIP, inbound/outbound test calls, two-way audio, RTP cleanup, carrier failover and rated CDR reconciliation before production cutover.
+
 ## Carrier commissioning and future providers
 
 The administrator Carrier providers screen is backed by the tenant-scoped
@@ -511,8 +542,7 @@ activate it. Disabling a custom carrier requires adapter deactivation first.
 Changing an active carrier profile or Flowroute PoP also requires deactivation.
 
 Flowroute PoP setup creates or updates an initially disabled tenant trunk for
-US-East-VA or US-West-OR on UDP 5060 and saves a draft profile. It never stores
-the SIP password or API secret in the database or browser. Keep provider secrets
+US-East-VA or US-West-OR on UDP 5060 and saves a draft profile. It does not store the SIP trunk password; provider API keys can be saved separately in the encrypted tenant credential store and are never returned to the browser. Keep provider secrets
 in private server configuration and rotate any credentials shared in documents.
 
 `CARRIER_PROVISION_URL` must be an HTTPS endpoint controlled by the switch
