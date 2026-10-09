@@ -64,7 +64,8 @@ with tempfile.TemporaryDirectory(prefix="olamide-sip-smoke-") as work:
             raise RuntimeError(f"Unauthenticated INVITE expected 407, got {result!r}")
         print("Loopback SIP: OPTIONS 200; unauthenticated REGISTER 401; INVITE 407")
     finally:
-        os.killpg(proc.pid, signal.SIGTERM)
+        if proc.poll() is None:
+            os.killpg(proc.pid, signal.SIGTERM)
         try:
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
