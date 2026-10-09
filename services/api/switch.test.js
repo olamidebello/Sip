@@ -54,3 +54,27 @@ test('admin cannot enable switch without super admin role',async()=>{
   let status=0;await handleSwitchAdmin({req:{method:'PUT'},path:'/api/admin/switch',
     user:{role:'admin',tenant_id:'x'},send:(_res,code)=>{status=code;}});assert.equal(status,403);
 });
+
+test('Kamailio readiness shows tenant-scoped blockers without claiming live service',async()=>{
+  process.env.KAMAILIO_ROUTE_TOKEN='t'.repeat(48);
+  process.env.SIP_CREDENTIAL_KEY=key.toString('hex');
+  const queries=[];
+  const pool={query:async(sql,args)=>{
+    queries.push(args);
+    if(sql.includes('FROM switch_tenants'))return {rows:[{domain:'sip.example.com',enabled:1,tariff_id:null}]};
+    if(sql.includes('kamailio_credentials'))return {rows:[{total:1}]};
+    if(sql.includes('FROM sip_accounts'))return {rows:[{total:2}]};
+    if(sql.includes('FROM carrier_provider_profiles'))return {rows:[{total:0}]};
+    throw Error('unexpected SQL');
+  }};
+  let result;
+  await handleSwitchAdmin({req:{method:'GET'},res:{},path:'/api/admin/switch/kamailio/readiness',
+    user:{role:'admin',tenant_id:'tenant-one'},pool,
+    send:(_res,code,body)=>{result={code,body};}});
+  assert.equal(result.code,200);
+  assert.equal(result.body.productionReady,false);
+  assert.equal(result.body.activeAccounts,2);
+  assert.equal(result.body.syncedCredentials,1);
+  assert.match(result.body.blockers.join(' '),/digest credentials/);
+  assert.deepEqual(queries,[['tenant-one'],['tenant-one'],['tenant-one'],['tenant-one']]);
+});
