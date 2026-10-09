@@ -48,3 +48,9 @@ rm -f /tmp/olamide-kamailio-inventory.ini
 ```
 
 These staging playbooks do not need the production Vault password and do not enable the services. Check a nonempty PLAY RECAP and the parser result; do not switch live signaling or run the Kamailio database migration.
+
+## Host-only API integration
+
+The draft compose file now binds the API container at `127.0.0.1:18080` on the host. The adapter template must use `kamailio_api_url=http://127.0.0.1:18080` when rendered. This binding becomes available only after deploying the reviewed compose change; package staging did not change the running API. Use `bash deploy/kamailio/preflight.sh` for read-only package, API health, and unauthenticated endpoint checks. A passing preflight is not a SIP call test.
+
+To commission authentication, provision a private `KAMAILIO_ROUTE_TOKEN` of at least 32 characters in the API and a root-readable Kamailio config, migrate the Kamailio credential table, and backfill active SIP accounts. Never run the backfill against production without a database backup and reviewed credentials. The current loopback template returns 503 for all carrier dispatch, and neither media server applications nor public SIP listeners are configured. It cannot be used for production or the requested 500 concurrent calls.
