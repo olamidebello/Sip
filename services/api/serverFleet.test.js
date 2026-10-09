@@ -25,3 +25,27 @@ test('fleet rejects non-super-admin before database access',async()=>{
     pool:null,send:(_res,code,body)=>{runnerResult={code,body};}});
   assert.equal(runnerResult.code,401);
 });
+
+test('runner Kamailio report validates service states and bound switch node',async()=>{
+  const secret='z'.repeat(48);
+  process.env.DEPLOY_RUNNER_TOKEN=secret;
+  const statements=[];
+  const pool={query:async(sql,args)=>{
+    statements.push([sql,args]);
+    if(sql.includes('SELECT id FROM deployment_nodes'))return {rows:[{id:'node'}],rowCount:1};
+    if(sql.includes('INSERT INTO kamailio_node_checks'))return {rows:[],rowCount:1};
+    throw Error('Unexpected query');
+  }};
+  const send=(_res,status,body)=>({status,body});
+  const base={req:{method:'POST',headers:{authorization:'Bearer '+secret}},
+    res:{},path:'/api/integrations/deployment/kamailio-check',pool,send};
+  const valid={nodeId:'11111111-1111-4111-8111-111111111111',
+    signalingStatus:'inactive',mediaStatus:'inactive',version:'5.6.3',latencyMs:10};
+  const bad=await handleServerFleetRunner({...base,readJson:async()=>({...valid,signalingStatus:'magic'})});
+  assert.equal(bad.status,400);
+  assert.equal(statements.length,0);
+  const good=await handleServerFleetRunner({...base,readJson:async()=>valid});
+  assert.equal(good.status,200);
+  assert.equal(statements.length,2);
+  assert.equal(statements[1][1][2],'inactive');
+});
