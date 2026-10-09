@@ -1,5 +1,6 @@
 import {randomUUID,createHash,createHmac,timingSafeEqual} from 'node:crypto';
 import {gunzipSync} from 'node:zlib';
+import {providerCredentials} from './providerCredentials.js';
 
 const methods={
   balance:['GET'],cities:['GET'],countries:['GET'],dids:['GET','PATCH'],
@@ -131,10 +132,15 @@ export async function handleDidwwCallback({req,res,path,pool,send,origin}){
 export async function handleDidwwAdmin({req,res,path,user,pool,send,readJson,origin}){
   if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
   if(!bound(user.tenant_id))return send(res,409,{error:'DIDWW tenant binding is not configured for this tenant'});
-  if(!base())return send(res,409,{error:'Set DIDWW_API_ENV to sandbox or production'});
+  const stored=await providerCredentials(pool,user.tenant_id,'didww');
+  if(stored?.disabled)return send(res,409,{error:'DIDWW credentials disabled'});
+  const environment=stored?.environment||process.env.DIDWW_API_ENV;
+  const endpoint=environment==='sandbox'?'https://sandbox-api.didww.com/v3':
+    environment==='production'?'https://api.didww.com/v3':null;
+  if(!endpoint)return send(res,409,{error:'Set DIDWW API environment to sandbox or production'});
   if(path==='/api/admin/didww/config'&&req.method==='GET')
-    return send(res,200,{environment:process.env.DIDWW_API_ENV,
-      apiConfigured:!!process.env.DIDWW_API_KEY,callbackConfigured:!!process.env.DIDWW_CALLBACK_SECRET,
+    return send(res,200,{environment,
+      apiConfigured:!!(stored?.apiKey||process.env.DIDWW_API_KEY),callbackConfigured:!!process.env.DIDWW_CALLBACK_SECRET,
       callbackUrl:callbackUrl(origin,user.tenant_id),
       callEventsConfigured:!!process.env.DIDWW_CALL_EVENTS_TOKEN,
       callEventsUrl:`${callbackUrl(origin,user.tenant_id)}/call-events`,resources:methods});
@@ -147,7 +153,8 @@ export async function handleDidwwAdmin({req,res,path,user,pool,send,readJson,ori
   const match=/^\/api\/admin\/didww\/resources\/([a-z_]+)(?:\/([0-9a-f-]{36}))?$/.exec(path);
   if(!match||!methods[match[1]]?.includes(req.method)||match[2]&&!uuid.test(match[2]))
     return send(res,404,{error:'DIDWW resource or method unavailable'});
-  if(!process.env.DIDWW_API_KEY)return send(res,409,{error:'DIDWW API key is not configured'});
+  const apiKey=stored?.apiKey||process.env.DIDWW_API_KEY;
+  if(!apiKey)return send(res,409,{error:'DIDWW API key is not configured'});
   const [,resource,id]=match;
   if(['PATCH','DELETE'].includes(req.method)&&!id)return send(res,400,{error:'Resource ID required'});
   if(req.method==='POST'&&id)return send(res,400,{error:'Create requests use the collection URL'});
@@ -158,7 +165,7 @@ export async function handleDidwwAdmin({req,res,path,user,pool,send,readJson,ori
       (req.method==='PATCH'&&body.data.id!==id))
       return send(res,400,{error:'JSON:API data type and resource ID must match'});
   }
-  const upstream=new URL(`${base()}/${resource}${id?'/'+id:''}`);
+  const upstream=new URL(`${endpoint}/${resource}${id?'/'+id:''}`);
   if(req.method==='GET'){
     const incoming=new URL(req.url,origin);
     for(const [key,value] of incoming.searchParams){
@@ -171,7 +178,7 @@ export async function handleDidwwAdmin({req,res,path,user,pool,send,readJson,ori
   let response,payload;
   try{
     response=await fetch(upstream,{method:req.method,signal:AbortSignal.timeout(15000),
-      headers:{'Api-Key':process.env.DIDWW_API_KEY,'Accept':'application/vnd.api+json',
+      headers:{'Api-Key':apiKey,'Accept':'application/vnd.api+json',
         'Content-Type':'application/vnd.api+json','X-DIDWW-Api-Version':'2026-04-16'},
       body:serialized});
     const raw=await response.text();
