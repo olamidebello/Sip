@@ -1,0 +1,103 @@
+---
+# Run on the SIP host after deploying and accepting the rated billing engine.
+# This playbook intentionally fails on the current build: importing CDRs and
+# displaying tariff previews cannot debit a prepaid account safely.
+- name: Gate production rating, prepaid authorization and carrier billing
+  hosts: switch_nodes
+  become: true
+  gather_facts: true
+  vars:
+    billing_checkout: /opt/olamide/kamailio-staging
+    billing_env_file: /opt/olamide/repo/deployment/docker/.env
+    billing_api_url: http://127.0.0.1:18080
+    billing_required_components:
+      - services/api/ratingEngine.js
+      - services/api/prepaidAuthorizer.js
+      - services/api/billingLedger.js
+      - services/api/carrierReconciliation.js
+  tasks:
+    - name: Require a local Debian 12 switch host
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version == '12'
+          - ansible_connection | default('ssh') == 'local'
+          - billing_checkout is match('^/')
+          - billing_api_url is match('^http://127\\.0\\.0\\.1:[0-9]+$')
+
+    - name: Inspect required billing engine components
+      ansible.builtin.stat:
+        path: "{{ billing_checkout }}/{{ item }}"
+      loop: "{{ billing_required_components }}"
+      register: billing_components
+
+    - name: Require a reviewed implementation before touching production
+      ansible.builtin.assert:
+        that:
+          - item.stat.isreg | default(false)
+        fail_msg: >-
+          Missing {{ item.item }}. The current CDR importer and tariff preview
+          are not a live rating or prepaid enforcement engine. Production
+          billing deployment stopped without changing services or balances.
+      loop: "{{ billing_components.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Require explicit independent acceptance evidence
+      ansible.builtin.assert:
+        that:
+          - billing_rating_test_report is defined
+          - billing_prepaid_test_report is defined
+          - billing_reconciliation_test_report is defined
+          - billing_rating_test_report is match('^/')
+          - billing_prepaid_test_report is match('^/')
+          - billing_reconciliation_test_report is match('^/')
+        fail_msg: >-
+          Provide absolute paths to reviewed rating, prepaid cutoff and
+          carrier reconciliation acceptance reports. No billing deployment occurred.
+
+    - name: Check acceptance report files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ billing_rating_test_report }}"
+        - "{{ billing_prepaid_test_report }}"
+        - "{{ billing_reconciliation_test_report }}"
+      register: billing_reports
+
+    - name: Require nonempty acceptance reports
+      ansible.builtin.assert:
+        that:
+          - item.stat.isreg | default(false)
+          - item.stat.size | default(0) | int > 0
+        fail_msg: "Acceptance report missing or empty: {{ item.item }}"
+      loop: "{{ billing_reports.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Require current API health
+      ansible.builtin.uri:
+        url: "{{ billing_api_url }}/api/health"
+        method: GET
+        status_code: 200
+        return_content: false
+        timeout: 5
+
+    - name: Check production environment exists without reading secrets
+      ansible.builtin.stat:
+        path: "{{ billing_env_file }}"
+      register: billing_environment
+
+    - name: Require private production environment
+      ansible.builtin.assert:
+        that:
+          - billing_environment.stat.isreg | default(false)
+          - billing_environment.stat.mode | default('0000') in ['0600','0400','0640']
+
+    - name: Report guarded deployment boundary
+      ansible.builtin.debug:
+        msg: >-
+          Code and acceptance evidence are present. This playbook has made no
+          production changes: a separate reviewed cutover must migrate the
+          ledger, enable synchronous prepaid authorization on the live switch,
+          and verify billed CDRs against carrier statements and cash receipts.
