@@ -14,7 +14,7 @@ import urllib.request
 import urllib.error
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-ALLOWED = {'health', 'install', 'upgrade', 'firewall'}
+ALLOWED = {'health', 'install', 'upgrade', 'firewall', 'kamailio_test'}
 
 
 def secrets_file(path):
@@ -152,7 +152,17 @@ def run_once(base, token, runner_id, inventory, vault_password):
     renewer = threading.Thread(target=renew, daemon=True)
     renewer.start()
     try:
-        if claimed['action'] == 'health':
+        if claimed['action'] == 'kamailio_test':
+            target = claimed['ssh_user'] + '@' + claimed['host']
+            cmd = ['ssh', '-p', str(claimed['ssh_port']), '-o', 'BatchMode=yes',
+                   '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8',
+                   target, 'sudo', '-n', 'python3',
+                   '/opt/olamide/kamailio-staging/deploy/kamailio/sip-smoke.py']
+            smoke = subprocess.run(cmd, capture_output=True, text=True, timeout=45)
+            request(base, token, 'kamailio-check', probe_kamailio(claimed))
+            if smoke.returncode or 'Loopback SIP:' not in smoke.stdout:
+                raise RuntimeError('Kamailio loopback SIP test failed; inspect private runner journal')
+        elif claimed['action'] == 'health':
             check = probe(claimed)
             request(base, token, 'check', check)
             if check['status'] != 'healthy':
@@ -163,7 +173,9 @@ def run_once(base, token, runner_id, inventory, vault_password):
             request(base, token, 'check', check)
             if check['status'] != 'healthy':
                 raise RuntimeError('Switch did not pass post-deployment health probe')
-        result = ('succeeded', 'Approved ' + claimed['action'] + ' job completed; switch active')
+        result = ('succeeded', 'Kamailio loopback SIP challenge passed' if
+                  claimed['action'] == 'kamailio_test' else
+                  'Approved ' + claimed['action'] + ' job completed; switch active')
     except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError,
             RuntimeError, KeyError, IndexError, ValueError, urllib.error.URLError) as error:
         result = ('failed', str(error)[:900])
