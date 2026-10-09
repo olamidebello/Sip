@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { isAdmin } from './tenancy.js';
 import { availableNumbers } from './providers.js';
 import {adapterTargets,commissionCarrier} from './adapterRegistry.js';
+import {providerCredentials} from './providerCredentials.js';
 
 const providers=['flowroute','didww'];
 const slug=/^[a-z][a-z0-9-]{1,15}$/;
@@ -43,15 +44,20 @@ export async function carrierActive(pool,tenant,provider){
 
 export async function handleCarrierProviders({req,res,path,user,pool,send,readJson}){
   if(!isAdmin(user)) return send(res,403,{error:'Administrator required'});
-  const configured=provider=>provider==='flowroute'?!!(process.env.FLOWROUTE_ACCESS_KEY&&process.env.FLOWROUTE_SECRET_KEY):
-    provider==='didww' ? !!(process.env.DIDWW_API_KEY&&process.env.DIDWW_ACCOUNT_CURRENCY==='USD'&&['sandbox','production'].includes(process.env.DIDWW_API_ENV)) : adapterReady();
+  const configured=async provider=>{
+    const stored=await providerCredentials(pool,user.tenant_id,provider);
+    return provider==='flowroute'?!!(stored?.accessKey&&stored?.secretKey||process.env.FLOWROUTE_ACCESS_KEY&&process.env.FLOWROUTE_SECRET_KEY):
+      provider==='didww'?!!((stored?.apiKey||process.env.DIDWW_API_KEY)&&process.env.DIDWW_ACCOUNT_CURRENCY==='USD'&&
+        ['sandbox','production'].includes(stored?.environment||process.env.DIDWW_API_ENV)):adapterReady();
+  };
   if(path==='/api/admin/carriers' && req.method==='GET'){
     const [rows,custom,verified]=await Promise.all([
       pool.query('SELECT provider,trunk_id,max_concurrent_calls,routing_mode,status,last_error,provisioned_at,updated_at FROM carrier_provider_profiles WHERE tenant_id=$1 ORDER BY provider',[user.tenant_id]),
       catalog(pool,user.tenant_id),
       pool.query('SELECT provider,verified_at FROM carrier_provider_verifications WHERE tenant_id=$1',[user.tenant_id])]);
-    return send(res,200,{providers:[...providers.map(provider=>({provider,displayName:provider==='didww'?'DIDWW':'Flowroute',enabled:true})),...custom].map(entry=>({provider:entry.provider,displayName:entry.displayName||entry.display_name,
-      enabled:!!entry.enabled,credentialsConfigured:providers.includes(entry.provider)?configured(entry.provider):false,
+    const readiness=await Promise.all([...providers,...custom.map(row=>row.provider)].map(configured));
+    return send(res,200,{providers:[...providers.map(provider=>({provider,displayName:provider==='didww'?'DIDWW':'Flowroute',enabled:true})),...custom].map((entry,index)=>({provider:entry.provider,displayName:entry.displayName||entry.display_name,
+      enabled:!!entry.enabled,credentialsConfigured:providers.includes(entry.provider)?readiness[index]:false,
       adapterVerified:!!verified.rows.find(row=>row.provider===entry.provider),
       ...(rows.rows.find(row=>row.provider===entry.provider)||{status:'not_configured',routing_mode:'disabled',max_concurrent_calls:0})})),
       adapterConfigured:adapterReady()});
@@ -144,7 +150,7 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
     return send(res,200,{provider,status:'draft'});
   }
   if(action==='verify' && req.method==='POST'){
-    if(!configured(provider)) return send(res,409,{error:providers.includes(provider)?'Provider credentials missing from private server configuration':'HTTPS provisioning adapter required'});
+    if(!await configured(provider)) return send(res,409,{error:providers.includes(provider)?'Provider credentials missing from private server configuration':'HTTPS provisioning adapter required'});
     if(!providers.includes(provider)){
       if(!adapterReady())return send(res,409,{error:'HTTPS provisioning adapter required'});
       const profile=await pool.query('SELECT trunk_id,max_concurrent_calls FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider=$2',[user.tenant_id,provider]);
@@ -157,13 +163,13 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
         return send(res,200,{provider,adapterVerified:true,note:'Provisioning adapter verified the carrier configuration.'});
       }catch{return send(res,502,{error:'Carrier adapter verification failed'});}
     }
-    try {const inventory=await availableNumbers(provider);
+    try {const inventory=await availableNumbers(provider,{pool,tenant:user.tenant_id});
       return send(res,200,{provider,credentialsValid:true,sampleCount:inventory.length,
         note:'Inventory API responded. This does not authorize or activate a SIP trunk.'});
     }catch(error){return send(res,502,{error:'Provider inventory check failed'});}
   }
   if(action==='activate' && req.method==='POST'){
-    if(!configured(provider)||!adapterReady())
+    if(!await configured(provider)||!adapterReady())
       return send(res,409,{error:'Carrier credentials and HTTPS provisioning adapter required'});
     const found=await pool.query("SELECT trunk_id,max_concurrent_calls,routing_mode,status FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider=$2",[user.tenant_id,provider]);
     const profile=found.rows[0];
