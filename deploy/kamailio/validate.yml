@@ -6,7 +6,7 @@
   serial: 1
   vars:
     kamailio_domain: "{{ sip_domain | default('sip.example.invalid') }}"
-    kamailio_api_url: "http://127.0.0.1:3000"
+    kamailio_api_url: "http://127.0.0.1:18080"
     kamailio_route_token: "staging-syntax-only-000000000000000000000000"
   tasks:
     - name: Require Debian 12
