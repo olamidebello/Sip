@@ -49,3 +49,16 @@ test('runner Kamailio report validates service states and bound switch node',asy
   assert.equal(statements.length,2);
   assert.equal(statements[1][1][2],'inactive');
 });
+
+test('Kamailio node configuration rejects unauthorized and invalid changes before writing',async()=>{
+  const path='/api/admin/servers/11111111-1111-4111-8111-111111111111/kamailio-config';
+  const send=(_res,status,body)=>({status,body});
+  const pool={query:async()=>{throw Error('Unexpected query');},connect:async()=>{throw Error('Unexpected connection');}};
+  const req={method:'PUT'};
+  const denied=await handleServerFleetAdmin({req,res:{},path,user:{role:'admin'},pool,send,
+    readJson:async()=>({})});
+  assert.equal(denied.status,403);
+  const invalid=await handleServerFleetAdmin({req,res:{},path,user:{role:'super_admin'},pool,send,
+    readJson:async()=>({sipDomain:'bad/domain',maxConcurrentCalls:100,expectedRevision:0})});
+  assert.equal(invalid.status,400);
+});
