@@ -2,11 +2,11 @@
 
 Olamide is a development browser softphone with a Node.js account API and MySQL 8.4 database. See the deployment checks below for the current server state.
 
-## FreeSWITCH and Class 5 deployment
+## Current SIP deployment path
 
-The Debian 12 switch playbook requires FreeSWITCH 1.11.3 or newer from the SignalWire stable repository and upgrades nodes one at a time after checking for active calls and backing up configuration. A FreeSWITCH XML bridge serves tenant-scoped SIP credentials and authenticated internal/outbound dialplans from MySQL. The **Administration → FreeSWITCH** screen manages domains, tariff selection, Sofia gateway mappings, and account activation. A [Debian 12 Ansible role](deploy/ansible/README.md) installs FreeSWITCH, XML curl, WSS certificates, local event socket protection, node telemetry, time synchronization, optional TURN, and a configurable switch firewall. Multiple hosts can share the backend.
+The `kamailio-rebuild` branch stages Kamailio and RTPengine on Debian 12 and includes a separate loopback-only API pilot. The reported server pilot passed syntax parsing and local SIP challenge tests; live trunk calls, RTP, billing and high availability have not been commissioned. The super admin Kamailio SIP screen manages shared tenant domain, account and carrier routing data. Adapter node settings are staged with revisions; they do not apply a host configuration. See `deploy/kamailio/` and the sections below.
 
-This is an installable switch foundation, not a completed carrier-grade Class 5 service. The role needs a SignalWire package token, trusted WSS certificate, private network API URL, SIP carrier settings, and vaulted secrets. It has not been deployed to a server. Public DID ingress, live CDR rating, prepaid enforcement, concurrent call limits, emergency routing, fraud settlement and regulatory controls require further implementation and acceptance testing.
+The earlier FreeSWITCH playbooks and XML bridge remain in the repository as legacy code; the current GUI no longer presents FreeSWITCH as the active switch. Do not use the older installation commands for this Kamailio rollout. The MySQL tenant and gateway tables with historical switch names are still required by Kamailio authentication and routing and must not be dropped.
 
 ## Generate the MySQL database
 
