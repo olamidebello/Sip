@@ -71,6 +71,26 @@ const formHints = {
 };
 
 const clean = value => String(value || '').replace(/\s+/g,' ').trim();
+const adminGuide = id => /admin|carrier|switch|operator|cluster|fleet|pricing|charging|payment|ldap|webhook|didww|adapter|server/.test(id);
+
+export function guideFor(id,form){
+  const heading=clean(form?.querySelector(':scope > h2, :scope > h3, :scope > h4')?.textContent);
+  const action=clean(form?.querySelector('button[type="submit"],button:not([type])')?.textContent);
+  const title=heading||clean(form?.getAttribute('aria-label'))||id.replaceAll('-',' ');
+  const description=formHints[id]||navigationHints[id]||'Review this page and its available controls before making changes.';
+  const fields=form?[...form.querySelectorAll('input:not([type="hidden"]),select,textarea')]
+    .map(input=>clean(input.closest('label')?.childNodes[0]?.textContent)).filter(Boolean).slice(0,8):[];
+  return {title,description,fields,action,related:adminGuide(id)?'help-admin':'help-user'};
+}
+
+function addGuideControl(link,id){
+  if(link.dataset.guideReady||!id||id==='help-context')return;
+  link.dataset.guideReady='true';
+  const guide=document.createElement('button');guide.type='button';guide.className='contextual-guide-link';
+  guide.dataset.guideTarget=id;guide.textContent='Guide';
+  guide.setAttribute('aria-label',`Open guide for ${clean(link.childNodes[0]?.textContent)||id.replaceAll('-',' ')}`);
+  link.after(guide);
+}
 
 export function describeNavigation(nav) {
   for(const link of nav.querySelectorAll('.menu-links a[href^="#"]')) {
@@ -80,6 +100,7 @@ export function describeNavigation(nav) {
     link.append(small);
     link.title=hint;
   }
+  for(const link of nav.querySelectorAll('a[href^="#"]'))addGuideControl(link,link.hash.slice(1));
   for(const link of nav.querySelectorAll('.page-links a[href^="/pages/"]')) {
     if(link.querySelector('.nav-hint')) continue;
     const id=decodeURIComponent(link.getAttribute('href').slice('/pages/'.length));
@@ -87,6 +108,8 @@ export function describeNavigation(nav) {
     const small=document.createElement('small');small.className='nav-hint';small.textContent=hint;
     link.append(small);link.title=hint;
   }
+  for(const link of nav.querySelectorAll('.page-links a[href^="/pages/"]'))
+    addGuideControl(link,decodeURIComponent(link.getAttribute('href').slice('/pages/'.length)));
   for(const group of nav.querySelectorAll('.menu-group')) {
     const summary=group.querySelector('summary');
     if(summary && !summary.title) summary.title=`Open ${clean(summary.textContent)} navigation`;
@@ -94,15 +117,20 @@ export function describeNavigation(nav) {
 }
 
 function describeForm(form) {
-  if(form.id==='quick-locale') return;
   if(form.dataset.hintsReady) return;
   form.dataset.hintsReady='true';
+  if(form.id==='quick-locale'){
+    const guide=document.createElement('button');guide.type='button';guide.className='contextual-guide-link';
+    guide.dataset.guideTarget=form.id;guide.textContent='Guide';form.append(guide);return;
+  }
   const button=form.querySelector('button[type="submit"],button:not([type])');
   const action=clean(button?.textContent).replace(/[.!]+$/,'');
   const hint=formHints[form.id] ||
     (action ? `Review the fields, then choose “${action}”. Required fields are checked before submission.` :
       'Review the fields and required values before saving.');
   const p=document.createElement('p');p.className='form-hint';p.id=`${form.id}-hint`;p.textContent=hint;
+  const guide=document.createElement('button');guide.type='button';guide.className='contextual-guide-link';
+  guide.dataset.guideTarget=form.id;guide.textContent='Open form guide';p.append(' ',guide);
   const heading=form.querySelector(':scope > h2, :scope > h3, :scope > h4');
   if(heading) heading.after(p); else form.prepend(p);
   const prior=form.getAttribute('aria-describedby');
@@ -124,9 +152,14 @@ function describeForm(form) {
   }
 }
 
-export function setupUiHints(root=document) {
+export function setupUiHints(root=document,{openGuide}={}) {
   root.querySelectorAll('form[id]').forEach(describeForm);
   const nav=root.querySelector('#app-nav');if(nav) describeNavigation(nav);
+  root.addEventListener('click',event=>{
+    const button=event.target.closest?.('.contextual-guide-link[data-guide-target]');
+    if(!button||!root.contains(button))return;
+    openGuide?.(button.dataset.guideTarget);
+  });
   const observer=new MutationObserver(records=>{
     for(const record of records) for(const node of record.addedNodes) {
       if(node.nodeType!==1) continue;

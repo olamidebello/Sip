@@ -34,7 +34,7 @@ import { setupInstall } from "./install.js";
 import { setupDownloads } from "./downloads.js";
 import { setupCarrierControl } from "./carrierControl.js";
 import { setupFormGroups } from "./formGroups.js";
-import { setupUiHints } from "./uiHints.js";
+import { setupUiHints,guideFor } from "./uiHints.js";
 import { setupPageRoutes, pageId } from "./pageRoutes.js";
 import { contactEmailsFromCsv, contactsToCsv } from "./contactsCsv.js";
 import { setupDashboard } from "./dashboard.js";
@@ -82,6 +82,7 @@ root.innerHTML = `
   <section id="help" aria-labelledby="help-title"><h2 id="help-title">Help center</h2>
     <p>Find a quick answer, follow a guided tour, or contact support.</p>
     <nav class="help-links" aria-label="Help topics"><a href="#help-faq">FAQs</a><a href="#help-user">User tutorial</a><a href="#help-admin">Administrator tutorial</a><a href="#help-technical">Technical guide</a><a href="#help-agent">AI support</a><a href="#support">Support tickets</a></nav>
+    <section id="help-context" hidden tabindex="-1"><h3 id="help-context-title"></h3><p id="help-context-description"></p><ol id="help-context-steps"></ol><a id="help-context-tutorial" href="#help-user">Read the full user tutorial</a></section>
     <section id="help-faq"><h3>Frequently asked questions</h3>
       <details><summary>How do I register and sign in?</summary><p>Choose Create an account in the Sign in menu, enter your details, then verify the email code. Return to Sign in with your email or assigned username.</p></details>
       <details><summary>How do I make a call?</summary><p>Open Dialer, enter the secure SIP WebSocket server and your provisioned SIP account, connect, and dial an allowed number. Your administrator must activate the account on a real switch.</p></details>
@@ -1241,7 +1242,24 @@ const ldapAdmin = setupLdapAdmin();
 const authProviders = setupAuthProviders();
 const catalogControl = setupCatalogControl();
 setupInstall();
-setupUiHints();
+setupUiHints(document,{openGuide:showContextGuide});
+function showContextGuide(id){
+  const target=document.getElementById(id);
+  if(!target)return;
+  const guide=guideFor(id,target.tagName==='FORM'?target:null);
+  const context=$('#help-context');context.hidden=false;
+  $('#help-context-title').textContent=`Guide: ${guide.title}`;
+  $('#help-context-description').textContent=guide.description;
+  const steps=[`Open ${guide.title} from the navigation or its form page.`,
+    guide.fields.length?`Prepare these fields: ${guide.fields.join(', ')}.`:'Review the controls and any requirements shown on the page.',
+    guide.action?`Review your entries, then choose “${guide.action}” when ready.`:'Read the available actions and choose the one you need.',
+    'Check the result or status message. If service activation is required, verify it separately before relying on it.'];
+  $('#help-context-steps').replaceChildren(...steps.map(step=>{const li=document.createElement('li');li.textContent=step;return li;}));
+  const tutorial=$('#help-context-tutorial');tutorial.href=`#${guide.related==='help-admin'&&activeRole?guide.related:'help-user'}`;
+  tutorial.textContent=tutorial.hash==='#help-admin'?'Read the administrator tutorial':'Read the user tutorial';
+  if(activeRole)showWorkspace('help');
+  context.scrollIntoView({behavior:'smooth',block:'start'});context.focus({preventScroll:true});
+}
 let phone;
 let onCall = false;
 let onHold = false;
