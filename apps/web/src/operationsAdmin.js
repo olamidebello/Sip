@@ -21,7 +21,8 @@ export function setupOperationsAdmin({get,request}){
       li.textContent='Revision '+row.revision+' · '+(row.enabled?'enabled':'disabled')+
         ' · '+row.strategy+' · '+row.created_at;history.append(li);}
     const list=$('redirector-targets');list.replaceChildren();
-    for(const t of data.targets){const li=document.createElement('li');li.textContent=`${t.name} · ${t.region} · ${t.wss_url} · weight ${t.weight} · ${t.enabled?'enabled':'disabled'} · switch ${t.node_status} `;
+    const search=$('redirector-search').value.trim().toLowerCase();
+    for(const t of data.targets.filter(t=>!search||[t.name,t.region,t.wss_url].some(value=>String(value).toLowerCase().includes(search)))){const li=document.createElement('li');li.textContent=`${t.name} · ${t.region} · ${t.wss_url} · weight ${t.weight} · ${t.enabled?'enabled':'disabled'} · switch ${t.node_status} `;
       const view=document.createElement('button');view.type='button';view.textContent='View';
       view.onclick=()=>{status.textContent=t.name+' · '+t.wss_url+' · region '+t.region+
         ' · linked node '+t.node_id+' · weight '+t.weight+' · '+(t.enabled?'enabled':'disabled')+
@@ -56,6 +57,8 @@ export function setupOperationsAdmin({get,request}){
       weight:Number(f.elements.weight.value),enabled:f.elements.enabled.checked};
     await request(id?`/api/admin/operations/redirector/${id}`:'/api/admin/operations/redirector',data,id?'PUT':'POST');f.reset();f.elements.targetId.value='';await refresh();status.textContent='WSS discovery target saved.';
   }catch(error){status.textContent=error.message;}};
+  $('redirector-refresh').onclick=()=>refresh().catch(e=>status.textContent=e.message);
+  $('redirector-search').oninput=()=>refresh().catch(e=>status.textContent=e.message);
   $('redirector-new').onclick=()=>{$('redirector-form').reset();$('redirector-form').elements.targetId.value='';};
   return {refresh:()=>refresh().catch(e=>status.textContent=e.message)};
 }
