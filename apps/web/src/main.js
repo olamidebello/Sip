@@ -10,6 +10,7 @@ import {setupDidwwAdmin} from "./didwwAdmin.js";
 import {setupAdapterAdmin} from "./adapterAdmin.js";
 import {setupOperatorControl} from "./operatorControl.js";
 import {setupSwitchAdmin} from "./switchAdmin.js";
+import {setupClusterAdmin} from "./clusterAdmin.js";
 import {setupServerFleetAdmin} from "./serverFleetAdmin.js";
 import {setupFleetNetworkAdmin} from "./fleetNetworkAdmin.js";
 import {setupFleetAccessAdmin} from "./fleetAccessAdmin.js";
@@ -736,6 +737,19 @@ root.innerHTML = `
       <h3>API capacity</h3><p id="cluster-summary"></p>
       <form id="cluster-scale"><label>Desired API replicas on this host <input name="apiReplicas" type="number" min="1" max="4" step="1" required></label><button>Request scaling</button></form>
       <button id="cluster-refresh" type="button">Refresh scaling status</button><p id="cluster-status" role="status"></p>
+      <h4>Switch capacity policy</h4>
+      <p>Set a planning target and compare it with fresh healthy switch inventory. Saving this policy does not deploy a node or change SIP routing.</p>
+      <form id="cluster-capacity-form">
+        <label>Target concurrent calls <input name="targetCalls" type="number" min="1" max="100000" required></label>
+        <label>Tested calls per node <input name="perNodeCalls" type="number" min="1" max="5000" required></label>
+        <label>Headroom percent <input name="headroomPercent" type="number" min="0" max="100" required></label>
+        <label>Minimum regions <input name="minRegions" type="number" min="1" max="5" required></label>
+        <button type="submit">Save capacity policy</button>
+      </form>
+      <button id="cluster-capacity-refresh" type="button">Refresh capacity and regions</button>
+      <p id="cluster-capacity-summary"></p><p id="cluster-capacity-status" role="status"></p>
+      <a href="#fleet-admin">Open server inventory and deployment jobs</a>
+      <h4>Capacity policy revisions</h4><ul id="cluster-capacity-history"></ul>
       <h4>Recent requests</h4><ul id="cluster-history"></ul>
     </section>
     <section id="fleet-admin" hidden>
@@ -1025,7 +1039,7 @@ const navigationGroups=[
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
-  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","FreeSWITCH"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
+  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","FreeSWITCH"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","Cluster & capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
   {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"]]}
@@ -1157,6 +1171,7 @@ const didwwAdmin=setupDidwwAdmin({get:apiGet,request:accountRequest});
 const adapterAdmin=setupAdapterAdmin({get:apiGet,request:accountRequest});
 const operatorAdmin=setupOperatorControl();
 const switchAdmin=setupSwitchAdmin();
+const clusterAdmin=setupClusterAdmin({get:apiGet,request:accountRequest});
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
 const pbx = setupPbx();
@@ -1548,7 +1563,7 @@ function signedIn(user) {
   $("#flowroute-auto-form").hidden=user.role!=="super_admin";
   $("#carrier-catalog-form").hidden=user.role!=="super_admin";
   if(user.role==="super_admin"){providerWebhooks.refresh();didwwAdmin.refresh();adapterAdmin.refresh();serverFleet.refresh();fleetNetwork.refresh();fleetGrants.refresh();fleetFirewall.refresh();operationsAdmin.refresh();}
-  if(["admin","super_admin"].includes(user.role))operatorAdmin.refresh();
+  if(["admin","super_admin"].includes(user.role)){operatorAdmin.refresh();clusterAdmin.refresh();}
   if(["admin","super_admin"].includes(user.role)){
     switchAdmin.refresh(user.role==="super_admin");
     $("#switch-config").querySelectorAll("input,select,button").forEach(el=>el.disabled=user.role!=="super_admin");
