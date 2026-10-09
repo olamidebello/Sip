@@ -24,9 +24,11 @@ jobs:
           template = Path('deploy/kamailio/adapter.cfg.j2').read_text()
           config = Environment(undefined=StrictUndefined).from_string(template).render(
               kamailio_domain='sip.example.invalid',
-              kamailio_api_url='http://127.0.0.1:3000',
+              kamailio_api_url='http://127.0.0.1:18080',
               kamailio_route_token='x' * 48)
           Path('/tmp/kamailio-adapter.cfg').write_text(config)
           PY
+      - name: Check preflight shell syntax
+        run: bash -n deploy/kamailio/preflight.sh
       - name: Parse Kamailio configuration
         run: kamailio -c -f /tmp/kamailio-adapter.cfg
