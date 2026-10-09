@@ -614,7 +614,7 @@ root.innerHTML = `
           <a href="#carrier-admin">Carrier profiles</a>
           <a href="#pbx-admin">PBX routes</a>
           <a href="#cdr-admin">Call records</a>
-          <a href="#server-admin">Server operations</a>
+          <a href="#fleet-admin">Server operations</a>
         </nav>
       </section>
       <h4>Gateway mappings</h4><ul id="switch-gateways"></ul>
