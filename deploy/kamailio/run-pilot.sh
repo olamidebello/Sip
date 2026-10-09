@@ -29,6 +29,7 @@ ports=api.get("ports",[])
 if not any(p.get("host_ip")=="127.0.0.1" and int(p.get("published",0))==18080 for p in ports):
     raise SystemExit("Pilot refused: API must bind only to host loopback 18080")
 '
-"${compose[@]}" up -d --build api
+"${compose[@]}" build api
+"${compose[@]}" up -d --no-build api
 bash "$repo/deploy/kamailio/preflight.sh"
 echo "Isolated API pilot ready. No production API or SIP service was changed."
