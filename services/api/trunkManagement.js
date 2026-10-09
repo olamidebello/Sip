@@ -39,6 +39,17 @@ export async function handleTrunks({req,res,path,user,pool,send,readJson}){
   const match=/^\/api\/pbx\/trunks\/([0-9a-f-]{36})(?:\/(status|history|export))?$/i.exec(path);
   if(!match||!uuid.test(match[1]))return send(res,404,{error:'Trunk route unavailable'});
   const id=match[1],action=match[2];
+  if(!action&&req.method==='GET'){
+    const trunk=(await pool.query('SELECT id,name,host,port,transport,priority,enabled,revision,updated_at FROM pbx_trunks WHERE id=$1 AND tenant_id=$2',
+      [id,tenant])).rows[0];
+    if(!trunk)return send(res,404,{error:'Trunk unavailable'});
+    const [rates,carriers]=await Promise.all([
+      pool.query('SELECT prefix,cost_cents_per_minute,price_cents_per_minute FROM pbx_rates WHERE trunk_id=$1 AND tenant_id=$2 ORDER BY prefix LIMIT 100',[id,tenant]),
+      pool.query('SELECT provider,status,routing_mode,max_concurrent_calls FROM carrier_provider_profiles WHERE trunk_id=$1 AND tenant_id=$2 ORDER BY provider',[id,tenant])
+    ]);
+    return send(res,200,{trunk,rates:rates.rows,carriers:carriers.rows,
+      scope:'Configuration and linked inventory only; SIP reachability and carrier activation are not verified'});
+  }
   if(action==='history'&&req.method==='GET'){
     const rows=await pool.query('SELECT action,snapshot,actor_id,created_at FROM pbx_trunk_events WHERE trunk_id=$1 AND tenant_id=$2 ORDER BY created_at DESC LIMIT 100',[id,tenant]);
     return rows.rowCount?send(res,200,{events:rows.rows}):send(res,404,{error:'Trunk history unavailable'});
