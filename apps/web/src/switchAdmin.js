@@ -7,6 +7,26 @@ async function api(path,method='GET',body){
 export function setupSwitchAdmin(){
   const root=$('#switch-admin'),status=$('#switch-status'),form=$('#switch-config');
   let canEdit=false;
+  async function readiness(){
+    const summary=root.querySelector('#kamailio-readiness-summary');
+    const blockers=root.querySelector('#kamailio-readiness-blockers');
+    const button=root.querySelector('#kamailio-readiness-refresh');
+    button.disabled=true;
+    summary.textContent='Checking tenant data…';
+    blockers.replaceChildren();
+    try{
+      const state=await api('/api/admin/switch/kamailio/readiness');
+      summary.textContent=state.activeAccounts+' active SIP accounts · '+
+        state.syncedCredentials+' digest credentials · '+
+        state.enabledCarriers+' enabled carrier mappings. Production readiness is unverified.';
+      for(const reason of state.blockers){
+        const item=document.createElement('li');
+        item.textContent=reason;
+        blockers.append(item);
+      }
+    }catch(error){summary.textContent=error.message;}
+    finally{button.disabled=false;}
+  }
   async function refresh(edit=canEdit){
     canEdit=edit;
     try{
@@ -37,6 +57,7 @@ export function setupSwitchAdmin(){
       status.textContent=(cfg?.enabled?'Tenant switch enabled':'Tenant switch disabled')+
         ' · '+(switchState.configured?'XML credentials configured':'XML credentials missing')+
         ' · '+Number(switchState.accounts.active)+' active of '+Number(switchState.accounts.total)+' SIP accounts.';
+      await readiness();
     }catch(e){status.textContent=e.message;}
   }
   form.onsubmit=async event=>{event.preventDefault();try{
@@ -48,5 +69,6 @@ export function setupSwitchAdmin(){
       provider:f.elements.provider.value,gatewayName:f.elements.gatewayName.value,enabled:f.elements.enabled.checked});
       await refresh();}catch(e){status.textContent=e.message;}};
   root.querySelector('#switch-refresh').onclick=refresh;
+  root.querySelector('#kamailio-readiness-refresh').onclick=readiness;
   return {refresh};
 }
