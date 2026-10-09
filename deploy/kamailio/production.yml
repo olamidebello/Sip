@@ -1,0 +1,168 @@
+---
+# Run locally on the switch host after carrier and media configurations have
+# been prepared and reviewed. This playbook never generates SIP credentials.
+- name: Install and activate reviewed production SIP configuration
+  hosts: switch_nodes
+  become: true
+  gather_facts: true
+  vars:
+    sip_packages:
+      - kamailio
+      - kamailio-extra-modules
+      - kamailio-json-modules
+      - kamailio-utils-modules
+      - kamailio-tls-modules
+      - kamailio-websocket-modules
+      - rtpengine-daemon
+  tasks:
+    - name: Require Debian 12 and explicit production inputs
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version == '12'
+          - production_public_ip is defined
+          - production_public_ip is match('^[0-9]{1,3}(\\.[0-9]{1,3}){3}$')
+          - production_kamailio_config is defined
+          - production_rtpengine_config is defined
+          - production_carrier_endpoint is defined
+          - production_carrier_endpoint | length > 3
+          - production_carrier_profile_reviewed | default(false) | bool
+        fail_msg: >-
+          Provide reviewed absolute config paths, public IP, carrier endpoint,
+          and production_carrier_profile_reviewed=true after reviewing peering inputs.
+
+    - name: Check source configuration files on this host
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ production_kamailio_config }}"
+        - "{{ production_rtpengine_config }}"
+      register: source_configs
+
+    - name: Require readable absolute regular files
+      ansible.builtin.assert:
+        that:
+          - item.item.startswith('/')
+          - item.stat.isreg | default(false)
+          - item.stat.mode not in ['0000']
+      loop: "{{ source_configs.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Read reviewed configurations for fail-closed checks
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - "{{ production_kamailio_config }}"
+        - "{{ production_rtpengine_config }}"
+      register: reviewed_configs
+      no_log: true
+
+    - name: Reject staging listener and missing carrier or media configuration
+      ansible.builtin.assert:
+        that:
+          - "'Carrier route not commissioned' not in (reviewed_configs.results[0].content | b64decode)"
+          - "'127.0.0.1:5062' not in (reviewed_configs.results[0].content | b64decode)"
+          - "production_public_ip in (reviewed_configs.results[0].content | b64decode)"
+          - "production_carrier_endpoint in (reviewed_configs.results[0].content | b64decode)"
+          - "production_public_ip in (reviewed_configs.results[1].content | b64decode)"
+          - "'2223' in (reviewed_configs.results[1].content | b64decode)"
+        fail_msg: Production listener, carrier dispatch, or RTPengine control/public interface is missing.
+      no_log: true
+
+    - name: Discover existing service state
+      ansible.builtin.service_facts:
+
+    - name: Require a controlled cutover with no active SIP service
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services.get('kamailio.service', {}).get('state', 'stopped') != 'running'
+          - ansible_facts.services.get('rtpengine-daemon.service', {}).get('state', 'stopped') != 'running'
+        fail_msg: Existing live services require a separate maintenance and rollback plan.
+
+    - name: Install SIP packages
+      ansible.builtin.apt:
+        name: "{{ sip_packages }}"
+        state: present
+        update_cache: true
+
+    - name: Parse reviewed Kamailio configuration before installation
+      ansible.builtin.command:
+        argv:
+          - /usr/sbin/kamailio
+          - -c
+          - -f
+          - "{{ production_kamailio_config }}"
+      changed_when: false
+
+    - name: Install, start, and check reviewed services
+      block:
+        - name: Install Kamailio configuration with backup
+          ansible.builtin.copy:
+            src: "{{ production_kamailio_config }}"
+            dest: /etc/kamailio/kamailio.cfg
+            remote_src: true
+            owner: root
+            group: kamailio
+            mode: '0640'
+            backup: true
+            validate: /usr/sbin/kamailio -c -f %s
+
+        - name: Install RTPengine configuration with backup
+          ansible.builtin.copy:
+            src: "{{ production_rtpengine_config }}"
+            dest: /etc/rtpengine/rtpengine.conf
+            remote_src: true
+            owner: root
+            group: rtpengine
+            mode: '0640'
+            backup: true
+
+        - name: Start RTPengine before Kamailio
+          ansible.builtin.systemd_service:
+            name: rtpengine-daemon
+            enabled: true
+            state: started
+
+        - name: Verify RTPengine control port
+          ansible.builtin.command: ss -H -lun sport = :2223
+          register: media_socket
+          changed_when: false
+          failed_when: media_socket.stdout | trim == ''
+
+        - name: Start Kamailio
+          ansible.builtin.systemd_service:
+            name: kamailio
+            enabled: true
+            state: started
+
+        - name: Verify public SIP UDP listener
+          ansible.builtin.command: ss -H -lun sport = :5060
+          register: sip_socket
+          changed_when: false
+          failed_when: production_public_ip not in sip_socket.stdout
+      rescue:
+        - name: Stop incomplete SIP activation
+          ansible.builtin.systemd_service:
+            name: kamailio
+            enabled: false
+            state: stopped
+          failed_when: false
+        - name: Stop incomplete RTP activation
+          ansible.builtin.systemd_service:
+            name: rtpengine-daemon
+            enabled: false
+            state: stopped
+          failed_when: false
+        - name: Report incomplete activation
+          ansible.builtin.fail:
+            msg: >-
+              Activation failed and both services were stopped. Configuration
+              backups are retained by Ansible. Review journalctl before retrying.
+
+    - name: Report remaining carrier acceptance checks
+      ansible.builtin.debug:
+        msg: >-
+          Host services and sockets are up. Live carrier peering, authenticated
+          registration, inbound/outbound calls, two-way RTP, failover, CDR and
+          billing still require observed tests before commissioning is complete.
