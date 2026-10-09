@@ -4,6 +4,7 @@ export function setupProviderCredentialsAdmin({get,request}){
   const status=root.querySelector('#provider-credentials-status');
   const list=root.querySelector('#provider-credentials-list');
   let revisions=new Map();
+  let entries=new Map();
   function choose(){
     const didww=form.elements.provider.value==='didww';
     root.querySelector('#provider-access-label').hidden=didww;
@@ -18,13 +19,28 @@ export function setupProviderCredentialsAdmin({get,request}){
     try{
       const data=await get('/api/admin/carriers/credentials');
       revisions=new Map(data.entries.map(row=>[row.provider,Number(row.revision)]));
+      entries=new Map(data.entries.map(row=>[row.provider,row]));
       list.replaceChildren();
       for(const provider of ['flowroute','didww']){
         const row=data.entries.find(item=>item.provider===provider);
         const li=document.createElement('li');
         li.append(document.createTextNode(provider.toUpperCase()+' · '+(row?
-          'configured (revision '+row.revision+', updated '+row.updated_at+')':'not configured')+' '));
+          (row.enabled?'enabled':'disabled')+' (revision '+row.revision+', updated '+row.updated_at+')':'not configured')+' '));
         if(row){
+          const edit=document.createElement('button');edit.type='button';edit.textContent='Edit / rotate';
+          edit.onclick=()=>{form.elements.provider.value=provider;form.elements.accessKey.value='';
+            form.elements.secretKey.value='';form.elements.apiKey.value='';choose();
+            status.textContent='Enter all new '+provider+' credentials and save to rotate. Existing secrets remain hidden.';
+            form.scrollIntoView({behavior:'smooth'});};
+          li.append(edit);
+          const toggle=document.createElement('button');toggle.type='button';
+          toggle.textContent=row.enabled?'Disable':'Enable';
+          toggle.onclick=async()=>{toggle.disabled=true;
+            try{await request('/api/admin/carriers/credentials/'+provider,
+              {enabled:!row.enabled,expectedRevision:Number(row.revision)},'PATCH');
+              await refresh();status.textContent=provider+' '+(row.enabled?'disabled':'enabled')+'.';}
+            catch(error){status.textContent=error.message;toggle.disabled=false;}
+          };li.append(toggle);
           const remove=document.createElement('button');remove.type='button';remove.textContent='Remove credentials';
           remove.onclick=async()=>{if(!confirm('Remove '+provider+' API credentials for this tenant?'))return;
             remove.disabled=true;
