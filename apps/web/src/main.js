@@ -845,7 +845,10 @@ root.innerHTML = `
         <label>Preview region <input id="balancer-preview-region" value="global" maxlength="40"></label>
         <button id="balancer-preview" type="button">Preview selection</button>
         <p id="balancer-preview-result" role="status"></p><ul id="balancer-policy-history"></ul>
-        <h4>Healthy WSS discovery targets</h4><p id="redirector-scope"></p><button id="redirector-new" type="button">New target</button>
+        <h4>Healthy WSS discovery targets</h4><p id="redirector-scope"></p>
+        <nav aria-label="Balancer management"><a href="#fleet-admin">Switch nodes</a><a href="#cluster-admin">Cluster capacity</a></nav>
+        <label>Find target <input id="redirector-search" type="search" placeholder="Name, region or URL"></label>
+        <button id="redirector-refresh" type="button">Refresh balancer</button><button id="redirector-new" type="button">New target</button>
         <form id="redirector-form"><input name="targetId" type="hidden"><label>Name <input name="name" required></label>
           <label>Region <input name="region" value="global" required></label><label>Linked switch <select name="nodeId" required></select></label>
           <label>WSS URL <input name="wssUrl" type="url" placeholder="wss://sip.example.com/" required></label>
