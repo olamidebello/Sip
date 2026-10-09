@@ -493,6 +493,14 @@ The monitoring feed needs an authoritative switch event producer for each tenant
 
 ### Production billing gate on the SIP server
 
+To install the Debian host prerequisites locally, without starting charging or changing SIP traffic, run:
+
+```bash
+cd /opt/olamide/kamailio-staging && git fetch origin kamailio-rebuild && git switch --detach origin/kamailio-rebuild && printf '[switch_nodes]\nsip-switch-1 ansible_connection=local\n' > /tmp/olamide-kamailio-inventory.ini && ansible-playbook -i /tmp/olamide-kamailio-inventory.ini deploy/kamailio/billing-requirements.yml
+```
+
+This installs TLS/diagnostic/database client packages and creates private billing artifact directories. It checks the existing Docker Compose and deployment inputs. It does not install an ASTPP-equivalent rating engine, since that application code and its real-time switch authorization contract have not been built. The server's existing MySQL and API are used by the current unrated features; installing packages cannot safely turn those into prepaid charging.
+
 Run `deploy/kamailio/billing-production.yml` locally on Debian 12 after the rating engine, synchronous switch authorization, immutable billing ledger, and carrier reconciliation have been implemented and independently accepted. The playbook checks for these components and acceptance reports before reading private API health. **It deliberately fails on this build and does not alter production or debit wallets.** A syntax check alone does not establish billing readiness. Do not substitute the existing unrated CDR import or tariff quote preview for live prepaid cutoff.
 
 ```bash
