@@ -87,7 +87,8 @@ test('admin API sends a versioned sandbox request with server-side key',async()=
   try{
     const result=await handleDidwwAdmin({req:{method:'GET',url:'/api/admin/didww/resources/balance'},
       path:'/api/admin/didww/resources/balance',user:{role:'super_admin',tenant_id:tenant},
-      pool:{query:()=>{throw Error('read-only request must not write audit');}},
+      pool:{query:sql=>{if(sql.startsWith('SELECT ciphertext,enabled FROM provider_api_credentials'))return {rows:[],rowCount:0};
+        throw Error('read-only request must not write audit');}},
       origin:'https://sip.example.com',send:(_res,status,body)=>({status,body})});
     assert.equal(result.status,200);
     assert.equal(outbound.url,'https://sandbox-api.didww.com/v3/balance');
