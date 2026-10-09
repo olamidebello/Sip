@@ -241,7 +241,7 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
   if(job&&uuid.test(job[1])&&req.method==='POST'){
     if(!granted('deploy'))return send(res,403,{error:'Fleet deployment access required'});
     const {action}=await readJson(req);
-    if(!['install','upgrade','health'].includes(action))return send(res,400,{error:'Approved job action required'});
+    if(!['install','upgrade','health','kamailio_test'].includes(action))return send(res,400,{error:'Approved job action required'});
     if(!process.env.DEPLOY_RUNNER_TOKEN)return send(res,409,{error:'Private deployment runner is not configured'});
     const outcome=await queue(pool,job[1],action,user.id);
     return send(res,outcome.code,outcome.error?{error:outcome.error}:outcome);
@@ -318,8 +318,9 @@ export async function handleServerFleetRunner({req,res,path,pool,send,readJson})
       const found=await db.query("SELECT node_id,action FROM deployment_jobs WHERE id=$1 AND runner_id=$2 AND status='leased' AND lease_until>UTC_TIMESTAMP(3) FOR UPDATE",[b.jobId,b.runnerId]);
       if(!found.rowCount){await db.query('ROLLBACK');return send(res,409,{error:'Job lease unavailable'});}
       await db.query("UPDATE deployment_jobs SET status=$1,summary=$2,finished_at=UTC_TIMESTAMP(3),lease_until=NULL WHERE id=$3",[b.status,b.summary,b.jobId]);
-      await db.query("UPDATE deployment_nodes SET status=$1,last_error=$2 WHERE id=$3",
-        [b.status==='succeeded'?'ready':'error',b.status==='failed'?b.summary:null,found.rows[0].node_id]);
+      if(found.rows[0].action!=='kamailio_test')
+        await db.query("UPDATE deployment_nodes SET status=$1,last_error=$2 WHERE id=$3",
+          [b.status==='succeeded'?'ready':'error',b.status==='failed'?b.summary:null,found.rows[0].node_id]);
       await db.query('INSERT INTO deployment_events(id,node_id,job_id,category,detail) VALUES($1,$2,$3,$4,$5)',
         [randomUUID(),found.rows[0].node_id,b.jobId,'job_'+b.status,b.summary.slice(0,500)]);
       await db.query('COMMIT');return send(res,200,{accepted:true});
