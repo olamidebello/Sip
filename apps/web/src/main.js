@@ -375,12 +375,20 @@ root.innerHTML = `
     </form>
     <label>Meeting ID <input id="meeting-id" placeholder="Paste a meeting ID"></label>
     <button id="meeting-join" type="button">Join meeting</button>
+    <button id="meeting-copy" type="button">Copy meeting link</button>
+    <button id="meeting-native-share" type="button">Share meeting</button>
+    <button id="meeting-refresh" type="button">Refresh my meetings</button>
+    <h3>My meetings and invitations</h3><ul id="meeting-list"></ul>
     <div id="meeting-live" hidden>
       <h3 id="meeting-title"></h3>
       <div id="meeting-videos" class="meeting-videos"></div>
       <button id="meeting-mic" type="button">Mute</button>
       <button id="meeting-camera" type="button">Camera off</button>
       <button id="meeting-share" type="button">Share screen</button>
+      <button id="meeting-hand" type="button">Raise hand</button>
+      <button id="meeting-reaction" type="button">Send applause</button>
+      <form id="meeting-invite" hidden><label>Invite tenant user by email <input name="email" type="email" required></label><button>Invite to meeting</button></form>
+      <p id="meeting-participants" aria-live="polite"></p>
       <p id="share-notice">Screen sharing is visible to all meeting participants. Pointer assistance needs your approval and does not control your computer.</p>
       <div id="assist-requests" aria-live="polite"></div>
       <div id="assist-grants"></div>
@@ -398,6 +406,25 @@ root.innerHTML = `
     <p id="meeting-status" role="status"></p>
   </section>
   <section id="admin" hidden>
+    <section id="meeting-policy-admin" hidden>
+      <h3>Meeting sharing and participants</h3>
+      <p>These tenant settings apply to meeting links, invitations, participant actions, and screen sharing. Rooms support at most four browser participants.</p>
+      <form id="meeting-policy-form">
+        <label>Maximum participants <input name="maxParticipants" type="number" min="2" max="4" required></label>
+        <label><input name="allowLinks" type="checkbox"> Allow same-tenant meeting links</label>
+        <label><input name="allowInvites" type="checkbox"> Allow host invitations</label>
+        <label><input name="requireInvitation" type="checkbox"> Require an invitation to join</label>
+        <label><input name="allowScreenShare" type="checkbox"> Allow screen sharing</label>
+        <label><input name="allowChat" type="checkbox"> Allow meeting chat</label>
+        <label><input name="allowReactions" type="checkbox"> Allow reactions</label>
+        <label><input name="allowHand" type="checkbox"> Allow hand raising</label>
+        <button type="submit">Save meeting settings</button>
+      </form>
+      <button id="meeting-policy-refresh" type="button">Refresh settings and rooms</button>
+      <h4>Active tenant rooms</h4><div id="meeting-admin-rooms"></div>
+      <p id="meeting-policy-status" role="status"></p>
+      <nav aria-label="Meeting administration"><a href="#meetings">Open meetings</a><a href="#group-admin">Group permissions</a><a href="#help">Meeting guide</a></nav>
+    </section>
     <section id="locale-admin">
       <h3>Tenant locale defaults</h3>
       <form id="locale-admin-form"><label>Language <select name="language"></select></label>
@@ -700,6 +727,16 @@ root.innerHTML = `
       <div id="charging-tiles" class="dashboard-tiles"></div>
       <nav class="auth-pages" aria-label="Charging administration"><a href="#pbx-admin">Rate deck and routing</a><a href="#cdr-admin">Call records</a><a href="#pricing-admin">DID pricing</a><a href="#report-admin">Reports</a><a href="#carrier-admin">Carriers</a></nav>
       <p id="charging-status" role="status"></p>
+    </section>
+    <section id="prepaid-control-admin" hidden><h3>Prepaid authorization controls</h3>
+      <p>Set the maximum authorized call window for this tenant. Calls reserve funds before dispatch and require a switch enforced BYE at expiry. This screen cannot install or verify the host SIP configuration.</p>
+      <nav aria-label="Prepaid setup"><a href="#operator-admin">Configure tariff rates</a><a href="#switch-admin">Check SIP readiness</a><a href="#live-calls-admin">Review live calls</a><a href="#cdr-admin">Review call records</a><a href="#help">Open guide</a></nav>
+      <button id="prepaid-control-refresh" type="button">Refresh policy and readiness</button>
+      <p id="prepaid-control-summary" role="status"></p>
+      <form id="prepaid-control-form"><label>Maximum call window (minutes) <input name="maxCallMinutes" type="number" min="1" max="60" value="10" required title="Funds for this many minutes are reserved before routing; the switch must end the call at expiry."></label>
+        <label><input name="enabled" type="checkbox"> Allow tenant prepaid authorization</label>
+        <button type="submit">Save prepaid policy</button></form>
+      <h4>Recent policy changes</h4><ol id="prepaid-control-events"></ol>
     </section>
     <section id="settlement-admin"><h3>Carrier statement reconciliation</h3>
       <p>Record a carrier statement against your independently reviewed expected amount. Approval requires a second super administrator and matching totals. This does not pay the carrier or bill subscribers.</p>
@@ -1136,7 +1173,7 @@ const navigationGroups=[
   {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio SIP"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["rating-admin","Call rating"],["settlement-admin","Carrier settlements"],["payment-admin","Stripe gateway"],["cluster-admin","Cluster & capacity"],["live-calls-admin","Live calls"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
-  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"]]}
+  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"],["prepaid-control-admin","Prepaid controls"],["meeting-policy-admin","Meeting controls"]]}
 ];
 let activeRole=null;
 let pageRoutes;
@@ -1740,6 +1777,10 @@ function signedIn(user) {
   $("#agent-panel").hidden = !user.features?.call_center;
   pbx.refreshSelf(user).catch((error) => { $("#agent-status-result").textContent = error.message; });
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
+  $("#prepaid-control-admin").hidden=user.role!=="super_admin";
+  $("#meeting-policy-admin").hidden=user.role!=="super_admin";
+  if(user.role==='super_admin')refreshMeetingAdmin().catch(error=>{$('#meeting-policy-status').textContent=error.message;});
+  if(user.role==="super_admin")refreshPrepaidControl().catch(error=>{$("#prepaid-control-summary").textContent=error.message;});
   updateNavigation();
   workspaceQuick.refresh();workPlanner.refresh();campaigns.inbox();
   if(["admin","super_admin"].includes(user.role)){ $("#campaign-admin").hidden=false;$("#campaign-form [name=audience] option[value=all]").hidden=user.role!=="super_admin";campaigns.refresh();passkeyPolicy.refresh(); }
@@ -2168,6 +2209,70 @@ async function refreshCharging(){
   $("#charging-status").textContent=summary.note;
 }
 $("#charging-refresh").onclick=()=>refreshCharging().catch(error=>{$("#charging-status").textContent=error.message;});
+async function refreshPrepaidControl(){
+  const data=await apiGet('/api/admin/billing-control');
+  const form=$("#prepaid-control-form");
+  form.elements.maxCallMinutes.value=data.policy.max_call_minutes;
+  form.elements.enabled.checked=Boolean(data.policy.enabled);
+  form.elements.enabled.disabled=!data.globalEnabled&&!data.policy.enabled;
+  $("#prepaid-control-summary").textContent=`Host authorization: ${data.globalEnabled?'enabled':'disabled'}; tenant policy: ${data.policy.enabled?'enabled':'disabled'}; funded accounts: ${data.prepaidAccounts}; active reservations: ${data.activeReservations}; eligible rates: ${data.activeRates}. ${data.note}`;
+  const history=$("#prepaid-control-events");history.replaceChildren();
+  for(const item of data.events){const li=document.createElement('li');li.textContent=`${item.created_at}: ${item.action}, ${item.max_call_minutes} minutes`;history.append(li);}
+}
+$("#prepaid-control-refresh").onclick=()=>refreshPrepaidControl().catch(error=>{$("#prepaid-control-summary").textContent=error.message;});
+$("#prepaid-control-form").onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button');button.disabled=true;
+  try{await accountRequest('/api/admin/billing-control',{maxCallMinutes:Number(form.elements.maxCallMinutes.value),enabled:form.elements.enabled.checked},'PUT');
+    await refreshPrepaidControl();}
+  catch(error){$("#prepaid-control-summary").textContent=error.message;}
+  finally{button.disabled=false;}
+};
+async function refreshMeetingAdmin(){
+  const [settings,inventory]=await Promise.all([apiGet('/api/admin/meeting-policy'),apiGet('/api/admin/meeting-rooms')]);
+  const form=$('#meeting-policy-form');
+  for(const [key,value] of Object.entries(settings.policy)){
+    const input=form.elements[key];if(!input)continue;
+    if(input.type==='checkbox')input.checked=value;else input.value=value;
+  }
+  const container=$('#meeting-admin-rooms');container.replaceChildren();
+  for(const room of inventory.rooms){
+    const article=document.createElement('article'),heading=document.createElement('h5');
+    heading.textContent=`${room.title} — ${room.host_name} (${room.participants.length} connected)`;article.append(heading);
+    const control=(label,action,body)=>{const button=document.createElement('button');button.type='button';button.textContent=label;
+      button.onclick=async()=>{button.disabled=true;try{
+        await accountRequest(`/api/admin/meeting-rooms/${room.id}/${action}`,body);
+        await refreshMeetingAdmin();$('#meeting-policy-status').textContent=`${label} completed`;
+      }catch(error){$('#meeting-policy-status').textContent=error.message;button.disabled=false;}};article.append(button);};
+    control(room.locked?'Unlock room':'Lock room','lock',{locked:!room.locked});
+    control('End room for all','end',{});
+    const inviteForm=document.createElement('form'),inviteLabel=document.createElement('label'),email=document.createElement('input'),submit=document.createElement('button');
+    inviteLabel.textContent='Invite tenant email ';email.type='email';email.required=true;inviteLabel.append(email);
+    submit.type='submit';submit.textContent='Invite';inviteForm.append(inviteLabel,submit);
+    inviteForm.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{
+      await accountRequest(`/api/admin/meeting-rooms/${room.id}/invite`,{email:email.value});await refreshMeetingAdmin();
+    }catch(error){$('#meeting-policy-status').textContent=error.message;submit.disabled=false;}};
+    if(settings.policy.allowInvites)article.append(inviteForm);
+    for(const invitation of room.invitations){const row=document.createElement('p'),revoke=document.createElement('button');
+      row.textContent=`Invited: ${invitation.email} `;revoke.type='button';revoke.textContent='Revoke invitation';
+      revoke.onclick=async()=>{revoke.disabled=true;try{await accountRequest(`/api/admin/meeting-rooms/${room.id}/revoke`,{userId:invitation.recipient_id});await refreshMeetingAdmin();}
+        catch(error){$('#meeting-policy-status').textContent=error.message;revoke.disabled=false;}};row.append(revoke);article.append(row);}
+    for(const participant of room.participants){const row=document.createElement('p');row.textContent=participant.name+' ';
+      if(participant.id!==room.host_id){const remove=document.createElement('button');remove.type='button';remove.textContent='Remove participant';
+        remove.onclick=async()=>{remove.disabled=true;try{await accountRequest(`/api/admin/meeting-rooms/${room.id}/remove`,{userId:participant.id});await refreshMeetingAdmin();}
+          catch(error){$('#meeting-policy-status').textContent=error.message;remove.disabled=false;}};row.append(remove);}article.append(row);}
+    container.append(article);
+  }
+  $('#meeting-policy-status').textContent=`${inventory.rooms.length} active room(s).`;
+}
+$('#meeting-policy-refresh').onclick=()=>refreshMeetingAdmin().catch(error=>{$('#meeting-policy-status').textContent=error.message;});
+$('#meeting-policy-form').onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button');button.disabled=true;
+  const policy={maxParticipants:Number(form.elements.maxParticipants.value)};
+  for(const key of ['allowLinks','allowInvites','requireInvitation','allowScreenShare','allowChat','allowReactions','allowHand'])
+    policy[key]=form.elements[key].checked;
+  try{await accountRequest('/api/admin/meeting-policy',policy,'PUT');await refreshMeetingAdmin();$('#meeting-policy-status').textContent='Meeting settings saved';}
+  catch(error){$('#meeting-policy-status').textContent=error.message;}finally{button.disabled=false;}
+};
 async function refreshSettlements(){
   const data=await apiGet('/api/admin/settlements');
   const list=$("#settlement-list");list.replaceChildren();

@@ -44,6 +44,9 @@ import {migrateSettlements} from './settlements.js';
 import {migrateRatingEngine} from './ratingEngine.js';
 import {migrateBillingLedger} from './billingLedger.js';
 import {migratePrepaidAuthorizer} from './prepaidAuthorizer.js';
+import {migrateBillingControl} from './billingControl.js';
+import {migrateMeetingInvitations} from './meetingInvitations.js';
+import {migrateMeetingPolicy} from './meetingPolicy.js';
 
 const sql = filename => fs.readFile(new URL(filename, import.meta.url), 'utf8');
 
@@ -63,6 +66,8 @@ export async function migrate(pool) {
     const steps = [
       ['core', () => pool.initialize(awaitSql.core)],
       ['tenancy', () => migrateTenancy(pool)],
+      ['meeting_invitations', () => migrateMeetingInvitations(pool)],
+      ['meeting_policy', () => migrateMeetingPolicy(pool)],
       ['access', () => migrateAccess(pool)],
       ['onboarding', () => migrateOnboarding(pool)],
       ['sip_marketplace', () => migrateSipMarketplace(pool)],
@@ -109,6 +114,7 @@ export async function migrate(pool) {
       ['rating_engine', () => migrateRatingEngine(pool)],
       ['billing_ledger', () => migrateBillingLedger(pool)],
       ['prepaid_authorizer', () => migratePrepaidAuthorizer(pool)],
+      ['billing_control', () => migrateBillingControl(pool)],
       ['locales', () => migrateLocales(pool)]
     ];
     for (const [name, action] of steps) {

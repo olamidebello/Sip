@@ -20,3 +20,13 @@ test('insufficient prepaid funds refuses a new call without debit',async()=>{
   assert.equal(queries.includes('ROLLBACK'),true);
   assert.equal(queries.some(sql=>sql.startsWith('UPDATE prepaid_accounts')),false);
 });
+test('new call reserves at most ten minutes and returns a hard cutoff',async()=>{
+  const queries=[];const db={query:async(sql,args)=>{queries.push([sql,args]);
+    if(sql.startsWith('SELECT available_cents'))return {rowCount:1,rows:[{available_cents:1000,reserved_cents:0}]};
+    return {rowCount:0,rows:[]};},release(){}};
+  const result=await reserveMinute({connect:async()=>db},{tenant,user,source:'switch-1',legId:'leg-2',rateId:rate,priceCents:3});
+  assert.equal(result.authorized,true);assert.equal(result.maxSeconds,600);
+  const debit=queries.find(([sql])=>sql.startsWith('UPDATE prepaid_accounts'));
+  assert.equal(debit[1][0],30);
+  assert.equal(queries.at(-1)[0],'COMMIT');
+});

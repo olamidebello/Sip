@@ -64,13 +64,13 @@ export async function handleKamailioRoute({req,res,pool}){
   if(!domainPattern.test(domain||'')||!userPattern.test(caller||'')||
       !(extensionPattern.test(destination||'')||e164.test(destination||'')))
     return reply(res,400,{error:'Invalid route request'});
-  const cfg=await pool.query(`SELECT t.tenant_id,t.tariff_id
+  const cfg=await pool.query(`SELECT t.tenant_id,t.tariff_id,a.user_id
     FROM switch_tenants t JOIN tenants n ON n.id=t.tenant_id AND n.status='active'
     JOIN sip_accounts a ON a.tenant_id=t.tenant_id AND a.domain=t.domain AND a.username=$2 AND a.status='active'
     JOIN users u ON u.id=a.user_id AND u.status='active'
     WHERE t.domain=$1 AND t.enabled=TRUE LIMIT 1`,[domain,caller]);
   if(!cfg.rowCount)return reply(res,404,{route:'reject'});
-  const {tenant_id:tenant,tariff_id:tariff}=cfg.rows[0];
+  const {tenant_id:tenant,tariff_id:tariff,user_id:userId}=cfg.rows[0];
   if(extensionPattern.test(destination)){
     const target=await pool.query(`SELECT s.username FROM pbx_destinations d
       JOIN pbx_extensions e ON e.destination_id=d.id
@@ -83,7 +83,7 @@ export async function handleKamailioRoute({req,res,pool}){
   if(!tariff)return reply(res,404,{route:'reject'});
   const [policy,rates,blocks,carriers]=await Promise.all([
     pool.query('SELECT prefix,action FROM pbx_outbound_policies WHERE tenant_id=$1',[tenant]),
-    pool.query(`SELECT r.provider,r.prefix,r.cost_cents,r.price_cents,r.priority,r.effective_at,
+    pool.query(`SELECT r.id,r.provider,r.prefix,r.cost_cents,r.price_cents,r.priority,r.effective_at,
       r.expires_at,r.enabled,t.mode FROM operator_tariff_rates r JOIN operator_tariffs t
       ON t.id=r.tariff_id AND t.tenant_id=r.tenant_id AND t.enabled=TRUE
       WHERE r.tenant_id=$1 AND r.tariff_id=$2 AND r.enabled=TRUE`,[tenant,tariff]),
@@ -101,10 +101,11 @@ export async function handleKamailioRoute({req,res,pool}){
   for(const candidate of quote.candidates){
     const gateway=carriers.rows.find(row=>row.provider===candidate.provider)?.gateway_name;
     if(!gatewayPattern.test(gateway||'')||ranked.some(row=>row.provider===candidate.provider))continue;
-    ranked.push({provider:candidate.provider,gateway});
+    ranked.push({provider:candidate.provider,gateway,rateId:candidate.id});
     if(ranked.length===4)break;
   }
   if(!ranked.length)return reply(res,404,{route:'reject'});
   return reply(res,200,{route:'carrier',gateway:ranked[0].gateway,
-    destination,provider:ranked[0].provider,alternates:ranked.slice(1)});
+    destination,provider:ranked[0].provider,alternates:ranked.slice(1),
+    prepaid:{tenantId:tenant,userId,rateId:ranked[0].rateId,required:true}});
 }

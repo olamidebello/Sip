@@ -57,10 +57,10 @@ test('carrier quote returns ranked, enabled, tenant-scoped alternates',async()=>
     {provider:'second',status:'active',routing_mode:'outbound',gateway_name:'gw_second'},
     {provider:'disabled',status:'draft',routing_mode:'disabled',gateway_name:'gw_disabled'}
   ];
-  const rate=(provider,cost)=>({provider,prefix:'1',cost_cents:cost,price_cents:cost+2,
+  const rate=(provider,cost)=>({id:`rate-${provider}`,provider,prefix:'1',cost_cents:cost,price_cents:cost+2,
     priority:1,effective_at:'2020-01-01T00:00:00Z',expires_at:null,enabled:true,mode:'least_cost'});
   const pool={query:async(sql)=>{
-    if(sql.includes('FROM switch_tenants t'))return {rows:[{tenant_id:'tenant',tariff_id:'tariff'}],rowCount:1};
+    if(sql.includes('FROM switch_tenants t'))return {rows:[{tenant_id:'tenant',tariff_id:'tariff',user_id:'subscriber'}],rowCount:1};
     if(sql.includes('FROM pbx_outbound_policies'))return {rows:[],rowCount:0};
     if(sql.includes('FROM operator_tariff_rates'))return {rows:[rate('second',4),rate('first',2),rate('disabled',1)],rowCount:3};
     if(sql.includes('FROM operator_fraud_rules'))return {rows:[],rowCount:0};
@@ -72,5 +72,6 @@ test('carrier quote returns ranked, enabled, tenant-scoped alternates',async()=>
   assert.equal(res.status,200);
   assert.deepEqual(res.body,{route:'carrier',gateway:'gw_first',
     destination:'+12125551234',provider:'first',
-    alternates:[{provider:'second',gateway:'gw_second'}]});
+    alternates:[{provider:'second',gateway:'gw_second',rateId:'rate-second'}],
+    prepaid:{tenantId:'tenant',userId:'subscriber',rateId:'rate-first',required:true}});
 });

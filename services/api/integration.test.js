@@ -70,6 +70,11 @@ test("registered users can create and join a room; host controls it", {
   const created = await post("/api/meetings", { title:"Team call" }, hostCookie);
   assert.equal(created.status, 201, JSON.stringify(created.body) + "\nAPI stderr: " + log);
   const id = created.body.id;
+  assert.equal((await post(`/api/meetings/${id}/invite`,{email:'guest'+unique+'@example.com'},hostCookie)).status,200);
+  const invitedList=await fetch(base+'/api/meetings',{headers:{Cookie:guestCookie}});
+  assert.equal(invitedList.status,200);
+  assert.ok((await invitedList.json()).meetings.some(room=>room.id===id));
+  assert.equal((await post(`/api/meetings/${id}/invite`,{email:'outside@example.com'},guestCookie)).status,403);
   const socket = (cookie) => new WebSocket(`ws://127.0.0.1:${port}/api/meetings/${id}/socket`,
     { headers: { Origin:origin, Cookie:cookie } });
   const hostWs = socket(hostCookie);
