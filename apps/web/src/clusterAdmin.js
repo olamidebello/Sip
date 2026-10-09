@@ -2,12 +2,39 @@ export function setupClusterAdmin({get,request}){
   const $=id=>document.getElementById(id);
   const status=$('cluster-status'),capacityStatus=$('cluster-capacity-status');
   let editable=false;
+  let nodeConfigs=new Map();
+  function selectNode(){
+    const form=$('kamailio-config-form'),row=nodeConfigs.get(form.elements.nodeId.value);
+    form.elements.sipDomain.value=row?.sip_domain||'';
+    form.elements.maxConcurrentCalls.value=row?.max_concurrent_calls||100;
+    $('kamailio-config-preview').textContent=row?
+      'Saved revision '+row.revision+' · SIP '+row.listen_ip+':'+row.listen_port+
+      ' · API '+row.api_url+' · media '+row.media_socket:'No saved revision for this node.';
+  }
   async function refreshKamailio(){
     const panel=$('kamailio-monitor'),status=$('kamailio-monitor-status');
     panel.hidden=!editable;
+    $('kamailio-config-panel').hidden=!editable;
     if(!editable)return;
     try{
-      const data=await get('/api/admin/servers/kamailio');
+      const [data,config]=await Promise.all([get('/api/admin/servers/kamailio'),
+        get('/api/admin/servers/kamailio-config')]);
+      nodeConfigs=new Map(config.configs.map(row=>[row.node_id,row]));
+      const selector=$('kamailio-config-form').elements.nodeId,old=selector.value;
+      selector.replaceChildren();
+      for(const node of data.nodes.filter(node=>node.enabled)){
+        const option=document.createElement('option');option.value=node.id;
+        option.textContent=node.name+' · '+node.region;selector.append(option);
+      }
+      if([...selector.options].some(option=>option.value===old))selector.value=old;
+      $('kamailio-config-form').querySelector('button').disabled=!selector.value;
+      selectNode();
+      const revisions=$('kamailio-config-history');revisions.replaceChildren();
+      for(const row of config.history){
+        const li=document.createElement('li');
+        li.textContent='Revision '+row.revision+' · '+row.sip_domain+' · '+
+          row.max_concurrent_calls+' calls · '+row.created_at;revisions.append(li);
+      }
       const list=$('kamailio-monitor-nodes');list.replaceChildren();
       for(const node of data.nodes){
         const li=document.createElement('li');
@@ -103,5 +130,22 @@ export function setupClusterAdmin({get,request}){
   $('cluster-refresh').onclick=refresh;
   $('cluster-capacity-refresh').onclick=refresh;
   $('kamailio-monitor-refresh').onclick=refreshKamailio;
+  $('kamailio-config-form').elements.nodeId.onchange=selectNode;
+  $('kamailio-config-form').onsubmit=async event=>{
+    event.preventDefault();if(!editable)return;
+    const form=event.currentTarget,nodeId=form.elements.nodeId.value;
+    if(!nodeId)return;
+    const button=form.querySelector('button');button.disabled=true;
+    const status=$('kamailio-config-status');
+    try{
+      const saved=await request('/api/admin/servers/'+nodeId+'/kamailio-config',{
+        sipDomain:form.elements.sipDomain.value.trim(),
+        maxConcurrentCalls:Number(form.elements.maxConcurrentCalls.value),
+        expectedRevision:Number(nodeConfigs.get(nodeId)?.revision||0)},'PUT');
+      await refreshKamailio();
+      status.textContent='Revision '+saved.revision+' saved as staged settings. No service was deployed.';
+    }catch(error){status.textContent=error.message;}
+    finally{button.disabled=false;}
+  };
   return {refresh};
 }
