@@ -49,7 +49,7 @@ export async function handlePbx({req,res,path,user,pool,send,readJson}) {
       pool.query("SELECT enabled FROM switch_tenants WHERE tenant_id=$1",[tenant])
     ]);
     return send(res,200,{...result.rows[0],switchConfigured:!!switchState.rows[0]?.enabled,
-      switchConnected:false,note:"FreeSWITCH lookups may be enabled, but this API does not verify switch runtime or enforce charging. Queue and public DID routes remain planning records."});
+      switchConnected:false,note:"Kamailio tenant lookups may be enabled, but this API does not verify live SIP service or enforce charging. Queue and public DID routes remain planning records."});
   }
   if (path === "/api/pbx/extensions" && req.method === "GET") {
     const found = await pool.query("SELECT d.id,d.number,d.name,d.enabled,e.user_id,e.voicemail_enabled,e.forward_to FROM pbx_destinations d JOIN pbx_extensions e ON e.destination_id=d.id WHERE d.tenant_id=$1 ORDER BY d.number",[tenant]);
