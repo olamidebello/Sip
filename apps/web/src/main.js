@@ -1599,7 +1599,8 @@ function signedIn(user) {
   $("#fleet-operations-panel").hidden=user.role!=="super_admin";
   $("#flowroute-auto-form").hidden=user.role!=="super_admin";
   $("#carrier-catalog-form").hidden=user.role!=="super_admin";
-  if(user.role==="super_admin"){providerWebhooks.refresh();didwwAdmin.refresh();adapterAdmin.refresh();serverFleet.refresh();fleetNetwork.refresh();fleetGrants.refresh();fleetFirewall.refresh();operationsAdmin.refresh();}
+  $("#provider-credentials-admin").hidden=user.role!=="super_admin";
+  if(user.role==="super_admin"){providerWebhooks.refresh();providerCredentialsAdmin.refresh();didwwAdmin.refresh();adapterAdmin.refresh();serverFleet.refresh();fleetNetwork.refresh();fleetGrants.refresh();fleetFirewall.refresh();operationsAdmin.refresh();}
   if(["admin","super_admin"].includes(user.role)){operatorAdmin.refresh();clusterAdmin.refresh();}
   if(["admin","super_admin"].includes(user.role)){
     switchAdmin.refresh(user.role==="super_admin");
