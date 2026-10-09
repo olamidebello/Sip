@@ -30,6 +30,7 @@ import { createDatabase } from "./db.js";
 import { handleMobileAdmin } from "./mobileAdmin.js";
 import { handlePbx } from "./pbx.js";
 import { handleCdrIngest, handleCdrAdmin } from "./cdr.js";
+import {handleLiveCallIngest,handleLiveCallsAdmin} from './liveCalls.js';
 import { handleInhouseDids } from "./dids.js";
 import { handleNigeria } from "./nigeria.js";
 import { handleReports } from "./reports.js";
@@ -146,13 +147,14 @@ async function handler(req, res) {
   const providerWebhook=path.startsWith("/api/webhooks/providers/");
   const didwwWebhook=path.startsWith("/api/webhooks/didww/");
   const cdrIngest = req.method === "POST" && path === "/api/integrations/cdr";
+  const liveIngest = req.method === 'POST' && path === '/api/integrations/calls/events';
   const switchXml = path === "/api/switch/xml";
   const kamailioRoute = path === "/api/switch/kamailio/route";
   const kamailioAuth = path === "/api/switch/kamailio/auth";
   const deployRunner = path.startsWith('/api/integrations/deployment/');
-  if (req.method !== "GET" && !deployRunner && !switchXml && !kamailioRoute && !kamailioAuth && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
+  if (req.method !== "GET" && !deployRunner && !switchXml && !kamailioRoute && !kamailioAuth && !cdrIngest && !liveIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
     return send(res, 403, { error: "Invalid origin" });
-  if (req.method !== "GET" && !limit(req,(switchXml || kamailioRoute || kamailioAuth) ? 3000 : (deployRunner || cdrIngest || flowrouteWebhook || stripeWebhook || providerWebhook || didwwWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
+  if (req.method !== "GET" && !limit(req,(switchXml || kamailioRoute || kamailioAuth) ? 3000 : (deployRunner || cdrIngest || liveIngest || flowrouteWebhook || stripeWebhook || providerWebhook || didwwWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
     return send(res, 429, { error: "Too many requests" });
   try {
     if (switchXml) return await handleSwitchXml({req,res,pool});
@@ -164,6 +166,7 @@ async function handler(req, res) {
     if (providerWebhook) return await handleProviderWebhook({req,res,path,pool,send});
     if (didwwWebhook) return await handleDidwwCallback({req,res,path,pool,send,origin});
     if (cdrIngest) return await handleCdrIngest({req,res,pool,send,keys:cdrKeys});
+    if (liveIngest) return await handleLiveCallIngest({req,res,pool,send,keys:cdrKeys});
     if (currentToken(req) && !['/api/account/password','/api/me','/api/logout','/api/login'].includes(path)) {
       const sessionAccount=await currentUser(req);
       if(sessionAccount?.must_change_password) return send(res,403,{error:'Change your temporary password before continuing'});
@@ -240,7 +243,7 @@ async function handler(req, res) {
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
         path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") ||
         path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path.startsWith("/api/dashboard") || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
-        path === "/api/admin/cdr" || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
+        path === "/api/admin/cdr" || path.startsWith('/api/admin/live-calls') || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
       if(path==='/api/redirector'&&req.method==='GET'){
@@ -317,6 +320,7 @@ async function handler(req, res) {
         return await handlePricing({req,res,path,user,pool,send,readJson});
       if (path === "/api/admin/cdr" && req.method === "GET")
         return await handleCdrAdmin({req,res,user,pool,send});
+      if(path.startsWith('/api/admin/live-calls'))return await handleLiveCallsAdmin({req,res,path,user,pool,send,readJson});
       if (path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/"))
         return await handleInhouseDids({req,res,path,user,pool,send,readJson});
       if (path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/"))

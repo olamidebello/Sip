@@ -25,6 +25,7 @@ import { setupMobileAdmin } from "./mobileAdmin.js";
 import { setupTenants } from "./tenants.js";
 import { setupPbx } from "./pbx.js";
 import { setupReports } from "./reports.js";
+import {setupLiveCalls} from './liveCalls.js';
 import { setupPricing } from "./pricing.js";
 import { setupBackground } from "./background.js";
 import { setupLdapAdmin } from "./ldapAdmin.js";
@@ -489,8 +490,19 @@ root.innerHTML = `
       <p id="report-summary"></p>
       <a id="report-export" hidden>Download daily calls CSV</a>
       <a id="report-invoice-export" hidden>Download invoice summary CSV</a>
+      <a id="report-source-export" hidden>Download source performance CSV</a>
       <div id="report-details"></div>
       <p id="report-status" role="status"></p>
+    </section>
+    <section id="live-calls-admin">
+      <h3>Live call monitor</h3><p>Shows signed switch events from the last two minutes. A missing event feed is displayed as unavailable, never as zero calls.</p>
+      <p id="live-call-summary"></p><button id="live-call-refresh" type="button">Refresh calls</button>
+      <label><input id="live-call-auto" type="checkbox"> Auto refresh every 15 seconds</label>
+      <ul id="live-call-list"></ul><p id="live-call-status" role="status"></p>
+      <section id="live-call-detail" hidden><h4>Call timeline</h4><ol id="live-call-events"></ol>
+        <h4>Investigation notes</h4><ol id="live-call-notes"></ol>
+        <form id="live-call-note-form"><label>Note <textarea name="body" maxlength="1000" required></textarea></label><button>Save note</button></form>
+      </section>
     </section>
     <section id="inhouse-admin">
       <h3>In-house DID management</h3>
@@ -692,7 +704,11 @@ root.innerHTML = `
     <section id="cdr-admin">
       <h3>Imported call records</h3>
       <p>Verified switch records only. These are unrated and never charge a customer.</p>
+      <form id="cdr-filter"><label>Direction <select name="direction"><option value="">All</option><option>inbound</option><option>outbound</option></select></label>
+        <label>Result <select name="disposition"><option value="">All</option><option>answered</option><option>missed</option><option>rejected</option><option>failed</option></select></label>
+        <label>Switch source <input name="source" maxlength="80" pattern="[a-zA-Z0-9_.:-]+"></label><button>Filter call records</button></form>
       <button id="refresh-cdr" type="button">Refresh call records</button>
+      <button id="cdr-prev" type="button">Previous page</button><button id="cdr-next" type="button">Next page</button>
       <ol id="cdr-records"></ol>
       <p id="cdr-status" role="status"></p>
     </section>
@@ -1098,7 +1114,7 @@ const navigationGroups=[
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
-  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio SIP"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","Cluster & capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
+  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio SIP"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","Cluster & capacity"],["live-calls-admin","Live calls"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
   {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"]]}
@@ -1236,6 +1252,7 @@ const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
 const pbx = setupPbx();
 const reports = setupReports({get:(path)=>apiGet(path)});
+const liveCalls=setupLiveCalls({get:apiGet,request:accountRequest});
 const pricing = setupPricing();
 const background = setupBackground();
 const ldapAdmin = setupLdapAdmin();
@@ -1423,15 +1440,18 @@ async function apiGet(path) {
   return data;
 }
 async function refreshCdr() {
-  const {records} = await apiGet("/api/admin/cdr");
+  const params=new URLSearchParams(new FormData($('#cdr-filter')));params.set('page',String(cdrPage));
+  const {records,hasMore,page} = await apiGet(`/api/admin/cdr?${params}`);
   const list = $("#cdr-records"); list.replaceChildren();
   for (const record of records) {
     const item = document.createElement("li");
     item.textContent = `${record.started_at} · ${record.direction} · ${record.caller_e164} → ${record.callee_e164} · ${record.disposition} · ${record.billable_seconds}s billable · ${record.source}/${record.leg_id}`;
     list.append(item);
   }
-  $("#cdr-status").textContent = `${records.length} recent records; no charges applied.`;
+  $('#cdr-prev').disabled=page<=1;$('#cdr-next').disabled=!hasMore;
+  $("#cdr-status").textContent = `Page ${page}: ${records.length} records; no charges applied.`;
 }
+let cdrPage=1;
 async function refreshInhouse() {
   const filters=new URLSearchParams(new FormData($("#inhouse-filter")));
   const [blocks,inventory] = await Promise.all([
@@ -1564,6 +1584,9 @@ $("#inhouse-price").onsubmit=async(event)=>{
   } catch(error) {$("#inhouse-status").textContent=error.message;}
 };
 $("#refresh-cdr").onclick = () => refreshCdr().catch((error) => { $("#cdr-status").textContent = error.message; });
+$('#cdr-filter').onsubmit=event=>{event.preventDefault();cdrPage=1;refreshCdr().catch(error=>{$('#cdr-status').textContent=error.message;});};
+$('#cdr-prev').onclick=()=>{cdrPage=Math.max(1,cdrPage-1);refreshCdr().catch(error=>{$('#cdr-status').textContent=error.message;});};
+$('#cdr-next').onclick=()=>{cdrPage++;refreshCdr().catch(error=>{$('#cdr-status').textContent=error.message;});};
 async function loadContacts() {
   const { contacts } = await apiGet("/api/contacts");
   const list = $("#contact-list");
@@ -1717,6 +1740,7 @@ function signedIn(user) {
   if (["admin","super_admin"].includes(user.role)) {
     loadGeofenceAdmin().catch(error=>{$("#geofence-admin-status").textContent=error.message;});
     reports.refresh();
+    liveCalls.activate();
     pricing.refresh();
     ldapAdmin.refresh();
     authProviders.refresh();
@@ -2194,6 +2218,7 @@ $("#logout").onclick = async () => {
     $("#planner").hidden=true;$("#campaign-inbox-panel").hidden=true;$("#campaign-admin").hidden=true;$("#search-panel").hidden=true;$("#support").hidden=true;
     $("#locale-settings").hidden=true;localeSettings.clear();
     support.clear();
+    liveCalls.clear();
     background.clear();
     $("#chat").hidden = true;
     $("#billing").hidden = true;

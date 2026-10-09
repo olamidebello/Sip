@@ -33,6 +33,7 @@ const navigationHints = {
   'payment-admin':'Configure payment provider settings.',
   'cluster-admin':'Review node capacity and scaling controls.',
   'report-admin':'View operational and account reports.',
+  'live-calls-admin':'Monitor signed switch call events, timelines and investigation notes.',
   'cdr-admin':'Review call detail records.',
   'nigeria-admin':'Configure Nigerian network interconnect.',
   'ldap-admin':'Map directory groups to access.',
