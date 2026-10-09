@@ -591,18 +591,18 @@ root.innerHTML = `
       <p id="operator-quote" role="status"></p><ol id="operator-quote-candidates" aria-label="Ranked carrier routes"></ol><p id="operator-status" role="status"></p>
     </section>
     <section id="switch-admin">
-      <h3>FreeSWITCH</h3>
-      <p>Serve active SIP accounts and authenticated outbound dialplans from the tenant database. Configure FreeSWITCH XML curl and Sofia gateways on the switch host before enabling traffic. Public inbound routes and real time charging are not enabled here.</p>
+      <h3>Kamailio tenant SIP settings</h3>
+      <p>Manage tenant SIP domains, authenticated accounts, tariffs and carrier route keys used by the Kamailio adapter. Saving settings does not activate a live SIP host.</p>
       <form id="switch-config">
         <label>SIP domain <input name="domain" placeholder="sip.example.com" required></label>
         <label>Outbound tariff <select name="tariffId"></select></label>
-        <label><input name="enabled" type="checkbox"> Enable tenant switch lookups</label>
+        <label><input name="enabled" type="checkbox"> Enable tenant SIP lookups</label>
         <button>Save switch settings</button>
       </form>
       <form id="switch-gateway-form">
         <label>Carrier <select name="provider" id="switch-provider"></select></label>
-        <label>Configured Sofia gateway name <input name="gatewayName" pattern="[a-z][a-z0-9_-]{1,63}" required></label>
-        <label><input name="enabled" type="checkbox"> Enable gateway route</label><button>Save gateway mapping</button>
+        <label>Carrier route key <input name="gatewayName" pattern="[a-z][a-z0-9_-]{1,63}" required></label>
+        <label><input name="enabled" type="checkbox"> Enable carrier route</label><button>Save gateway mapping</button>
       </form>
       <section aria-labelledby="kamailio-readiness-title">
         <h4 id="kamailio-readiness-title">Kamailio commissioning</h4>
@@ -759,6 +759,19 @@ root.innerHTML = `
         <ul id="kamailio-monitor-nodes"></ul>
         <a href="#fleet-admin">Open fleet deployment and schedules</a>
       </section>
+      <section id="kamailio-config-panel" hidden>
+        <h4>Adapter node configuration</h4>
+        <p>Save loopback SIP adapter settings for an enabled switch host. These settings are staged; saving does not deploy them.</p>
+        <form id="kamailio-config-form">
+          <label>Switch node <select name="nodeId" required></select></label>
+          <label>SIP domain <input name="sipDomain" maxlength="255" placeholder="sip.example.com" required></label>
+          <label>Planned concurrent calls <input name="maxConcurrentCalls" type="number" min="1" max="5000" required></label>
+          <button type="submit">Save staged configuration</button>
+        </form>
+        <p id="kamailio-config-preview"></p>
+        <p id="kamailio-config-status" role="status"></p>
+        <h5>Recent revisions</h5><ul id="kamailio-config-history"></ul>
+      </section>
     </section>
     <section id="fleet-admin" hidden>
       <h3>Server and network operations</h3><p>Register switch hosts, review connectivity and versions, queue approved installations, and schedule health checks or upgrades. The private Ansible runner requires SSH access and passwordless sudo on managed hosts.</p>
@@ -908,7 +921,7 @@ root.innerHTML = `
         <button>Save DID route</button>
       </form><ul id="pbx-route-list"></ul>
       <h4>Trunk management and rate deck</h4>
-      <p>These trunk records drive route previews. Carrier activation and switch configuration use the separate provider and FreeSWITCH controls; a saved trunk alone does not provision a live SIP connection.</p>
+      <p>These trunk records drive route previews. Carrier activation and SIP configuration use the provider and Kamailio tenant controls; a saved trunk alone does not provision a live SIP connection.</p>
       <form id="pbx-trunk-form">
         <input name="trunkId" type="hidden"><input name="revision" type="hidden">
         <label>Name <input name="name" required></label>
@@ -1047,7 +1060,7 @@ const navigationGroups=[
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
-  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","FreeSWITCH"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","Cluster & capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
+  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio SIP"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","Cluster & capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
   {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"]]}
