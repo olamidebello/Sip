@@ -32,3 +32,5 @@ jobs:
         run: bash -n deploy/kamailio/preflight.sh deploy/kamailio/run-pilot.sh
       - name: Parse Kamailio configuration
         run: kamailio -c -f /tmp/kamailio-adapter.cfg
+      - name: Exercise isolated SIP challenge path
+        run: python3 deploy/kamailio/sip-smoke.py
