@@ -117,6 +117,10 @@ root.innerHTML = `
     <section id="help-agent" hidden><h3>AI support guide</h3><p>Answers general Olamide usage questions. Do not enter passwords, OTPs, payment details, or identification numbers.</p>
       <form id="help-ask"><label>Your question <textarea name="question" maxlength="1200" minlength="3" required></textarea></label><button>Ask support guide</button></form>
       <div id="help-answer" role="status" aria-live="polite"></div><p id="help-agent-status" role="status"></p>
+      <h4>Automation assistant</h4><p>Describe a goal to get a reviewable setup plan. The assistant cannot schedule, publish, deploy, or change a live SIP route for you.</p>
+      <form id="help-automation"><label>Automation goal <textarea name="question" maxlength="1200" minlength="3" placeholder="For example: schedule a tenant announcement and a follow-up task" required></textarea></label><button>Draft setup steps</button></form>
+      <div id="help-automation-answer" role="status" aria-live="polite" class="automation-answer"></div>
+      <nav class="help-links" aria-label="Automation controls"><a href="#planner">Events &amp; tasks</a><a href="#campaign-admin" class="automation-admin-link">Tenant campaigns</a><a href="#fleet-admin" class="automation-admin-link">Server operations</a><a href="#support">Support tickets</a></nav>
       <button id="help-ticket" type="button">Open a support ticket</button>
     </section>
   </section>
@@ -1631,8 +1635,10 @@ function signedIn(user) {
   $('#help-agent').hidden=false;
   apiGet('/api/help/agent').then(({available})=>{
     $('#help-ask').querySelector('button').disabled=!available;
+    $('#help-automation').querySelector('button').disabled=!available;
     $('#help-agent-status').textContent=available?'Ask a question about using Olamide.':'AI support is not configured. Open a support ticket for help.';
   }).catch(error=>{$('#help-agent-status').textContent=error.message;});
+  document.querySelectorAll('.automation-admin-link').forEach(link=>link.hidden=!['admin','super_admin'].includes(user.role));
   $('#help-admin').hidden=!['admin','super_admin'].includes(user.role);
   $("#signin-role-help").textContent=`Signed in with ${activeRole==="super_admin"?"super administrator":activeRole==="admin"?"administrator":"user"} access.`;
   $('#login-menu-label').textContent='My account';$('#login-options-auth').hidden=true;$('#login-options-account').hidden=false;
@@ -2404,5 +2410,12 @@ $('#help-ask').onsubmit=async event=>{
   try{const result=await accountRequest('/api/help/agent',{question});$('#help-answer').textContent=result.answer;$('#help-agent-status').textContent='AI generated answer. Open a ticket for account specific help.';}
   catch(error){$('#help-answer').textContent='';$('#help-agent-status').textContent=error.message;}
   finally{button.disabled=false;}
+};
+$('#help-automation').onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button'),output=$('#help-automation-answer');
+  button.disabled=true;output.textContent='Drafting review steps…';
+  try{const result=await accountRequest('/api/help/agent',{question:form.elements.question.value,mode:'automation'});
+    output.textContent=result.answer+'\n\nReview each step in the linked controls before applying it.';
+  }catch(error){output.textContent=error.message;}finally{button.disabled=false;}
 };
 $('#help-ticket').onclick=()=>showWorkspace('support');

@@ -143,3 +143,5 @@ body.workspace-mode #app>section:not(.workspace-inactive){max-width:100%}
 .dashboard-option[draggable="true"]:active,#fleet-nodes li[draggable="true"]:active,#fleet-devices li[draggable="true"]:active{cursor:grabbing}
 
 .site-copyright{padding:1.5rem 1rem 2rem;text-align:center;color:#aebdd1;font-size:.82rem;border-top:1px solid #ffffff18}
+/* Preserve line breaks in AI drafted steps without interpreting model output as HTML. */
+.automation-answer{white-space:pre-wrap;overflow-wrap:anywhere}
