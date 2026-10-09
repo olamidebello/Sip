@@ -712,6 +712,14 @@ root.innerHTML = `
       <button id="settlement-refresh" type="button">Refresh statements</button><ol id="settlement-list"></ol><h4>Disputes</h4><ol id="settlement-disputes"></ol>
       <p id="settlement-status" role="status"></p>
     </section>
+    <section id="rating-admin"><h3>Call rating review</h3>
+      <p>Create a draft rating for an answered outbound CDR using an effective tenant tariff. The amount is a snapshot for review and reconciliation; it does not charge the customer.</p>
+      <form id="rating-create"><label>CDR ID <input name="cdrId" required placeholder="Imported call record UUID"></label>
+        <label>Customer user ID <input name="userId" required placeholder="Tenant user UUID"></label>
+        <label>Carrier rate ID <input name="rateId" required placeholder="Tariff rate UUID"></label>
+        <button>Create draft rating</button></form>
+      <button id="rating-refresh" type="button">Refresh ratings</button><ol id="rating-list"></ol><p id="rating-status" role="status"></p>
+    </section>
     <section id="cdr-admin">
       <h3>Imported call records</h3>
       <p>Verified switch records only. These are unrated and never charge a customer.</p>
@@ -1125,7 +1133,7 @@ const navigationGroups=[
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
-  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio SIP"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["settlement-admin","Carrier settlements"],["payment-admin","Stripe gateway"],["cluster-admin","Cluster & capacity"],["live-calls-admin","Live calls"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
+  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio SIP"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["rating-admin","Call rating"],["settlement-admin","Carrier settlements"],["payment-admin","Stripe gateway"],["cluster-admin","Cluster & capacity"],["live-calls-admin","Live calls"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
   {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"]]}
@@ -2187,6 +2195,15 @@ $("#settlement-create").onsubmit=async event=>{
   catch(error){$("#settlement-status").textContent=error.message;}
 };
 $("#settlement-refresh").onclick=()=>refreshSettlements().catch(error=>{$("#settlement-status").textContent=error.message;});
+async function refreshRatings(){const data=await apiGet('/api/admin/rating');
+  $("#rating-list").replaceChildren(...data.records.map(row=>{const li=document.createElement('li');
+    li.textContent=`${row.provider} · CDR ${row.cdr_id} · ${row.units} minute units · customer ${row.charge_cents} cents / carrier ${row.cost_total_cents} cents · ${row.status}`;return li;}));
+  $("#rating-status").textContent=data.note;
+}
+$("#rating-refresh").onclick=()=>refreshRatings().catch(error=>{$("#rating-status").textContent=error.message;});
+$("#rating-create").onsubmit=async event=>{event.preventDefault();const form=event.currentTarget;
+  try{await accountRequest('/api/admin/rating',Object.fromEntries(new FormData(form)));form.reset();await refreshRatings();}
+  catch(error){$("#rating-status").textContent=error.message;}};
 $("#dialplan-refresh").onclick=refreshDialplans;
 $("#dialplan-admin-create").onsubmit=async event=>{
   event.preventDefault();const form=event.currentTarget;const data=Object.fromEntries(new FormData(form));

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isAdmin } from './tenancy.js';
+import {reconcileCarrier} from './carrierReconciliation.js';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const day=/^\d{4}-\d{2}-\d{2}$/;
@@ -63,16 +64,26 @@ export async function handleSettlements({req,res,path,user,pool,send,readJson}){
   const db=await pool.connect();
   try{
     await db.query('BEGIN');
-    const result=await db.query('SELECT status,expected_cents,carrier_cents,created_by FROM carrier_settlements WHERE id=$1 AND tenant_id=$2 FOR UPDATE',[id,tenant]);
+    const result=await db.query('SELECT status,provider,period_from,period_to,expected_cents,carrier_cents,created_by FROM carrier_settlements WHERE id=$1 AND tenant_id=$2 FOR UPDATE',[id,tenant]);
     if(!result.rowCount){await db.query('ROLLBACK');return send(res,404,{error:'Tenant settlement unavailable'});}
     const item=result.rows[0];
+    let reconciliation=null;
+    if(action==='approve'){
+      const rated=await db.query(`SELECT COUNT(*) AS calls,COALESCE(SUM(r.cost_total_cents),0) AS cents
+        FROM rated_call_records r JOIN cdr_records c ON c.id=r.cdr_id AND c.tenant_id=r.tenant_id
+        WHERE r.tenant_id=$1 AND r.provider=$2 AND c.started_at>= $3 AND c.started_at<DATE_ADD($4,INTERVAL 1 DAY)`,
+        [tenant,item.provider,item.period_from,item.period_to]);
+      const row=rated.rows[0];
+      if(Number(row?.calls||0)>0)reconciliation=reconcileCarrier({expectedCents:Number(item.expected_cents),
+        carrierCents:Number(item.carrier_cents),ratedCostCents:Number(row.cents)});
+    }
     let next;
     if(action==='submit'&&item.status==='draft')next='in_review';
     else if(action==='approve'&&item.status==='in_review'&&user.role==='super_admin'&&item.created_by!==user.id&&
-      Number(item.expected_cents)===Number(item.carrier_cents))next='approved';
+      reconciliation?.matched)next='approved';
     else if(action==='dispute'&&item.status==='in_review')next='disputed';
     else if(action==='resolve'&&item.status==='disputed'&&user.role==='super_admin')next='in_review';
-    else {await db.query('ROLLBACK');return send(res,409,{error:'Action unavailable for this status, role, reviewer or variance'});}
+    else {await db.query('ROLLBACK');return send(res,409,{error:'Action unavailable: independent review and matching rated CDR cost are required'});}
     const input=['dispute','resolve'].includes(action)?await readJson(req):{};
     if(action==='dispute'&& (typeof input.reason!=='string'||!input.reason.trim()||input.reason.length>1000)){
       await db.query('ROLLBACK');return send(res,400,{error:'Dispute reason required (max 1000 characters)'});

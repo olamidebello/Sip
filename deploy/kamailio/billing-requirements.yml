@@ -8,6 +8,7 @@
   vars:
     billing_base: /opt/olamide/billing
     billing_checkout: /opt/olamide/kamailio-staging
+    billing_deploy_application: false
     billing_packages:
       - ca-certificates
       - curl
@@ -78,10 +79,29 @@
       loop_control:
         label: "{{ item.item }}"
 
+    - name: Build and migrate the application with database backup and rollback
+      ansible.builtin.command:
+        argv:
+          - bash
+          - "{{ billing_checkout }}/deploy/kamailio/deploy-production-gui.sh"
+        chdir: "{{ billing_checkout }}"
+      when: billing_deploy_application | bool
+      register: billing_deploy_result
+      changed_when: billing_deploy_result.rc == 0
+
+    - name: Check the migrated private API after application deployment
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/api/health
+        status_code: 200
+        return_content: false
+        timeout: 5
+      when: billing_deploy_application | bool
+
     - name: Report installed scope and next gate
       ansible.builtin.debug:
         msg: >-
-          Billing host prerequisites installed. No charging service, payment
-          gateway, prepaid cutoff or carrier settlement was activated. Run
+          Billing host prerequisites installed. Optional application deployment
+          backs up MySQL and runs schema migrations. No prepaid cutoff or
+          carrier settlement was activated. Run
           billing-production.yml only after the missing engine components and
           independent acceptance reports have been implemented.

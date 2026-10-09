@@ -94,6 +94,22 @@
           - billing_environment.stat.isreg | default(false)
           - billing_environment.stat.mode | default('0000') in ['0600','0400','0640']
 
+    - name: Read production SIP config for billing cutover gates
+      ansible.builtin.slurp:
+        src: /etc/kamailio/kamailio.cfg
+      register: billing_switch_config
+      no_log: true
+
+    - name: Require actual synchronous prepaid authorization and timeout wiring
+      ansible.builtin.assert:
+        that:
+          - "'api/switch/prepaid' in (billing_switch_config.content | b64decode)"
+          - "'dlg_set_timeout' in (billing_switch_config.content | b64decode)"
+        fail_msg: >-
+          The installed SIP switch does not call prepaid authorization and
+          enforce per-call expiry. Do not turn on billing using only CDR imports.
+      no_log: true
+
     - name: Report guarded deployment boundary
       ansible.builtin.debug:
         msg: >-

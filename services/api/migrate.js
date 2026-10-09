@@ -41,6 +41,9 @@ import { migrateFlowrouteRates } from './flowrouteRates.js';
 import {migrateAiConfiguration} from './aiConfiguration.js';
 import {migrateLiveCalls} from './liveCalls.js';
 import {migrateSettlements} from './settlements.js';
+import {migrateRatingEngine} from './ratingEngine.js';
+import {migrateBillingLedger} from './billingLedger.js';
+import {migratePrepaidAuthorizer} from './prepaidAuthorizer.js';
 
 const sql = filename => fs.readFile(new URL(filename, import.meta.url), 'utf8');
 
@@ -103,6 +106,9 @@ export async function migrate(pool) {
       ['ai_support_configuration', () => migrateAiConfiguration(pool)],
       ['live_call_monitor', () => migrateLiveCalls(pool)],
       ['carrier_settlements', () => migrateSettlements(pool)],
+      ['rating_engine', () => migrateRatingEngine(pool)],
+      ['billing_ledger', () => migrateBillingLedger(pool)],
+      ['prepaid_authorizer', () => migratePrepaidAuthorizer(pool)],
       ['locales', () => migrateLocales(pool)]
     ];
     for (const [name, action] of steps) {

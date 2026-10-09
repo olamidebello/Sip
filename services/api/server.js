@@ -27,6 +27,8 @@ import {handleAiConfiguration} from './aiConfiguration.js';
 import { handleFlowrouteWebhook, handleMessagingWebhookAdmin, handleExternalSms, handleSmsNumberAdmin } from './messagingWebhooks.js';
 import { handleCharging } from './charging.js';
 import { handleSettlements } from './settlements.js';
+import {handleRating} from './ratingEngine.js';
+import {handlePrepaid} from './prepaidAuthorizer.js';
 import { createDatabase } from "./db.js";
 import { handleMobileAdmin } from "./mobileAdmin.js";
 import { handlePbx } from "./pbx.js";
@@ -152,15 +154,17 @@ async function handler(req, res) {
   const switchXml = path === "/api/switch/xml";
   const kamailioRoute = path === "/api/switch/kamailio/route";
   const kamailioAuth = path === "/api/switch/kamailio/auth";
+  const prepaidSwitch = path === '/api/switch/prepaid';
   const deployRunner = path.startsWith('/api/integrations/deployment/');
-  if (req.method !== "GET" && !deployRunner && !switchXml && !kamailioRoute && !kamailioAuth && !cdrIngest && !liveIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
+  if (req.method !== "GET" && !deployRunner && !switchXml && !kamailioRoute && !kamailioAuth && !prepaidSwitch && !cdrIngest && !liveIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
     return send(res, 403, { error: "Invalid origin" });
-  if (req.method !== "GET" && !limit(req,(switchXml || kamailioRoute || kamailioAuth) ? 3000 : (deployRunner || cdrIngest || liveIngest || flowrouteWebhook || stripeWebhook || providerWebhook || didwwWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
+  if (req.method !== "GET" && !limit(req,(switchXml || kamailioRoute || kamailioAuth || prepaidSwitch) ? 3000 : (deployRunner || cdrIngest || liveIngest || flowrouteWebhook || stripeWebhook || providerWebhook || didwwWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
     return send(res, 429, { error: "Too many requests" });
   try {
     if (switchXml) return await handleSwitchXml({req,res,pool});
     if (kamailioRoute) return await handleKamailioRoute({req,res,pool});
     if (kamailioAuth) return await handleKamailioAuth({req,res,pool});
+    if (prepaidSwitch) return await handlePrepaid({req,res,pool,send,readJson});
     if (deployRunner) return await handleServerFleetRunner({req,res,path,pool,send,readJson});
     if (flowrouteWebhook) return await handleFlowrouteWebhook({req,res,path,pool,send});
     if (stripeWebhook) return await handleStripeWebhook({req,res,path,pool,send});
@@ -282,6 +286,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/carriers')) return await handleCarrierProviders({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/charging/overview') return await handleCharging({req,res,user,pool,send});
       if(path.startsWith('/api/admin/settlements')) return await handleSettlements({req,res,path,user,pool,send,readJson});
+      if(path==='/api/admin/rating') return await handleRating({req,res,path,user,pool,send,readJson});
       if (path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales")
         return await handleLocales({req,res,path,user,pool,send,readJson});
       if (path==="/api/search") return await handleSearch({req,res,user,pool,send});
