@@ -22,3 +22,16 @@ test('trunk list is restricted to selected tenant',async()=>{
   assert.equal((await call('/api/pbx/trunks','GET',null,pool)).status,200);
   assert.deepEqual(params,[user.tenant_id]);
 });
+
+test('trunk detail includes only selected tenant links',async()=>{
+  const calls=[];
+  const pool={query:async(sql,args)=>{
+    calls.push(args);
+    if(sql.includes('FROM pbx_trunks'))return {rows:[{id,name:'A',revision:2}]};
+    return {rows:[]};
+  }};
+  const result=await call('/api/pbx/trunks/'+id,'GET',null,pool);
+  assert.equal(result.status,200);
+  assert.equal(result.data.trunk.id,id);
+  assert.deepEqual(calls,[[id,user.tenant_id],[id,user.tenant_id],[id,user.tenant_id]]);
+});
