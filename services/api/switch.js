@@ -68,7 +68,7 @@ export async function handleSwitchAdmin({req,res,path,user,pool,send,readJson}){
       pool.query('SELECT domain,tariff_id,enabled,updated_at FROM switch_tenants WHERE tenant_id=$1',[tenant]),
       pool.query('SELECT provider,gateway_name,enabled FROM switch_gateways WHERE tenant_id=$1 ORDER BY provider',[tenant]),
       pool.query("SELECT COUNT(*) AS total,COALESCE(SUM(status='active'),0) AS active FROM sip_accounts WHERE tenant_id=$1",[tenant])]);
-    return send(res,200,{configured:!!process.env.FREESWITCH_XML_PASSWORD&&!!credentialKey(),
+    return send(res,200,{configured:Buffer.byteLength(process.env.KAMAILIO_ROUTE_TOKEN||'')>=32&&!!credentialKey(),
       config:config.rows[0]||null,gateways:gateways.rows,accounts:accounts.rows[0]});
   }
   if(path==='/api/admin/switch/kamailio/readiness'&&req.method==='GET'){
@@ -108,8 +108,8 @@ export async function handleSwitchAdmin({req,res,path,user,pool,send,readJson}){
     const b=await readJson(req);
     if(!domainPattern.test(b.domain||'')||typeof b.enabled!=='boolean'||b.tariffId!==null&&!uuid.test(b.tariffId||''))
       return send(res,400,{error:'Valid switch domain, tariff and enabled state required'});
-    if(b.enabled&&(!process.env.FREESWITCH_XML_PASSWORD||!credentialKey()))
-      return send(res,409,{error:'Switch XML password and SIP credential key required'});
+    if(b.enabled&&(Buffer.byteLength(process.env.KAMAILIO_ROUTE_TOKEN||'')<32||!credentialKey()))
+      return send(res,409,{error:'Kamailio route token and SIP credential key required'});
     if(b.tariffId){
       const found=await pool.query('SELECT id FROM operator_tariffs WHERE id=$1 AND tenant_id=$2',[b.tariffId,tenant]);
       if(!found.rowCount)return send(res,404,{error:'Tariff unavailable'});
@@ -140,7 +140,7 @@ export async function handleSwitchAdmin({req,res,path,user,pool,send,readJson}){
     const b=await readJson(req);
     if(!uuid.test(b.userId||''))return send(res,400,{error:'Valid user ID required'});
     const key=credentialKey();
-    if(!key||!process.env.FREESWITCH_XML_PASSWORD)return send(res,409,{error:'Switch credentials unavailable'});
+    if(!key||Buffer.byteLength(process.env.KAMAILIO_ROUTE_TOKEN||'')<32)return send(res,409,{error:'Kamailio credentials unavailable'});
     const cfg=await pool.query('SELECT domain FROM switch_tenants WHERE tenant_id=$1 AND enabled=TRUE',[tenant]);
     if(!cfg.rowCount)return send(res,409,{error:'Enable tenant switch first'});
     const found=await pool.query("SELECT id,username,domain,secret_cipher,status FROM sip_accounts WHERE user_id=$1 AND tenant_id=$2",[b.userId,tenant]);
