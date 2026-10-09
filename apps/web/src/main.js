@@ -946,6 +946,7 @@ root.innerHTML = `
         <label>Priority <input name="priority" type="number" min="1" max="1000" value="100" required></label>
         <button>Save trunk</button><button id="pbx-trunk-cancel" type="button">Clear form</button>
       </form>
+      <label>Find trunk <input id="pbx-trunk-search" type="search" placeholder="Name, host or transport"></label>
       <button id="pbx-trunks-refresh" type="button">Refresh trunks</button>
       <button id="pbx-trunks-enable" type="button">Enable selected for preview</button>
       <button id="pbx-trunks-disable" type="button">Disable selected for preview</button>
