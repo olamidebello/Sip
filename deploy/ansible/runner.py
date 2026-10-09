@@ -55,6 +55,34 @@ def probe(node):
     return {'nodeId': node['id'], 'status': status, 'latencyMs': latency, 'version': version}
 
 
+
+def probe_kamailio(node):
+    start = time.monotonic()
+    target = node['ssh_user'] + '@' + node['host']
+    ssh = ['ssh', '-p', str(node['ssh_port']), '-o', 'BatchMode=yes',
+           '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8', target]
+    try:
+        signal = subprocess.run(ssh + ['sudo', '-n', 'systemctl', 'is-active', 'kamailio'],
+                                capture_output=True, text=True, timeout=15)
+        media = subprocess.run(ssh + ['sudo', '-n', 'systemctl', 'is-active', 'rtpengine-daemon'],
+                               capture_output=True, text=True, timeout=15)
+        version = subprocess.run(ssh + ['dpkg-query', '-W', '-f=${Version}', 'kamailio'],
+                                 capture_output=True, text=True, timeout=15)
+        signaling_status = ('unreachable' if signal.returncode == 255 else
+                            'active' if signal.returncode == 0 and signal.stdout.strip() == 'active'
+                            else 'inactive')
+        media_status = ('unreachable' if media.returncode == 255 else
+                        'active' if media.returncode == 0 and media.stdout.strip() == 'active'
+                        else 'inactive')
+        installed_version = version.stdout.strip()[:80] if version.returncode == 0 else None
+    except (subprocess.TimeoutExpired, OSError):
+        signaling_status = media_status = 'unreachable'
+        installed_version = None
+    return {'nodeId': node['id'], 'signalingStatus': signaling_status,
+            'mediaStatus': media_status, 'version': installed_version,
+            'latencyMs': int((time.monotonic() - start) * 1000)}
+
+
 def deploy(node, inventory, vault_password):
     # Inherit reviewed group variables, replacing only the selected target host.
     source = json.loads(pathlib.Path(inventory).read_text())
@@ -103,6 +131,7 @@ def run_once(base, token, runner_id, inventory, vault_password):
     for node in request(base, token, 'nodes')['nodes']:
         try:
             request(base, token, 'check', probe(node))
+            request(base, token, 'kamailio-check', probe_kamailio(node))
         except (urllib.error.URLError, OSError, ValueError) as error:
             print('Health report failed for ' + node['name'] + ': ' + type(error).__name__, flush=True)
     claimed = request(base, token, 'claim', {'runnerId': runner_id}).get('job')
