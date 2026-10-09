@@ -10,6 +10,7 @@ import {handleCluster} from './cluster.js';
 import {handleProviderWebhook,handleProviderWebhookAdmin} from './providerWebhooks.js';
 import {handleDidwwCallback,handleDidwwAdmin} from './didwwIntegration.js';
 import { handleCarrierProviders, carrierActive } from './carrierProviders.js';
+import {handleProviderCredentials} from './providerCredentials.js';
 import { handleAdapterRegistry } from './adapterRegistry.js';
 import { handleOperatorControl } from './operatorControl.js';
 import { handleSwitchAdmin,handleSwitchXml } from './switch.js';
@@ -271,6 +272,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/operator')) return await handleOperatorControl({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/switch')) return await handleSwitchAdmin({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/servers')) return await handleServerFleetAdmin({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/admin/carriers/credentials')) return await handleProviderCredentials({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/carriers')) return await handleCarrierProviders({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/charging/overview') return await handleCharging({req,res,user,pool,send});
       if (path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales")
@@ -501,7 +503,7 @@ async function handler(req, res) {
         if(!await carrierActive(pool,user.tenant_id,provider)) return send(res,409,{error:'Carrier provider awaits administrator activation'});
         const rule=await pricingRule(pool,user.tenant_id,provider);
         try {
-          const numbers = await availableNumbers(provider);
+          const numbers = await availableNumbers(provider,{pool,tenant:user.tenant_id});
           return send(res, 200, { pricing:{mode:rule.mode,setupValue:Number(rule.setupValue),monthlyValue:Number(rule.monthlyValue)},
             numbers: numbers.map(({ monthlyCostCents,setupCostCents,...item }) => ({
               ...item, monthlyCents: sellingCents(monthlyCostCents,rule.mode,Number(rule.monthlyValue)),
@@ -520,7 +522,7 @@ async function handler(req, res) {
           return send(res,400,{error:"Choose a valid inventory number"});
         if(!await carrierActive(pool,user.tenant_id,provider)) return send(res,409,{error:'Carrier provider awaits administrator activation'});
         let inventory;
-        try {inventory=(await availableNumbers(provider)).find(item=>item.number===number && item.inventoryId===inventoryId && (item.skuId||null)===(skuId||null));}
+        try {inventory=(await availableNumbers(provider,{pool,tenant:user.tenant_id})).find(item=>item.number===number && item.inventoryId===inventoryId && (item.skuId||null)===(skuId||null));}
         catch(error) {return send(res,503,{error:error.message});}
         if (!inventory) return send(res,409,{error:"Number is no longer in the current provider listing"});
         const rule=await pricingRule(pool,user.tenant_id,provider);
