@@ -12,8 +12,8 @@ for package in kamailio kamailio-extra-modules kamailio-json-modules kamailio-we
 done
 for service in kamailio rtpengine-daemon; do
   state="$(systemctl is-active "$service" 2>/dev/null || true)"
-  echo "$service: $state"
-  [[ "$state" == active ]] || failed=1
+  if [[ "$state" == active ]]; then echo "PASS $service service active";
+  else echo "BLOCKED $service service $state"; failed=1; fi
 done
 if curl --connect-timeout 2 --max-time 5 --fail --silent http://127.0.0.1:18080/api/health >/dev/null; then
   echo "PASS private API health"
@@ -31,6 +31,9 @@ else echo "BLOCKED installed Kamailio configuration missing"; failed=1; fi
 if ss -H -lun '( sport = :5060 or sport = :5061 or sport = :5062 )' | grep -q .; then
   echo "SIP UDP listener detected; verify address and firewall before traffic"
 else echo "BLOCKED no SIP UDP listener detected"; failed=1; fi
+if ss -H -lun '( sport = :2223 )' | grep -q .; then
+  echo "PASS RTPengine control socket detected"
+else echo "BLOCKED RTPengine control socket 2223 unavailable"; failed=1; fi
 echo "Manual acceptance still required: carrier SIP peering and authentication, public DNS/certificate, RTP ports/NAT, authenticated REGISTER, two-way audio, inbound/outbound calls, failover, CDR and billing."
 if ((failed)); then echo "NOT COMMISSIONED"; exit 1; fi
 echo "HOST CHECKS PASSED; manual acceptance is still required"
