@@ -31,5 +31,17 @@ if not any(p.get("host_ip")=="127.0.0.1" and int(p.get("published",0))==18080 fo
 '
 "${compose[@]}" build api
 "${compose[@]}" up -d --no-build api
+ready=0
+for attempt in {1..12}; do
+  if curl --connect-timeout 2 --max-time 3 --fail --silent http://127.0.0.1:18080/api/health >/dev/null; then
+    ready=1
+    break
+  fi
+  sleep 5
+done
+if (( !ready )); then
+  echo "Pilot API did not become healthy; inspect pilot logs without sharing secrets" >&2
+  exit 1
+fi
 bash "$repo/deploy/kamailio/preflight.sh"
 echo "Isolated API pilot ready. No production API or SIP service was changed."
