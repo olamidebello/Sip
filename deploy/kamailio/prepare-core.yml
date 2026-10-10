@@ -1,0 +1,155 @@
+---
+# Generate a public SIP core from the tested adapter. Outbound carrier calls
+# still return 503. The private API token is read only on the switch host.
+- name: Prepare private carrier-blocked SIP and media configurations
+  hosts: switch_nodes
+  become: true
+  gather_facts: true
+  vars:
+    core_env_file: /opt/olamide/repo/deployment/docker/.env
+  tasks:
+    - name: Require local Debian 12 and explicit network inputs
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version == '12'
+          - ansible_connection | default('ssh') == 'local'
+          - production_public_ip is defined
+          - production_public_ip is match('^[0-9]{1,3}(\\.[0-9]{1,3}){3}$')
+          - core_domain is defined
+          - core_domain is match('^[a-z0-9][a-z0-9.-]{1,253}$')
+          - core_network_reviewed | default(false) | bool
+        fail_msg: Provide the public IP and actual tenant SIP domain after reviewing firewall and NAT.
+
+    - name: Check private API environment
+      ansible.builtin.stat:
+        path: "{{ core_env_file }}"
+      register: core_env_stat
+
+    - name: Require private existing API environment
+      ansible.builtin.assert:
+        that:
+          - core_env_stat.stat.isreg | default(false)
+          - core_env_stat.stat.mode | default('0000') in ['0400', '0600', '0640']
+
+    - name: Read switch token privately
+      ansible.builtin.slurp:
+        src: "{{ core_env_file }}"
+      register: core_env_content
+      no_log: true
+
+    - name: Reject an existing malformed token rather than rotating it
+      ansible.builtin.assert:
+        that:
+          - >-
+            (core_env_content.content | b64decode |
+            regex_findall('(?m)^KAMAILIO_ROUTE_TOKEN=(.*)$') | first | default(''))
+            in ['', (core_env_content.content | b64decode |
+            regex_findall('(?m)^KAMAILIO_ROUTE_TOKEN=([A-Za-z0-9._~+/=-]{32,})$') | first | default(''))]
+        fail_msg: Existing switch token has an unsupported format; review it privately before changing it.
+      no_log: true
+
+    - name: Generate a token only when none exists
+      ansible.builtin.command:
+        argv: [python3, -c, 'import secrets; print(secrets.token_urlsafe(48))']
+      register: generated_switch_token
+      when: not ((core_env_content.content | b64decode) is search('(?m)^KAMAILIO_ROUTE_TOKEN=[A-Za-z0-9._~+/=-]{32,}$'))
+      no_log: true
+
+    - name: Save the new token in the existing private environment
+      ansible.builtin.lineinfile:
+        path: "{{ core_env_file }}"
+        regexp: '^KAMAILIO_ROUTE_TOKEN='
+        line: "KAMAILIO_ROUTE_TOKEN={{ generated_switch_token.stdout }}"
+        mode: '0600'
+        backup: true
+      when: generated_switch_token is changed
+      no_log: true
+
+    - name: Extract private switch token
+      ansible.builtin.set_fact:
+        kamailio_route_token: "{{ generated_switch_token.stdout if generated_switch_token is changed else ((core_env_content.content | b64decode | regex_findall('(?m)^KAMAILIO_ROUTE_TOKEN=([A-Za-z0-9._~+/=-]{32,})$')) | first | default('')) }}"
+      no_log: true
+
+    - name: Require existing strong switch token
+      ansible.builtin.assert:
+        that:
+          - kamailio_route_token | length >= 32
+        fail_msg: KAMAILIO_ROUTE_TOKEN must exist in the private production API environment.
+
+    - name: Require healthy private API
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/api/health
+        status_code: 200
+        timeout: 5
+
+    - name: Reload only the API when its private token was created
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-name
+          - docker
+          - --env-file
+          - "{{ core_env_file }}"
+          - -f
+          - /opt/olamide/kamailio-staging/deployment/docker/compose.yml
+          - up
+          - -d
+          - --no-deps
+          - --force-recreate
+          - api
+      when: generated_switch_token is changed
+      no_log: true
+
+    - name: Check API after token reload
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/api/health
+        status_code: 200
+        timeout: 5
+      register: core_api_reload
+      until: core_api_reload is succeeded
+      retries: 10
+      delay: 2
+      when: generated_switch_token is changed
+
+    - name: Inspect existing service state
+      ansible.builtin.service_facts:
+
+    - name: Refuse to prepare files during live SIP operation
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services.get('kamailio.service', {}).get('state', 'stopped') != 'running'
+          - ansible_facts.services.get('rtpengine-daemon.service', {}).get('state', 'stopped') != 'running'
+        fail_msg: A running SIP edge requires a separate maintenance and rollback procedure.
+
+    - name: Render private public SIP configuration
+      ansible.builtin.template:
+        src: adapter.cfg.j2
+        dest: /root/production-kamailio.cfg
+        owner: root
+        group: root
+        mode: '0600'
+        validate: /usr/sbin/kamailio -c -f %s
+      vars:
+        kamailio_domain: "{{ core_domain }}"
+        kamailio_listen_ip: "{{ production_public_ip }}"
+        kamailio_listen_port: 5060
+        kamailio_api_url: http://127.0.0.1:18080
+      no_log: true
+
+    - name: Render private RTPengine configuration
+      ansible.builtin.template:
+        src: core-rtpengine.conf.j2
+        dest: /root/production-rtpengine.conf
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Report activation boundary
+      ansible.builtin.debug:
+        msg: >-
+          Private core files are prepared and SIP syntax passed. Review the
+          public SIP and media interface, firewall and RTP port range, then
+          run commission-all.yml with commission_activate_core=true. Carrier
+          routes and live prepaid charging remain disabled.

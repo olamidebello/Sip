@@ -69,11 +69,17 @@ export function setupPbx() {
       policyList.append(item);
     }
     const trunkList = $("#pbx-trunk-list"); trunkList.replaceChildren();
-    for (const trunk of trunks) {
+    const search=$('#pbx-trunk-search').value.trim().toLowerCase();
+    for (const trunk of trunks.filter(t=>!search||[t.name,t.host,t.transport].some(value=>String(value).toLowerCase().includes(search)))) {
       const item = document.createElement("li");
       const check=document.createElement('input');check.type='checkbox';check.value=trunk.id;check.setAttribute('aria-label',`Select ${trunk.name}`);
       item.append(check,document.createTextNode(` ${trunk.name} · ${trunk.host}:${trunk.port}/${trunk.transport} · priority ${trunk.priority} · ${trunk.enabled?'preview enabled':'preview disabled'} · ${trunk.rate_count} rates · ${trunk.carrier_count} carrier links · revision ${trunk.revision} `));
       const button=(label,fn)=>{const el=document.createElement('button');el.type='button';el.textContent=label;el.onclick=async()=>{el.disabled=true;try{await fn();}catch(error){report(error);}finally{el.disabled=false;}};item.append(el);};
+      button('View',async()=>{const data=await api('/api/pbx/trunks/'+trunk.id);
+        const t=data.trunk;$('#pbx-trunk-detail').textContent=t.name+' · '+t.host+':'+t.port+'/'+t.transport+
+          ' · '+(t.enabled?'preview enabled':'preview disabled')+' · revision '+t.revision+
+          ' · rates '+data.rates.map(r=>r.prefix+' ('+r.price_cents_per_minute+'¢/min)').join(', ')+
+          ' · carriers '+data.carriers.map(c=>c.provider+' ('+c.status+')').join(', ')+'. '+data.scope;});
       button('Edit',async()=>{const form=$('#pbx-trunk-form');for(const [key,value] of Object.entries({trunkId:trunk.id,revision:trunk.revision,name:trunk.name,host:trunk.host,port:trunk.port,transport:trunk.transport,priority:trunk.priority}))form.elements[key].value=value;form.scrollIntoView({block:'center'});$('#pbx-trunk-detail').textContent=`Editing ${trunk.name}; save to apply a new revision.`;});
       button(trunk.enabled?'Disable preview':'Enable preview',async()=>{await api(`/api/pbx/trunks/${trunk.id}/status`,'PUT',{enabled:!trunk.enabled,revision:Number(trunk.revision)});await refreshAdmin();status.textContent='Preview status saved. No live carrier change was made.';});
       button('History',async()=>{const data=await api(`/api/pbx/trunks/${trunk.id}/history`);$('#pbx-trunk-detail').textContent=data.events.map(e=>`${e.action} · ${new Date(e.created_at).toLocaleString()} · ${e.actor_id}`).join(' | ')||'No events.';});
@@ -96,6 +102,7 @@ export function setupPbx() {
     }
   }
   $("#pbx-queue-select").onchange = renderMembers;
+  $("#pbx-trunk-search").oninput=()=>refreshAdmin().catch(report);
   $("#agent-status-form").addEventListener("submit",async (event) => {
     event.preventDefault();
     try {

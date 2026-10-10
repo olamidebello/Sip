@@ -1,6 +1,7 @@
 deployment/secrets.env
 deployment/docker/.env
 node_modules/
+.env.local
 apps/web/dist/
 deployment/ansible/inventory.ini
 deploy/ansible/inventory.yml

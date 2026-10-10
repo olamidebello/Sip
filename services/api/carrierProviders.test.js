@@ -1,6 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { carrierActive, handleCarrierProviders } from './carrierProviders.js';
+import { carrierActive, handleCarrierProviders, seedFlowrouteDrafts } from './carrierProviders.js';
+
+test('Flowroute defaults are draft, disabled and preserve existing tenant rows',async()=>{
+  const statements=[];
+  await seedFlowrouteDrafts({query:async sql=>{statements.push(sql);return {rowCount:0,rows:[]};}});
+  assert.equal(statements.length,3);
+  assert.ok(statements.every(sql=>sql.includes('INSERT IGNORE')));
+  assert.match(statements[0],/5060,'udp',100,FALSE/);
+  assert.match(statements[1],/'manual','draft'/);
+  assert.match(statements[2],/CONCAT\('flowroute-',t.id\),FALSE/);
+});
+
+test('tenant admin cannot change a Flowroute carrier profile',async()=>{
+  const result=await handleCarrierProviders({req:{method:'PUT'},res:{},path:'/api/admin/carriers/flowroute',
+    user:{role:'admin',tenant_id:'tenant-1'},pool:{query:async()=>({rowCount:0,rows:[]})},
+    readJson:async()=>({trunkId:'11111111-1111-4111-8111-111111111111',maxConcurrentCalls:10,routingMode:'manual'}),
+    send:(_res,status,body)=>({status,body})});
+  assert.equal(result.status,403);
+});
 
 test('carrier inventory stays blocked without an acknowledged tenant profile',async()=>{
   let last;

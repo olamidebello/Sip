@@ -1,0 +1,52 @@
+---
+- name: Inspect production SIP and prepaid readiness without changing traffic
+  hosts: switch_nodes
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Require local Debian 12 switch execution
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version == '12'
+          - ansible_connection | default('ssh') == 'local'
+
+    - name: Read signaling and media service state
+      ansible.builtin.command:
+        argv: [systemctl, is-active, "{{ item }}"]
+      loop: [kamailio, rtpengine-daemon]
+      register: sip_services
+      failed_when: false
+      changed_when: false
+
+    - name: Check installed SIP configuration syntax
+      ansible.builtin.command:
+        argv: [/usr/sbin/kamailio, -c, -f, /etc/kamailio/kamailio.cfg]
+      register: sip_syntax
+      failed_when: false
+      changed_when: false
+
+    - name: Check private API health
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/api/health
+        timeout: 5
+        status_code: 200
+      register: sip_api
+      failed_when: false
+
+    - name: Check SIP and RTPengine control sockets
+      ansible.builtin.command:
+        argv: [ss, -H, -lun]
+      register: sip_sockets
+      changed_when: false
+
+    - name: Report measured host state and acceptance boundary
+      ansible.builtin.debug:
+        msg:
+          kamailio: "{{ sip_services.results[0].stdout | default('unknown') }}"
+          rtpengine: "{{ sip_services.results[1].stdout | default('unknown') }}"
+          config_parses: "{{ sip_syntax.rc == 0 }}"
+          private_api_healthy: "{{ sip_api.status | default(0) == 200 }}"
+          sip_udp_socket: "{{ sip_sockets.stdout is search(':(5060|5061|5062)\\b') }}"
+          rtpengine_control_socket: "{{ sip_sockets.stdout is search(':2223\\b') }}"
+          carrier_and_prepaid: No live call, expiry or reconciliation is inferred from host checks

@@ -2,6 +2,8 @@ import {randomBytes,timingSafeEqual,createDecipheriv,createCipheriv} from 'node:
 import {isAdmin} from './tenancy.js';
 import {selectQuote} from './operatorControl.js';
 import {evaluateOutboundPolicy} from './pbx.js';
+import {syncKamailioCredential} from './kamailio.js';
+import {activateTenantSipAccounts} from './sipMarketplace.js';
 
 const domainPattern=/^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$/i;
 const gatewayPattern=/^[a-z][a-z0-9_-]{1,63}$/;
@@ -60,15 +62,43 @@ export async function migrateSwitch(pool){
   ) ENGINE=InnoDB`);
 }
 export async function handleSwitchAdmin({req,res,path,user,pool,send,readJson}){
-  if(!isAdmin(user))return send(res,403,{error:'Administrator required'});
+  if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
   const tenant=user.tenant_id;
   if(path==='/api/admin/switch'&&req.method==='GET'){
     const [config,gateways,accounts]=await Promise.all([
       pool.query('SELECT domain,tariff_id,enabled,updated_at FROM switch_tenants WHERE tenant_id=$1',[tenant]),
       pool.query('SELECT provider,gateway_name,enabled FROM switch_gateways WHERE tenant_id=$1 ORDER BY provider',[tenant]),
       pool.query("SELECT COUNT(*) AS total,COALESCE(SUM(status='active'),0) AS active FROM sip_accounts WHERE tenant_id=$1",[tenant])]);
-    return send(res,200,{configured:!!process.env.FREESWITCH_XML_PASSWORD&&!!credentialKey(),
+    return send(res,200,{configured:Buffer.byteLength(process.env.KAMAILIO_ROUTE_TOKEN||'')>=32&&!!credentialKey(),
       config:config.rows[0]||null,gateways:gateways.rows,accounts:accounts.rows[0]});
+  }
+  if(path==='/api/admin/switch/kamailio/readiness'&&req.method==='GET'){
+    const [configuration,accounts,credentials,carriers]=await Promise.all([
+      pool.query('SELECT domain,enabled,tariff_id FROM switch_tenants WHERE tenant_id=$1',[tenant]),
+      pool.query("SELECT COUNT(*) AS total FROM sip_accounts WHERE tenant_id=$1 AND status='active'",[tenant]),
+      pool.query(`SELECT COUNT(*) AS total FROM kamailio_credentials c
+        JOIN sip_accounts a ON a.id=c.account_id
+        WHERE a.tenant_id=$1 AND a.status='active'`,[tenant]),
+      pool.query(`SELECT COUNT(*) AS total FROM carrier_provider_profiles p
+        JOIN switch_gateways g ON g.tenant_id=p.tenant_id AND g.provider=p.provider
+        WHERE p.tenant_id=$1 AND p.status='active' AND p.routing_mode<>'disabled'
+          AND g.enabled=TRUE`,[tenant])
+    ]);
+    const config=configuration.rows[0]||null;
+    const active=Number(accounts.rows[0]?.total||0);
+    const synced=Number(credentials.rows[0]?.total||0);
+    const enabledCarriers=Number(carriers.rows[0]?.total||0);
+    const blockers=[];
+    if(!config?.enabled)blockers.push('Tenant switch lookup is disabled');
+    if(!credentialKey())blockers.push('SIP credential encryption key is unavailable');
+    if(Buffer.byteLength(process.env.KAMAILIO_ROUTE_TOKEN||'')<32)
+      blockers.push('Kamailio API token is unavailable');
+    if(!active)blockers.push('No active SIP accounts');
+    if(synced<active)blockers.push('Some active SIP accounts lack Kamailio digest credentials');
+    if(!enabledCarriers)blockers.push('No commissioned carrier gateway mappings');
+    blockers.push('Live SIP, media, charging and failover tests are still required');
+    return send(res,200,{domain:config?.domain||null,activeAccounts:active,
+      syncedCredentials:synced,enabledCarriers,blockers,productionReady:false});
   }
   if(path==='/api/admin/switch/accounts'&&req.method==='GET'){
     const found=await pool.query('SELECT user_id,username,domain,status FROM sip_accounts WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200',[tenant]);
@@ -79,8 +109,8 @@ export async function handleSwitchAdmin({req,res,path,user,pool,send,readJson}){
     const b=await readJson(req);
     if(!domainPattern.test(b.domain||'')||typeof b.enabled!=='boolean'||b.tariffId!==null&&!uuid.test(b.tariffId||''))
       return send(res,400,{error:'Valid switch domain, tariff and enabled state required'});
-    if(b.enabled&&(!process.env.FREESWITCH_XML_PASSWORD||!credentialKey()))
-      return send(res,409,{error:'Switch XML password and SIP credential key required'});
+    if(b.enabled&&(Buffer.byteLength(process.env.KAMAILIO_ROUTE_TOKEN||'')<32||!credentialKey()))
+      return send(res,409,{error:'Kamailio route token and SIP credential key required'});
     if(b.tariffId){
       const found=await pool.query('SELECT id FROM operator_tariffs WHERE id=$1 AND tenant_id=$2',[b.tariffId,tenant]);
       if(!found.rowCount)return send(res,404,{error:'Tariff unavailable'});
@@ -92,7 +122,8 @@ export async function handleSwitchAdmin({req,res,path,user,pool,send,readJson}){
     try{await pool.query('INSERT INTO switch_tenants(tenant_id,domain,tariff_id,enabled,updated_by) VALUES($1,$2,$3,$4,$5) ON DUPLICATE KEY UPDATE domain=VALUES(domain),tariff_id=VALUES(tariff_id),enabled=VALUES(enabled),updated_by=VALUES(updated_by)',
       [tenant,b.domain.toLowerCase(),b.tariffId,b.enabled,user.id]);}
     catch(error){if(error.code==='ER_DUP_ENTRY')return send(res,409,{error:'Domain assigned to another tenant'});throw error;}
-    return send(res,200,{domain:b.domain.toLowerCase(),enabled:b.enabled});
+    const provisioning=b.enabled?await activateTenantSipAccounts(pool,tenant,b.domain.toLowerCase()):null;
+    return send(res,200,{domain:b.domain.toLowerCase(),enabled:b.enabled,provisioning});
   }
   if(path==='/api/admin/switch/gateways'&&req.method==='PUT'){
     if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
@@ -111,14 +142,17 @@ export async function handleSwitchAdmin({req,res,path,user,pool,send,readJson}){
     const b=await readJson(req);
     if(!uuid.test(b.userId||''))return send(res,400,{error:'Valid user ID required'});
     const key=credentialKey();
-    if(!key||!process.env.FREESWITCH_XML_PASSWORD)return send(res,409,{error:'Switch credentials unavailable'});
+    if(!key||Buffer.byteLength(process.env.KAMAILIO_ROUTE_TOKEN||'')<32)return send(res,409,{error:'Kamailio credentials unavailable'});
     const cfg=await pool.query('SELECT domain FROM switch_tenants WHERE tenant_id=$1 AND enabled=TRUE',[tenant]);
     if(!cfg.rowCount)return send(res,409,{error:'Enable tenant switch first'});
-    const found=await pool.query("SELECT id,domain,secret_cipher,status FROM sip_accounts WHERE user_id=$1 AND tenant_id=$2",[b.userId,tenant]);
+    const found=await pool.query("SELECT id,username,domain,secret_cipher,status FROM sip_accounts WHERE user_id=$1 AND tenant_id=$2",[b.userId,tenant]);
     if(!found.rowCount||found.rows[0].domain!==cfg.rows[0].domain)return send(res,409,{error:'SIP account domain does not match switch'});
-    const generated=found.rows[0].secret_cipher?null:encrypt(randomBytes(32).toString('base64url'),key);
+    const password=found.rows[0].secret_cipher?decrypt(found.rows[0].secret_cipher,key):randomBytes(32).toString('base64url');
+    const generated=found.rows[0].secret_cipher?null:encrypt(password,key);
     await pool.query("UPDATE sip_accounts SET status='active',secret_cipher=COALESCE(secret_cipher,$3) WHERE id=$1 AND tenant_id=$2",
       [found.rows[0].id,tenant,generated]);
+    await syncKamailioCredential(pool,{accountId:found.rows[0].id,username:found.rows[0].username,
+      domain:found.rows[0].domain,password});
     return send(res,200,{userId:b.userId,status:'active'});
   }
   return send(res,404,{error:'Switch route unavailable'});

@@ -6,10 +6,12 @@ import { setupGroupAdmin } from "./groups.js";
 import { setupSipProfiles } from "./sipProfiles.js";
 import {setupCommerceOps} from "./commerceOps.js";
 import {setupProviderWebhookAdmin} from "./providerWebhookAdmin.js";
+import {setupProviderCredentialsAdmin} from "./providerCredentialsAdmin.js";
 import {setupDidwwAdmin} from "./didwwAdmin.js";
 import {setupAdapterAdmin} from "./adapterAdmin.js";
 import {setupOperatorControl} from "./operatorControl.js";
 import {setupSwitchAdmin} from "./switchAdmin.js";
+import {setupClusterAdmin} from "./clusterAdmin.js";
 import {setupServerFleetAdmin} from "./serverFleetAdmin.js";
 import {setupFleetNetworkAdmin} from "./fleetNetworkAdmin.js";
 import {setupFleetAccessAdmin} from "./fleetAccessAdmin.js";
@@ -23,6 +25,7 @@ import { setupMobileAdmin } from "./mobileAdmin.js";
 import { setupTenants } from "./tenants.js";
 import { setupPbx } from "./pbx.js";
 import { setupReports } from "./reports.js";
+import {setupLiveCalls} from './liveCalls.js';
 import { setupPricing } from "./pricing.js";
 import { setupBackground } from "./background.js";
 import { setupLdapAdmin } from "./ldapAdmin.js";
@@ -32,6 +35,7 @@ import { setupInstall } from "./install.js";
 import { setupDownloads } from "./downloads.js";
 import { setupCarrierControl } from "./carrierControl.js";
 import { setupFormGroups } from "./formGroups.js";
+import { setupUiHints,guideFor,applyUiPreferences } from "./uiHints.js";
 import { setupPageRoutes, pageId } from "./pageRoutes.js";
 import { contactEmailsFromCsv, contactsToCsv } from "./contactsCsv.js";
 import { setupDashboard } from "./dashboard.js";
@@ -79,6 +83,7 @@ root.innerHTML = `
   <section id="help" aria-labelledby="help-title"><h2 id="help-title">Help center</h2>
     <p>Find a quick answer, follow a guided tour, or contact support.</p>
     <nav class="help-links" aria-label="Help topics"><a href="#help-faq">FAQs</a><a href="#help-user">User tutorial</a><a href="#help-admin">Administrator tutorial</a><a href="#help-technical">Technical guide</a><a href="#help-agent">AI support</a><a href="#support">Support tickets</a></nav>
+    <section id="help-context" hidden tabindex="-1"><h3 id="help-context-title"></h3><p id="help-context-description"></p><ol id="help-context-steps"></ol><a id="help-context-tutorial" href="#help-user">Read the full user tutorial</a></section>
     <section id="help-faq"><h3>Frequently asked questions</h3>
       <details><summary>How do I register and sign in?</summary><p>Choose Create an account in the Sign in menu, enter your details, then verify the email code. Return to Sign in with your email or assigned username.</p></details>
       <details><summary>How do I make a call?</summary><p>Open Dialer, enter the secure SIP WebSocket server and your provisioned SIP account, connect, and dial an allowed number. Your administrator must activate the account on a real switch.</p></details>
@@ -114,6 +119,14 @@ root.innerHTML = `
     <section id="help-agent" hidden><h3>AI support guide</h3><p>Answers general Olamide usage questions. Do not enter passwords, OTPs, payment details, or identification numbers.</p>
       <form id="help-ask"><label>Your question <textarea name="question" maxlength="1200" minlength="3" required></textarea></label><button>Ask support guide</button></form>
       <div id="help-answer" role="status" aria-live="polite"></div><p id="help-agent-status" role="status"></p>
+      <h4>Automation assistant</h4><p>Describe a goal to get a reviewable setup plan. The assistant cannot schedule, publish, deploy, or change a live SIP route for you.</p>
+      <form id="help-automation"><label>Automation goal <textarea name="question" maxlength="1200" minlength="3" placeholder="For example: schedule a tenant announcement and a follow-up task" required></textarea></label><button>Draft setup steps</button></form>
+      <div id="help-automation-answer" role="status" aria-live="polite" class="automation-answer"></div>
+      <nav class="help-links" aria-label="Automation controls"><a href="#planner">Events &amp; tasks</a><a href="#campaign-admin" class="automation-admin-link">Tenant campaigns</a><a href="#fleet-admin" class="automation-admin-link">Server operations</a><a href="#support">Support tickets</a></nav>
+      <section id="help-ai-config" hidden><h4>Super admin AI setup</h4><p>Enter an OpenAI API key after deployment. It is encrypted on the server and never shown again. Existing keys are replaced when you save a new one.</p>
+        <form id="help-ai-key-form" autocomplete="off"><label>OpenAI API key <input name="apiKey" type="password" autocomplete="new-password" minlength="20" maxlength="256" required></label><button>Save AI key</button></form>
+        <button id="help-ai-key-refresh" type="button">Refresh key status</button><button id="help-ai-key-remove" type="button">Remove stored key</button><p id="help-ai-key-status" role="status"></p>
+      </section>
       <button id="help-ticket" type="button">Open a support ticket</button>
     </section>
   </section>
@@ -143,6 +156,19 @@ root.innerHTML = `
       <button>Verify and activate</button>
       <button id="signup-resend" type="button">Resend code</button>
     </form>
+    <section id="email-admin" hidden><h3>Email verification settings</h3>
+      <p>Super administrators can save a verified Resend sender and sending key. The key is encrypted on the server and is never shown again. Send a test to your own administrator email before opening registration.</p>
+      <p>Setup: run the server email playbook, verify your sender domain with Resend, save a sending key here, and send a test message before opening registration.</p>
+      <form id="email-admin-form" autocomplete="off">
+        <label>Verified sender address <input name="sender" type="email" autocomplete="off" required></label>
+        <label>Resend sending API key <input name="apiKey" type="password" autocomplete="new-password" minlength="19" required></label>
+        <button>Save email settings</button>
+      </form>
+      <button id="email-admin-refresh" type="button">Refresh email status</button>
+      <button id="email-admin-test" type="button">Send test to my email</button>
+      <button id="email-admin-remove" type="button">Remove stored key</button>
+      <p id="email-admin-status" role="status"></p>
+    </section>
     <form id="login">
       <label>Email or username <input name="email" autocomplete="username" required></label>
       <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
@@ -158,6 +184,24 @@ root.innerHTML = `
     </form>
     <button id="logout" hidden>Sign out</button>
     <p id="account-status" role="status">Not signed in</p>
+    <section id="help-preferences" hidden><h3>Hints and guide links</h3>
+      <p>Choose how guidance appears in your workspace. Your choices are saved to your account.</p>
+      <form id="help-preferences-form">
+        <label><input name="showHints" type="checkbox"> Show navigation and form hints</label>
+        <label><input name="showGuides" type="checkbox"> Show guide buttons</label>
+        <label><input name="showFieldHints" type="checkbox"> Show field tips</label>
+        <label>Hint detail <select name="detail"><option value="standard">Detailed</option><option value="brief">Brief</option></select></label>
+        <button type="submit">Save display settings</button>
+      </form>
+      <form id="help-override-form"><h4>Customize one hint and guide</h4>
+        <label>Page or form <select name="target" required></select></label>
+        <label>Custom hint <textarea name="hint" maxlength="240" placeholder="Write a short helpful description"></textarea></label>
+        <label>Guide destination <select name="guide"><option value="help-user">User tutorial</option><option value="help-admin">Administrator tutorial</option><option value="help-technical">Technical guide</option></select></label>
+        <button type="submit">Save custom guidance</button><button id="help-override-remove" type="button">Restore this hint</button>
+      </form>
+      <button id="help-preferences-reset" type="button">Restore all guidance defaults</button>
+      <p id="help-preferences-status" role="status"></p>
+    </section>
     <form id="password-change" hidden>
       <h3>Change password</h3>
       <label>Current password <input name="currentPassword" type="password" autocomplete="current-password" required></label>
@@ -177,7 +221,8 @@ root.innerHTML = `
         <label>Authorization username <input name="username" maxlength="128" required></label>
         <label>SIP domain <input name="domain" maxlength="255" required></label>
         <label>Secure WebSocket URL <input name="wssUrl" type="url" placeholder="wss://sip.example.com:7443" required></label>
-        <button>Save profile</button></form><ul id="sip-profile-list"></ul><p id="sip-profile-status" role="status"></p>
+        <button type="button" id="sip-profile-use-defaults">Use my SIP account</button>
+        <button type="submit">Save profile</button></form><ul id="sip-profile-list"></ul><p id="sip-profile-status" role="status"></p>
     </section>
   </section>
   <section id="dashboard" hidden>
@@ -362,12 +407,20 @@ root.innerHTML = `
     </form>
     <label>Meeting ID <input id="meeting-id" placeholder="Paste a meeting ID"></label>
     <button id="meeting-join" type="button">Join meeting</button>
+    <button id="meeting-copy" type="button">Copy meeting link</button>
+    <button id="meeting-native-share" type="button">Share meeting</button>
+    <button id="meeting-refresh" type="button">Refresh my meetings</button>
+    <h3>My meetings and invitations</h3><ul id="meeting-list"></ul>
     <div id="meeting-live" hidden>
       <h3 id="meeting-title"></h3>
       <div id="meeting-videos" class="meeting-videos"></div>
       <button id="meeting-mic" type="button">Mute</button>
       <button id="meeting-camera" type="button">Camera off</button>
       <button id="meeting-share" type="button">Share screen</button>
+      <button id="meeting-hand" type="button">Raise hand</button>
+      <button id="meeting-reaction" type="button">Send applause</button>
+      <form id="meeting-invite" hidden><label>Invite tenant user by email <input name="email" type="email" required></label><button>Invite to meeting</button></form>
+      <p id="meeting-participants" aria-live="polite"></p>
       <p id="share-notice">Screen sharing is visible to all meeting participants. Pointer assistance needs your approval and does not control your computer.</p>
       <div id="assist-requests" aria-live="polite"></div>
       <div id="assist-grants"></div>
@@ -385,6 +438,26 @@ root.innerHTML = `
     <p id="meeting-status" role="status"></p>
   </section>
   <section id="admin" hidden>
+    <section id="meeting-policy-admin" hidden>
+      <h3>Meeting sharing and participants</h3>
+      <p>These tenant settings apply to meeting links, invitations, participant actions, and screen sharing. Rooms support at most four browser participants.</p>
+      <form id="meeting-policy-form">
+        <label>Maximum participants <input name="maxParticipants" type="number" min="2" max="4" value="4" required></label>
+        <label><input name="allowLinks" type="checkbox" checked> Allow same-tenant meeting links</label>
+        <label><input name="allowInvites" type="checkbox" checked> Allow host invitations</label>
+        <label><input name="requireInvitation" type="checkbox"> Require an invitation to join</label>
+        <label><input name="allowScreenShare" type="checkbox" checked> Allow screen sharing</label>
+        <label><input name="allowChat" type="checkbox" checked> Allow meeting chat</label>
+        <label><input name="allowReactions" type="checkbox" checked> Allow reactions</label>
+        <label><input name="allowHand" type="checkbox" checked> Allow hand raising</label>
+        <button type="button" data-defaults="meeting">Use recommended values</button>
+        <button type="submit">Save meeting settings</button>
+      </form>
+      <button id="meeting-policy-refresh" type="button">Refresh settings and rooms</button>
+      <h4>Active tenant rooms</h4><div id="meeting-admin-rooms"></div>
+      <p id="meeting-policy-status" role="status"></p>
+      <nav aria-label="Meeting administration"><a href="#meetings">Open meetings</a><a href="#group-admin">Group permissions</a><a href="#help">Meeting guide</a></nav>
+    </section>
     <section id="locale-admin">
       <h3>Tenant locale defaults</h3>
       <form id="locale-admin-form"><label>Language <select name="language"></select></label>
@@ -403,7 +476,8 @@ root.innerHTML = `
     <h2>Administrator</h2>
     <p id="admin-overview"></p>
     <form id="server-config">
-      <label>Default SIP secure WebSocket URL <input name="sipWssUrl" type="url" placeholder="wss://sip.example.com"></label>
+      <label>Default SIP secure WebSocket URL <input name="sipWssUrl" type="url" placeholder="wss://sip.dobhrap.com:7443"></label>
+      <p>Enter this URL only after secure WebSocket service is enabled and reachable. UDP SIP on port 5060 does not provide WSS.</p>
       <button>Save server URL</button>
     </form>
     <p id="admin-status" role="status"></p>
@@ -477,8 +551,19 @@ root.innerHTML = `
       <p id="report-summary"></p>
       <a id="report-export" hidden>Download daily calls CSV</a>
       <a id="report-invoice-export" hidden>Download invoice summary CSV</a>
+      <a id="report-source-export" hidden>Download source performance CSV</a>
       <div id="report-details"></div>
       <p id="report-status" role="status"></p>
+    </section>
+    <section id="live-calls-admin">
+      <h3>Live call monitor</h3><p>Shows signed switch events from the last two minutes. A missing event feed is displayed as unavailable, never as zero calls.</p>
+      <p id="live-call-summary"></p><button id="live-call-refresh" type="button">Refresh calls</button>
+      <label><input id="live-call-auto" type="checkbox"> Auto refresh every 15 seconds</label>
+      <ul id="live-call-list"></ul><p id="live-call-status" role="status"></p>
+      <section id="live-call-detail" hidden><h4>Call timeline</h4><ol id="live-call-events"></ol>
+        <h4>Investigation notes</h4><ol id="live-call-notes"></ol>
+        <form id="live-call-note-form"><label>Note <textarea name="body" maxlength="1000" required></textarea></label><button>Save note</button></form>
+      </section>
     </section>
     <section id="inhouse-admin">
       <h3>In-house DID management</h3>
@@ -543,7 +628,10 @@ root.innerHTML = `
       </form>
       <p id="nigeria-status" role="status"></p>
     </section>
-    <section id="carrier-admin"><h3>Carrier provider commissioning</h3>
+    <section id="carrier-admin"><h3>Trunk management and commissioning</h3>
+      <p>Super admin workspace for trunk configuration, provider peering, credential verification, and guarded activation.</p>
+      <nav aria-label="Trunk workflow"><a href="#pbx-admin">Create or edit tenant trunk</a><a href="#provider-credentials-admin">Set provider credentials</a><a href="#switch-admin">Map carrier route</a><a href="#operator-admin">Review rates</a></nav>
+      <p>Save a trunk and its provider profile before requesting activation. Verify real carrier connectivity and test calls separately.</p>
       <p>Link a tenant trunk, set capacity, verify private provider credentials, then ask the switch adapter to activate. A provider remains blocked from DID requests until activation is acknowledged.</p>
       <form id="carrier-catalog-form" hidden><h4>Add a future carrier</h4>
         <label>Carrier ID <input name="provider" pattern="[a-z][a-z0-9-]{1,15}" maxlength="16" required placeholder="carrier-name"></label>
@@ -551,7 +639,24 @@ root.innerHTML = `
         <button type="submit">Add carrier</button>
       </form>
       <p id="carrier-catalog-status" role="status"></p>
-      <form id="flowroute-auto-form" hidden><h4>Flowroute PoP setup</h4>
+      <section id="provider-credentials-admin" hidden>
+        <h4>Provider API credentials</h4>
+        <p>Enter your Flowroute account access key and secret key here. Secret values are never displayed again. Confirm your assigned SIP PoP and any trunk authentication details with Flowroute before enabling calls. Inventory verification does not activate a SIP trunk.</p>
+        <form id="provider-credentials-form" autocomplete="off">
+          <label>Provider <select name="provider"><option value="flowroute">Flowroute</option><option value="didww">DIDWW</option></select></label>
+          <label id="provider-access-label">Flowroute access key <input name="accessKey" maxlength="256"></label>
+          <label id="provider-secret-label">Flowroute secret key <input name="secretKey" type="password" maxlength="256"></label>
+          <label id="provider-sip-user-label">Flowroute SIP username (if assigned) <input name="sipUsername" autocomplete="off" maxlength="256"></label>
+          <label id="provider-sip-pass-label">Flowroute SIP password (if assigned) <input name="sipPassword" type="password" autocomplete="new-password" maxlength="256"></label>
+          <label id="provider-api-label" hidden>DIDWW API key <input name="apiKey" type="password" maxlength="256"></label>
+          <label id="provider-env-label" hidden>DIDWW environment <select name="environment"><option value="sandbox">Sandbox</option><option value="production">Production</option></select></label>
+          <button type="submit">Save credentials</button>
+        </form>
+        <button id="provider-credentials-refresh" type="button">Refresh credential status</button>
+        <p id="provider-credentials-status" role="status"></p><ul id="provider-credentials-list"></ul>
+      </section>
+      <form id="flowroute-auto-form" hidden><h4>Flowroute trunk settings</h4>
+        <p>A disabled Flowroute draft is preconfigured for each tenant. Review the PoP assigned to your account, then enter your Flowroute API profile above. Save changes here only if your assigned PoP differs from the draft.</p>
         <label>Point of presence <select name="pop"><option value="US-East-VA">US East, Virginia</option><option value="US-West-OR">US West, Oregon</option></select></label>
         <label>Maximum concurrent calls <input name="maxConcurrentCalls" type="number" min="1" max="100000" value="10" required></label>
         <label>Routing intent <select name="routingMode"><option value="manual">Manual</option><option value="least_cost">Least cost</option><option value="priority">Priority</option></select></label>
@@ -587,22 +692,39 @@ root.innerHTML = `
       <ul id="operator-blocks"></ul>
       <form id="operator-quote-form"><h4>Route quote</h4>
         <label>E.164 destination <input name="number" placeholder="+12125550123" required></label><button>Preview route</button></form>
-      <p id="operator-quote" role="status"></p><p id="operator-status" role="status"></p>
+      <p id="operator-quote" role="status"></p><ol id="operator-quote-candidates" aria-label="Ranked carrier routes"></ol><p id="operator-status" role="status"></p>
     </section>
     <section id="switch-admin">
-      <h3>FreeSWITCH</h3>
-      <p>Serve active SIP accounts and authenticated outbound dialplans from the tenant database. Configure FreeSWITCH XML curl and Sofia gateways on the switch host before enabling traffic. Public inbound routes and real time charging are not enabled here.</p>
+      <h3>User SIP accounts and commissioning</h3>
+      <p>Super admin workspace for SIP account readiness, tenant domain, credentials, and carrier gateway mappings. New users receive account records through user provisioning.</p>
+      <nav aria-label="SIP account workflow"><a href="#tenant-admin">Create user</a><a href="#sip-profile-admin">Manage profile access</a><a href="#carrier-admin">Review trunk</a></nav>
+      <h4>Tenant SIP configuration</h4>
+      <p>Manage tenant SIP domains, authenticated accounts, tariffs and carrier route keys used by the Kamailio adapter. Saving settings does not activate a live SIP host.</p>
       <form id="switch-config">
-        <label>SIP domain <input name="domain" placeholder="sip.example.com" required></label>
+        <label>SIP domain <input name="domain" placeholder="sip.dobhrap.com" required></label>
         <label>Outbound tariff <select name="tariffId"></select></label>
-        <label><input name="enabled" type="checkbox"> Enable tenant switch lookups</label>
+        <label><input name="enabled" type="checkbox"> Enable tenant SIP lookups</label>
         <button>Save switch settings</button>
       </form>
       <form id="switch-gateway-form">
         <label>Carrier <select name="provider" id="switch-provider"></select></label>
-        <label>Configured Sofia gateway name <input name="gatewayName" pattern="[a-z][a-z0-9_-]{1,63}" required></label>
-        <label><input name="enabled" type="checkbox"> Enable gateway route</label><button>Save gateway mapping</button>
+        <label>Carrier route key <input name="gatewayName" pattern="[a-z][a-z0-9_-]{1,63}" required></label>
+        <label><input name="enabled" type="checkbox"> Enable carrier route</label><button>Save gateway mapping</button>
       </form>
+      <section aria-labelledby="kamailio-readiness-title">
+        <h4 id="kamailio-readiness-title">Kamailio commissioning</h4>
+        <p>This panel checks tenant data and credentials. It cannot verify the host services, media, call tests, or billing.</p>
+        <button id="kamailio-readiness-refresh" type="button">Check Kamailio readiness</button>
+        <p id="kamailio-readiness-summary" role="status"></p>
+        <ul id="kamailio-readiness-blockers"></ul>
+        <nav aria-label="Switch commissioning">
+          <a href="#operator-admin">Tariffs and destination blocks</a>
+          <a href="#carrier-admin">Carrier profiles</a>
+          <a href="#pbx-admin">PBX routes</a>
+          <a href="#cdr-admin">Call records</a>
+          <a href="#fleet-admin">Server operations</a>
+        </nav>
+      </section>
       <h4>Gateway mappings</h4><ul id="switch-gateways"></ul>
       <h4>SIP accounts</h4><ul id="switch-accounts"></ul>
       <button id="switch-refresh" type="button">Refresh switch configuration</button>
@@ -649,10 +771,43 @@ root.innerHTML = `
       <nav class="auth-pages" aria-label="Charging administration"><a href="#pbx-admin">Rate deck and routing</a><a href="#cdr-admin">Call records</a><a href="#pricing-admin">DID pricing</a><a href="#report-admin">Reports</a><a href="#carrier-admin">Carriers</a></nav>
       <p id="charging-status" role="status"></p>
     </section>
+    <section id="prepaid-control-admin" hidden><h3>Prepaid authorization controls</h3>
+      <p>Set the maximum authorized call window for this tenant. Calls reserve funds before dispatch and require a switch enforced BYE at expiry. This screen cannot install or verify the host SIP configuration.</p>
+      <nav aria-label="Prepaid setup"><a href="#operator-admin">Configure tariff rates</a><a href="#switch-admin">Check SIP readiness</a><a href="#live-calls-admin">Review live calls</a><a href="#cdr-admin">Review call records</a><a href="#help">Open guide</a></nav>
+      <button id="prepaid-control-refresh" type="button">Refresh policy and readiness</button>
+      <p id="prepaid-control-summary" role="status"></p>
+      <form id="prepaid-control-form"><label>Maximum call window (minutes) <input name="maxCallMinutes" type="number" min="1" max="60" value="10" required title="Funds for this many minutes are reserved before routing; the switch must end the call at expiry."></label>
+        <label><input name="enabled" type="checkbox"> Allow tenant prepaid authorization</label>
+        <button type="submit">Save prepaid policy</button></form>
+      <h4>Recent policy changes</h4><ol id="prepaid-control-events"></ol>
+    </section>
+    <section id="settlement-admin"><h3>Carrier statement reconciliation</h3>
+      <p>Record a carrier statement against your independently reviewed expected amount. Approval requires a second super administrator and matching totals. This does not pay the carrier or bill subscribers.</p>
+      <form id="settlement-create"><label>Carrier ID <input name="provider" required pattern="[a-z][a-z0-9-]{1,15}" placeholder="flowroute"></label>
+        <label>Statement reference <input name="externalReference" required maxlength="100" placeholder="Carrier invoice ID"></label>
+        <label>From (UTC) <input name="periodFrom" type="date" required></label><label>To (UTC) <input name="periodTo" type="date" required></label>
+        <label>Expected USD cents <input name="expectedCents" type="number" min="0" step="1" required></label>
+        <label>Carrier USD cents <input name="carrierCents" type="number" min="0" step="1" required></label>
+        <label>Review note <textarea name="note" maxlength="1000" required></textarea></label><button>Create draft</button></form>
+      <button id="settlement-refresh" type="button">Refresh statements</button><ol id="settlement-list"></ol><h4>Disputes</h4><ol id="settlement-disputes"></ol>
+      <p id="settlement-status" role="status"></p>
+    </section>
+    <section id="rating-admin"><h3>Call rating review</h3>
+      <p>Create a draft rating for an answered outbound CDR using an effective tenant tariff. The amount is a snapshot for review and reconciliation; it does not charge the customer.</p>
+      <form id="rating-create"><label>CDR ID <input name="cdrId" required placeholder="Imported call record UUID"></label>
+        <label>Customer user ID <input name="userId" required placeholder="Tenant user UUID"></label>
+        <label>Carrier rate ID <input name="rateId" required placeholder="Tariff rate UUID"></label>
+        <button>Create draft rating</button></form>
+      <button id="rating-refresh" type="button">Refresh ratings</button><ol id="rating-list"></ol><p id="rating-status" role="status"></p>
+    </section>
     <section id="cdr-admin">
       <h3>Imported call records</h3>
       <p>Verified switch records only. These are unrated and never charge a customer.</p>
+      <form id="cdr-filter"><label>Direction <select name="direction"><option value="">All</option><option>inbound</option><option>outbound</option></select></label>
+        <label>Result <select name="disposition"><option value="">All</option><option>answered</option><option>missed</option><option>rejected</option><option>failed</option></select></label>
+        <label>Switch source <input name="source" maxlength="80" pattern="[a-zA-Z0-9_.:-]+"></label><button>Filter call records</button></form>
       <button id="refresh-cdr" type="button">Refresh call records</button>
+      <button id="cdr-prev" type="button">Previous page</button><button id="cdr-next" type="button">Next page</button>
       <ol id="cdr-records"></ol>
       <p id="cdr-status" role="status"></p>
     </section>
@@ -669,8 +824,8 @@ root.innerHTML = `
       <form id="pricing-rule">
         <label>Source <select name="provider"><option value="flowroute">Flowroute</option><option value="didww">DIDWW</option><option value="inhouse">In-house</option></select></label>
         <label>Method <select name="mode"><option value="percent">Percentage adjustment</option><option value="fixed">Fixed cent increase or decrease</option><option value="manual">Manual selling price in cents</option></select></label>
-        <label>Setup value <input name="setupValue" type="number" step="1" required></label>
-        <label>Monthly value <input name="monthlyValue" type="number" step="1" required></label>
+        <label>Setup value <input name="setupValue" type="number" step="1" value="3000" required></label>
+        <label>Monthly value <input name="monthlyValue" type="number" step="1" value="3000" required></label>
         <p>Percentage values use basis points: 3000 = +30%, -1000 = -10%. Fixed values use cents; negative decreases price. Manual values are final cents. Decreases stop at zero.</p>
         <button>Save source rule</button>
       </form>
@@ -720,12 +875,48 @@ root.innerHTML = `
     </section>
     <section id="cluster-admin">
       <h3>API capacity</h3><p id="cluster-summary"></p>
-      <form id="cluster-scale"><label>Desired API replicas on this host <input name="apiReplicas" type="number" min="1" max="4" step="1" required></label><button>Request scaling</button></form>
+      <form id="cluster-scale"><label>Desired API replicas on this host <input name="apiReplicas" type="number" min="1" max="4" step="1" value="1" required></label><button>Request scaling</button></form>
       <button id="cluster-refresh" type="button">Refresh scaling status</button><p id="cluster-status" role="status"></p>
+      <h4>Switch capacity policy</h4>
+      <p>Set a planning target and compare it with fresh healthy switch inventory. Saving this policy does not deploy a node or change SIP routing.</p>
+      <form id="cluster-capacity-form">
+        <label>Target concurrent calls <input name="targetCalls" type="number" min="1" max="100000" value="500" required></label>
+        <label>Tested calls per node <input name="perNodeCalls" type="number" min="1" max="5000" value="100" required></label>
+        <label>Headroom percent <input name="headroomPercent" type="number" min="0" max="100" value="30" required></label>
+        <label>Minimum regions <input name="minRegions" type="number" min="1" max="5" value="2" required></label>
+        <button type="button" data-defaults="capacity">Use recommended values</button>
+        <button type="submit">Save capacity policy</button>
+      </form>
+      <button id="cluster-capacity-refresh" type="button">Refresh capacity and regions</button>
+      <p id="cluster-capacity-summary"></p><p id="cluster-capacity-status" role="status"></p>
+      <a href="#fleet-admin">Open server inventory and deployment jobs</a>
+      <h4>Capacity policy revisions</h4><ul id="cluster-capacity-history"></ul>
       <h4>Recent requests</h4><ul id="cluster-history"></ul>
+      <section id="kamailio-monitor" hidden>
+        <h4>Kamailio and RTPengine hosts</h4>
+        <p>Service states are reported by the private runner. A loopback test verifies SIP challenges; it does not place a carrier call.</p>
+        <button id="kamailio-monitor-refresh" type="button">Refresh Kamailio hosts</button>
+        <p id="kamailio-monitor-status" role="status"></p>
+        <ul id="kamailio-monitor-nodes"></ul>
+        <a href="#fleet-admin">Open fleet deployment and schedules</a>
+      </section>
+      <section id="kamailio-config-panel" hidden>
+        <h4>Adapter node configuration</h4>
+        <p>Save loopback SIP adapter settings for an enabled switch host. These settings are staged; saving does not deploy them.</p>
+        <form id="kamailio-config-form">
+          <label>Switch node <select name="nodeId" required></select></label>
+          <label>SIP domain <input name="sipDomain" maxlength="255" placeholder="sip.dobhrap.com" required></label>
+          <label>Planned concurrent calls <input name="maxConcurrentCalls" type="number" min="1" max="5000" value="100" required></label>
+          <button type="submit">Save staged configuration</button>
+        </form>
+        <p id="kamailio-config-preview"></p>
+        <p id="kamailio-config-status" role="status"></p>
+        <h5>Recent revisions</h5><ul id="kamailio-config-history"></ul>
+      </section>
     </section>
     <section id="fleet-admin" hidden>
       <h3>Server and network operations</h3><p>Register switch hosts, review connectivity and versions, queue approved installations, and schedule health checks or upgrades. The private Ansible runner requires SSH access and passwordless sudo on managed hosts.</p>
+      <nav aria-label="SIP service management"><a href="#switch-admin">SIP accounts and tenant switch</a><a href="#cluster-admin">Kamailio configuration revisions</a><a href="#carrier-admin">Carrier profiles</a><a href="#prepaid-control-admin">Prepaid controls</a><a href="#help">SIP guide</a></nav>
       <p id="fleet-summary"></p><p id="fleet-status" role="status"></p>
       <h4>Cluster overview by region</h4><p id="fleet-topology"></p>
       <form id="fleet-add"><h4>Add a server</h4>
@@ -737,9 +928,9 @@ root.innerHTML = `
         <button>Add server</button></form>
       <button id="fleet-refresh" type="button">Refresh monitoring</button><h4>Servers</h4><ul id="fleet-nodes"></ul>
       <h4>Scheduled events</h4><ul id="fleet-schedules"></ul><h4>Deployment jobs</h4><ul id="fleet-jobs"></ul><h4>Event log</h4><ul id="fleet-events"></ul>
-      <form id="fleet-report-settings"><h4>Report thresholds</h4><label>Stale after seconds <input name="staleSeconds" type="number" min="60" max="3600" required></label>
-        <label>Warning latency ms <input name="warningLatencyMs" type="number" min="100" max="30000" required></label>
-        <label>Retention days <input name="retentionDays" type="number" min="7" max="365" required></label><button>Save thresholds</button></form>
+      <form id="fleet-report-settings"><h4>Report thresholds</h4><label>Stale after seconds <input name="staleSeconds" type="number" min="60" max="3600" value="300" required></label>
+        <label>Warning latency ms <input name="warningLatencyMs" type="number" min="100" max="30000" value="2000" required></label>
+        <label>Retention days <input name="retentionDays" type="number" min="7" max="365" value="90" required></label><button type="button" data-defaults="fleet">Use recommended values</button><button>Save thresholds</button></form>
       <label>Report window in days <input id="fleet-report-days" type="number" min="1" max="90" value="7"></label><button id="fleet-report-run" type="button">Generate report</button><p id="fleet-report"></p>
       <section id="fleet-device-panel"><h3>Network devices and configuration versions</h3>
         <p>Drag devices to reorder them. Router, firewall and load balancer configurations are stored as reviewed intent; only linked Linux switch hosts have an installation adapter.</p>
@@ -772,7 +963,19 @@ root.innerHTML = `
       <section id="fleet-operations-panel" hidden><h3>Registration and switch discovery</h3>
         <form id="registration-policy"><h4>User registration policy</h4><label><input name="openSignup" type="checkbox"> Allow new public registrations</label>
           <label>Allowed email domains, one per line (empty allows any domain) <textarea name="allowedDomains" rows="4"></textarea></label><button>Save registration policy</button></form>
-        <h4>Healthy WSS discovery targets</h4><p id="redirector-scope"></p><button id="redirector-new" type="button">New target</button>
+        <h4>WSS load balancer</h4>
+        <p>Controls HTTPS discovery for healthy switch hosts. It does not change SIP signaling, media or an external proxy.</p>
+        <form id="balancer-policy-form"><label><input name="enabled" type="checkbox"> Enable WSS discovery</label>
+          <label>Selection <select name="strategy"><option value="sticky">Sticky per account</option><option value="rotating">Rotate every minute</option></select></label>
+          <label><input name="allowGlobalFallback" type="checkbox"> Include global targets for regional requests</label>
+          <button>Save balancer policy</button></form>
+        <label>Preview region <input id="balancer-preview-region" value="global" maxlength="40"></label>
+        <button id="balancer-preview" type="button">Preview selection</button>
+        <p id="balancer-preview-result" role="status"></p><ul id="balancer-policy-history"></ul>
+        <h4>Healthy WSS discovery targets</h4><p id="redirector-scope"></p>
+        <nav aria-label="Balancer management"><a href="#fleet-admin">Switch nodes</a><a href="#cluster-admin">Cluster capacity</a></nav>
+        <label>Find target <input id="redirector-search" type="search" placeholder="Name, region or URL"></label>
+        <button id="redirector-refresh" type="button">Refresh balancer</button><button id="redirector-new" type="button">New target</button>
         <form id="redirector-form"><input name="targetId" type="hidden"><label>Name <input name="name" required></label>
           <label>Region <input name="region" value="global" required></label><label>Linked switch <select name="nodeId" required></select></label>
           <label>WSS URL <input name="wssUrl" type="url" placeholder="wss://sip.example.com/" required></label>
@@ -812,7 +1015,10 @@ root.innerHTML = `
       <h4>Call Events</h4><ul id="didww-call-events"></ul>
     </section>
     <section id="sip-profile-admin" hidden>
-      <h3>SIP profile access</h3><p>Super administrators set tenant defaults, group grants and individual overrides for viewing, adding, editing and deleting SIP profiles.</p>
+      <h3>User profile management and commissioning</h3>
+      <p>Create users in Tenants and administrators, then review their SIP account and assign profile access. Each user can save a SIP client profile only within the permissions set here.</p>
+      <nav aria-label="User profile workflow"><a href="#tenant-admin">Create or manage users</a><a href="#switch-admin">Review provisioned SIP accounts</a><a href="#calling-workspace">SIP client profiles</a></nav>
+      <h4>SIP profile access</h4><p>Super administrators set tenant defaults, group grants and individual overrides for viewing, adding, editing and deleting SIP profiles.</p>
       <label>Tenant <select id="sip-policy-tenant"></select></label>
       <h4>Tenant defaults</h4><div id="sip-tenant-choices"></div><button type="button" id="sip-tenant-save">Save tenant defaults</button>
       <h4>Group grants</h4><label>Group <select id="sip-policy-group"></select></label><div id="sip-group-choices"></div><button type="button" id="sip-group-save">Save group grants</button>
@@ -872,7 +1078,7 @@ root.innerHTML = `
         <button>Save DID route</button>
       </form><ul id="pbx-route-list"></ul>
       <h4>Trunk management and rate deck</h4>
-      <p>These trunk records drive route previews. Carrier activation and switch configuration use the separate provider and FreeSWITCH controls; a saved trunk alone does not provision a live SIP connection.</p>
+      <p>These trunk records drive route previews. Carrier activation and SIP configuration use the provider and Kamailio tenant controls; a saved trunk alone does not provision a live SIP connection.</p>
       <form id="pbx-trunk-form">
         <input name="trunkId" type="hidden"><input name="revision" type="hidden">
         <label>Name <input name="name" required></label>
@@ -882,6 +1088,7 @@ root.innerHTML = `
         <label>Priority <input name="priority" type="number" min="1" max="1000" value="100" required></label>
         <button>Save trunk</button><button id="pbx-trunk-cancel" type="button">Clear form</button>
       </form>
+      <label>Find trunk <input id="pbx-trunk-search" type="search" placeholder="Name, host or transport"></label>
       <button id="pbx-trunks-refresh" type="button">Refresh trunks</button>
       <button id="pbx-trunks-enable" type="button">Enable selected for preview</button>
       <button id="pbx-trunks-disable" type="button">Disable selected for preview</button>
@@ -1010,11 +1217,11 @@ const navigationGroups=[
   {label:"Workspace",items:[["dashboard","Dashboard"],["campaign-inbox-panel","Announcements"],["planner","Events & tasks"],["search-panel","Search"],["support","Support tickets"],["help","Help & tutorials"]]},
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
-  {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
-  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","FreeSWITCH"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
+  {label:"My settings",items:[["account","Account & security"],["help-preferences","Hints & guides"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
+  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["operator-admin","Wholesale tariffs"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["rating-admin","Call rating"],["settlement-admin","Carrier settlements"],["payment-admin","Stripe gateway"],["cluster-admin","Cluster & capacity"],["live-calls-admin","Live calls"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
-  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"]]}
+  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","User profiles & commissioning"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"],["prepaid-control-admin","Prepaid controls"],["meeting-policy-admin","Meeting controls"]]}
 ];
 let activeRole=null;
 let pageRoutes;
@@ -1037,7 +1244,7 @@ function showWorkspace(target) {
   admin.classList.toggle("admin-subview",rootView==="admin"&&target!=="admin");
   for(const section of admin.querySelectorAll(":scope > section[id]"))
     section.classList.toggle("workspace-inactive",rootView==="admin"&&section.id!==target);
-  for(const link of $("#app-nav").querySelectorAll(".menu-links a")) {
+  for(const link of $("#app-nav").querySelectorAll(".menu-links a, .standalone-menu-link")) {
     if(link.hash===`#${target}`) link.setAttribute("aria-current","page");
     else link.removeAttribute("aria-current");
   }
@@ -1060,6 +1267,18 @@ function updateNavigation() {
   returnToCall.onclick=()=>showWorkspace("calling-workspace");nav.append(returnToCall);
   const search=document.createElement("input");search.type="search";search.className="menu-search";search.placeholder="Find a menu…";search.setAttribute("aria-label","Find a menu");nav.append(search);
   const groups=document.createElement("div");groups.className="menu-groups";nav.append(groups);
+  if(activeRole==="super_admin"){
+    for(const [id,label] of [["carrier-admin","Trunk management"],["switch-admin","SIP account management"]]){
+      const section=document.getElementById(id);
+      if(!section||section.closest("[hidden]")) continue;
+      const item=document.createElement("div");item.className="standalone-menu";
+      const link=document.createElement("a");link.className="standalone-menu-link";
+      link.href=`#${id}`;link.textContent=label;
+      link.onclick=()=>showWorkspace(id);
+      if(location.hash===`#${id}`)link.setAttribute("aria-current","page");
+      item.append(link);groups.append(item);
+    }
+  }
   for(const group of navigationGroups) {
     if(group.roles&&!group.roles.includes(activeRole)) continue;
     const items=group.items.filter(([id])=>{const section=document.getElementById(id);return section&&!section.closest("[hidden]");});
@@ -1092,6 +1311,24 @@ function updateNavigation() {
 }
 updateNavigation();
 pageRoutes=setupPageRoutes({showWorkspace,isSignedIn:()=>!!activeRole});
+// These match the API's initial database policies. A reset only edits the
+// visible draft; the administrator must save it to change a stored policy.
+const recommendedSettings={
+  meeting:{maxParticipants:4,allowLinks:true,allowInvites:true,requireInvitation:false,
+    allowScreenShare:true,allowChat:true,allowReactions:true,allowHand:true},
+  capacity:{targetCalls:500,perNodeCalls:100,headroomPercent:30,minRegions:2},
+  fleet:{staleSeconds:300,warningLatencyMs:2000,retentionDays:90}
+};
+document.querySelectorAll('button[data-defaults]').forEach(button=>{
+  button.addEventListener('click',()=>{
+    const form=button.closest('form');
+    for(const [name,value] of Object.entries(recommendedSettings[button.dataset.defaults])){
+      const field=form.elements.namedItem(name);
+      if(field.type==='checkbox')field.checked=value;
+      else field.value=String(value);
+    }
+  });
+});
 $("#app-nav").addEventListener("keydown",event=>{
   if(event.key!=="Escape") return;
   for(const menu of $("#app-nav").querySelectorAll("details[open]")) menu.open=false;
@@ -1139,20 +1376,96 @@ const workPlanner=setupWorkPlanner({get:apiGet,request:accountRequest});
 const campaigns=setupCampaigns();
 const passkeyPolicy=setupPasskeyPolicy();
 const providerWebhooks=setupProviderWebhookAdmin({get:apiGet,request:accountRequest});
+const providerCredentialsAdmin=setupProviderCredentialsAdmin({get:apiGet,request:accountRequest});
 const didwwAdmin=setupDidwwAdmin({get:apiGet,request:accountRequest});
 const adapterAdmin=setupAdapterAdmin({get:apiGet,request:accountRequest});
 const operatorAdmin=setupOperatorControl();
 const switchAdmin=setupSwitchAdmin();
+const clusterAdmin=setupClusterAdmin({get:apiGet,request:accountRequest});
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
 const pbx = setupPbx();
 const reports = setupReports({get:(path)=>apiGet(path)});
+const liveCalls=setupLiveCalls({get:apiGet,request:accountRequest});
 const pricing = setupPricing();
 const background = setupBackground();
 const ldapAdmin = setupLdapAdmin();
 const authProviders = setupAuthProviders();
 const catalogControl = setupCatalogControl();
 setupInstall();
+setupUiHints(document,{openGuide:showContextGuide});
+let helpPreferences={showHints:true,showGuides:true,showFieldHints:true,detail:'standard',overrides:{}};
+function renderHelpPreferences(){
+  applyUiPreferences(helpPreferences);
+  const form=$('#help-preferences-form');
+  for(const key of ['showHints','showGuides','showFieldHints'])form.elements[key].checked=helpPreferences[key];
+  form.elements.detail.value=helpPreferences.detail;
+  const select=$('#help-override-form').elements.target,current=select.value;
+  {
+    for(const item of document.querySelectorAll('#app-nav a[href^="#"],form[id]')){
+      const id=item.tagName==='FORM'?item.id:item.hash.slice(1);
+      if(!/^[a-z][a-z0-9-]{0,79}$/.test(id)||select.querySelector(`option[value="${id}"]`))continue;
+      const option=document.createElement('option');option.value=id;option.textContent=id.replaceAll('-',' ');select.append(option);
+    }
+  }
+  if(current)select.value=current;
+  showSelectedHelpOverride();
+}
+function showSelectedHelpOverride(){
+  const form=$('#help-override-form'),value=helpPreferences.overrides?.[form.elements.target.value];
+  form.elements.hint.value=value?.hint||'';
+  form.elements.guide.value=value?.guide||'help-user';
+}
+async function refreshHelpPreferences(){
+  helpPreferences=await apiGet('/api/help/preferences');renderHelpPreferences();
+}
+$('#help-override-form').elements.target.onchange=showSelectedHelpOverride;
+$('#help-preferences-form').onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget;
+  const next={...helpPreferences,showHints:form.elements.showHints.checked,showGuides:form.elements.showGuides.checked,
+    showFieldHints:form.elements.showFieldHints.checked,detail:form.elements.detail.value};
+  try{helpPreferences=await accountRequest('/api/help/preferences',next,'PUT');renderHelpPreferences();
+    $('#help-preferences-status').textContent='Display settings saved';}
+  catch(error){$('#help-preferences-status').textContent=error.message;}
+};
+$('#help-override-form').onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,id=form.elements.target.value;
+  const next={...helpPreferences,overrides:{...helpPreferences.overrides,[id]:{
+    hint:form.elements.hint.value.trim(),guide:form.elements.guide.value}}};
+  try{helpPreferences=await accountRequest('/api/help/preferences',next,'PUT');renderHelpPreferences();
+    $('#help-preferences-status').textContent='Custom hint and guide saved';}
+  catch(error){$('#help-preferences-status').textContent=error.message;}
+};
+$('#help-override-remove').onclick=async()=>{
+  const id=$('#help-override-form').elements.target.value,overrides={...helpPreferences.overrides};delete overrides[id];
+  try{helpPreferences=await accountRequest('/api/help/preferences',{...helpPreferences,overrides},'PUT');
+    renderHelpPreferences();$('#help-preferences-status').textContent='Default hint restored';}
+  catch(error){$('#help-preferences-status').textContent=error.message;}
+};
+$('#help-preferences-reset').onclick=async()=>{
+  try{helpPreferences=await accountRequest('/api/help/preferences',undefined,'DELETE');renderHelpPreferences();
+    $('#help-preferences-status').textContent='All guidance defaults restored';}
+  catch(error){$('#help-preferences-status').textContent=error.message;}
+};
+function showContextGuide(id){
+  const target=document.getElementById(id);
+  if(!target)return;
+  const guide=guideFor(id,target.tagName==='FORM'?target:null);
+  const context=$('#help-context');context.hidden=false;
+  $('#help-context-title').textContent=`Guide: ${guide.title}`;
+  $('#help-context-description').textContent=guide.description;
+  const steps=[`Open ${guide.title} from the navigation or its form page.`,
+    guide.fields.length?`Prepare these fields: ${guide.fields.join(', ')}.`:'Review the controls and any requirements shown on the page.',
+    guide.action?`Review your entries, then choose “${guide.action}” when ready.`:'Read the available actions and choose the one you need.',
+    'Check the result or status message. If service activation is required, verify it separately before relying on it.'];
+  $('#help-context-steps').replaceChildren(...steps.map(step=>{const li=document.createElement('li');li.textContent=step;return li;}));
+  const tutorial=$('#help-context-tutorial');
+  tutorial.href=`#${guide.related==='help-admin'&&!['admin','super_admin'].includes(activeRole)?'help-user':guide.related}`;
+  tutorial.textContent=tutorial.hash==='#help-admin'?'Read the administrator tutorial':
+    tutorial.hash==='#help-technical'?'Read the technical guide':'Read the user tutorial';
+  if(activeRole)showWorkspace('help');
+  context.scrollIntoView({behavior:'smooth',block:'start'});context.focus({preventScroll:true});
+}
 let phone;
 let onCall = false;
 let onHold = false;
@@ -1306,7 +1619,7 @@ async function accountRequest(path, body, method="POST") {
     body: JSON.stringify(body)
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Account request failed");
+  if (!response.ok) {const error=new Error(data.error || "Account request failed");error.status=response.status;throw error;}
   return data;
 }
 async function apiGet(path) {
@@ -1316,15 +1629,18 @@ async function apiGet(path) {
   return data;
 }
 async function refreshCdr() {
-  const {records} = await apiGet("/api/admin/cdr");
+  const params=new URLSearchParams(new FormData($('#cdr-filter')));params.set('page',String(cdrPage));
+  const {records,hasMore,page} = await apiGet(`/api/admin/cdr?${params}`);
   const list = $("#cdr-records"); list.replaceChildren();
   for (const record of records) {
     const item = document.createElement("li");
     item.textContent = `${record.started_at} · ${record.direction} · ${record.caller_e164} → ${record.callee_e164} · ${record.disposition} · ${record.billable_seconds}s billable · ${record.source}/${record.leg_id}`;
     list.append(item);
   }
-  $("#cdr-status").textContent = `${records.length} recent records; no charges applied.`;
+  $('#cdr-prev').disabled=page<=1;$('#cdr-next').disabled=!hasMore;
+  $("#cdr-status").textContent = `Page ${page}: ${records.length} records; no charges applied.`;
 }
+let cdrPage=1;
 async function refreshInhouse() {
   const filters=new URLSearchParams(new FormData($("#inhouse-filter")));
   const [blocks,inventory] = await Promise.all([
@@ -1457,6 +1773,9 @@ $("#inhouse-price").onsubmit=async(event)=>{
   } catch(error) {$("#inhouse-status").textContent=error.message;}
 };
 $("#refresh-cdr").onclick = () => refreshCdr().catch((error) => { $("#cdr-status").textContent = error.message; });
+$('#cdr-filter').onsubmit=event=>{event.preventDefault();cdrPage=1;refreshCdr().catch(error=>{$('#cdr-status').textContent=error.message;});};
+$('#cdr-prev').onclick=()=>{cdrPage=Math.max(1,cdrPage-1);refreshCdr().catch(error=>{$('#cdr-status').textContent=error.message;});};
+$('#cdr-next').onclick=()=>{cdrPage++;refreshCdr().catch(error=>{$('#cdr-status').textContent=error.message;});};
 async function loadContacts() {
   const { contacts } = await apiGet("/api/contacts");
   const list = $("#contact-list");
@@ -1523,8 +1842,15 @@ function signedIn(user) {
   if(user.authSource==="local") refreshPasskeys();
   $("#sip-account-panel").hidden=false;
   refreshSipAccount();
+  apiGet('/api/config').then(({sipWssUrl})=>{
+    currentSipWssUrl=sipWssUrl||'';
+    $('#server-config').elements.sipWssUrl.value=currentSipWssUrl;
+    applySipDefaults();
+  }).catch(()=>{});
   sipProfiles.refresh();
   $("#sip-profile-admin").hidden=user.role!=="super_admin";
+  $("#carrier-admin").hidden=user.role!=="super_admin";
+  $("#switch-admin").hidden=user.role!=="super_admin";
   $("#provider-webhook-admin").hidden=user.role!=="super_admin";
   $("#didww-admin").hidden=user.role!=="super_admin";
   $("#carrier-adapter-admin").hidden=user.role!=="super_admin";
@@ -1532,9 +1858,11 @@ function signedIn(user) {
   $("#fleet-access-panel").hidden=user.role!=="super_admin";
   $("#fleet-operations-panel").hidden=user.role!=="super_admin";
   $("#flowroute-auto-form").hidden=user.role!=="super_admin";
+  $("#carrier-profile-form").hidden=user.role!=="super_admin";
   $("#carrier-catalog-form").hidden=user.role!=="super_admin";
-  if(user.role==="super_admin"){providerWebhooks.refresh();didwwAdmin.refresh();adapterAdmin.refresh();serverFleet.refresh();fleetNetwork.refresh();fleetGrants.refresh();fleetFirewall.refresh();operationsAdmin.refresh();}
-  if(["admin","super_admin"].includes(user.role))operatorAdmin.refresh();
+  $("#provider-credentials-admin").hidden=user.role!=="super_admin";
+  if(user.role==="super_admin"){providerWebhooks.refresh();providerCredentialsAdmin.refresh();didwwAdmin.refresh();adapterAdmin.refresh();serverFleet.refresh();fleetNetwork.refresh();fleetGrants.refresh();fleetFirewall.refresh();operationsAdmin.refresh();}
+  if(["admin","super_admin"].includes(user.role)){operatorAdmin.refresh();clusterAdmin.refresh();}
   if(["admin","super_admin"].includes(user.role)){
     switchAdmin.refresh(user.role==="super_admin");
     $("#switch-config").querySelectorAll("input,select,button").forEach(el=>el.disabled=user.role!=="super_admin");
@@ -1549,8 +1877,14 @@ function signedIn(user) {
   $('#help-agent').hidden=false;
   apiGet('/api/help/agent').then(({available})=>{
     $('#help-ask').querySelector('button').disabled=!available;
+    $('#help-automation').querySelector('button').disabled=!available;
     $('#help-agent-status').textContent=available?'Ask a question about using Olamide.':'AI support is not configured. Open a support ticket for help.';
   }).catch(error=>{$('#help-agent-status').textContent=error.message;});
+  document.querySelectorAll('.automation-admin-link').forEach(link=>link.hidden=!['admin','super_admin'].includes(user.role));
+  $('#help-ai-config').hidden=user.role!=='super_admin';
+  if(user.role==='super_admin')refreshAiKeyStatus();
+  $('#email-admin').hidden=user.role!=='super_admin';
+  if(user.role==='super_admin')refreshEmailConfig();
   $('#help-admin').hidden=!['admin','super_admin'].includes(user.role);
   $("#signin-role-help").textContent=`Signed in with ${activeRole==="super_admin"?"super administrator":activeRole==="admin"?"administrator":"user"} access.`;
   $('#login-menu-label').textContent='My account';$('#login-options-auth').hidden=true;$('#login-options-account').hidden=false;
@@ -1562,6 +1896,8 @@ function signedIn(user) {
   background.refresh(["admin","super_admin"].includes(user.role));
   $("#password-change").hidden = user.authSource==="ldap";
   $("#account-status").textContent = `Signed in as ${user.name}`;
+  $('#help-preferences').hidden=false;
+  refreshHelpPreferences().catch(error=>{$('#help-preferences-status').textContent=error.message;});
   $("#chat").hidden = !user.features?.messaging;
   $("#billing").hidden = !user.features?.billing;
   if (user.features?.meetings) meetings.show();
@@ -1586,6 +1922,10 @@ function signedIn(user) {
   $("#agent-panel").hidden = !user.features?.call_center;
   pbx.refreshSelf(user).catch((error) => { $("#agent-status-result").textContent = error.message; });
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
+  $("#prepaid-control-admin").hidden=user.role!=="super_admin";
+  $("#meeting-policy-admin").hidden=user.role!=="super_admin";
+  if(user.role==='super_admin')refreshMeetingAdmin().catch(error=>{$('#meeting-policy-status').textContent=error.message;});
+  if(user.role==="super_admin")refreshPrepaidControl().catch(error=>{$("#prepaid-control-summary").textContent=error.message;});
   updateNavigation();
   workspaceQuick.refresh();workPlanner.refresh();campaigns.inbox();
   if(["admin","super_admin"].includes(user.role)){ $("#campaign-admin").hidden=false;$("#campaign-form [name=audience] option[value=all]").hidden=user.role!=="super_admin";campaigns.refresh();passkeyPolicy.refresh(); }
@@ -1605,6 +1945,7 @@ function signedIn(user) {
   if (["admin","super_admin"].includes(user.role)) {
     loadGeofenceAdmin().catch(error=>{$("#geofence-admin-status").textContent=error.message;});
     reports.refresh();
+    liveCalls.activate();
     pricing.refresh();
     ldapAdmin.refresh();
     authProviders.refresh();
@@ -1838,29 +2179,53 @@ $("#send-message").addEventListener("submit", async (event) => {
     $("#chat-status").textContent = "Message sent";
   } catch (error) { $("#chat-status").textContent = error.message; }
 });
+let currentSipAccount=null;
+let currentSipWssUrl='';
+function applySipDefaults(overwrite=false){
+  const profile=$('#sip-profile-create'),dialer=$('#connect');
+  if(currentSipAccount && !profile.dataset.id){
+    for(const [name,value] of Object.entries({label:'My SIP account',username:currentSipAccount.username,domain:currentSipAccount.domain})){
+      if(overwrite||!profile.elements[name].value)profile.elements[name].value=value;
+    }
+    if(overwrite||!dialer.elements.username.value)dialer.elements.username.value=currentSipAccount.username;
+    if(overwrite||!dialer.elements.aor.value)dialer.elements.aor.value=`sip:${currentSipAccount.username}@${currentSipAccount.domain}`;
+  }
+  if(currentSipWssUrl){
+    if(overwrite||!profile.elements.wssUrl.value)profile.elements.wssUrl.value=currentSipWssUrl;
+    if(overwrite||!dialer.elements.server.value)dialer.elements.server.value=currentSipWssUrl;
+  }
+}
+$('#sip-profile-use-defaults').onclick=()=>applySipDefaults(true);
 $("#server-config").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
     const result = await accountRequest("/api/admin/config",
       Object.fromEntries(new FormData(event.currentTarget)));
+    currentSipWssUrl=result.sipWssUrl;
     $("#connect [name=server]").value = result.sipWssUrl;
+    applySipDefaults();
     $("#admin-status").textContent = "Server URL saved";
   } catch (error) { $("#admin-status").textContent = error.message; }
 });
 apiGet("/api/config").then(({ sipWssUrl }) => {
-  if (sipWssUrl) $("#connect [name=server]").value = sipWssUrl;
+  currentSipWssUrl=sipWssUrl||'';
+  if (sipWssUrl) {$("#server-config").elements.sipWssUrl.value=sipWssUrl;applySipDefaults();}
 }).catch(() => {});
 $("#signup").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   const data = new FormData(form);
   try {
-    await accountRequest("/api/register", Object.fromEntries(data));
-    $("#signup-verify").elements.email.value=data.get('email');
+    const result=await accountRequest("/api/register", Object.fromEntries(data));
+    $("#signup-verify").elements.email.value=result.email;
     form.reset();
-    $("#account-status").textContent = "Check your email for a verification code.";
+    $("#account-status").textContent = result.delivery==='failed'?result.message:"Check your email for a verification code.";
     pageRoutes.go('signup-verify');
-  } catch (error) { $("#account-status").textContent = error.message; }
+  } catch (error) {
+    if(error.status===409){$("#signup-verify").elements.email.value=String(data.get('email')).trim().toLowerCase();pageRoutes.go('signup-verify');
+      $("#account-status").textContent='An account already exists. If you have not verified your email, use Resend code. Otherwise, sign in.';}
+    else $("#account-status").textContent = error.message;
+  }
 });
 $("#signup-verify").addEventListener('submit',async event=>{
   event.preventDefault();
@@ -1884,6 +2249,8 @@ async function refreshPasskeys(){
 }
 async function refreshSipAccount(){
   try {const {account,note}=await apiGet('/api/sip-account');
+    currentSipAccount=account;
+    applySipDefaults();
     $("#sip-account-status").textContent=account?`${account.username}@${account.domain}: ${account.status}. ${note}`:'No SIP account record. Contact support.';
     $("#sip-credentials").hidden=!account||account.status!=='active';
   }catch(error){$("#sip-account-status").textContent=error.message;}
@@ -1924,6 +2291,10 @@ async function refreshCarriers(){
   for(const trunk of trunks.trunks){const option=document.createElement('option');option.value=trunk.id;
     option.textContent=`${trunk.name} (${trunk.host})`;selection.append(option);}
   if(trunks.trunks.some(trunk=>trunk.id===priorTrunk)) selection.value=priorTrunk;
+  else {
+    const draft=data.providers.find(profile=>profile.provider===providerSelect.value);
+    if(draft?.trunk_id&&trunks.trunks.some(trunk=>trunk.id===draft.trunk_id))selection.value=draft.trunk_id;
+  }
   const list=$("#carrier-profiles");list.replaceChildren();
   for(const profile of data.providers){const card=document.createElement('article');
     const title=document.createElement('h4');title.textContent=`${profile.displayName}: ${profile.enabled?profile.status:'disabled'}`;
@@ -1931,14 +2302,14 @@ async function refreshCarriers(){
     const trunk=trunks.trunks.find(item=>item.id===profile.trunk_id);
     const target=document.createElement('p');target.textContent=trunk?`Trunk: ${trunk.name} (${trunk.host}:${trunk.port}/${trunk.transport}) · ${trunk.enabled?'enabled':'disabled'}`:'No trunk selected';
     const verify=document.createElement('button');verify.type='button';verify.textContent='Verify inventory API';
-    verify.disabled=!profile.enabled||(!['flowroute','didww'].includes(profile.provider)?!data.adapterConfigured:!profile.credentialsConfigured);
+    verify.disabled=activeRole!=='super_admin'||!profile.enabled||(!['flowroute','didww'].includes(profile.provider)?!data.adapterConfigured:!profile.credentialsConfigured);
     if(!['flowroute','didww'].includes(profile.provider))verify.textContent='Verify carrier adapter';
     verify.onclick=async()=>{try{const result=await accountRequest(`/api/admin/carriers/${profile.provider}/verify`,{});
       $("#carrier-admin-status").textContent=result.adapterVerified?`${result.provider}: carrier adapter verified. No SIP route activated.`:
         `${result.provider}: credentials valid; ${result.sampleCount} inventory results. No SIP route activated.`;
       }catch(error){$("#carrier-admin-status").textContent=error.message;}};
     const activate=document.createElement('button');activate.type='button';activate.textContent='Provision with switch adapter';
-    activate.disabled=!profile.trunk_id||!data.adapterConfigured||
+    activate.disabled=activeRole!=='super_admin'||!profile.trunk_id||!data.adapterConfigured||
       (['flowroute','didww'].includes(profile.provider)&&!profile.credentialsConfigured);
     if(!['flowroute','didww'].includes(profile.provider))activate.disabled ||= !profile.adapterVerified;
     activate.disabled ||= !profile.enabled;
@@ -1949,7 +2320,7 @@ async function refreshCarriers(){
     if(profile.status==='active'){
       const deactivate=document.createElement('button');deactivate.type='button';
       deactivate.textContent='Deactivate with switch adapter';
-      deactivate.disabled=!data.adapterConfigured;
+      deactivate.disabled=activeRole!=='super_admin'||!data.adapterConfigured;
       deactivate.onclick=async()=>{deactivate.disabled=true;try{
         await accountRequest(`/api/admin/carriers/${profile.provider}/deactivate`,{});
         await refreshCarriers();$("#carrier-admin-status").textContent=`${profile.displayName} deactivated by the switch adapter.`;
@@ -2013,6 +2384,106 @@ async function refreshCharging(){
   $("#charging-status").textContent=summary.note;
 }
 $("#charging-refresh").onclick=()=>refreshCharging().catch(error=>{$("#charging-status").textContent=error.message;});
+async function refreshPrepaidControl(){
+  const data=await apiGet('/api/admin/billing-control');
+  const form=$("#prepaid-control-form");
+  form.elements.maxCallMinutes.value=data.policy.max_call_minutes;
+  form.elements.enabled.checked=Boolean(data.policy.enabled);
+  form.elements.enabled.disabled=!data.globalEnabled&&!data.policy.enabled;
+  $("#prepaid-control-summary").textContent=`Host authorization: ${data.globalEnabled?'enabled':'disabled'}; tenant policy: ${data.policy.enabled?'enabled':'disabled'}; funded accounts: ${data.prepaidAccounts}; active reservations: ${data.activeReservations}; eligible rates: ${data.activeRates}. ${data.note}`;
+  const history=$("#prepaid-control-events");history.replaceChildren();
+  for(const item of data.events){const li=document.createElement('li');li.textContent=`${item.created_at}: ${item.action}, ${item.max_call_minutes} minutes`;history.append(li);}
+}
+$("#prepaid-control-refresh").onclick=()=>refreshPrepaidControl().catch(error=>{$("#prepaid-control-summary").textContent=error.message;});
+$("#prepaid-control-form").onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button');button.disabled=true;
+  try{await accountRequest('/api/admin/billing-control',{maxCallMinutes:Number(form.elements.maxCallMinutes.value),enabled:form.elements.enabled.checked},'PUT');
+    await refreshPrepaidControl();}
+  catch(error){$("#prepaid-control-summary").textContent=error.message;}
+  finally{button.disabled=false;}
+};
+async function refreshMeetingAdmin(){
+  const [settings,inventory]=await Promise.all([apiGet('/api/admin/meeting-policy'),apiGet('/api/admin/meeting-rooms')]);
+  const form=$('#meeting-policy-form');
+  for(const [key,value] of Object.entries(settings.policy)){
+    const input=form.elements[key];if(!input)continue;
+    if(input.type==='checkbox')input.checked=value;else input.value=value;
+  }
+  const container=$('#meeting-admin-rooms');container.replaceChildren();
+  for(const room of inventory.rooms){
+    const article=document.createElement('article'),heading=document.createElement('h5');
+    heading.textContent=`${room.title} — ${room.host_name} (${room.participants.length} connected)`;article.append(heading);
+    const control=(label,action,body)=>{const button=document.createElement('button');button.type='button';button.textContent=label;
+      button.onclick=async()=>{button.disabled=true;try{
+        await accountRequest(`/api/admin/meeting-rooms/${room.id}/${action}`,body);
+        await refreshMeetingAdmin();$('#meeting-policy-status').textContent=`${label} completed`;
+      }catch(error){$('#meeting-policy-status').textContent=error.message;button.disabled=false;}};article.append(button);};
+    control(room.locked?'Unlock room':'Lock room','lock',{locked:!room.locked});
+    control('End room for all','end',{});
+    const inviteForm=document.createElement('form'),inviteLabel=document.createElement('label'),email=document.createElement('input'),submit=document.createElement('button');
+    inviteLabel.textContent='Invite tenant email ';email.type='email';email.required=true;inviteLabel.append(email);
+    submit.type='submit';submit.textContent='Invite';inviteForm.append(inviteLabel,submit);
+    inviteForm.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{
+      await accountRequest(`/api/admin/meeting-rooms/${room.id}/invite`,{email:email.value});await refreshMeetingAdmin();
+    }catch(error){$('#meeting-policy-status').textContent=error.message;submit.disabled=false;}};
+    if(settings.policy.allowInvites)article.append(inviteForm);
+    for(const invitation of room.invitations){const row=document.createElement('p'),revoke=document.createElement('button');
+      row.textContent=`Invited: ${invitation.email} `;revoke.type='button';revoke.textContent='Revoke invitation';
+      revoke.onclick=async()=>{revoke.disabled=true;try{await accountRequest(`/api/admin/meeting-rooms/${room.id}/revoke`,{userId:invitation.recipient_id});await refreshMeetingAdmin();}
+        catch(error){$('#meeting-policy-status').textContent=error.message;revoke.disabled=false;}};row.append(revoke);article.append(row);}
+    for(const participant of room.participants){const row=document.createElement('p');row.textContent=participant.name+' ';
+      if(participant.id!==room.host_id){const remove=document.createElement('button');remove.type='button';remove.textContent='Remove participant';
+        remove.onclick=async()=>{remove.disabled=true;try{await accountRequest(`/api/admin/meeting-rooms/${room.id}/remove`,{userId:participant.id});await refreshMeetingAdmin();}
+          catch(error){$('#meeting-policy-status').textContent=error.message;remove.disabled=false;}};row.append(remove);}article.append(row);}
+    container.append(article);
+  }
+  $('#meeting-policy-status').textContent=`${inventory.rooms.length} active room(s).`;
+}
+$('#meeting-policy-refresh').onclick=()=>refreshMeetingAdmin().catch(error=>{$('#meeting-policy-status').textContent=error.message;});
+$('#meeting-policy-form').onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button');button.disabled=true;
+  const policy={maxParticipants:Number(form.elements.maxParticipants.value)};
+  for(const key of ['allowLinks','allowInvites','requireInvitation','allowScreenShare','allowChat','allowReactions','allowHand'])
+    policy[key]=form.elements[key].checked;
+  try{await accountRequest('/api/admin/meeting-policy',policy,'PUT');await refreshMeetingAdmin();$('#meeting-policy-status').textContent='Meeting settings saved';}
+  catch(error){$('#meeting-policy-status').textContent=error.message;}finally{button.disabled=false;}
+};
+async function refreshSettlements(){
+  const data=await apiGet('/api/admin/settlements');
+  const list=$("#settlement-list");list.replaceChildren();
+  for(const item of data.settlements){
+    const li=document.createElement('li');
+    li.append(document.createTextNode(`${item.provider} · ${item.external_reference} · ${String(item.period_from).slice(0,10)} to ${String(item.period_to).slice(0,10)} · expected ${item.expected_cents} / carrier ${item.carrier_cents} ${item.currency} cents · ${item.status} `));
+    const actions=item.status==='draft'?['submit']:item.status==='in_review'?['approve','dispute']:item.status==='disputed'?['resolve']:[];
+    for(const action of actions){const button=document.createElement('button');button.type='button';button.textContent=action[0].toUpperCase()+action.slice(1);
+      button.onclick=async()=>{let body={};if(action==='dispute'||action==='resolve'){
+        const value=window.prompt(action==='dispute'?'Reason for dispute':'Resolution note');
+        if(value===null)return;body=action==='dispute'?{reason:value}:{resolution:value};
+      }
+      button.disabled=true;try{await accountRequest(`/api/admin/settlements/${item.id}/${action}`,body);await refreshSettlements();}
+      catch(error){$("#settlement-status").textContent=error.message;button.disabled=false;}};li.append(button);}
+    list.append(li);
+  }
+  $("#settlement-disputes").replaceChildren(...data.disputes.map(dispute=>{
+    const li=document.createElement('li');li.textContent=`${dispute.status}: ${dispute.reason}${dispute.resolution?' — '+dispute.resolution:''}`;return li;}));
+  $("#settlement-status").textContent=data.note;
+}
+$("#settlement-create").onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,input=Object.fromEntries(new FormData(form));
+  try{await accountRequest('/api/admin/settlements',{...input,expectedCents:Number(input.expectedCents),carrierCents:Number(input.carrierCents)});
+    form.reset();await refreshSettlements();}
+  catch(error){$("#settlement-status").textContent=error.message;}
+};
+$("#settlement-refresh").onclick=()=>refreshSettlements().catch(error=>{$("#settlement-status").textContent=error.message;});
+async function refreshRatings(){const data=await apiGet('/api/admin/rating');
+  $("#rating-list").replaceChildren(...data.records.map(row=>{const li=document.createElement('li');
+    li.textContent=`${row.provider} · CDR ${row.cdr_id} · ${row.units} minute units · customer ${row.charge_cents} cents / carrier ${row.cost_total_cents} cents · ${row.status}`;return li;}));
+  $("#rating-status").textContent=data.note;
+}
+$("#rating-refresh").onclick=()=>refreshRatings().catch(error=>{$("#rating-status").textContent=error.message;});
+$("#rating-create").onsubmit=async event=>{event.preventDefault();const form=event.currentTarget;
+  try{await accountRequest('/api/admin/rating',Object.fromEntries(new FormData(form)));form.reset();await refreshRatings();}
+  catch(error){$("#rating-status").textContent=error.message;}};
 $("#dialplan-refresh").onclick=refreshDialplans;
 $("#dialplan-admin-create").onsubmit=async event=>{
   event.preventDefault();const form=event.currentTarget;const data=Object.fromEntries(new FormData(form));
@@ -2071,6 +2542,7 @@ $("#logout").onclick = async () => {
     for(const id of ["account-login-group","account-signup-group","account-verify-group","account-directory-group"]) $("#"+id).hidden=false;
     $("#passkey-settings").hidden=true;
     $("#sip-account-panel").hidden=true;$("#sip-credentials-result").textContent='';
+    currentSipAccount=null;currentSipWssUrl='';$('#sip-profile-create').reset();$('#connect').reset();$('#server-config').reset();
     $("#dialplan-marketplace").hidden=true;$("#dialplan-offers").replaceChildren();$("#dialplan-orders").replaceChildren();
     $("#account-password-group").hidden=true;
     activeRole=null;workspaceQuick.clear();resetWorkspace();$("#help-agent").hidden=true;$("#help-admin").hidden=true;$("#signin-role-help").textContent="Your assigned role controls which menus appear after sign-in.";
@@ -2082,12 +2554,15 @@ $("#logout").onclick = async () => {
     $("#planner").hidden=true;$("#campaign-inbox-panel").hidden=true;$("#campaign-admin").hidden=true;$("#search-panel").hidden=true;$("#support").hidden=true;
     $("#locale-settings").hidden=true;localeSettings.clear();
     support.clear();
+    liveCalls.clear();
     background.clear();
     $("#chat").hidden = true;
     $("#billing").hidden = true;
     meetings.hide();
     $("#agent-panel").hidden = true;
     $("#admin").hidden = true;
+    $('#help-preferences').hidden=true;
+    applyUiPreferences({showHints:true,showGuides:true,showFieldHints:true,detail:'standard',overrides:{}});
     $("#message-list").replaceChildren();
     $("#account-status").textContent = "Signed out";
     updateNavigation();
@@ -2322,5 +2797,64 @@ $('#help-ask').onsubmit=async event=>{
   try{const result=await accountRequest('/api/help/agent',{question});$('#help-answer').textContent=result.answer;$('#help-agent-status').textContent='AI generated answer. Open a ticket for account specific help.';}
   catch(error){$('#help-answer').textContent='';$('#help-agent-status').textContent=error.message;}
   finally{button.disabled=false;}
+};
+$('#help-automation').onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button'),output=$('#help-automation-answer');
+  button.disabled=true;output.textContent='Drafting review steps…';
+  try{const result=await accountRequest('/api/help/agent',{question:form.elements.question.value,mode:'automation'});
+    output.textContent=result.answer+'\n\nReview each step in the linked controls before applying it.';
+  }catch(error){output.textContent=error.message;}finally{button.disabled=false;}
+};
+async function refreshAiKeyStatus(){
+  try{const result=await apiGet('/api/admin/ai-support');
+    $('#help-ai-key-status').textContent=result.configured?`Stored key: ${result.enabled?'enabled':'disabled'}. Secret is write-only.`:
+      result.environmentFallback?'A server environment key is active. Save a key here to manage it in the GUI.':
+      result.encryptionReady?'No AI key saved. Enter one above.':'Server encryption is not configured. Redeploy the production GUI.';
+    $('#help-ai-key-remove').disabled=!result.configured;
+  }catch(error){$('#help-ai-key-status').textContent=error.message;}
+}
+$('#help-ai-key-form').onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button');button.disabled=true;
+  try{await accountRequest('/api/admin/ai-support',{apiKey:form.elements.apiKey.value},'PUT');
+    form.reset();await refreshAiKeyStatus();$('#help-ask').querySelector('button').disabled=false;$('#help-automation').querySelector('button').disabled=false;
+  }catch(error){$('#help-ai-key-status').textContent=error.message;}finally{button.disabled=false;}
+};
+$('#help-ai-key-refresh').onclick=()=>refreshAiKeyStatus();
+$('#help-ai-key-remove').onclick=async()=>{
+  if(!confirm('Remove the stored AI key? The assistant will become unavailable unless a server environment key exists.'))return;
+  try{await accountRequest('/api/admin/ai-support',undefined,'DELETE');await refreshAiKeyStatus();
+    const {available}=await apiGet('/api/help/agent');$('#help-ask').querySelector('button').disabled=!available;$('#help-automation').querySelector('button').disabled=!available;
+  }catch(error){$('#help-ai-key-status').textContent=error.message;}
+};
+async function refreshEmailConfig(){
+  try{
+    const config=await apiGet('/api/admin/email-verification');
+    $('#email-admin-status').textContent=config.configured
+      ?`Sender: ${config.sender}. Key source: ${config.source}. Secret is write-only. ${config.otpReady?'OTP secret ready.':'OTP secret missing; run email-verification.yml.'}`
+      :`No sender configured. ${config.encryptionReady?'Enter a verified sender and Resend key.':'Run email-verification.yml on the server first.'}`;
+    $('#email-admin-test').disabled=!config.configured||!config.otpReady;
+    $('#email-admin-remove').disabled=config.source!=='database';
+    if(config.sender)$('#email-admin-form').elements.sender.value=config.sender;
+  }catch(error){$('#email-admin-status').textContent=error.message;}
+}
+$('#email-admin-form').onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button');button.disabled=true;
+  try{await accountRequest('/api/admin/email-verification',{
+    sender:form.elements.sender.value.trim(),apiKey:form.elements.apiKey.value},'PUT');
+    form.elements.apiKey.value='';await refreshEmailConfig();
+  }catch(error){$('#email-admin-status').textContent=error.message;}
+  finally{button.disabled=false;}
+};
+$('#email-admin-refresh').onclick=refreshEmailConfig;
+$('#email-admin-test').onclick=async()=>{
+  const button=$('#email-admin-test');button.disabled=true;
+  try{const result=await accountRequest('/api/admin/email-verification/test',{});$('#email-admin-status').textContent=result.status;}
+  catch(error){$('#email-admin-status').textContent=error.message;}
+  finally{button.disabled=false;}
+};
+$('#email-admin-remove').onclick=async()=>{
+  if(!confirm('Remove the stored email sending key? New registration emails will stop unless an environment fallback is configured.'))return;
+  try{await accountRequest('/api/admin/email-verification',{},'DELETE');await refreshEmailConfig();}
+  catch(error){$('#email-admin-status').textContent=error.message;}
 };
 $('#help-ticket').onclick=()=>showWorkspace('support');

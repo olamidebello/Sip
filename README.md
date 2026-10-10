@@ -2,11 +2,11 @@
 
 Olamide is a development browser softphone with a Node.js account API and MySQL 8.4 database. See the deployment checks below for the current server state.
 
-## FreeSWITCH and Class 5 deployment
+## Current SIP deployment path
 
-The Debian 12 switch playbook requires FreeSWITCH 1.11.3 or newer from the SignalWire stable repository and upgrades nodes one at a time after checking for active calls and backing up configuration. A FreeSWITCH XML bridge serves tenant-scoped SIP credentials and authenticated internal/outbound dialplans from MySQL. The **Administration → FreeSWITCH** screen manages domains, tariff selection, Sofia gateway mappings, and account activation. A [Debian 12 Ansible role](deploy/ansible/README.md) installs FreeSWITCH, XML curl, WSS certificates, local event socket protection, node telemetry, time synchronization, optional TURN, and a configurable switch firewall. Multiple hosts can share the backend.
+The `kamailio-rebuild` branch stages Kamailio and RTPengine on Debian 12 and includes a separate loopback-only API pilot. The reported server pilot passed syntax parsing and local SIP challenge tests; live trunk calls, RTP, billing and high availability have not been commissioned. The super admin Kamailio SIP screen manages shared tenant domain, account and carrier routing data. Adapter node settings are staged with revisions; they do not apply a host configuration. See `deploy/kamailio/` and the sections below.
 
-This is an installable switch foundation, not a completed carrier-grade Class 5 service. The role needs a SignalWire package token, trusted WSS certificate, private network API URL, SIP carrier settings, and vaulted secrets. It has not been deployed to a server. Public DID ingress, live CDR rating, prepaid enforcement, concurrent call limits, emergency routing, fraud settlement and regulatory controls require further implementation and acceptance testing.
+The earlier FreeSWITCH playbooks and XML bridge remain in the repository as legacy code; the current GUI no longer presents FreeSWITCH as the active switch. Do not use the older installation commands for this Kamailio rollout. The MySQL tenant and gateway tables with historical switch names are still required by Kamailio authentication and routing and must not be dropped.
 
 ## Generate the MySQL database
 
@@ -310,7 +310,8 @@ To regenerate packages, use the workflow's **Run workflow** button or push packa
 
 - Create monthly plans and review unpaid invoices. Plan selection creates a pending invoice; a separate payment processor, tax engine, and settlement reconciliation are required. In **DID buying and selling prices**, configure a separate Flowroute, DIDWW, and in-house rule. The default provider rule is +30%; a legacy tenant markup setting remains the fallback until a source rule is saved. Flowroute/DIDWW buying costs come from the provider inventory feed and cannot be changed at the provider by this application. Choose percentage adjustment (signed basis points, such as `3000` for +30% or `-1000` for -10%), fixed cent adjustment (positive or negative), or manual final setup and monthly selling prices. Preview calculations before saving. Decreases stop at zero. API: `GET /api/admin/pricing` and `PUT /api/admin/pricing/{flowroute|didww|inhouse}` with `mode`, integer `setupValue` and `monthlyValue`. Rules are tenant scoped and audited. Flowroute/DIDWW searches need provider API keys in the server environment. Purchase and number port submission remain disabled.
 - In **In-house DID management**, filter inventory by number prefix and status, then choose **Set buy/sell price** on an individual unverified, available, or disabled number. Enter estimated buy setup/monthly cents, manual sell setup/monthly cents, and select manual or **Follow in-house rule**. For rule-managed numbers, search and reservation compute the selling prices from the stored buy costs and current rule; the reservation snapshots setup and monthly prices and creates an unpaid invoice at the computed setup amount. A rule change affects future reservations; existing invoices are not repriced. Reserved or assigned numbers cannot be edited through this control. The administrator must verify actual acquisition cost independently. This is a price record and reservation flow, not automatic provider purchasing or recurring charge collection.
-- Add contacts in the same tenant, send server-stored messages, and use meeting rooms with up to four participants. Meeting chat is temporary; screen sharing uses the browser's screen capture. Pointer assistance is an overlay and cannot operate the remote desktop. Configure TURN for cross-network calls. Messages have no end-to-end encryption or push delivery.
+- Add contacts in the same tenant, send server-stored messages, and use meeting rooms with up to four participants. Under **Meetings**, create a room, copy its direct link, use the device share sheet, or enter a tenant user's email in the host invitation form. The invited user sees the room under **My meetings and invitations**; the direct link still requires a signed-in user in the same tenant. Hosts can lock or end rooms and remove participants. Participants can raise a hand, applaud, chat, mute their own microphone, toggle their own camera, and share their screen if their group permits it. In **Super admin → Meeting controls**, set tenant link and invitation policies, require invited recipients, limit rooms to two through four people, enable or disable chat, screen sharing, reactions and hand raising, inspect active rooms, invite or revoke recipients, remove connected participants, and lock or end rooms. New admission settings affect the next join; disabling screen sharing also stops active shares. Meeting chat and reactions are temporary; policies and invitations are stored in MySQL. Pointer assistance is an overlay and cannot operate the remote desktop. Configure TURN for cross-network calls. This is a four-person browser room, not a large webinar or cloud recording service. Messages have no end-to-end encryption or push delivery.
+- In **My settings → Hints & guides**, choose whether navigation and form hints, field tips, and contextual guide buttons appear. Select brief or detailed hints, customize the hint and internal guide destination for a page or form, restore one default, or restore all defaults. These choices are saved per user in MySQL and do not change another account's guidance.
 - Android/iOS release administration records app identifiers, artifact references, tracks, internal approval, and audit history. It does not build native clients or submit to Google/Apple stores.
 
 ## Integration work required for a live PBX or ASTPP-class service
@@ -395,10 +396,17 @@ POSTs `{accountId,tenantId,userId,username,password,domain}` with an
 `Idempotency-Key` header and marks the account `active` only after the adapter
 returns JSON `{ "status": "active" }`. The adapter must provision the user on
 the authoritative switch and enforce tenant isolation before acknowledging.
-Without it, the record remains `awaiting_switch` and cannot make calls. The
-account page displays that status; an active user's SIP credentials require
-password reauthentication to reveal. Existing accounts are not retroactively
-assigned credentials by this new signup hook.
+For the local Kamailio adapter, an enabled tenant switch and a configured
+`SIP_CREDENTIAL_KEY` now create and activate the SIP account and digest record
+in the same user-creation transaction. Tenant-admin users and LDAP users also
+get an account; migration backfills missing accounts for existing active users
+without changing existing SIP passwords. If the switch is disabled or the key
+is missing, accounts stay `awaiting_switch`. Enabling the tenant switch
+activates pending accounts when the local adapter is in use. When an external
+`SIP_PROVISION_URL` is configured, its acknowledgment is still required.
+The account page displays status; local users reauthenticate to reveal
+credentials. An active database account does not establish a live SIP listener,
+public reachability, media, or carrier routing.
 
 **Dial plan marketplace** lets administrators create draft or published offers.
 Users browse published offers and request one. The request and unpaid invoice
@@ -413,8 +421,7 @@ In **Administration → Carrier providers**, an administrator selects an existin
 tenant trunk, a concurrent call capacity, and a routing intent for Flowroute
 or DIDWW. The server stores the profile in `carrier_provider_profiles`. The
 **Verify inventory API** action checks the provider's private server
-credentials without showing the key in the browser. Credentials remain in
-`/etc/olamide/secrets.env`. **Provision with switch adapter** requires
+credentials without showing the key in the browser. Credentials may be saved in the encrypted tenant credential store when `PROVIDER_CREDENTIAL_KEY` is configured, or supplied through private server environment variables. **Provision with switch adapter** requires
 `CARRIER_PROVISION_URL` (HTTPS) and `CARRIER_PROVISION_TOKEN`; the adapter
 receives `{tenantId,provider,trunkId,maxConcurrentCalls,routingMode}` with an
 idempotency header. Only a response `{ "status": "active" }` marks the tenant
@@ -480,6 +487,42 @@ Choose **Help** from the public header or **Workspace → Help & tutorials** whe
 
 To activate AI support, add `OPENAI_SUPPORT_API_KEY` to the private `/etc/olamide/secrets.env`, optionally set `OPENAI_SUPPORT_MODEL` (default `gpt-4.1-mini`), and rerun bootstrap so the API container receives it. Keep the key server side. The endpoint requires a signed in account, caps each question at 1,200 characters and ten requests per user per hour per API process, sends only that question and the fixed product guide to the model, uses `store:false`, and returns a generic error if the provider is unavailable. No account records, tickets or secrets are supplied to the model. Without a key, users can still read the FAQs and open a ticket. Production cost limits, retention policies and incident monitoring should be configured on the provider account before rollout.
 
+The Help & tutorials page also offers an Automation assistant. A signed in user can describe a goal and receive a reviewable, role-aware setup plan with navigation links to Events & tasks, tenant campaigns, server operations, and support. The assistant generates text only: it cannot schedule, publish, deploy, or change SIP routes. The API also accepts `OPENAI_API_KEY` when `OPENAI_SUPPORT_API_KEY` is unset. The local `.env.local` is ignored by Git; a production key must be supplied privately to the production Compose environment before the assistant becomes available there.
+
+Every application form and workspace navigation entry has a **Guide** control. It opens contextual instructions in Help & tutorials, lists the relevant field labels and save action, and links to the full user or administrator tutorial. Guides describe the workflow; they do not submit a form or change server state. Newly rendered forms and menu entries get the same controls.
+
+### Live calls and wholesale reporting
+
+Administrators now have **Live calls** in Administration. The screen polls on demand or every 15 seconds, shows recently signed ringing and answered legs, lets an administrator inspect the event timeline, and stores tenant-scoped investigation notes. It reports **no recent switch events** when no feed is connected. This is a monitoring view, not a hangup or interception control. Calls without a heartbeat for two minutes leave the recent view; history remains in the database. Call records can be filtered by direction, disposition and source with paged results. Reports include failed-call percentage, average answered duration, per-source answered and failed counts, and a downloadable source CSV. CDRs are still unrated; no balance is charged from these reports.
+
+The monitoring feed needs an authoritative switch event producer for each tenant. The included `deploy/kamailio/live-event-forwarder.py` accepts newline-delimited normalized events from a trusted local collector and signs them for `POST /api/integrations/calls/events`. Set `LIVE_CALL_EVENT_URL` to the private API bridge, `LIVE_CALL_TENANT_ID` to the tenant UUID, `LIVE_CALL_SOURCE` to a stable switch name, and `LIVE_CALL_SIGNING_KEY` to the same tenant secret configured in the API's `CDR_INGEST_KEYS_JSON`. Keep the key in a root-readable environment file and do not place it in a web page or Kamailio script. Input objects require `legId`, `event` (`ringing`, `answered`, `heartbeat`, `ended`), `direction`, `from`, `to`, and `occurredAt` in UTC ISO format; `eventId` should be a stable UUID retained across retries. Numbers must satisfy the API's accepted format. The forwarder exits on delivery failure; use a durable source and supervisor to replay events with their original IDs after recovery. Deploying the forwarder alone does not produce events. Wire Kamailio's dialog lifecycle or another authoritative switch event source, verify signed ringing/answer/end and heartbeat delivery with a real test call, and check the GUI's recent feed state before declaring monitoring commissioned. Call records and billing require separate signed CDR ingestion and reconciliation.
+
+**Carrier statement reconciliation** under Administration records a carrier statement reference, period, expected and carrier USD cent amounts, draft/review/dispute/resolution state, and notes. An independent super administrator can approve a matching statement; the creator cannot approve it. This approval is an internal review record only. Carrier payment, customer call rating, tax, prepaid enforcement and settlement accounting remain separate integrations.
+
+### Production billing gate on the SIP server
+
+To install the Debian host prerequisites locally, without starting charging or changing SIP traffic, run:
+
+```bash
+cd /opt/olamide/kamailio-staging && git fetch origin kamailio-rebuild && git switch --detach origin/kamailio-rebuild && printf '[switch_nodes]\nsip-switch-1 ansible_connection=local\n' > /tmp/olamide-kamailio-inventory.ini && ansible-playbook -i /tmp/olamide-kamailio-inventory.ini deploy/kamailio/billing-requirements.yml
+```
+
+This installs TLS/diagnostic/database client packages and creates private billing artifact directories. It checks the existing Docker Compose and deployment inputs. It does not activate a complete ASTPP-equivalent engine: the real-time switch cutoff, funding, tax, invoicing, and payment reconciliation contracts remain unaccepted. Installing packages alone cannot safely turn CDR imports into prepaid charging.
+
+The build now includes a **draft per-minute CDR rating service** (`Call rating` in Administration), a separate double-entry journal schema, a prepaid account/reservation module, and rated-cost comparison for carrier statements. The prepaid switch API is disabled unless `LIVE_PREPAID_ENABLED=true`; it is not called by the installed Kamailio configuration. There is no verified funding path for prepaid accounts. Do not set the flag on the current host. To back up the database, build the updated GUI/API and run migrations using the existing guarded deployment script, rerun the requirements playbook with `-e billing_deploy_application=true` after reviewing its production effects. The pilot API must be stopped because it occupies the same loopback bridge. Deployment adds schema and draft review controls but does not activate charging.
+
+Run `deploy/kamailio/billing-production.yml` locally on Debian 12 after the rating engine, synchronous switch authorization, immutable billing ledger, and carrier reconciliation have been implemented and independently accepted. The playbook checks for these components and acceptance reports before reading private API health, and also requires installed Kamailio prepaid authorization and dialog timeout wiring. **It deliberately fails on this build and does not alter production or debit wallets.** A syntax check alone does not establish billing readiness. Do not substitute the existing unrated CDR import or tariff quote preview for live prepaid cutoff.
+
+```bash
+cd /opt/olamide/kamailio-staging && printf '[switch_nodes]\nsip-switch-1 ansible_connection=local\n' > /tmp/olamide-kamailio-inventory.ini && ansible-playbook -i /tmp/olamide-kamailio-inventory.ini deploy/kamailio/billing-production.yml
+```
+
+For a future accepted implementation, pass absolute paths for `billing_rating_test_report`, `billing_prepaid_test_report`, and `billing_reconciliation_test_report`. Required acceptance includes idempotent CDR rating and rerating, per-call price snapshots, tax and currency precision, prepaid reservation/cutoff during a call, concurrent call limits, refund/reversal accounting, failed delivery recovery, tenant isolation, and carrier statement and cash reconciliation. Provisioning these requires more than installing packages; the switch must deny calls when the authorization path is unavailable and billing must never mutate balances from untrusted or duplicate events.
+
+A trusted switch event producer must POST raw JSON to the private `/api/integrations/calls/events` API using `X-CDR-Timestamp` (Unix seconds) and `X-CDR-Signature` (hex HMAC-SHA256 of `timestamp + "." + raw JSON`) with the tenant's secret in private `CDR_INGEST_KEYS_JSON`. Each event contains `tenantId` (UUID), `eventId` (new UUID), `source`, `legId`, `direction` (`inbound` or `outbound`), `from`, `to`, `event` (`ringing`, `answered`, `heartbeat`, or `ended`), and `occurredAt` (UTC ISO timestamp). Send `ringing` first, then answer/heartbeats/end with the same leg ID. Event IDs are idempotent and events outside a five-minute clock window are rejected. Use a heartbeat at least every minute during long calls. Configure that producer and confirm real carrier call traces before treating the monitor as live traffic. This branch's loopback staging Kamailio adapter does not emit those events or commission a carrier. Plan event retention and access to calling metadata before production traffic.
+
+On a GUI deployment, `deploy/kamailio/deploy-production-gui.sh` generates `AI_CONFIG_KEY` in the private production Compose environment if missing. After deployment, sign in as super administrator, open **Help & tutorials → AI support guide → Super admin AI setup**, and save a provider-issued OpenAI API key. The key is encrypted with AES-256-GCM in `ai_support_configuration`, is write-only in the GUI, and can be replaced or removed. The encryption key stays on the server and must be backed up alongside the database: losing it makes the saved AI key unreadable. A saved key takes precedence over any legacy environment key. If no key has been saved, the legacy environment key remains available. Model calls are server-side and drafting does not execute automation.
+
 ### SIP profile access and saved dialer connections
 
 The super administrator opens **Administration → SIP profile access** and selects a tenant. Tenant defaults control `view`, `add`, `edit`, and `delete`; group grants may allow additional actions; an individual user's explicit allow or deny takes priority. New tenants default to view only. Group and user selections are checked against the selected tenant by the API. Policy writes require the `super_admin` role. Group and user policies are removed automatically when those records are deleted.
@@ -500,6 +543,38 @@ The panel displays the exact tenant webhook URL: `https://<DOMAIN>/api/webhooks/
 
 **Administration → API capacity** shows the desired and last applied API replica counts and recent requests to tenant administrators. Super administrators may request one to four API replicas. The API records the requested revision in `cluster_state` and `cluster_actions`; it never receives Docker socket access. On the deployment host, `olamide-cluster.timer` runs a root-only service every minute. It reads the bounded request from MySQL through the API container, runs `docker compose up -d --no-build --scale api=N api`, and reports the applied revision or failure. Reapply Ansible or run `bash /opt/olamide/repo/deployment/install-cluster-timer.sh` after updating older installations if the timer is missing. Review `systemctl status olamide-cluster.timer olamide-cluster.service` and `journalctl -u olamide-cluster.service -n 100 --no-pager` when a request remains pending. This scales API processes on one Docker Compose host; MySQL, Caddy, SIP/media, TURN, and multi-host failover require separate infrastructure and are not clustered by this control.
 
+## Administrator guide: Flowroute and DIDWW trunks
+
+The **Provider API credentials** form stores keys for number inventory and the DIDWW API. A provider's **SIP trunk credentials and peering settings are separate**. A PBX trunk record, rate quote, or API inventory verification does not register or connect Kamailio. On the current staged Kamailio adapter, carrier INVITEs return 503. Complete the host and media commissioning gate below before sending live calls.
+
+### Shared preparation
+
+1. Sign in as super administrator and select the intended tenant. Ensure `PROVIDER_CREDENTIAL_KEY` is set to a stable 64-character hex value in the API server's private environment; restart the API after adding it. Do not paste provider secrets in the README, Git, screenshots, or support tickets.
+2. In **Carrier provider commissioning → Provider API credentials**, select Flowroute or DIDWW. Save the full key set. **Refresh credential status** shows the revision and enabled state but never reveals the secret. **Edit / rotate** replaces the entire set; **Disable** blocks stored credentials and provider inventory even if legacy environment keys exist.
+3. In **PBX → Trunk management and rate deck**, create a tenant trunk with the actual provider signaling host, port, transport, and priority. Use **View** for linked rates and carrier profiles; **Edit** requires the current revision. The **Enable preview** control changes planning state only.
+4. In **Carrier provider commissioning**, select the provider and trunk, choose capacity and routing intent, and save the draft profile. Set up an HTTPS carrier provisioning adapter in private server configuration, then use **Carrier adapter nodes → Check health** and enable a healthy node. The adapter must acknowledge and verify actual provider and switch state; the GUI cannot create a live Kamailio carrier route on its own.
+5. Add eligible tariff rates, outbound destination policy, fraud blocks and a carrier route key in **Kamailio tenant SIP settings**. Confirm tenant SIP domain and accounts. Test with a provider test number, check signaling, two-way RTP, call teardown, failover, and CDR/billing reconciliation before directing production traffic.
+
+### Flowroute outbound and inbound
+
+1. In the Flowroute account, obtain the **API access key and secret** for inventory and choose the **SIP interconnection method**: registration or IP authentication. Record the provider-approved signaling endpoints, source IP ranges, codecs, caller ID rules, and any technical prefix. Flowroute describes both interconnection methods in its [integration overview](https://flowroute.com/blog/faq/how-do-i-integrate-with-flowroute/).
+2. Save the API key pair under **Provider API credentials → Flowroute** and click **Verify inventory API** on its carrier card. This checks inventory access only. It does not verify SIP authentication.
+3. For the repo's shortcut, use **Flowroute PoP setup** (US-East-VA or US-West-OR) to create a disabled UDP 5060 trunk and draft profile. Otherwise create the trunk manually with the Flowroute endpoint and transport assigned to your account. Review it in **PBX**, then link it in **Carrier provider commissioning**.
+4. Configure your Flowroute account's outbound SIP authentication and inbound DID route to the tested public SIP edge, according to the chosen interconnection method. Flowroute documents inbound [registration, host-based, and SIP URI routing](https://flowroute.com/blog/choosing-between-sip-registration-and-host-based-routing/). Associate the test DID with that route in the provider account.
+5. Do not invoke **Provision with switch adapter** until the private adapter is implemented, health-checked, and able to verify the real SIP setup. **Verify inventory API** alone is insufficient. Messaging callback URLs are set separately under **Messaging webhooks**.
+
+### DIDWW outbound and inbound
+
+1. Confirm DIDWW has approved **Outbound Trunks** for the account. DIDWW says access is required before placing outbound calls; see its [outbound trunk access guide](https://doc.didww.com/voice/outbound-trunks/get-access.html). In the DIDWW User Panel, open **Voice → Outbound Trunks → Create New** and configure authentication, allowed SIP and RTP addresses, caller ID, capacity, media options, and a test destination according to the [outbound setup guide](https://doc.didww.com/voice/outbound-trunks/how-to-guides/create-outbound-trunk.html). Keep the SIP digest username/password private.
+2. In **Provider API credentials → DIDWW**, save the **API key** and choose **Sandbox** or **Production** for the correct account. The API key is not the outbound SIP digest password. Set `DIDWW_ACCOUNT_CURRENCY=USD` and `DIDWW_TENANT_ID` privately for the tenant-bound API console. The DIDWW API console can list or manage permitted `voice_out_trunks` and `voice_in_trunks` resources, subject to provider access. Use **Verify inventory API** to test the key against DID inventory.
+3. Copy the signaling endpoint and port shown for the approved DIDWW outbound trunk into a new PBX trunk. Link the draft profile in **Carrier provider commissioning**. DIDWW's [outbound credentials guide](https://doc.didww.com/voice/outbound-trunks/how-to-guides/view-outbound-trunk-credentials.html) explains where to view the SIP-specific values.
+4. For inbound DIDs, create a DIDWW **Voice In Trunk** pointed at the tested public SIP URI and assign the DID to it in DIDWW. An inbound trunk is a separate resource that delivers calls to your SIP system; see [DIDWW inbound trunks](https://doc.didww.com/api3/2026-04-16/inventory-resources/voice-in-trunks/index.html). Configure the matching tenant DID route in Olamide and test an inbound call.
+5. DIDWW API callbacks and Call Events require their own signed receiver and tokens as described below. The API key does not configure callbacks, SIP peering, RTP, or charging.
+
+### Before carrier activation
+
+Run `bash deploy/kamailio/commission-check.sh` on the switch host and resolve every blocked host gate. The current `adapter.cfg.j2` binds only to loopback and explicitly rejects carrier routes; the existing GUI cannot make that path live. The private adapter's `active` acknowledgment is a control-plane record, not evidence of an outbound call. Require successful authenticated SIP, inbound/outbound test calls, two-way audio, RTP cleanup, carrier failover and rated CDR reconciliation before production cutover.
+
 ## Carrier commissioning and future providers
 
 The administrator Carrier providers screen is backed by the tenant-scoped
@@ -511,8 +586,7 @@ activate it. Disabling a custom carrier requires adapter deactivation first.
 Changing an active carrier profile or Flowroute PoP also requires deactivation.
 
 Flowroute PoP setup creates or updates an initially disabled tenant trunk for
-US-East-VA or US-West-OR on UDP 5060 and saves a draft profile. It never stores
-the SIP password or API secret in the database or browser. Keep provider secrets
+US-East-VA or US-West-OR on UDP 5060 and saves a draft profile. It does not store the SIP trunk password; provider API keys can be saved separately in the encrypted tenant credential store and are never returned to the browser. Keep provider secrets
 in private server configuration and rotate any credentials shared in documents.
 
 `CARRIER_PROVISION_URL` must be an HTTPS endpoint controlled by the switch
@@ -532,9 +606,11 @@ credentials only and does not establish SIP registration.
 ## DIDWW API v3 and callbacks
 
 The super admin DIDWW API screen uses a tenant-bound server-side API key. Set
-`DIDWW_TENANT_ID`, `DIDWW_API_KEY`, `DIDWW_API_ENV` (`sandbox` or
-`production`), `DIDWW_ACCOUNT_CURRENCY=USD`, and the DIDWW-generated
-`DIDWW_CALLBACK_SECRET` in private deployment configuration. The API version
+`DIDWW_TENANT_ID`, `DIDWW_ACCOUNT_CURRENCY=USD`, and the DIDWW-generated
+`DIDWW_CALLBACK_SECRET` in private deployment configuration. Save the API key and
+sandbox/production environment in the encrypted Provider API credentials section
+(with a stable `PROVIDER_CREDENTIAL_KEY`), or set legacy `DIDWW_API_KEY` and
+`DIDWW_API_ENV` privately on the API server. The API version
 is pinned to `2026-04-16`. The browser never receives the key or callback
 secret. The resource console restricts methods and paths to a documented
 allowlist, validates JSON:API resource types and IDs, and records mutation
@@ -609,3 +685,167 @@ Copyright © 2026 Olamide Olatayo Bello. All rights reserved. The original Sip a
 ### Trunk management
 
 Tenant administrators can create, edit, inspect, export, and delete PBX trunk plans, review their audit history and linked dependency counts, and update up to 50 preview states atomically. Revision checks reject stale edits. Active carrier-linked trunks must be deactivated through the carrier adapter before changing endpoint settings. Saving a plan or toggling its preview state does not provision, register, or disconnect a live SIP trunk; see the operations manual for commissioning steps.
+
+### Carrier API credentials
+
+The super admin Carrier provider commissioning page stores Flowroute access and secret keys or a DIDWW API key and sandbox/production environment for the selected tenant. Set a stable `PROVIDER_CREDENTIAL_KEY` (32 random bytes encoded as 64 hex characters) in the API container environment before saving credentials. Keep it in server secrets, never in Git. Losing or changing this key makes stored ciphertext unusable; restore the original key or replace the provider credentials through the GUI. The browser sees status, revision and update time, never the saved secret.
+
+Create, replace, enable, disable and remove operations are tenant scoped and audited. Disabling a stored entry blocks use of that provider even if legacy environment credentials remain configured. Inventory verification and number search use the selected tenant's stored credentials; the DIDWW management proxy also uses its stored key. DIDWW callbacks still require their separate tenant binding and callback secret. Carrier activation, account routing, and a live call require their own commissioning checks.
+
+### Kamailio adapter node configuration
+
+Super administrators can select an enabled switch node, save its SIP domain and planned concurrent call capacity, and inspect the revision history. The database records a staged configuration with optimistic revision checks. The host monitor reports recent Kamailio and RTPengine service states, and the private runner can queue a loopback SIP challenge test. Saving a node configuration does not render or deploy the host's Kamailio configuration. Use the isolated pilot, syntax validation and actual call testing before putting traffic on a node.
+
+### WSS load balancer and discovery
+
+Under Super admin → Operations, configure the WSS discovery policy, create or edit weighted targets, view the linked host and health, enable or disable a target, delete it, and preview the choice for the current account and a region. Policy controls include an overall enable switch, sticky per-account selection or one-minute rotation, and an option to include global targets in regional selection. Saves use a revision check and append policy history. Target changes appear in the operations audit.
+
+Discovery returns only enabled targets attached to fresh healthy switch nodes. The policy is used by `/api/account/redirector` for browser WSS discovery. It is not a SIP load balancer, a media relay, high availability across hosts, or an external proxy configuration. For live failover, commission multiple real switch nodes and test registration and calls.
+
+### Trunk management updates
+
+The PBX trunk list now has name, host and transport search, a detail view with linked carrier profiles and rates, and the existing edit, history, export, batch preview enable/disable and guarded delete actions. Trunk toggles update planning state only. Carrier activation through the private adapter and live SIP verification remain separate.
+
+### SIP and carrier commissioning gate
+
+To deploy the current branch's production web and API while leaving carrier
+routing uncommissioned, first stop the disposable pilot API so it releases
+`127.0.0.1:18080`. Review the branch and run
+`bash deploy/kamailio/deploy-production-gui.sh` as root from the staging
+checkout. The script confirms the existing Compose project, backs up the
+production MySQL database, builds the branch's API and web images, runs its
+schema migration, checks the private API health endpoint, and attempts to
+restore the prior application build if health fails. It does not change
+Kamailio or RTPengine. The super admin can then enter carrier and trunk
+settings in the GUI; saving settings does not activate SIP peering.
+
+`deploy/kamailio/production.yml` accepts reviewed production Kamailio and
+RTPengine files for a later controlled activation. The playbook rejects the
+loopback staging adapter and requires a carrier endpoint in the Kamailio
+configuration. It cannot generate provider-specific SIP peering from an API
+credential or from an empty GUI profile.
+
+`deploy/kamailio/carrier-prepaid.yml` adds a local commissioning gate around
+that activation playbook. Supply real `production_public_ip`, absolute
+`production_kamailio_config` and `production_rtpengine_config` paths, the
+assigned `production_carrier_endpoint`, and nonempty carrier and prepaid test
+reports (`carrier_acceptance_report`, `prepaid_acceptance_report`). Set
+`production_carrier_profile_reviewed=true` and
+`carrier_prepaid_cutoff_reviewed=true` only after checking the actual trunk and
+switch behavior. It checks for route, prepaid, dialog timeout and media wiring,
+parses Kamailio, then installs the reviewed files and starts the services using
+`production.yml`. The check does not create a trunk, fund subscribers, verify
+carrier acceptance, or enable the API's live charging flags. Test a real
+authenticated call and its timeout and settlement before setting those flags.
+The current staging adapter does not satisfy this gate.
+
+For a controlled **core-only** activation before any carrier is provisioned,
+`deploy/kamailio/activate-core.yml` accepts private, reviewed SIP and RTPengine
+configuration files. Set `production_public_ip`,
+`production_kamailio_config`, `production_rtpengine_config`, and
+`core_network_reviewed=true`. The SIP configuration must listen on the public
+address, use RTPengine, and explicitly return `Carrier route not commissioned`
+for outbound carrier calls. The RTPengine control socket must bind to
+`127.0.0.1:2223`. The playbook checks the private API, parses Kamailio, backs
+up installed configs, starts RTPengine and Kamailio, verifies their sockets,
+and stops both services if activation fails. Review the firewall, media port
+range and DNS before using it. It never enables live charging.
+
+The route API returns a selected carrier SIP host, port and transport only for
+an active profile with an enabled trunk and gateway. GUI provisioning alone
+cannot turn this core-only activation into a working trunk: the installed
+Kamailio configuration must consume that route and enforce prepaid cutoff.
+Do not mark carrier peering or prepaid billing commissioned until real switch
+dispatch, authenticated carrier calls, media and settlement have been verified.
+
+The super admin **Fleet operations → Server and network operations** screen
+now queues **Check and install SIP requirements** and **Activate reviewed SIP
+core** for switch nodes through the private deployment runner. The core action
+uses `/root/production-kamailio.cfg` and `/root/production-rtpengine.conf` on
+the target, its inventory IPv4 address, and the local inventory shipped at
+`deploy/kamailio/local-inventory.ini`. Prepare those files privately and review
+the public listener, firewall and media range before queuing. Job history and
+Kamailio service reports show the result. The old generic install and upgrade
+buttons, which targeted FreeSWITCH, are retired. These controls install host
+prerequisites and activate the carrier-blocked SIP core; they do not provision
+the trunk from GUI drafts or mark live prepaid commissioned.
+
+To audit and repair host prerequisites first, run this on the Debian 12 server:
+
+```bash
+cd /opt/olamide/kamailio-staging && printf '[switch_nodes]\nsip-switch-1 ansible_connection=local\n' > /tmp/olamide-kamailio-inventory.ini && ansible-playbook -i /tmp/olamide-kamailio-inventory.ini deploy/kamailio/install-requirements.yml
+```
+
+The idempotent playbook installs missing Kamailio modules, RTPengine, TLS and
+billing client packages, creates private billing directories, and reports
+missing checkout/environment inputs, Docker Compose, API health and SIP service
+state. It does not install or replace Docker on an existing production host,
+create carrier credentials, activate routing or enable live charging. Repair
+reported inputs before running the gated production playbook.
+
+Run `bash deploy/kamailio/commission-check.sh` as root from the updated staging checkout on the target Debian host. The report is read-only and lists installed packages, systemd state, private API health, installed Kamailio syntax, loopback-only listener and the carrier dispatch blocker. An exit code of zero means host checks passed; it is **not** a successful carrier call or traffic cutover.
+
+The current `adapter.cfg.j2` binds only `127.0.0.1:5062` and deliberately returns 503 for carrier destinations. The pilot API and loopback challenge smoke test do not prove live registration, trunk authentication, RTP, NAT, inbound routing, CDR or charging. To commission external traffic, obtain the carrier's documented SIP peering details, IP allowlists or credentials, DID destinations and codec requirements; configure a public SIP edge and RTPengine network interfaces and ports; then test authenticated registrations, outbound and inbound calls, two-way audio, failover and reconciled CDRs with a real carrier test account before enabling production routing. Keep provider keys in the encrypted admin store or server secrets, not in Git.
+# Prepaid administration gate
+
+The super administrator's **Prepaid controls** page reads and saves a tenant's 1–60 minute maximum authorized call window, enabled state, and policy history. It also shows the host gate, funded account count, active reservations, and eligible rate count. The API rejects new reservations for disabled tenants and never authorizes an unbounded call.
+
+Enabling requires both `LIVE_PREPAID_ENABLED=true` and `LIVE_PREPAID_SWITCH_VERIFIED=true` in the private API environment. Set the second flag only after the installed Kamailio configuration synchronously authorizes outbound calls, fails closed on API errors, terminates answered calls at the returned `maxSeconds`, and sends authenticated end events for settlement. The route adapter supplies the tenant, subscriber, and selected rate ID for the authorization request. The GUI does not deploy the SIP host or commission a carrier; the billing requirements playbook alone does not enable live charging.
+
+## Combined installation and carrier gate
+
+On the production host, fetch the reviewed branch and run the combined local playbook:
+
+```bash
+cd /opt/olamide/kamailio-staging && git fetch origin kamailio-rebuild && git switch --detach origin/kamailio-rebuild && ansible-playbook -i deploy/kamailio/local-inventory.ini deploy/kamailio/commission-all.yml
+```
+
+This repairs host prerequisites and reports missing inputs. Set
+`commission_deploy_gui=true` to back up the production database, migrate it,
+and deploy the GUI and API. The super admin configures a tenant trunk, carrier
+profile, gateway and tariff there. The private route API selects only active
+profiles with enabled trunks and gateways and returns the SIP host, port and
+transport for the selected carrier and alternates.
+
+For a carrier-blocked public SIP core, the `prepare-core.yml` playbook renders
+private `/root/production-kamailio.cfg` and `/root/production-rtpengine.conf`
+from the tested adapter. If the private API token is absent, it generates one
+on the host, stores it in the private production environment, and restarts only
+the API. An existing malformed token requires review. Use the actual
+tenant SIP domain, confirm the public IP and network rules, and run:
+
+```bash
+cd /opt/olamide/kamailio-staging && git fetch origin kamailio-rebuild && git switch --detach origin/kamailio-rebuild && ansible-playbook -i deploy/kamailio/local-inventory.ini deploy/kamailio/commission-all.yml -e commission_prepare_core=true -e commission_activate_core=true -e production_public_ip=154.29.77.102 -e core_domain=YOUR_TENANT_SIP_DOMAIN -e production_kamailio_config=/root/production-kamailio.cfg -e production_rtpengine_config=/root/production-rtpengine.conf -e core_network_reviewed=true
+```
+
+This path starts RTPengine and Kamailio only after configuration and API checks.
+It deliberately returns 503 for carrier calls and leaves live prepaid disabled.
+Do not combine `commission_activate_core=true` with `commission_activate_carrier=true`.
+
+Set `commission_activate_carrier=true` only with reviewed production SIP and
+media files, a real carrier endpoint and independent acceptance reports. The
+guarded activation checks configuration and service state; it cannot prove
+carrier peering, automatic call expiry, two-way media, settlement or billing.
+The current repository still needs production Kamailio dispatch and prepaid
+callback integration plus observed carrier call tests before full commissioning.
+
+The super admin fleet screen also offers **Audit SIP and media readiness**.
+The private runner executes `monitoring.yml` on the switch, records service
+state, and displays the latest Kamailio/RTPengine reports. The dashboard shows
+prepaid reservation counts and posted prepaid journals from MySQL. To run the
+read-only host audit directly:
+
+After a recent host audit, super admins can queue **Activate reviewed SIP core**
+or **Stop carrier-blocked SIP core** for a registered switch. The stop action
+uses `deactivate-core.yml`: it refuses a config with carrier or prepaid hooks,
+then stops Kamailio before RTPengine while retaining the private files. Jobs,
+service reports and history are stored in the fleet database. Links from the
+fleet page open SIP accounts, configuration revisions, carrier profiles and
+prepaid controls; saving those settings does not commission carrier traffic.
+
+```bash
+ansible-playbook -i /opt/olamide/kamailio-staging/deploy/kamailio/local-inventory.ini /opt/olamide/kamailio-staging/deploy/kamailio/monitoring.yml
+```
+
+These measurements expose inactive services and unsettled reservations; they
+do not infer that a carrier accepted a call or that an RTP stream worked.

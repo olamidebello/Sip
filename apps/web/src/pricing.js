@@ -11,16 +11,17 @@ export function setupPricing() {
   }
   function selected() {
     const rule=rules.find(item=>item.provider===form.elements.provider.value);
-    if (!rule) return;
-    form.elements.mode.value=rule.mode;
-    form.elements.setupValue.value=rule.setupValue;
-    form.elements.monthlyValue.value=rule.monthlyValue;
+    // Keep the draft in sync with the API's fallback for providers without a saved rule.
+    form.elements.mode.value=rule?.mode??"percent";
+    form.elements.setupValue.value=rule?.setupValue??3000;
+    form.elements.monthlyValue.value=rule?.monthlyValue??3000;
   }
   async function refresh() {
     try {({rules}=await request("/api/admin/pricing"));selected();}
     catch(error) {result.textContent=error.message;}
   }
   form.elements.provider.onchange=selected;
+  selected();
   form.onsubmit=async(event)=>{
     event.preventDefault();
     try {

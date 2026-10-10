@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { hashPassword } from "./security.js";
+import { createSipAccount } from './sipMarketplace.js';
 
 export const defaultTenantId = "00000000-0000-4000-8000-000000000000";
 export const isAdmin = (user) => user?.role === "admin" || user?.role === "super_admin";
@@ -95,6 +96,7 @@ export async function handleTenants({req,res,path,user,pool,readJson,send,meetin
       await db.query("BEGIN");
       await db.query("INSERT INTO users(id,tenant_id,display_name,email,password_salt,password_hash,role) VALUES($1,$2,$3,$4,$5,$6,$7)",
         [id,targetTenant,name.trim(),email.toLowerCase().trim(),salt,hash,role]);
+      await createSipAccount(db,id,new URL(process.env.PUBLIC_ORIGIN||'https://sip.dobhrap.com').hostname,targetTenant);
       const group = await db.query("SELECT id FROM user_groups WHERE tenant_id=$1 AND name='Standard'",[targetTenant]);
       if (group.rowCount) await db.query("INSERT INTO user_group_members(user_id,group_id) VALUES($1,$2)",[id,group.rows[0].id]);
       await db.query("INSERT INTO security_events(id,tenant_id,actor_id,target_id,action) VALUES($1,$2,$3,$4,'user_created')",

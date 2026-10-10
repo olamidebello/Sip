@@ -1,0 +1,7 @@
+[rtpengine]
+# Userspace relay; control traffic stays on loopback.
+table = -1
+interface = {{ production_public_ip }}
+listen-ng = 127.0.0.1:2223
+port-min = 30000
+port-max = 40000
