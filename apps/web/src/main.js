@@ -441,14 +441,15 @@ root.innerHTML = `
       <h3>Meeting sharing and participants</h3>
       <p>These tenant settings apply to meeting links, invitations, participant actions, and screen sharing. Rooms support at most four browser participants.</p>
       <form id="meeting-policy-form">
-        <label>Maximum participants <input name="maxParticipants" type="number" min="2" max="4" required></label>
-        <label><input name="allowLinks" type="checkbox"> Allow same-tenant meeting links</label>
-        <label><input name="allowInvites" type="checkbox"> Allow host invitations</label>
+        <label>Maximum participants <input name="maxParticipants" type="number" min="2" max="4" value="4" required></label>
+        <label><input name="allowLinks" type="checkbox" checked> Allow same-tenant meeting links</label>
+        <label><input name="allowInvites" type="checkbox" checked> Allow host invitations</label>
         <label><input name="requireInvitation" type="checkbox"> Require an invitation to join</label>
-        <label><input name="allowScreenShare" type="checkbox"> Allow screen sharing</label>
-        <label><input name="allowChat" type="checkbox"> Allow meeting chat</label>
-        <label><input name="allowReactions" type="checkbox"> Allow reactions</label>
-        <label><input name="allowHand" type="checkbox"> Allow hand raising</label>
+        <label><input name="allowScreenShare" type="checkbox" checked> Allow screen sharing</label>
+        <label><input name="allowChat" type="checkbox" checked> Allow meeting chat</label>
+        <label><input name="allowReactions" type="checkbox" checked> Allow reactions</label>
+        <label><input name="allowHand" type="checkbox" checked> Allow hand raising</label>
+        <button type="button" data-defaults="meeting">Use recommended values</button>
         <button type="submit">Save meeting settings</button>
       </form>
       <button id="meeting-policy-refresh" type="button">Refresh settings and rooms</button>
@@ -863,15 +864,16 @@ root.innerHTML = `
     </section>
     <section id="cluster-admin">
       <h3>API capacity</h3><p id="cluster-summary"></p>
-      <form id="cluster-scale"><label>Desired API replicas on this host <input name="apiReplicas" type="number" min="1" max="4" step="1" required></label><button>Request scaling</button></form>
+      <form id="cluster-scale"><label>Desired API replicas on this host <input name="apiReplicas" type="number" min="1" max="4" step="1" value="1" required></label><button>Request scaling</button></form>
       <button id="cluster-refresh" type="button">Refresh scaling status</button><p id="cluster-status" role="status"></p>
       <h4>Switch capacity policy</h4>
       <p>Set a planning target and compare it with fresh healthy switch inventory. Saving this policy does not deploy a node or change SIP routing.</p>
       <form id="cluster-capacity-form">
-        <label>Target concurrent calls <input name="targetCalls" type="number" min="1" max="100000" required></label>
-        <label>Tested calls per node <input name="perNodeCalls" type="number" min="1" max="5000" required></label>
-        <label>Headroom percent <input name="headroomPercent" type="number" min="0" max="100" required></label>
-        <label>Minimum regions <input name="minRegions" type="number" min="1" max="5" required></label>
+        <label>Target concurrent calls <input name="targetCalls" type="number" min="1" max="100000" value="500" required></label>
+        <label>Tested calls per node <input name="perNodeCalls" type="number" min="1" max="5000" value="100" required></label>
+        <label>Headroom percent <input name="headroomPercent" type="number" min="0" max="100" value="30" required></label>
+        <label>Minimum regions <input name="minRegions" type="number" min="1" max="5" value="2" required></label>
+        <button type="button" data-defaults="capacity">Use recommended values</button>
         <button type="submit">Save capacity policy</button>
       </form>
       <button id="cluster-capacity-refresh" type="button">Refresh capacity and regions</button>
@@ -893,7 +895,7 @@ root.innerHTML = `
         <form id="kamailio-config-form">
           <label>Switch node <select name="nodeId" required></select></label>
           <label>SIP domain <input name="sipDomain" maxlength="255" placeholder="sip.example.com" required></label>
-          <label>Planned concurrent calls <input name="maxConcurrentCalls" type="number" min="1" max="5000" required></label>
+          <label>Planned concurrent calls <input name="maxConcurrentCalls" type="number" min="1" max="5000" value="100" required></label>
           <button type="submit">Save staged configuration</button>
         </form>
         <p id="kamailio-config-preview"></p>
@@ -915,9 +917,9 @@ root.innerHTML = `
         <button>Add server</button></form>
       <button id="fleet-refresh" type="button">Refresh monitoring</button><h4>Servers</h4><ul id="fleet-nodes"></ul>
       <h4>Scheduled events</h4><ul id="fleet-schedules"></ul><h4>Deployment jobs</h4><ul id="fleet-jobs"></ul><h4>Event log</h4><ul id="fleet-events"></ul>
-      <form id="fleet-report-settings"><h4>Report thresholds</h4><label>Stale after seconds <input name="staleSeconds" type="number" min="60" max="3600" required></label>
-        <label>Warning latency ms <input name="warningLatencyMs" type="number" min="100" max="30000" required></label>
-        <label>Retention days <input name="retentionDays" type="number" min="7" max="365" required></label><button>Save thresholds</button></form>
+      <form id="fleet-report-settings"><h4>Report thresholds</h4><label>Stale after seconds <input name="staleSeconds" type="number" min="60" max="3600" value="300" required></label>
+        <label>Warning latency ms <input name="warningLatencyMs" type="number" min="100" max="30000" value="2000" required></label>
+        <label>Retention days <input name="retentionDays" type="number" min="7" max="365" value="90" required></label><button type="button" data-defaults="fleet">Use recommended values</button><button>Save thresholds</button></form>
       <label>Report window in days <input id="fleet-report-days" type="number" min="1" max="90" value="7"></label><button id="fleet-report-run" type="button">Generate report</button><p id="fleet-report"></p>
       <section id="fleet-device-panel"><h3>Network devices and configuration versions</h3>
         <p>Drag devices to reorder them. Router, firewall and load balancer configurations are stored as reviewed intent; only linked Linux switch hosts have an installation adapter.</p>
@@ -1283,6 +1285,24 @@ function updateNavigation() {
 }
 updateNavigation();
 pageRoutes=setupPageRoutes({showWorkspace,isSignedIn:()=>!!activeRole});
+// These match the API's initial database policies. A reset only edits the
+// visible draft; the administrator must save it to change a stored policy.
+const recommendedSettings={
+  meeting:{maxParticipants:4,allowLinks:true,allowInvites:true,requireInvitation:false,
+    allowScreenShare:true,allowChat:true,allowReactions:true,allowHand:true},
+  capacity:{targetCalls:500,perNodeCalls:100,headroomPercent:30,minRegions:2},
+  fleet:{staleSeconds:300,warningLatencyMs:2000,retentionDays:90}
+};
+document.querySelectorAll('button[data-defaults]').forEach(button=>{
+  button.addEventListener('click',()=>{
+    const form=button.closest('form');
+    for(const [name,value] of Object.entries(recommendedSettings[button.dataset.defaults])){
+      const field=form.elements.namedItem(name);
+      if(field.type==='checkbox')field.checked=value;
+      else field.value=String(value);
+    }
+  });
+});
 $("#app-nav").addEventListener("keydown",event=>{
   if(event.key!=="Escape") return;
   for(const menu of $("#app-nav").querySelectorAll("details[open]")) menu.open=false;
