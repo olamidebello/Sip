@@ -133,6 +133,14 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
       WHERE n.role='switch' AND n.deleted_at IS NULL ORDER BY n.name LIMIT 500`);
     return send(res,200,{nodes:result.rows,scope:'Reported systemd service state only; calls and RTP quality are not measured'});
   }
+  if(path==='/api/admin/servers/commissioning'&&req.method==='GET'){
+    if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
+    const [calls,journals]=await Promise.all([
+      pool.query("SELECT status,COUNT(*) AS count FROM prepaid_calls GROUP BY status"),
+      pool.query("SELECT COUNT(*) AS count FROM billing_journals WHERE source_type='prepaid_call'")]);
+    return send(res,200,{reservations:calls.rows,prepaidJournals:Number(journals.rows[0]?.count||0),
+      liveCarrierVerified:false,scope:'Database counts only; reconcile each carrier CDR and observe call expiry before commissioning'});
+  }
   if(path==='/api/admin/servers/kamailio-config'&&req.method==='GET'){
     if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
     const configs=await pool.query(`SELECT c.node_id,n.name,n.region,c.sip_domain,c.listen_ip,c.listen_port,
@@ -305,7 +313,7 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
   if(job&&uuid.test(job[1])&&req.method==='POST'){
     if(!granted('deploy'))return send(res,403,{error:'Fleet deployment access required'});
     const {action}=await readJson(req);
-    if(!['health','kamailio_test','sip_packages','sip_core'].includes(action))return send(res,400,{error:'Approved SIP job action required'});
+    if(!['health','kamailio_test','sip_packages','sip_core','sip_audit'].includes(action))return send(res,400,{error:'Approved SIP job action required'});
     if(action==='sip_core'&&user.role!=='super_admin')return send(res,403,{error:'Super administrator required for SIP activation'});
     if(!process.env.DEPLOY_RUNNER_TOKEN)return send(res,409,{error:'Private deployment runner is not configured'});
     const outcome=await queue(pool,job[1],action,user.id);

@@ -4,10 +4,20 @@ export function setupServerFleetAdmin({get,request}){
   const list=(id,rows,render)=>{const el=$(id);el.replaceChildren();for(const row of rows){const item=document.createElement('li');render(item,row);el.append(item);}};
   const button=(parent,title,run)=>{const b=document.createElement('button');b.type='button';b.textContent=title;b.onclick=async()=>{b.disabled=true;try{const result=await run();await refresh();status.textContent=result?.status==='pending'?title+' queued. Check job history for the result.':title+' completed.';}catch(e){status.textContent=e.message;}finally{b.disabled=false;}};parent.append(b);};
   async function refresh(){
-    const [data,topology]=await Promise.all([get('/api/admin/servers'),get('/api/admin/servers/topology')]);
+    const [data,topology,kamailio,commissioning]=await Promise.all([get('/api/admin/servers'),get('/api/admin/servers/topology'),get('/api/admin/servers/kamailio').catch(()=>null),get('/api/admin/servers/commissioning').catch(()=>null)]);
     const can=level=>({none:0,view:1,manage:2,deploy:3})[data.accessLevel]>=({view:1,manage:2,deploy:3})[level];
     $('fleet-add').hidden=!can('manage');$('fleet-report-settings').hidden=!can('manage');
     $('fleet-summary').textContent=`${data.nodes.length} registered servers · ${data.jobs.filter(j=>['pending','leased'].includes(j.status)).length} active jobs · runner ${data.runnerConfigured?'configured':'unavailable'}`;
+    if(kamailio){
+      let panel=$('fleet-kamailio-monitor');
+      if(!panel){panel=document.createElement('section');panel.id='fleet-kamailio-monitor';panel.setAttribute('aria-label','Kamailio service monitoring');$('fleet-summary').after(panel);}
+      panel.textContent=`Kamailio service monitoring: ${kamailio.nodes.map(n=>`${n.name}: signaling ${n.signaling_status||'unreported'}, media ${n.media_status||'unreported'}, checked ${n.created_at||'never'}`).join('; ')||'No switch nodes'}. Service state does not prove carrier calls or prepaid settlement.`;
+    }
+    if(commissioning){
+      let panel=$('fleet-prepaid-monitor');
+      if(!panel){panel=document.createElement('section');panel.id='fleet-prepaid-monitor';panel.setAttribute('aria-label','Prepaid and billing monitoring');$('fleet-summary').after(panel);}
+      panel.textContent=`Prepaid reservations: ${commissioning.reservations.map(r=>`${r.status} ${r.count}`).join(', ')||'none'} · settled journals ${commissioning.prepaidJournals}. ${commissioning.scope}`;
+    }
     $('fleet-topology').textContent=`${topology.healthyWssTargets} healthy WSS targets · ${topology.regions.map(r=>`${r.region} ${r.role}: ${r.fresh_healthy}/${r.nodes} fresh, configured capacity ${r.configured_capacity}`).join('; ')||'No servers registered'}. ${topology.scope}`;
     const settings=data.settings||{};const form=$('fleet-report-settings');
     form.elements.staleSeconds.value=settings.stale_seconds??300;
@@ -35,6 +45,7 @@ export function setupServerFleetAdmin({get,request}){
       if(n.role==='switch'&&can('deploy')){
         const operations=document.createElement('div');li.append(operations);
         button(operations,'Check Kamailio health',()=>request(`/api/admin/servers/${n.id}/jobs`,{action:'health'}));
+        button(operations,'Audit SIP and media readiness',()=>request(`/api/admin/servers/${n.id}/jobs`,{action:'sip_audit'}));
         button(operations,'Check and install SIP requirements',()=>request(`/api/admin/servers/${n.id}/jobs`,{action:'sip_packages'}));
         if(data.superAdmin)button(operations,'Activate reviewed SIP core',()=>{
           if(!window.confirm('Start the public SIP listener and RTPengine using reviewed private host files? Carrier calls and prepaid charging remain disabled.'))return;

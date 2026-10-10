@@ -783,3 +783,38 @@ The current `adapter.cfg.j2` binds only `127.0.0.1:5062` and deliberately return
 The super administrator's **Prepaid controls** page reads and saves a tenant's 1–60 minute maximum authorized call window, enabled state, and policy history. It also shows the host gate, funded account count, active reservations, and eligible rate count. The API rejects new reservations for disabled tenants and never authorizes an unbounded call.
 
 Enabling requires both `LIVE_PREPAID_ENABLED=true` and `LIVE_PREPAID_SWITCH_VERIFIED=true` in the private API environment. Set the second flag only after the installed Kamailio configuration synchronously authorizes outbound calls, fails closed on API errors, terminates answered calls at the returned `maxSeconds`, and sends authenticated end events for settlement. The route adapter supplies the tenant, subscriber, and selected rate ID for the authorization request. The GUI does not deploy the SIP host or commission a carrier; the billing requirements playbook alone does not enable live charging.
+
+## Combined installation and carrier gate
+
+On the production host, fetch the reviewed branch and run the combined local playbook:
+
+```bash
+cd /opt/olamide/kamailio-staging && git fetch origin kamailio-rebuild && git switch --detach origin/kamailio-rebuild && ansible-playbook -i deploy/kamailio/local-inventory.ini deploy/kamailio/commission-all.yml
+```
+
+This repairs host prerequisites and reports missing inputs. Set
+`commission_deploy_gui=true` to back up the production database, migrate it,
+and deploy the GUI and API. The super admin configures a tenant trunk, carrier
+profile, gateway and tariff there. The private route API selects only active
+profiles with enabled trunks and gateways and returns the SIP host, port and
+transport for the selected carrier and alternates.
+
+Set `commission_activate_carrier=true` only with reviewed production SIP and
+media files, a real carrier endpoint and independent acceptance reports. The
+guarded activation checks configuration and service state; it cannot prove
+carrier peering, automatic call expiry, two-way media, settlement or billing.
+The current repository still needs production Kamailio dispatch and prepaid
+callback integration plus observed carrier call tests before full commissioning.
+
+The super admin fleet screen also offers **Audit SIP and media readiness**.
+The private runner executes `monitoring.yml` on the switch, records service
+state, and displays the latest Kamailio/RTPengine reports. The dashboard shows
+prepaid reservation counts and posted prepaid journals from MySQL. To run the
+read-only host audit directly:
+
+```bash
+ansible-playbook -i /opt/olamide/kamailio-staging/deploy/kamailio/local-inventory.ini /opt/olamide/kamailio-staging/deploy/kamailio/monitoring.yml
+```
+
+These measurements expose inactive services and unsettled reservations; they
+do not infer that a carrier accepted a call or that an RTP stream worked.

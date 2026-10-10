@@ -53,8 +53,8 @@ test('carrier quote returns ranked, enabled, tenant-scoped alternates',async()=>
   process.env.KAMAILIO_ROUTE_TOKEN=token;
   const res=response();
   const carriers=[
-    {provider:'first',status:'active',routing_mode:'outbound',gateway_name:'gw_first'},
-    {provider:'second',status:'active',routing_mode:'outbound',gateway_name:'gw_second'},
+    {provider:'first',status:'active',routing_mode:'least_cost',gateway_name:'gw_first',host:'sip.first.example',port:5061,transport:'tls'},
+    {provider:'second',status:'active',routing_mode:'priority',gateway_name:'gw_second',host:'sip.second.example',port:5060,transport:'udp'},
     {provider:'disabled',status:'draft',routing_mode:'disabled',gateway_name:'gw_disabled'}
   ];
   const rate=(provider,cost)=>({id:`rate-${provider}`,provider,prefix:'1',cost_cents:cost,price_cents:cost+2,
@@ -64,14 +64,14 @@ test('carrier quote returns ranked, enabled, tenant-scoped alternates',async()=>
     if(sql.includes('FROM pbx_outbound_policies'))return {rows:[],rowCount:0};
     if(sql.includes('FROM operator_tariff_rates'))return {rows:[rate('second',4),rate('first',2),rate('disabled',1)],rowCount:3};
     if(sql.includes('FROM operator_fraud_rules'))return {rows:[],rowCount:0};
-    if(sql.includes('FROM carrier_provider_profiles'))return {rows:carriers,rowCount:3};
+    if(sql.includes('FROM carrier_provider_profiles')){assert.match(sql,/tr\.enabled=TRUE/);return {rows:carriers,rowCount:3};}
     throw Error('Unexpected query');
   }};
   await handleKamailioRoute({req:req({domain:'sip.example.com',caller:'alice',
     destination:'+12125551234'}),res,pool});
   assert.equal(res.status,200);
-  assert.deepEqual(res.body,{route:'carrier',gateway:'gw_first',
+  assert.deepEqual(res.body,{route:'carrier',gateway:'gw_first',host:'sip.first.example',port:5061,transport:'tls',
     destination:'+12125551234',provider:'first',
-    alternates:[{provider:'second',gateway:'gw_second',rateId:'rate-second'}],
+    alternates:[{provider:'second',gateway:'gw_second',host:'sip.second.example',port:5060,transport:'udp',rateId:'rate-second'}],
     prepaid:{tenantId:'tenant',userId:'subscriber',rateId:'rate-first',required:true}});
 });

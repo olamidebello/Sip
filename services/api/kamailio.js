@@ -88,9 +88,12 @@ export async function handleKamailioRoute({req,res,pool}){
       ON t.id=r.tariff_id AND t.tenant_id=r.tenant_id AND t.enabled=TRUE
       WHERE r.tenant_id=$1 AND r.tariff_id=$2 AND r.enabled=TRUE`,[tenant,tariff]),
     pool.query('SELECT prefix,reason,enabled FROM operator_fraud_rules WHERE tenant_id=$1 AND enabled=TRUE',[tenant]),
-    pool.query(`SELECT c.provider,c.status,c.routing_mode,g.gateway_name
+    pool.query(`SELECT c.provider,c.status,c.routing_mode,g.gateway_name,
+      tr.host,tr.port,tr.transport
       FROM carrier_provider_profiles c JOIN switch_gateways g ON g.provider=c.provider
-      AND g.tenant_id=c.tenant_id AND g.enabled=TRUE WHERE c.tenant_id=$1`,[tenant])]);
+      AND g.tenant_id=c.tenant_id AND g.enabled=TRUE
+      JOIN pbx_trunks tr ON tr.id=c.trunk_id AND tr.tenant_id=c.tenant_id AND tr.enabled=TRUE
+      WHERE c.tenant_id=$1 AND c.status='active' AND c.routing_mode<>'disabled'`,[tenant])]);
   if(!evaluateOutboundPolicy(destination,policy.rows).allowed)return reply(res,404,{route:'reject'});
   const normalized=rates.rows.map(row=>({...row,effective_at:new Date(row.effective_at).toISOString(),
     expires_at:row.expires_at?new Date(row.expires_at).toISOString():null}));
@@ -99,13 +102,17 @@ export async function handleKamailioRoute({req,res,pool}){
   if(quote.blocked||!quote.selected)return reply(res,404,{route:'reject'});
   const ranked=[];
   for(const candidate of quote.candidates){
-    const gateway=carriers.rows.find(row=>row.provider===candidate.provider)?.gateway_name;
-    if(!gatewayPattern.test(gateway||'')||ranked.some(row=>row.provider===candidate.provider))continue;
-    ranked.push({provider:candidate.provider,gateway,rateId:candidate.id});
+    const carrier=carriers.rows.find(row=>row.provider===candidate.provider);
+    const {gateway_name:gateway,host,port,transport}=carrier||{};
+    if(!gatewayPattern.test(gateway||'')||!domainPattern.test(host||'')||
+        !Number.isInteger(Number(port))||Number(port)<1||Number(port)>65535||
+        !['udp','tcp','tls'].includes(transport)||ranked.some(row=>row.provider===candidate.provider))continue;
+    ranked.push({provider:candidate.provider,gateway,host,port:Number(port),transport,rateId:candidate.id});
     if(ranked.length===4)break;
   }
   if(!ranked.length)return reply(res,404,{route:'reject'});
   return reply(res,200,{route:'carrier',gateway:ranked[0].gateway,
+    host:ranked[0].host,port:ranked[0].port,transport:ranked[0].transport,
     destination,provider:ranked[0].provider,alternates:ranked.slice(1),
     prepaid:{tenantId:tenant,userId,rateId:ranked[0].rateId,required:true}});
 }

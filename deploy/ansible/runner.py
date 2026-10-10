@@ -14,7 +14,7 @@ import urllib.request
 import urllib.error
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-ALLOWED = {'health', 'install', 'upgrade', 'firewall', 'kamailio_test', 'sip_packages', 'sip_core'}
+ALLOWED = {'health', 'install', 'upgrade', 'firewall', 'kamailio_test', 'sip_packages', 'sip_core', 'sip_audit'}
 
 
 def secrets_file(path):
@@ -92,7 +92,7 @@ def deploy_sip(node):
         if address.version != 4 or not address.is_global:
             raise RuntimeError('Core activation requires a verified public IPv4 node address')
     playbook = ('install-requirements.yml' if action == 'sip_packages'
-                else 'activate-core.yml')
+                else 'monitoring.yml' if action == 'sip_audit' else 'activate-core.yml')
     command = ['sudo', '-n', 'ansible-playbook', '-i',
                '/opt/olamide/kamailio-staging/deploy/kamailio/local-inventory.ini',
                '/opt/olamide/kamailio-staging/deploy/kamailio/' + playbook]
@@ -189,7 +189,7 @@ def run_once(base, token, runner_id, inventory, vault_password):
             request(base, token, 'kamailio-check', probe_kamailio(claimed))
             if smoke.returncode or 'Loopback SIP:' not in smoke.stdout:
                 raise RuntimeError('Kamailio loopback SIP test failed; inspect private runner journal')
-        elif claimed['action'] in {'sip_packages', 'sip_core'}:
+        elif claimed['action'] in {'sip_packages', 'sip_core', 'sip_audit'}:
             deploy_sip(claimed)
             check = probe_kamailio(claimed)
             request(base, token, 'kamailio-check', check)
@@ -212,6 +212,7 @@ def run_once(base, token, runner_id, inventory, vault_password):
         result = ('succeeded', 'Kamailio loopback SIP challenge passed' if
                   claimed['action'] == 'kamailio_test' else
                   'SIP prerequisites checked; no traffic change' if claimed['action'] == 'sip_packages' else
+                  'SIP host audit recorded; carrier call acceptance remains separate' if claimed['action'] == 'sip_audit' else
                   'SIP core active; carrier and prepaid remain uncommissioned' if claimed['action'] == 'sip_core' else
                   'Approved ' + claimed['action'] + ' job completed')
     except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError,
