@@ -732,6 +732,24 @@ carrier acceptance, or enable the API's live charging flags. Test a real
 authenticated call and its timeout and settlement before setting those flags.
 The current staging adapter does not satisfy this gate.
 
+For a controlled **core-only** activation before any carrier is provisioned,
+`deploy/kamailio/activate-core.yml` accepts private, reviewed SIP and RTPengine
+configuration files. Set `production_public_ip`,
+`production_kamailio_config`, `production_rtpengine_config`, and
+`core_network_reviewed=true`. The SIP configuration must listen on the public
+address, use RTPengine, and explicitly return `Carrier route not commissioned`
+for outbound carrier calls. The RTPengine control socket must bind to
+`127.0.0.1:2223`. The playbook checks the private API, parses Kamailio, backs
+up installed configs, starts RTPengine and Kamailio, verifies their sockets,
+and stops both services if activation fails. Review the firewall, media port
+range and DNS before using it. It never enables live charging.
+
+The current GUI trunk editor reports `simulationOnly` and the route adapter
+returns a gateway key without the carrier SIP host/port. Therefore GUI
+provisioning alone cannot turn this core-only activation into a working trunk.
+Do not mark carrier peering or prepaid billing commissioned until real switch
+dispatch, authenticated carrier calls, media and settlement have been verified.
+
 To audit and repair host prerequisites first, run this on the Debian 12 server:
 
 ```bash

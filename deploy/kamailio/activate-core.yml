@@ -1,0 +1,157 @@
+---
+# Activate only the reviewed public SIP edge and media relay. Carrier routes
+# must fail closed until GUI provisioning is connected to real switch dispatch.
+- name: Activate Kamailio and RTPengine core without carrier peering
+  hosts: switch_nodes
+  become: true
+  gather_facts: true
+  serial: 1
+  tasks:
+    - name: Require local Debian 12 and reviewed core inputs
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version == '12'
+          - ansible_connection | default('ssh') == 'local'
+          - production_public_ip is defined
+          - production_public_ip is match('^[0-9]{1,3}(\\.[0-9]{1,3}){3}$')
+          - production_kamailio_config is defined
+          - production_rtpengine_config is defined
+          - core_network_reviewed | default(false) | bool
+        fail_msg: >-
+          Provide reviewed absolute SIP and RTPengine config paths, public IP,
+          and core_network_reviewed=true after checking firewall/NAT.
+
+    - name: Check reviewed configuration files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ production_kamailio_config }}"
+        - "{{ production_rtpengine_config }}"
+      register: core_configs
+
+    - name: Require private absolute regular source files
+      ansible.builtin.assert:
+        that:
+          - item.item.startswith('/')
+          - item.stat.isreg | default(false)
+          - item.stat.mode | default('0000') in ['0400', '0600', '0640']
+      loop: "{{ core_configs.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Read reviewed configuration without printing secrets
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - "{{ production_kamailio_config }}"
+        - "{{ production_rtpengine_config }}"
+      register: core_content
+      no_log: true
+
+    - name: Require public SIP, local media control and closed carrier path
+      ansible.builtin.assert:
+        that:
+          - "production_public_ip in (core_content.results[0].content | b64decode)"
+          - "'127.0.0.1:5062' not in (core_content.results[0].content | b64decode)"
+          - "'Carrier route not commissioned' in (core_content.results[0].content | b64decode)"
+          - "'rtpengine_offer' in (core_content.results[0].content | b64decode)"
+          - "'rtpengine_answer' in (core_content.results[0].content | b64decode)"
+          - "production_public_ip in (core_content.results[1].content | b64decode)"
+          - "'127.0.0.1:2223' in (core_content.results[1].content | b64decode)"
+        fail_msg: >-
+          Core config must use the public SIP/media address and explicitly
+          reject carrier calls. No files or services were changed.
+      no_log: true
+
+    - name: Require healthy private API
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/api/health
+        method: GET
+        status_code: 200
+        timeout: 5
+
+    - name: Parse reviewed SIP configuration
+      ansible.builtin.command:
+        argv: [/usr/sbin/kamailio, -c, -f, "{{ production_kamailio_config }}"]
+      changed_when: false
+
+    - name: Inspect service state
+      ansible.builtin.service_facts:
+
+    - name: Require a controlled first activation
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services.get('kamailio.service', {}).get('state', 'stopped') != 'running'
+          - ansible_facts.services.get('rtpengine-daemon.service', {}).get('state', 'stopped') != 'running'
+        fail_msg: Existing live services require a separate maintenance and rollback plan.
+
+    - name: Install and activate reviewed core
+      block:
+        - name: Install Kamailio configuration with backup
+          ansible.builtin.copy:
+            src: "{{ production_kamailio_config }}"
+            dest: /etc/kamailio/kamailio.cfg
+            remote_src: true
+            owner: root
+            group: kamailio
+            mode: '0640'
+            backup: true
+            validate: /usr/sbin/kamailio -c -f %s
+
+        - name: Install RTPengine configuration with backup
+          ansible.builtin.copy:
+            src: "{{ production_rtpengine_config }}"
+            dest: /etc/rtpengine/rtpengine.conf
+            remote_src: true
+            owner: root
+            group: rtpengine
+            mode: '0640'
+            backup: true
+
+        - name: Start RTPengine
+          ansible.builtin.systemd_service:
+            name: rtpengine-daemon
+            enabled: true
+            state: started
+
+        - name: Verify local media control socket
+          ansible.builtin.command: ss -H -lun sport = :2223
+          register: core_media_socket
+          changed_when: false
+          failed_when: "'127.0.0.1:2223' not in core_media_socket.stdout"
+
+        - name: Start Kamailio
+          ansible.builtin.systemd_service:
+            name: kamailio
+            enabled: true
+            state: started
+
+        - name: Verify public SIP listener
+          ansible.builtin.command: ss -H -lun sport = :5060
+          register: core_sip_socket
+          changed_when: false
+          failed_when: production_public_ip not in core_sip_socket.stdout
+      rescue:
+        - name: Stop incomplete SIP activation
+          ansible.builtin.systemd_service:
+            name: kamailio
+            enabled: false
+            state: stopped
+          failed_when: false
+        - name: Stop incomplete media activation
+          ansible.builtin.systemd_service:
+            name: rtpengine-daemon
+            enabled: false
+            state: stopped
+          failed_when: false
+        - name: Report failed activation
+          ansible.builtin.fail:
+            msg: Activation failed; both services stopped. Inspect journalctl and configuration backups.
+
+    - name: Report separate carrier and prepaid boundary
+      ansible.builtin.debug:
+        msg: >-
+          SIP and media host sockets are up. Carrier calls remain rejected.
+          GUI trunk records are not yet live switch dispatch; do not enable
+          prepaid charging or claim carrier commissioning.
