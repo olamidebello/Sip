@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 29194)
-Total output lines: 742
-
 # Olamide SIP
 
 Olamide is a development browser softphone with a Node.js account API and MySQL 8.4 database. See the deployment checks below for the current server state.
@@ -228,7 +225,248 @@ The Compose stack includes a **disabled by default** coturn profile. On the Debi
 
 ### Bare Debian installation and Ansible automation
 
-On a fresh Debian 12 host, create the public A record first and confirm it resolves to the address shown in the …9194 tokens truncated… characters in **Account → Change password**. All privileged API routes remain blocked until that change succeeds. The account has an internal placeholder email address (`olamidebello@local.invalid`); set a verified real email through a separate account profile process before expecting mail delivery. The bootstrap command refuses an existing account and never resets its password. Super administrators can switch tenants and manage tenant administrators; tenant administrators cannot promote users to administrator or change another administrator's status or role.
+On a fresh Debian 12 host, create the public A record first and confirm it resolves to the address shown in the server provider console. Use the single entrypoint in the preceding guide, `deployment/install-all.sh`. It installs minimal prerequisites, obtains the repository, verifies DNS, and calls the existing installer. If you already cloned the repository, you can also run its lower-level installer:
+
+```bash
+apt-get update && apt-get install -y ca-certificates git
+git clone https://github.com/olamidebello/Sip.git /root/Sip
+cd /root/Sip
+OLAMIDE_DOMAIN=sip.dobhrap.com OLAMIDE_PUBLIC_IP=YOUR_VERIFIED_PUBLIC_IPV4 bash deployment/install.sh
+```
+
+`deployment/install-ansible.sh` installs Debian prerequisites, Ansible, and its dependencies. `deployment/install.sh` checks public DNS before running the existing bootstrap. Bootstrap installs Docker and Compose with Ansible, generates private database passwords, selects a successfully validated main commit, and brings up the web/API/MySQL stack. Rerun the installer to apply a validated update; the scheduled update service also checks for validated main commits. Inspect `/etc/olamide/secrets.env`, `journalctl -u olamide-compose`, and `docker compose ps` in `/opt/olamide/repo/deployment/docker` during commissioning. Keep a console recovery path, backups, and firewall access to HTTPS. This automation does not configure the carrier switch or create DNS records.
+
+### Wallet foundation
+
+Billing users can see their USD wallet balance and activity and submit a peer transfer to an active account in the same tenant. `POST /api/wallet/transfers` accepts `{ "recipientEmail": "person@example.com", "amountCents": 100, "idempotencyKey": "UUID" }`. Each transfer locks both accounts in a MySQL transaction, rejects insufficient funds, records two ledger entries, and returns the same result for an identical request ID. Account balances start at zero. There is no authorized wallet funding path, bank linkage, payout, cash card, dispute handling, KYC, or switch-level prepaid enforcement; transfers cannot execute until a separately reviewed funding integration credits a balance. Do not insert wallet balances manually or treat the UI as a live money service.
+
+### Dashboard, navigation, and contact batches
+
+The application navigation links to the sections available to the signed-in role and feature groups. The dashboard provides shortcuts to those sections. A tenant administrator can order and choose default tiles under **Administration → Tenant dashboard defaults**, and can allow or lock personal layouts. A signed-in user can order and select available tiles under **Dashboard → Customize my dashboard**, or restore the tenant layout. `GET/PUT /api/dashboard` and `PUT /api/admin/dashboard` store settings in MySQL and enforce role and tenant permissions. **Refresh dashboard** loads tenant-scoped app counts from `GET /api/dashboard/summary`: account messages and contacts, unpaid invoices, hosted rooms, and administrator tenant users where allowed. These are app records, not live switch, payment, or carrier telemetry. The tiles are navigation shortcuts, not a general widget framework.
+
+Under **Messages**, import a UTF-8 CSV with an `email` header (other columns are ignored), up to 500 rows and 64 KB. Every address must match an active account in the same tenant; if one is missing, the entire batch is rejected. Existing contacts are safely ignored. The **Export contacts CSV** button downloads the signed-in user's contact names and emails. The authenticated `POST /api/contacts/import` route repeats the tenant and row validation on the server; users need messaging permission. Imported contacts do not create user accounts, send invitations, or import message histories. The API returns at most 1,000 contacts; remove or paginate records if the deployment needs a larger address book.
+
+### Search and technical support
+
+Sign in and use **Search** to search accessible tickets, your own contacts, and published plans in the current tenant. Choose a category or **All**; the query must contain 2–100 characters. `GET /api/search` returns at most 20 matches per category with server-side tenant and feature checks. Search is a bounded app-record lookup, not full-text indexing of call recordings, server logs, or carrier data.
+
+Under **Technical support**, submit a ticket with a subject, category, and description. Search and filter the ticket list by keywords, status, or priority; use **Previous page** and **Next page** for 25 results at a time. Open a ticket to read the conversation and status history, post a reply, and refresh the list. Users can see only tickets they created in the selected tenant. Tenant administrators can see all tenant tickets, set status and priority, assign an active tenant administrator, and post internal notes that ticket requesters cannot read. Closed tickets must be reopened before posting a reply. The API is under `/api/support/tickets`; mutations enforce these permissions and retain a status-change history. Support tickets do not send email, SMS, push notifications, or open a remote support session. Staff must monitor the console; assignment alone does not alert the assignee.
+
+### Language, country, and currency preferences
+
+Sign in and open **Locale** to choose a language, country or territory, and preferred currency, then **Save my preferences** or **Use tenant defaults**. Administrators can set tenant defaults under **Administration → Locale defaults**. `/api/locales/catalog` exposes the runtime's recognized language codes and currency codes plus the ISO 3166 alpha-2 territory catalog; `/api/locales` and `/api/admin/locales` persist validated selections in MySQL. The current catalog has 1,069 language codes (including aliases), 249 territories, and 162 currency codes on the bundled Node runtime; available currencies can vary with ICU updates. These are preferences, not a translated interface or foreign exchange system. The UI remains in English. App-side USD displays use the chosen language's number formatting; the selected currency does not convert invoices, wallet balances, plan prices, or payments. Country selection does not verify legal residency, available numbering rights, or service eligibility.
+
+### Live telecom and financial commissioning gates
+
+The current FreeSWITCH playbook **stages packages and leaves the switch stopped**. The PBX API stores tenant scoped extensions, queues, DID destinations, trunk intent, rates, and preview policies; it does not yet generate a live FreeSWITCH directory or dialplan. Do not start a public SIP service from this repository as if the stored settings were active. Live WSS registration needs a commissioned SIP profile with trusted TLS, provisioned SIP users and credential lifecycle, verified tenant routing, trunk authentication, media/NAT configuration, and an SBC or equivalent ingress controls. FreeSWITCH [mod_xml_curl](https://developer.signalwire.com/freeswitch/integration/xml-curl/) can fetch directory and dialplan XML from an authenticated backend, while [mod_callcenter](https://developer.signalwire.com/freeswitch/applications/call-queues/) supplies live ACD, and [mod_voicemail](https://developer.signalwire.com/freeswitch/applications/voicemail/) needs recording storage and a delivery service. Those integrations, recording consent and retention rules, queue SLA event capture, and an operator wallboard are not implemented here.
+
+The CDR API accepts signed, idempotent **normalized** records from a configured source but does not subscribe to FreeSWITCH events or rate, settle, reconcile, or charge them. Plan and DID invoices can be paid through an enabled Stripe Checkout gateway; payment does not fulfill or provision an order. Before activating prepaid calling, implement jurisdiction-specific tax calculation, an immutable ledger, real-time balance reservation and call cutoff at the switch, fraud limits, and carrier invoice reconciliation. Do not credit a wallet from a browser success message or treat the current route preview as a fraud or balance control.
+
+Commissioning the server also requires authorized SSH/console access, public DNS control for `sip.dobhrap.com`, the provider's actual interconnect and account credentials, and production firewall rules. The deployment playbook verifies public HTTPS and DNS when run against the server, but this repository cannot change a DNS zone or supply external credentials. Confirm each dependency and perform end-to-end call, failure, emergency routing, payment, tax, CDR, and recovery tests before advertising live service.
+
+### Downloadable clients
+
+The landing page lists the latest published preview files from GitHub Releases. The Android debug APK includes a native carrier privilege check and a user-confirmed **Set Olamide display name / Restore carrier name** control under **Carrier partner integration**. On ordinary SIMs it reports that the APK is unauthorized and changes nothing. The native bridge targets the default SIM. Android default phone role, cellular calling and emergency calling are not implemented.
+
+For an operator-authorized APK, first have the carrier authorize the **release signing certificate** on the intended SIM/eSIM profiles. Configure GitHub Actions secrets `CARRIER_KEYSTORE_B64` (base64 of the JKS, without line breaks), `CARRIER_KEY_ALIAS`, `CARRIER_KEYSTORE_PASSWORD`, and `CARRIER_KEY_PASSWORD`. The package workflow then assembles and verifies `olamide-carrier-signed.apk` and publishes it alongside the preview downloads. Keep keys out of Git and distribute the signed APK only after physical-device validation. Merely signing the APK does not grant carrier privileges; the installed SIM must recognize the exact signing certificate. See [carrier integration requirements](apps/web/public/carrier-partner.md).
+
+The [Releases page](https://github.com/olamidebello/Sip/releases) provides downloadable builds when a `v*` tag has passed the package workflow. The [Downloadable Olamide apps workflow](https://github.com/olamidebello/Sip/actions/workflows/packages.yml) also exposes build artifacts for each successful run (GitHub sign-in may be required for Actions artifacts). Files include a browser ZIP of the built static client, Linux AppImage, Windows `.exe`, macOS `.dmg`, and an Android debug `.apk`. The browser ZIP must be hosted with the API at the same HTTPS origin; opening `index.html` from disk does not connect to the backend.
+
+The desktop client in `apps/desktop` uses an isolated, sandboxed Electron window restricted to `https://sip.dobhrap.com`, with microphone and camera permissions for that origin. The Android package in `apps/mobile` is a Capacitor WebView loading the same HTTPS site, so sign-in and API calls share the hosted origin. Both require a running backend, DNS and trusted HTTPS. They do not bundle a PBX or work offline. Capacitor documents remote `server.url` for live reload rather than production; this Android debug build is an evaluation package, not a production app or Play Store submission. Test device audio, SIP over WSS, session persistence, links, and permissions before any production packaging. Do not install debug builds on devices you do not control.
+
+For iOS the workflow builds an **unsigned simulator app** as an Actions artifact. It cannot be installed on a physical iPhone. To create a device build, use a Mac with Xcode and an Apple development team, run `cd apps/mobile && npm install && npx cap add ios && npx cap sync ios`, open `ios/App/App.xcodeproj`, configure bundle signing, and archive or run on a connected device. Apple distribution and store review require separate signing and app review; no signed IPA is published here. The Windows and macOS installers are also unsigned and may show operating system warnings. Android carrier release signing runs only when the four signing secrets are configured; Play Store distribution is not configured.
+
+To regenerate packages, use the workflow's **Run workflow** button or push package changes to `main`. After all package builds succeed, the workflow publishes a public preview release (`v0.1.0-preview.<run number>`) with direct download links; a pushed `v*` tag creates a release with that tag instead. Do not treat a successful build as proof of calling behavior on a physical device. Source build commands: `cd apps/web && npm install && npm run build`, `cd apps/desktop && npm install && npm run dist`, and `cd apps/mobile && npm install && npx cap add android && npx cap sync android && bash install-carrier-native.sh && cd android && ./gradlew assembleDebug` with Android SDK and JDK 21 installed.
+
+### DID and plan purchase controls
+
+1. Sign in as a super admin, switch to the intended tenant in **Administrator → Tenant management**, then use **DID, plan, and tenant role controls**. Six switches independently enable user plan requests, user DID requests, tenant admin plan edits, tenant admin pricing edits, tenant admin in-house DID management, and tenant admin user/group changes. These policies are stored per tenant and enforced by the API on every protected write; a super admin can recover and change them. Tenant admins can view but cannot modify the switches. The existing `admin` role is the tenant administrator for the selected tenant; ordinary `user` access to billing still depends on its feature group. Super admins can switch tenant context, while tenant admins remain in their own tenant. This is the implemented role matrix, not a general custom role editor across every module.
+2. Tenant admins with plan editing enabled can create a plan and publish or hide it from the **Plan catalog**. `GET/POST /api/admin/plans` and `PUT /api/admin/plans/:id` are tenant scoped. Changing a plan's current price changes the catalog price; it does not charge subscribers or retroactively modify prior invoices. Users with billing access request an active plan. The backend creates an unpaid invoice and a `pending_payment` subscription; it does not collect a payment or activate service.
+3. Set Flowroute, DIDWW, and in-house selling rules under **DID pricing**. Imported in-house inventory must be verified and explicitly published before a user can reserve it. A user reservation creates an unpaid setup invoice and holds the in-house number for 24 hours; it does not provision a route.
+4. For Flowroute or DIDWW, a user searches live inventory and clicks **Request DID**. The backend rechecks that provider's listing and recalculates tenant pricing, then atomically saves a `pending_payment` request and unpaid setup invoice. Users can review requests under **My number requests**; tenant administrators can review them under **Provider DID requests for review**. `POST /api/numbers/request`, `GET /api/numbers/requests`, and `GET /api/admin/numbers/requests` are tenant scoped. This **does not reserve or order the DID from the provider**, guarantee its availability after the search, charge a card, activate monthly billing, or provision SIP service. A carrier ordering and payment integration with credentials, webhook verification, idempotency and reconciliation is required for a completed purchase. The provider catalog may change between request and fulfillment.
+5. `GET /api/catalog-policy` returns a signed-in user's purchase permissions. `GET/PUT /api/admin/catalog-policy` reads or updates the six controls, with PUT restricted to super admins. The UI disables request controls for policies that disallow them; the backend independently rejects prohibited writes. Audit events record policy and plan changes. Existing tenant admin LDAP controls remain under **Authentication providers**.
+
+### Reports and analytics
+
+1. Open **Administrator → Reports and analytics**, choose inclusive UTC start and end dates (up to 366 days), then select **Run report**. The report is generated from MySQL for the tenant currently selected in your admin session. Tenant administrators see only their own tenant. Super admins must switch tenant context to review another tenant; this endpoint does not aggregate across tenants.
+2. Review daily call counts, answer rate, duration and billable seconds, dispositions, directions, CDR sources, traffic by UTC hour, invoice count and recorded amounts separated by currency and status, port requests, new users, and current DID and PBX agent states. Missing days have no ingested calls. The inventory, total user, and agent figures are current snapshots; the other figures use the selected date range.
+3. Download **daily calls CSV** or **invoice summary CSV** for external analysis. API endpoints are `GET /api/admin/reports?from=YYYY-MM-DD&to=YYYY-MM-DD` and `GET /api/admin/reports.csv?from=YYYY-MM-DD&to=YYYY-MM-DD&kind=calls|invoices`. Authentication and administrator role checks apply to both. CSV output contains aggregate data, not customer phone numbers. Recorded CDRs depend on configured ingestion and may not represent every switch event. An invoice marked paid is a database status, not independently reconciled cash receipt. No scheduled reports, provider settlement, live switch telemetry, queue event timing, or revenue recognition engine is implemented.
+
+### Dynamic backgrounds
+
+1. In **Administrator → Tenant background policy**, choose day and night presets (`Midnight`, `Ocean`, `Aurora`, `Sunrise`, or `Slate`). Optionally switch at 6 AM and 6 PM based on each device's local time and enable gentle movement. Clear **Allow users to choose their own background** to enforce the tenant setting. Save the policy for the currently selected tenant. The change is audited.
+2. Under **My background**, signed-in users can save their own settings when allowed, or choose **Use tenant background** to remove their personal override. A locked policy takes effect on the next background refresh or sign-in. The browser checks the local hour each minute. `prefers-reduced-motion` disables movement regardless of the saved animation preference.
+3. Settings are persisted in MySQL through `GET/PUT/DELETE /api/background` and administrator `GET/PUT /api/admin/background`. Only the five built-in gradients are allowed. No user-supplied CSS, uploaded image storage, remote image loading, device-wide wallpaper control, or instant push to other open tabs is implemented.
+
+### PBX extension and queue configuration
+
+1. Create each **extension** with a unique 2–10 digit number, display name, optional assigned user, voicemail intent, and optional forwarding target. A number cannot also be a queue number in the same tenant. The user's **Call center agent** panel displays their assigned extension. Creation saves database intent; it does not provision a SIP device, password, voicemail box, or switch dialplan.
+2. Create a **queue** with a number, name, strategy (`ring_all`, `ordered`, `longest_idle`), and maximum wait time. Select the queue, check its tenant users, and save members. Grant the `Call center agent` group feature to the intended agents. Agents set their own manual availability to `ready`, `away`, or `offline`. **Preview eligible agents** computes the next agents from this status and the queue order. It does not ring phones. `longest_idle` uses the last manual status change, not a verified call idle time.
+3. Under **Inbound DID routing**, enter an E.164 DID and select a saved extension or queue. This maps the number to a destination in MySQL. You must separately configure your carrier and a live PBX to deliver the DID; no carrier order or dialplan update is sent.
+4. Add a **trunk plan** with name, host, port, transport and priority. The button labeled **Enable for preview** includes the trunk in simulation only. Credentials are deliberately not stored in the trunk table. Add prefix rates in integer cents per minute with selling price at least cost; then preview an outbound E.164 number. The preview selects the longest matching prefix, lowest cost, then trunk priority. No outbound call or real-time balance authorization occurs.
+5. The PBX API also exposes `GET /api/pbx/overview`, `/extensions`, `/queues`, `/inbound-routes`, `/trunks`, `/rates`, and `/route-preview?number=%2B12125550123`. All admin mutations require a signed-in administrator and the browser's configured origin. Agent status and an assigned extension are accessible to the signed-in user. Use the browser interface for routine work.
+
+### Plans, numbers, communication, and mobile releases
+
+- Create monthly plans and review unpaid invoices. Plan selection creates a pending invoice; a separate payment processor, tax engine, and settlement reconciliation are required. In **DID buying and selling prices**, configure a separate Flowroute, DIDWW, and in-house rule. The default provider rule is +30%; a legacy tenant markup setting remains the fallback until a source rule is saved. Flowroute/DIDWW buying costs come from the provider inventory feed and cannot be changed at the provider by this application. Choose percentage adjustment (signed basis points, such as `3000` for +30% or `-1000` for -10%), fixed cent adjustment (positive or negative), or manual final setup and monthly selling prices. Preview calculations before saving. Decreases stop at zero. API: `GET /api/admin/pricing` and `PUT /api/admin/pricing/{flowroute|didww|inhouse}` with `mode`, integer `setupValue` and `monthlyValue`. Rules are tenant scoped and audited. Flowroute/DIDWW searches need provider API keys in the server environment. Purchase and number port submission remain disabled.
+- In **In-house DID management**, filter inventory by number prefix and status, then choose **Set buy/sell price** on an individual unverified, available, or disabled number. Enter estimated buy setup/monthly cents, manual sell setup/monthly cents, and select manual or **Follow in-house rule**. For rule-managed numbers, search and reservation compute the selling prices from the stored buy costs and current rule; the reservation snapshots setup and monthly prices and creates an unpaid invoice at the computed setup amount. A rule change affects future reservations; existing invoices are not repriced. Reserved or assigned numbers cannot be edited through this control. The administrator must verify actual acquisition cost independently. This is a price record and reservation flow, not automatic provider purchasing or recurring charge collection.
+- Add contacts in the same tenant, send server-stored messages, and use meeting rooms with up to four participants. Under **Meetings**, create a room, copy its direct link, use the device share sheet, or enter a tenant user's email in the host invitation form. The invited user sees the room under **My meetings and invitations**; the direct link still requires a signed-in user in the same tenant. Hosts can lock or end rooms and remove participants. Participants can raise a hand, applaud, chat, mute their own microphone, toggle their own camera, and share their screen if their group permits it. In **Super admin → Meeting controls**, set tenant link and invitation policies, require invited recipients, limit rooms to two through four people, enable or disable chat, screen sharing, reactions and hand raising, inspect active rooms, invite or revoke recipients, remove connected participants, and lock or end rooms. New admission settings affect the next join; disabling screen sharing also stops active shares. Meeting chat and reactions are temporary; policies and invitations are stored in MySQL. Pointer assistance is an overlay and cannot operate the remote desktop. Configure TURN for cross-network calls. This is a four-person browser room, not a large webinar or cloud recording service. Messages have no end-to-end encryption or push delivery.
+- In **My settings → Hints & guides**, choose whether navigation and form hints, field tips, and contextual guide buttons appear. Select brief or detailed hints, customize the hint and internal guide destination for a page or form, restore one default, or restore all defaults. These choices are saved per user in MySQL and do not change another account's guidance.
+- Android/iOS release administration records app identifiers, artifact references, tracks, internal approval, and audit history. It does not build native clients or submit to Google/Apple stores.
+
+## Integration work required for a live PBX or ASTPP-class service
+
+Choose a licensed and supported switch (for example Asterisk/FreeSWITCH with an SBC and a suitable provisioning layer) and implement tenant-isolated provisioning for PJSIP credentials, TLS/WSS, dialplan, queue engine, voicemail, inbound/outbound carrier routing, emergency calling policy, media/RTP, and CDR ingestion. Require reconciliation and idempotency between the Olamide database and the switch. Add per-tenant carrier credentials, explicit route activation, number ownership checks, fraud limits, call recording consent and storage policy, and monitoring before enabling trunk traffic. For ASTPP-like charging, add authoritative CDRs, prefix effective dates, rounding rules, taxes, prepaid credit reservation, low-balance interruption, dispute adjustments, and audited settlement. For 3CX-like call center operation, add live queue distribution, presence tied to registration and calls, SLA measurement, callbacks, recording, reports, and supervisor controls. The current queue and LCR endpoints are safe previews for that implementation, not an operational substitute.
+# Form pages and account registration
+
+Forms have direct browser routes under `/pages/<form-id>`. For example,
+`/pages/signup`, `/pages/login`, `/pages/ldap-login` and `/pages/support-create`.
+The application navigation lists forms beneath their workspace section. Browser
+back and forward navigation and direct reloads use the same route; Caddy serves
+the web application for these paths.
+
+Registration submits to `POST /api/register`. The API validates and normalizes
+the account, hashes its password with scrypt, and inserts the user and default
+group membership in a single MySQL transaction. Sign-in uses `POST /api/login`
+and an HttpOnly session cookie; directory sign-in uses `POST /api/login/ldap`.
+Registration creates an application account only. Carrier onboarding still
+requires verified identity, carrier authorization, number assignment, SIP
+credential provisioning, and operational fraud controls before calling access
+can be enabled. Do not treat a newly created account as a provisioned carrier
+subscriber.
+
+## Automatic MySQL creation and migrations
+
+On a fresh Docker volume, the MySQL container creates the database and
+application account from `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD` and
+`MYSQL_ROOT_PASSWORD` in the private deployment environment file. The
+`migrate` container then creates and updates tables for accounts, tenants,
+permissions, PBX, CDRs, DIDs, Nigeria interconnect records, billing, wallet,
+support and the other implemented API modules. The API starts only after this
+job succeeds, and also reruns the idempotent migrations at startup for local
+development. A MySQL advisory lock serializes migration attempts. Applied
+components are recorded in `schema_components`.
+
+For a fresh server, run the documented `deployment/install-all.sh` command.
+For a normal update, run `bash /opt/olamide/repo/deployment/update.sh`; it backs
+up MySQL before updating and lets Compose execute the migration job. To run
+the job manually from `/opt/olamide/repo/deployment/docker`:
+
+```bash
+docker compose run --rm migrate
+docker compose exec -T mysql sh -c 'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "SELECT component,applied_at FROM schema_components ORDER BY component"'
+```
+
+Do not delete the `mysql_data` volume during updates. MySQL's initial database
+and user creation runs only for a new data directory. If a preexisting external
+MySQL server lacks the configured database or grants, create them with
+`services/api/create-database.sql` and an administrator credential first.
+These migrations create data structures for implemented software features;
+external carrier, clearinghouse and payment services still need credentials,
+agreements and provisioning.
+
+## Verified signup, passkeys and SIP provisioning
+
+The registration page collects a full name, email, E.164 phone number and
+address. Configure `RESEND_API_KEY`, `RESEND_FROM` (a verified sender) and a
+random `OTP_HMAC_SECRET` of at least 32 characters in
+`/etc/olamide/secrets.env`, then rerun bootstrap to install the updated private
+environment file. Registration is unavailable until email delivery is
+configured. New accounts have `pending_email` status and cannot sign in. The
+API sends a six-digit email code that expires after 10 minutes; verification
+activates the account. Five incorrect attempts exhaust a code; resend is
+limited to once per minute and creates a fresh code. The MySQL migration adds
+`user_profiles`, `signup_otps`, `passkeys` and `passkey_challenges`.
+
+Signed-in local users can add a WebAuthn passkey in **Account & security**.
+The passkey can then be used on the sign-in page. Device biometric or PIN
+verification remains on the device: the server stores the public key and
+counter, checks origin, relying party ID and a one-use challenge, and requires
+user verification. Use HTTPS with the final app domain. Losing all passkeys
+does not remove password access. An administrator should configure recovery
+and phishing-resistant administrator policies before relying on passkeys as
+the only sign-in method.
+
+Email verification also creates a tenant-scoped `sip_accounts` record with a
+unique authorization username. Set a random 64-character hex
+`SIP_CREDENTIAL_KEY` so the generated SIP password can be encrypted at rest.
+If a commissioned switch adapter is available, set `SIP_PROVISION_URL` to its
+HTTPS endpoint and `SIP_PROVISION_TOKEN` to its private bearer token. The API
+POSTs `{accountId,tenantId,userId,username,password,domain}` with an
+`Idempotency-Key` header and marks the account `active` only after the adapter
+returns JSON `{ "status": "active" }`. The adapter must provision the user on
+the authoritative switch and enforce tenant isolation before acknowledging.
+Without it, the record remains `awaiting_switch` and cannot make calls. The
+account page displays that status; an active user's SIP credentials require
+password reauthentication to reveal. Existing accounts are not retroactively
+assigned credentials by this new signup hook.
+
+**Dial plan marketplace** lets administrators create draft or published offers.
+Users browse published offers and request one. The request and unpaid invoice
+are created together in MySQL; this is a purchase request, not a live routed
+dialplan, recurring charge or payment confirmation. The server still needs
+switch activation, billing authorization, fraud controls and reconciliation
+before the offer can route calls.
+
+## Carrier provider commissioning and ASTPP-style controls
+
+In **Administration → Carrier providers**, an administrator selects an existing
+tenant trunk, a concurrent call capacity, and a routing intent for Flowroute
+or DIDWW. The server stores the profile in `carrier_provider_profiles`. The
+**Verify inventory API** action checks the provider's private server
+credentials without showing the key in the browser. Credentials may be saved in the encrypted tenant credential store when `PROVIDER_CREDENTIAL_KEY` is configured, or supplied through private server environment variables. **Provision with switch adapter** requires
+`CARRIER_PROVISION_URL` (HTTPS) and `CARRIER_PROVISION_TOKEN`; the adapter
+receives `{tenantId,provider,trunkId,maxConcurrentCalls,routingMode}` with an
+idempotency header. Only a response `{ "status": "active" }` marks the tenant
+profile active. Provider DID search and request endpoints reject providers
+that have not been activated. Changing a profile returns it to draft and
+requires a new adapter acknowledgment. The adapter must enforce trunk
+configuration, capacity and routing on the actual switch; saving a profile
+does not change a running switch.
+
+**Administration → Charging operations** shows tenant counts for imported
+unrated CDRs, enabled preview rates, unpaid invoices, pending dial plan
+requests, active carrier profiles, and USD wallet liabilities. It links to
+the underlying administration screens. Amounts from other currencies are
+excluded from the USD totals.
+
+The existing PBX rate deck, outbound policy preview, DID price rules, tenant
+management, normalized CDR ingestion, wallet transfer ledger, invoices and
+reports provide parts of an ASTPP-style administrative control plane. They
+are not an ASTPP deployment or a carrier-grade charging engine. Live LCR,
+rating, prepaid reservation and cutoff, tax, settlement, reseller accounting,
+fraud detection and reconciliation require authoritative switch events and
+carrier agreements. Do not turn on paid traffic based on preview data.
+
+### Flowroute messaging callbacks and external SMS
+
+Olamide accepts four Flowroute account callback types at private, tokenized HTTPS URLs. After a validated update, sign in as the administrator for the carrier tenant and open **Administration → Messaging webhooks** to copy the four full URLs. In Flowroute Manage → Messaging Webhooks, paste the corresponding URL into **SMS**, **MMS**, **SMS DLR**, and **MMS DLR**, enable each and save. The public URL shapes are:
+
+| Flowroute field | Olamide URL shape |
+| --- | --- |
+| SMS | `https://sip.dobhrap.com/api/webhooks/flowroute/<PRIVATE_TOKEN>/sms` |
+| MMS | `https://sip.dobhrap.com/api/webhooks/flowroute/<PRIVATE_TOKEN>/mms` |
+| SMS DLR | `https://sip.dobhrap.com/api/webhooks/flowroute/<PRIVATE_TOKEN>/sms-dlr` |
+| MMS DLR | `https://sip.dobhrap.com/api/webhooks/flowroute/<PRIVATE_TOKEN>/mms-dlr` |
+
+The private token is generated into `/etc/olamide/secrets.env` on bootstrap or first validated update and copied to the Compose environment. Do not paste it into tickets or public repositories. For a manual install, use `openssl rand -hex 32` as `FLOWROUTE_WEBHOOK_TOKEN` and restart the API. An administrator with access to the carrier tenant can see and copy the complete URLs on the Messaging webhooks page. The callbacks require this token, accept Flowroute JSON API content, store events idempotently by provider record and receipt level, and show recent events to carrier tenant administrators. MMS media metadata is retained without the temporary signed download URLs; attachment downloads are not implemented. If you rotate the token, update all Flowroute callback URLs and restart the API.
+
+For external text messaging, enter Flowroute API access and secret keys privately as `FLOWROUTE_ACCESS_KEY` and `FLOWROUTE_SECRET_KEY` in `/etc/olamide/secrets.env`, then rerun bootstrap or synchronize the private Compose environment and restart. In **Administration → Messaging webhooks**, confirm that a phone number belongs to this Flowroute account and is SMS enabled; assign its E.164 number to an active tenant user, set a daily send limit, and enable it. The user opens **Communications → Text messages**, chooses the assigned sender, and enters an external E.164 mobile number and SMS text. Incoming SMS and MMS callbacks for an assigned number appear in that user's inbox; outgoing SMS shows carrier acceptance or an unknown state if the provider response could not be confirmed. Delivery receipts are recorded in the administrator event log. Quota limits guard sends, but carrier usage charges are billed by Flowroute and no prepaid SMS wallet debit or settlement is implemented. A daily quota of zero blocks sending. Carrier messaging must be provisioned and funded with Flowroute before use. The existing **Account messages** page is separate server-based chat between Olamide users.
+
+These controls cover number assignment, SMS inbox/outbox, callback monitoring, provider setup and tenant scoped administration. Other ASTPP billing, switch, reseller and carrier features require their own authoritative integrations and are not implied by these screens.
+
+### Bootstrap the `olamidebello` super administrator
+
+The application supports a local `olamidebello` username with super administrator privileges and a mandatory first login password change. This account is **not** created by a Git pull alone. After migrations and the API container are running, execute the following on the server console. The prompt reads the requested temporary password without printing it or adding it to shell history:
+
+```bash
+cd /opt/olamide/repo/deployment/docker
+read -rsp 'Temporary super admin password: ' OLAMIDE_TEMP_PASSWORD; printf '\n'
+printf '%s\n' "$OLAMIDE_TEMP_PASSWORD" | docker compose exec -T api node bootstrap-super-admin.js olamidebello
+unset OLAMIDE_TEMP_PASSWORD
+```
+
+Enter the temporary value supplied during setup (the requested value is ten digits). Sign in using username `olamidebello`, then immediately choose a new password of at least 12 characters in **Account → Change password**. All privileged API routes remain blocked until that change succeeds. The account has an internal placeholder email address (`olamidebello@local.invalid`); set a verified real email through a separate account profile process before expecting mail delivery. The bootstrap command refuses an existing account and never resets its password. Super administrators can switch tenants and manage tenant administrators; tenant administrators cannot promote users to administrator or change another administrator's status or role.
 
 ### Flowroute outbound rate import
 
@@ -493,6 +731,19 @@ parses Kamailio, then installs the reviewed files and starts the services using
 carrier acceptance, or enable the API's live charging flags. Test a real
 authenticated call and its timeout and settlement before setting those flags.
 The current staging adapter does not satisfy this gate.
+
+To audit and repair host prerequisites first, run this on the Debian 12 server:
+
+```bash
+cd /opt/olamide/kamailio-staging && printf '[switch_nodes]\nsip-switch-1 ansible_connection=local\n' > /tmp/olamide-kamailio-inventory.ini && ansible-playbook -i /tmp/olamide-kamailio-inventory.ini deploy/kamailio/install-requirements.yml
+```
+
+The idempotent playbook installs missing Kamailio modules, RTPengine, TLS and
+billing client packages, creates private billing directories, and reports
+missing checkout/environment inputs, Docker Compose, API health and SIP service
+state. It does not install or replace Docker on an existing production host,
+create carrier credentials, activate routing or enable live charging. Repair
+reported inputs before running the gated production playbook.
 
 Run `bash deploy/kamailio/commission-check.sh` as root from the updated staging checkout on the target Debian host. The report is read-only and lists installed packages, systemd state, private API health, installed Kamailio syntax, loopback-only listener and the carrier dispatch blocker. An exit code of zero means host checks passed; it is **not** a successful carrier call or traffic cutover.
 
