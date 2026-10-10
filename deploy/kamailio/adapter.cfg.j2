@@ -3,7 +3,7 @@
 debug=2
 log_stderror=yes
 children=4
-listen=udp:127.0.0.1:5062
+listen=udp:{{ kamailio_listen_ip | default('127.0.0.1') }}:{{ kamailio_listen_port | default(5062) }}
 alias="{{ kamailio_domain }}"
 loadmodule "tm.so"
 loadmodule "sl.so"

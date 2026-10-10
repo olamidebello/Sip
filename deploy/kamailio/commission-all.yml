@@ -39,6 +39,9 @@
           prepaid cutoff evidence and the carrier-prepaid.yml acceptance gate.
       when: commission_activate_carrier | default(false) | bool
 
+- import_playbook: prepare-core.yml
+  when: commission_prepare_core | default(false) | bool
+
 - import_playbook: activate-core.yml
   when: commission_activate_core | default(false) | bool
 
