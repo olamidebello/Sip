@@ -815,8 +815,8 @@ root.innerHTML = `
       <form id="pricing-rule">
         <label>Source <select name="provider"><option value="flowroute">Flowroute</option><option value="didww">DIDWW</option><option value="inhouse">In-house</option></select></label>
         <label>Method <select name="mode"><option value="percent">Percentage adjustment</option><option value="fixed">Fixed cent increase or decrease</option><option value="manual">Manual selling price in cents</option></select></label>
-        <label>Setup value <input name="setupValue" type="number" step="1" required></label>
-        <label>Monthly value <input name="monthlyValue" type="number" step="1" required></label>
+        <label>Setup value <input name="setupValue" type="number" step="1" value="3000" required></label>
+        <label>Monthly value <input name="monthlyValue" type="number" step="1" value="3000" required></label>
         <p>Percentage values use basis points: 3000 = +30%, -1000 = -10%. Fixed values use cents; negative decreases price. Manual values are final cents. Decreases stop at zero.</p>
         <button>Save source rule</button>
       </form>
