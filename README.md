@@ -750,6 +750,18 @@ provisioning alone cannot turn this core-only activation into a working trunk.
 Do not mark carrier peering or prepaid billing commissioned until real switch
 dispatch, authenticated carrier calls, media and settlement have been verified.
 
+The super admin **Fleet operations → Server and network operations** screen
+now queues **Check and install SIP requirements** and **Activate reviewed SIP
+core** for switch nodes through the private deployment runner. The core action
+uses `/root/production-kamailio.cfg` and `/root/production-rtpengine.conf` on
+the target, its inventory IPv4 address, and the local inventory shipped at
+`deploy/kamailio/local-inventory.ini`. Prepare those files privately and review
+the public listener, firewall and media range before queuing. Job history and
+Kamailio service reports show the result. The old generic install and upgrade
+buttons, which targeted FreeSWITCH, are retired. These controls install host
+prerequisites and activate the carrier-blocked SIP core; they do not provision
+the trunk from GUI drafts or mark live prepaid commissioned.
+
 To audit and repair host prerequisites first, run this on the Debian 12 server:
 
 ```bash

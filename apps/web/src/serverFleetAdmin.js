@@ -2,7 +2,7 @@ export function setupServerFleetAdmin({get,request}){
   const $=id=>document.getElementById(id);
   const status=$('fleet-status');
   const list=(id,rows,render)=>{const el=$(id);el.replaceChildren();for(const row of rows){const item=document.createElement('li');render(item,row);el.append(item);}};
-  const button=(parent,title,run)=>{const b=document.createElement('button');b.type='button';b.textContent=title;b.onclick=async()=>{b.disabled=true;try{await run();await refresh();status.textContent=title+' completed.';}catch(e){status.textContent=e.message;}finally{b.disabled=false;}};parent.append(b);};
+  const button=(parent,title,run)=>{const b=document.createElement('button');b.type='button';b.textContent=title;b.onclick=async()=>{b.disabled=true;try{const result=await run();await refresh();status.textContent=result?.status==='pending'?title+' queued. Check job history for the result.':title+' completed.';}catch(e){status.textContent=e.message;}finally{b.disabled=false;}};parent.append(b);};
   async function refresh(){
     const [data,topology]=await Promise.all([get('/api/admin/servers'),get('/api/admin/servers/topology')]);
     const can=level=>({none:0,view:1,manage:2,deploy:3})[data.accessLevel]>=({view:1,manage:2,deploy:3})[level];
@@ -34,10 +34,15 @@ export function setupServerFleetAdmin({get,request}){
       if(can('manage'))button(controls,'Remove server',async()=>{if(window.confirm(`Retire ${n.name} from the managed fleet?`))await request(`/api/admin/servers/${n.id}`,{},'DELETE');});
       if(n.role==='switch'&&can('deploy')){
         const operations=document.createElement('div');li.append(operations);
-        for(const action of ['health','install','upgrade'])button(operations,action,()=>request(`/api/admin/servers/${n.id}/jobs`,{action}));
+        button(operations,'Check Kamailio health',()=>request(`/api/admin/servers/${n.id}/jobs`,{action:'health'}));
+        button(operations,'Check and install SIP requirements',()=>request(`/api/admin/servers/${n.id}/jobs`,{action:'sip_packages'}));
+        if(data.superAdmin)button(operations,'Activate reviewed SIP core',()=>{
+          if(!window.confirm('Start the public SIP listener and RTPengine using reviewed private host files? Carrier calls and prepaid charging remain disabled.'))return;
+          return request(`/api/admin/servers/${n.id}/jobs`,{action:'sip_core'});
+        });
         const interval=document.createElement('input');interval.type='number';interval.min='5';interval.max='10080';interval.value='60';interval.setAttribute('aria-label',`${n.name} schedule interval minutes`);controls.append(interval);
         operations.append(interval);
-        for(const action of ['health','upgrade'])button(operations,`Schedule ${action}`,()=>request(`/api/admin/servers/${n.id}/schedules`,{action,intervalMinutes:Number(interval.value)}));
+        button(operations,'Schedule health',()=>request(`/api/admin/servers/${n.id}/schedules`,{action:'health',intervalMinutes:Number(interval.value)}));
       }
     });
     list('fleet-schedules',data.schedules,(li,s)=>{

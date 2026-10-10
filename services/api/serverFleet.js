@@ -191,7 +191,7 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
       pool.query('SELECT stale_seconds,warning_latency_ms,retention_days FROM deployment_report_settings WHERE id=1'),
       pool.query('SELECT id,node_id,action,interval_minutes,enabled,next_run_at FROM deployment_schedules ORDER BY next_run_at LIMIT 200'),
       pool.query('SELECT e.id,e.node_id,n.name AS node_name,e.category,e.detail,e.created_at FROM deployment_events e LEFT JOIN deployment_nodes n ON n.id=e.node_id ORDER BY e.created_at DESC LIMIT 100')]);
-    return send(res,200,{nodes:nodes.rows,jobs:jobs.rows,settings:settings.rows[0],schedules:schedules.rows,events:events.rows,accessLevel:level,
+    return send(res,200,{nodes:nodes.rows,jobs:jobs.rows,settings:settings.rows[0],schedules:schedules.rows,events:events.rows,accessLevel:level,superAdmin:user.role==='super_admin',
       runnerConfigured:!!process.env.DEPLOY_RUNNER_TOKEN,scope:'Switch jobs require the private Ansible runner. App capacity remains on the existing Compose cluster control.'});
   }
   if(path==='/api/admin/servers'&&req.method==='POST'){
@@ -305,7 +305,8 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
   if(job&&uuid.test(job[1])&&req.method==='POST'){
     if(!granted('deploy'))return send(res,403,{error:'Fleet deployment access required'});
     const {action}=await readJson(req);
-    if(!['install','upgrade','health','kamailio_test'].includes(action))return send(res,400,{error:'Approved job action required'});
+    if(!['health','kamailio_test','sip_packages','sip_core'].includes(action))return send(res,400,{error:'Approved SIP job action required'});
+    if(action==='sip_core'&&user.role!=='super_admin')return send(res,403,{error:'Super administrator required for SIP activation'});
     if(!process.env.DEPLOY_RUNNER_TOKEN)return send(res,409,{error:'Private deployment runner is not configured'});
     const outcome=await queue(pool,job[1],action,user.id);
     return send(res,outcome.code,outcome.error?{error:outcome.error}:outcome);
@@ -314,9 +315,9 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
   if(schedule&&uuid.test(schedule[1])&&req.method==='POST'){
     if(!granted('deploy'))return send(res,403,{error:'Fleet deployment access required'});
     const b=await readJson(req);
-    if(!['health','upgrade'].includes(b.action)||!Number.isInteger(b.intervalMinutes)||
-      b.intervalMinutes<(b.action==='upgrade'?60:5)||b.intervalMinutes>10080)
-      return send(res,400,{error:'Health or upgrade schedule with valid interval required'});
+    if(b.action!=='health'||!Number.isInteger(b.intervalMinutes)||
+      b.intervalMinutes<5||b.intervalMinutes>10080)
+      return send(res,400,{error:'Health schedule with valid interval required'});
     if(!process.env.DEPLOY_RUNNER_TOKEN)return send(res,409,{error:'Private deployment runner is not configured'});
     const node=await pool.query("SELECT role,enabled FROM deployment_nodes WHERE id=$1 AND deleted_at IS NULL",[schedule[1]]);
     if(!node.rowCount||node.rows[0].role!=='switch'||!node.rows[0].enabled)

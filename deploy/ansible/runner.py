@@ -14,7 +14,7 @@ import urllib.request
 import urllib.error
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-ALLOWED = {'health', 'install', 'upgrade', 'firewall', 'kamailio_test'}
+ALLOWED = {'health', 'install', 'upgrade', 'firewall', 'kamailio_test', 'sip_packages', 'sip_core'}
 
 
 def secrets_file(path):
@@ -35,7 +35,7 @@ def probe(node):
     target = node['ssh_user'] + '@' + node['host']
     cmd = ['ssh', '-p', str(node['ssh_port']), '-o', 'BatchMode=yes',
            '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8', target,
-           'sudo', '-n', 'systemctl', 'is-active', 'freeswitch']
+           'sudo', '-n', 'systemctl', 'is-active', 'kamailio']
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
         status = ('healthy' if result.returncode == 0 and result.stdout.strip() == 'active'
@@ -44,7 +44,7 @@ def probe(node):
         if status == 'healthy':
             package = subprocess.run(['ssh', '-p', str(node['ssh_port']), '-o', 'BatchMode=yes',
                 '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8', target,
-                'dpkg-query', '-W', '-f=\\${Version}', 'freeswitch'], capture_output=True,
+                'dpkg-query', '-W', '-f=\\${Version}', 'kamailio'], capture_output=True,
                 text=True, timeout=15)
             if package.returncode == 0:
                 version = package.stdout.strip()[:80]
@@ -81,6 +81,33 @@ def probe_kamailio(node):
     return {'nodeId': node['id'], 'signalingStatus': signaling_status,
             'mediaStatus': media_status, 'version': installed_version,
             'latencyMs': int((time.monotonic() - start) * 1000)}
+
+
+def deploy_sip(node):
+    """Run only fixed, reviewed playbooks on the switch's own checkout."""
+    target = node['ssh_user'] + '@' + node['host']
+    action = node['action']
+    if action == 'sip_core':
+        address = ipaddress.ip_address(node['host'])
+        if address.version != 4 or not address.is_global:
+            raise RuntimeError('Core activation requires a verified public IPv4 node address')
+    playbook = ('install-requirements.yml' if action == 'sip_packages'
+                else 'activate-core.yml')
+    command = ['sudo', '-n', 'ansible-playbook', '-i',
+               '/opt/olamide/kamailio-staging/deploy/kamailio/local-inventory.ini',
+               '/opt/olamide/kamailio-staging/deploy/kamailio/' + playbook]
+    if action == 'sip_core':
+        command += ['-e', 'production_public_ip=' + node['host'],
+                    '-e', 'production_kamailio_config=/root/production-kamailio.cfg',
+                    '-e', 'production_rtpengine_config=/root/production-rtpengine.conf',
+                    '-e', 'core_network_reviewed=true']
+    # ssh joins command arguments through a remote shell. All strings above
+    # are constants except the validated IP address.
+    ssh = ['ssh', '-p', str(node['ssh_port']), '-o', 'BatchMode=yes',
+           '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8', target]
+    result = subprocess.run(ssh + command, capture_output=True, text=True, timeout=3600)
+    if result.returncode:
+        raise RuntimeError('SIP Ansible job failed; inspect the private runner and host journals')
 
 
 def deploy(node, inventory, vault_password):
@@ -162,11 +189,20 @@ def run_once(base, token, runner_id, inventory, vault_password):
             request(base, token, 'kamailio-check', probe_kamailio(claimed))
             if smoke.returncode or 'Loopback SIP:' not in smoke.stdout:
                 raise RuntimeError('Kamailio loopback SIP test failed; inspect private runner journal')
+        elif claimed['action'] in {'sip_packages', 'sip_core'}:
+            deploy_sip(claimed)
+            check = probe_kamailio(claimed)
+            request(base, token, 'kamailio-check', check)
+            if claimed['action'] == 'sip_core' and (check['signalingStatus'] != 'active' or
+                                                  check['mediaStatus'] != 'active'):
+                raise RuntimeError('SIP core activation did not leave both services active')
         elif claimed['action'] == 'health':
             check = probe(claimed)
             request(base, token, 'check', check)
             if check['status'] != 'healthy':
                 raise RuntimeError('Switch health probe: ' + check['status'])
+        elif claimed['action'] in {'install', 'upgrade'}:
+            raise RuntimeError('Legacy FreeSWITCH job retired; use SIP requirements or core activation')
         else:
             deploy(claimed, inventory, vault_password)
             check = probe(claimed)
@@ -175,7 +211,9 @@ def run_once(base, token, runner_id, inventory, vault_password):
                 raise RuntimeError('Switch did not pass post-deployment health probe')
         result = ('succeeded', 'Kamailio loopback SIP challenge passed' if
                   claimed['action'] == 'kamailio_test' else
-                  'Approved ' + claimed['action'] + ' job completed; switch active')
+                  'SIP prerequisites checked; no traffic change' if claimed['action'] == 'sip_packages' else
+                  'SIP core active; carrier and prepaid remain uncommissioned' if claimed['action'] == 'sip_core' else
+                  'Approved ' + claimed['action'] + ' job completed')
     except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError,
             RuntimeError, KeyError, IndexError, ValueError, urllib.error.URLError) as error:
         result = ('failed', str(error)[:900])
