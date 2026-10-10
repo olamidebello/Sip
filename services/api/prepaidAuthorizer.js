@@ -119,7 +119,10 @@ export async function handlePrepaid({req,res,pool,send,readJson}){
         JOIN sip_accounts s ON s.tenant_id=st.tenant_id AND s.domain=st.domain AND s.username=$5
           AND s.user_id=$2 AND s.status='active'
         JOIN users u ON u.id=s.user_id AND u.tenant_id=r.tenant_id AND u.status='active'
-        JOIN carrier_provider_profiles c ON c.tenant_id=r.tenant_id AND c.provider=r.provider AND c.status='active'
+        JOIN carrier_provider_profiles c ON c.tenant_id=r.tenant_id AND c.provider=r.provider
+          AND c.status='active' AND c.routing_mode<>'disabled'
+        JOIN pbx_trunks tr ON tr.id=c.trunk_id AND tr.tenant_id=c.tenant_id AND tr.enabled=TRUE
+        JOIN switch_gateways g ON g.tenant_id=c.tenant_id AND g.provider=c.provider AND g.enabled=TRUE
         WHERE r.id=$3 AND r.tenant_id=$1 AND r.enabled=TRUE AND r.effective_at<=UTC_TIMESTAMP(3)
         AND (r.expires_at IS NULL OR r.expires_at>UTC_TIMESTAMP(3))`,
         [body.tenantId,body.userId,body.rateId,body.domain,body.caller]);

@@ -16,7 +16,7 @@ export function setupServerFleetAdmin({get,request}){
     if(commissioning){
       let panel=$('fleet-prepaid-monitor');
       if(!panel){panel=document.createElement('section');panel.id='fleet-prepaid-monitor';panel.setAttribute('aria-label','Prepaid and billing monitoring');$('fleet-summary').after(panel);}
-      panel.textContent=`Prepaid reservations: ${commissioning.reservations.map(r=>`${r.status} ${r.count}`).join(', ')||'none'} · settled journals ${commissioning.prepaidJournals}. ${commissioning.scope}`;
+      panel.textContent=`Prepaid reservations: ${commissioning.reservations.map(r=>`${r.status} ${r.count}`).join(', ')||'none'} · past authorized expiry ${commissioning.overdueReservations} · settled journals ${commissioning.prepaidJournals}. ${commissioning.scope}`;
     }
     $('fleet-topology').textContent=`${topology.healthyWssTargets} healthy WSS targets · ${topology.regions.map(r=>`${r.region} ${r.role}: ${r.fresh_healthy}/${r.nodes} fresh, configured capacity ${r.configured_capacity}`).join('; ')||'No servers registered'}. ${topology.scope}`;
     const settings=data.settings||{};const form=$('fleet-report-settings');

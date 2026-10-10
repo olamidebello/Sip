@@ -135,10 +135,11 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
   }
   if(path==='/api/admin/servers/commissioning'&&req.method==='GET'){
     if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
-    const [calls,journals]=await Promise.all([
+    const [calls,journals,overdue]=await Promise.all([
       pool.query("SELECT status,COUNT(*) AS count FROM prepaid_calls GROUP BY status"),
-      pool.query("SELECT COUNT(*) AS count FROM billing_journals WHERE source_type='prepaid_call'")]);
-    return send(res,200,{reservations:calls.rows,prepaidJournals:Number(journals.rows[0]?.count||0),
+      pool.query("SELECT COUNT(*) AS count FROM billing_journals WHERE source_type='prepaid_call'"),
+      pool.query("SELECT COUNT(*) AS count FROM prepaid_calls WHERE status='active' AND DATE_ADD(created_at,INTERVAL authorized_seconds SECOND)<UTC_TIMESTAMP(3)")]);
+    return send(res,200,{reservations:calls.rows,prepaidJournals:Number(journals.rows[0]?.count||0),overdueReservations:Number(overdue.rows[0]?.count||0),
       liveCarrierVerified:false,scope:'Database counts only; reconcile each carrier CDR and observe call expiry before commissioning'});
   }
   if(path==='/api/admin/servers/kamailio-config'&&req.method==='GET'){
