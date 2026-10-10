@@ -1221,7 +1221,7 @@ const navigationGroups=[
   {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["operator-admin","Wholesale tariffs"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["rating-admin","Call rating"],["settlement-admin","Carrier settlements"],["payment-admin","Stripe gateway"],["cluster-admin","Cluster & capacity"],["live-calls-admin","Live calls"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
-  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["carrier-admin","Trunks & commissioning"],["switch-admin","SIP accounts & commissioning"],["sip-profile-admin","User profiles & commissioning"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"],["prepaid-control-admin","Prepaid controls"],["meeting-policy-admin","Meeting controls"]]}
+  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","User profiles & commissioning"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"],["prepaid-control-admin","Prepaid controls"],["meeting-policy-admin","Meeting controls"]]}
 ];
 let activeRole=null;
 let pageRoutes;
@@ -1244,7 +1244,7 @@ function showWorkspace(target) {
   admin.classList.toggle("admin-subview",rootView==="admin"&&target!=="admin");
   for(const section of admin.querySelectorAll(":scope > section[id]"))
     section.classList.toggle("workspace-inactive",rootView==="admin"&&section.id!==target);
-  for(const link of $("#app-nav").querySelectorAll(".menu-links a")) {
+  for(const link of $("#app-nav").querySelectorAll(".menu-links a, .standalone-menu-link")) {
     if(link.hash===`#${target}`) link.setAttribute("aria-current","page");
     else link.removeAttribute("aria-current");
   }
@@ -1267,6 +1267,18 @@ function updateNavigation() {
   returnToCall.onclick=()=>showWorkspace("calling-workspace");nav.append(returnToCall);
   const search=document.createElement("input");search.type="search";search.className="menu-search";search.placeholder="Find a menu…";search.setAttribute("aria-label","Find a menu");nav.append(search);
   const groups=document.createElement("div");groups.className="menu-groups";nav.append(groups);
+  if(activeRole==="super_admin"){
+    for(const [id,label] of [["carrier-admin","Trunk management"],["switch-admin","SIP account management"]]){
+      const section=document.getElementById(id);
+      if(!section||section.closest("[hidden]")) continue;
+      const item=document.createElement("div");item.className="standalone-menu";
+      const link=document.createElement("a");link.className="standalone-menu-link";
+      link.href=`#${id}`;link.textContent=label;
+      link.onclick=()=>showWorkspace(id);
+      if(location.hash===`#${id}`)link.setAttribute("aria-current","page");
+      item.append(link);groups.append(item);
+    }
+  }
   for(const group of navigationGroups) {
     if(group.roles&&!group.roles.includes(activeRole)) continue;
     const items=group.items.filter(([id])=>{const section=document.getElementById(id);return section&&!section.closest("[hidden]");});
