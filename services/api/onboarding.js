@@ -78,25 +78,32 @@ export async function handleOnboarding({req,res,path,pool,send,readJson,origin})
       throw error;
     } finally {db.release();}
     try {await sendCode(data.email,code,origin);}
-    catch(error) {console.error('Verification delivery failed',error.name);return send(res,503,{error:'Email delivery unavailable. Use resend code later.'});}
-    return send(res,201,{email:data.email,verificationRequired:true});
+    catch(error) {
+      console.error('Verification delivery failed',error.name);
+      // A failed first send should not impose the normal one-minute resend cooldown.
+      await pool.query('UPDATE signup_otps SET sent_at=DATE_SUB(UTC_TIMESTAMP(3), INTERVAL 61 SECOND) WHERE user_id=$1',[id]);
+      return send(res,202,{email:data.email,verificationRequired:true,delivery:'failed',message:'Account saved, but the verification email could not be sent. Use Resend code on the verification page.'});
+    }
+    return send(res,201,{email:data.email,verificationRequired:true,delivery:'sent'});
   }
   if (path === '/api/register/resend' && req.method === 'POST') {
     if(!configured()) return send(res,503,{error:'Email verification is not configured'});
     const {email}=await readJson(req);const normalized=emailAddress(email);
     if(!normalized) return send(res,400,{error:'Valid email required'});
-    const db=await pool.connect();let delivery=null;
+    const db=await pool.connect();
     try {
       await db.query('START TRANSACTION');
       const found=await db.query("SELECT u.id,o.sent_at FROM users u JOIN signup_otps o ON o.user_id=u.id WHERE u.email=$1 AND u.status='pending_email' FOR UPDATE",[normalized]);
       if(found.rowCount && Date.now()-new Date(found.rows[0].sent_at).getTime()>=60000) {
         const id=found.rows[0].id,code=String(randomInt(0,1000000)).padStart(6,'0');
+        // Keep the previous code usable if the provider rejects this message.
+        try {await sendCode(normalized,code,origin);}
+        catch(error) {console.error('Verification resend failed',error.name);await db.query('ROLLBACK');return send(res,503,{error:'Email delivery unavailable. Try again later.'});}
         await db.query('UPDATE signup_otps SET code_hash=$1,attempts=0,expires_at=DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 10 MINUTE),sent_at=UTC_TIMESTAMP(3) WHERE user_id=$2',
-          [codeHash(id,code,process.env.OTP_HMAC_SECRET),id]);delivery={email:normalized,code};
+          [codeHash(id,code,process.env.OTP_HMAC_SECRET),id]);
       }
       await db.query('COMMIT');
     } catch(error) {await db.query('ROLLBACK');throw error;} finally {db.release();}
-    if(delivery) try {await sendCode(delivery.email,delivery.code,origin);} catch(error) {console.error('Verification resend failed',error.name);return send(res,503,{error:'Email delivery unavailable'});}
     return send(res,200,{status:'If this account is awaiting verification, a code has been sent when eligible.'});
   }
   if (path === '/api/register/verify' && req.method === 'POST') {
