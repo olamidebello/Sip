@@ -84,6 +84,31 @@
         timeout: 5
         return_content: false
 
+    - name: Check configured carrier, tariff and SIP subscriber chain
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-name
+          - docker
+          - --env-file
+          - "{{ carrier_env_file }}"
+          - -f
+          - /opt/olamide/kamailio-staging/deployment/docker/compose.yml
+          - exec
+          - -T
+          - -e
+          - "CARRIER_ENDPOINT={{ production_carrier_endpoint }}"
+          - api
+          - node
+          - carrierReadiness.js
+      register: carrier_database_readiness
+      changed_when: false
+
+    - name: Report carrier database preflight without credentials
+      ansible.builtin.debug:
+        var: carrier_database_readiness.stdout
+
     - name: Parse reviewed Kamailio configuration
       ansible.builtin.command:
         argv: [/usr/sbin/kamailio, -c, -f, "{{ production_kamailio_config }}"]
