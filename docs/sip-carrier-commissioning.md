@@ -23,4 +23,15 @@ Use a root-only vars file with the values required by `carrier-prepaid.yml` and 
 
 The carrier playbook also runs a read-only database preflight inside the production API container. It requires an enabled tenant, matching active carrier profile and gateway, enabled trunk whose host matches the reviewed endpoint, current tariff rate, and an active SIP account with digest credentials. Passing this check does not prove carrier reachability, real-time cutoff, media or billing reconciliation; those require observed calls and independent acceptance evidence. The playbook will stop before touching SIP services when the preflight fails.
 
+## Unattended local installation and audit
+
+From the reviewed detached checkout on the Debian 12 server, run:
+
+```sh
+cd /opt/olamide/kamailio-staging
+ansible-playbook -i deploy/kamailio/local-inventory.ini deploy/kamailio/unattended-production.yml
+```
+
+The playbook repairs missing packages, generates missing private OTP, email and SIP encryption keys without rotating valid ones, backs up the database, deploys the GUI/API, provisions accounts for enabled tenants and audits SIP and carrier readiness. It returns a failure when the measured host or database carrier path is blocked, after reporting the blockers. A sender domain and provider key must still be configured and tested for email delivery. A real carrier trunk, reviewed dispatch and prepaid expiry configuration, and observed carrier, media, settlement and reconciliation tests remain required for live commissioning. Do not treat a successful package installation or SIP account backfill as live carrier acceptance.
+
 If Kamailio or RTPengine is already running, `production.yml` refuses to replace the live configuration. Plan a maintenance window, backup and rollback before a controlled cutover. Successful package, database and socket checks are not call acceptance: verify outbound and inbound carrier calls, two-way media, call expiry, end-event charging, ledger balance, failure handling and statement reconciliation before marking the service commissioned.

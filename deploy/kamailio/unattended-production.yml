@@ -1,0 +1,119 @@
+---
+# Local, rerunnable installation and readiness audit. Carrier cutover remains
+# a separate reviewed maintenance operation; this play never rewrites live SIP.
+- import_playbook: install-requirements.yml
+
+- import_playbook: email-verification.yml
+
+- name: Prepare the private SIP account key
+  hosts: switch_nodes
+  become: true
+  gather_facts: true
+  vars:
+    unattended_env: /opt/olamide/repo/deployment/docker/.env
+  tasks:
+    - name: Require root and local Debian 12 execution
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version == '12'
+          - ansible_connection | default('ssh') == 'local'
+          - ansible_user_id == 'root'
+
+    - name: Read private production environment
+      ansible.builtin.slurp:
+        src: "{{ unattended_env }}"
+      register: unattended_private_env
+      no_log: true
+
+    - name: Inspect SIP encryption key without displaying it
+      ansible.builtin.set_fact:
+        unattended_sip_keys: "{{ (unattended_private_env.content | b64decode) | regex_findall('(?m)^SIP_CREDENTIAL_KEY=([^\\r\\n]*)$') }}"
+      no_log: true
+
+    - name: Reject duplicate or malformed existing SIP keys
+      ansible.builtin.assert:
+        that:
+          - unattended_sip_keys | length <= 1
+          - unattended_sip_keys | length == 0 or unattended_sip_keys[0] | length == 0 or unattended_sip_keys[0] is match('^[a-fA-F0-9]{64}$')
+        fail_msg: Existing SIP key is malformed or duplicated; credentials were not rotated.
+      no_log: true
+
+    - name: Generate SIP encryption key when missing
+      ansible.builtin.command: openssl rand -hex 32
+      register: unattended_new_sip_key
+      when: unattended_sip_keys | length == 0 or unattended_sip_keys[0] | length == 0
+      changed_when: false
+      no_log: true
+
+    - name: Store new SIP key only in the private environment
+      ansible.builtin.lineinfile:
+        path: "{{ unattended_env }}"
+        regexp: '^SIP_CREDENTIAL_KEY='
+        line: "SIP_CREDENTIAL_KEY={{ unattended_new_sip_key.stdout }}"
+        owner: root
+        group: root
+        mode: '0600'
+      when: unattended_new_sip_key.stdout is defined
+      no_log: true
+
+    - name: Back up database and deploy production API and GUI
+      ansible.builtin.command:
+        argv: [bash, /opt/olamide/kamailio-staging/deploy/kamailio/deploy-production-gui.sh]
+      register: unattended_deploy
+      changed_when: unattended_deploy.rc == 0
+
+- import_playbook: provision-sip-users.yml
+
+- import_playbook: monitoring.yml
+
+- name: Report independently measured carrier and host readiness
+  hosts: switch_nodes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Inspect host commissioning status without changing traffic
+      ansible.builtin.command:
+        argv: [bash, /opt/olamide/kamailio-staging/deploy/kamailio/commission-check.sh]
+      register: unattended_host_check
+      failed_when: false
+      changed_when: false
+
+    - name: Inspect carrier database path without changing traffic
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-name
+          - docker
+          - --env-file
+          - /opt/olamide/repo/deployment/docker/.env
+          - -f
+          - /opt/olamide/kamailio-staging/deployment/docker/compose.yml
+          - exec
+          - -T
+          - api
+          - node
+          - carrierReadiness.js
+      register: unattended_carrier_check
+      failed_when: false
+      changed_when: false
+
+    - name: Report measured readiness and remaining live acceptance
+      ansible.builtin.debug:
+        msg:
+          host_checks_passed: "{{ unattended_host_check.rc == 0 }}"
+          carrier_database_preflight_passed: "{{ unattended_carrier_check.rc == 0 }}"
+          host_report: "{{ unattended_host_check.stdout_lines }}"
+          carrier_report: "{{ unattended_carrier_check.stdout | default('unavailable') }}"
+          live_acceptance: >-
+            Carrier authentication, two-way media, call expiry, settlement,
+            reconciliation, failover and email delivery require observed tests.
+            No carrier cutover or live prepaid switch was activated by this playbook.
+
+    - name: Fail closed when host or carrier database checks are blocked
+      ansible.builtin.assert:
+        that:
+          - unattended_host_check.rc == 0
+          - unattended_carrier_check.rc == 0
+        fail_msg: Installation completed but production carrier readiness is blocked; inspect the reports above.
