@@ -1837,6 +1837,8 @@ function signedIn(user) {
   }).catch(()=>{});
   sipProfiles.refresh();
   $("#sip-profile-admin").hidden=user.role!=="super_admin";
+  $("#carrier-admin").hidden=user.role!=="super_admin";
+  $("#switch-admin").hidden=user.role!=="super_admin";
   $("#provider-webhook-admin").hidden=user.role!=="super_admin";
   $("#didww-admin").hidden=user.role!=="super_admin";
   $("#carrier-adapter-admin").hidden=user.role!=="super_admin";
