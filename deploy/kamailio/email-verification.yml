@@ -8,6 +8,9 @@
   vars:
     email_env_file: /opt/olamide/repo/deployment/docker/.env
     email_checkout: /opt/olamide/kamailio-staging
+    # Optional: set both values in a root-only local vars file, never with -e on a command line.
+    email_provider_key_file: ''
+    email_sender: ''
   tasks:
     - name: Require the local production Debian host
       ansible.builtin.assert:
@@ -98,6 +101,65 @@
       when: email_new_cipher.stdout is defined
       no_log: true
 
+    - name: Require both provider inputs when provisioning delivery
+      ansible.builtin.assert:
+        that:
+          - (email_provider_key_file | length == 0) == (email_sender | length == 0)
+          - email_provider_key_file | length == 0 or email_provider_key_file is match('^/[^\r\n]+$')
+          - email_sender | length == 0 or email_sender is match('^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$')
+        fail_msg: Provide a verified sender and an absolute root-only Resend key file together.
+
+    - name: Check private provider key file
+      ansible.builtin.stat:
+        path: "{{ email_provider_key_file }}"
+        follow: false
+      register: email_provider_key_stat
+      when: email_provider_key_file | length > 0
+      no_log: true
+
+    - name: Require a root-only regular provider key file
+      ansible.builtin.assert:
+        that:
+          - email_provider_key_stat.stat.isreg | default(false)
+          - email_provider_key_stat.stat.uid | default(-1) == 0
+          - (email_provider_key_stat.stat.mode | default('777')) == '0600'
+          - email_provider_key_stat.stat.size | default(0) < 1024
+        fail_msg: Provider key file must be a small root-owned regular file with mode 0600.
+      when: email_provider_key_file | length > 0
+
+    - name: Read provider key without logging it
+      ansible.builtin.slurp:
+        src: "{{ email_provider_key_file }}"
+      register: email_provider_key_raw
+      when: email_provider_key_file | length > 0
+      no_log: true
+
+    - name: Validate provider key format
+      ansible.builtin.assert:
+        that:
+          - (email_provider_key_raw.content | b64decode | trim) is match('^re_[A-Za-z0-9_]{16,}$')
+        fail_msg: Provider key file does not contain a Resend sending key.
+      when: email_provider_key_file | length > 0
+      no_log: true
+
+    - name: Install provider key in private production environment
+      ansible.builtin.lineinfile:
+        path: "{{ email_env_file }}"
+        regexp: '^RESEND_API_KEY='
+        line: "RESEND_API_KEY={{ email_provider_key_raw.content | b64decode | trim }}"
+        mode: '0600'
+      when: email_provider_key_file | length > 0
+      no_log: true
+
+    - name: Install verified sender in private production environment
+      ansible.builtin.lineinfile:
+        path: "{{ email_env_file }}"
+        regexp: '^RESEND_FROM='
+        line: "RESEND_FROM={{ email_sender }}"
+        mode: '0600'
+      when: email_provider_key_file | length > 0
+      no_log: true
+
     - name: Deploy the GUI, API and migrations after database backup
       ansible.builtin.command:
         argv: [bash, "{{ email_checkout }}/deploy/kamailio/deploy-production-gui.sh"]
@@ -112,9 +174,32 @@
         return_content: false
         timeout: 10
 
+    - name: Verify the running API received the local cryptographic and provider configuration
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-name
+          - docker
+          - --env-file
+          - "{{ email_env_file }}"
+          - -f
+          - "{{ email_checkout }}/deployment/docker/compose.yml"
+          - exec
+          - -T
+          - api
+          - node
+          - -e
+          - >-
+            const e=process.env;
+            process.exit(e.OTP_HMAC_SECRET?.length>=32 && /^[0-9a-f]{64}$/i.test(e.EMAIL_CONFIG_KEY||'')
+              && (!process.argv.includes('provider') || (!!e.RESEND_API_KEY && !!e.RESEND_FROM)) ? 0 : 1);
+          - "{{ 'provider' if email_provider_key_file | length > 0 else 'keys' }}"
+      changed_when: false
+      no_log: true
+
     - name: Report the remaining external-provider step
       ansible.builtin.debug:
         msg: >-
-          Local OTP and encryption keys are ready. A super administrator must
-          save a Resend sending key and a verified sender in Email verification
-          settings, then send a test message and verify a test registration.
+          Local OTP and encryption keys are ready. {{ 'Provider configuration was installed in the API environment.' if email_provider_key_file | length > 0 else 'A super administrator must save a Resend sending key and a verified sender in Email verification settings, or provide a private key file and sender to this playbook.' }}
+          Send a test message and verify a test registration before relying on delivery.

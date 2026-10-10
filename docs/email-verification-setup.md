@@ -20,11 +20,36 @@ required. A health check alone does not prove delivery.
    `/opt/olamide/repo/deployment/docker/.env`, then deploys the GUI, API and
    database migration. It refuses to replace a populated key.
 
-3. Sign in as a super administrator. Open **Account & security → Email
+3. For local unattended provisioning, put the Resend sending key alone in a
+   root-owned file outside the Git checkout and supply its path and verified
+   sender in a root-only Ansible vars file:
+
+   ```bash
+   install -d -m 0700 /root/olamide-email
+   umask 077
+   read -r -s -p 'Resend sending key: ' EMAIL_INPUT; printf '\n'
+   printf '%s\n' "$EMAIL_INPUT" > /root/olamide-email/provider.key
+   unset EMAIL_INPUT
+   chmod 0600 /root/olamide-email/provider.key
+   cat > /root/olamide-email/provision.yml <<'EOF'
+   email_provider_key_file: /root/olamide-email/provider.key
+   email_sender: verify@YOUR_VERIFIED_DOMAIN
+   EOF
+   chmod 0600 /root/olamide-email/provision.yml
+   ansible-playbook -i deploy/kamailio/local-inventory.ini \
+     deploy/kamailio/email-verification.yml -e @/root/olamide-email/provision.yml
+   ```
+
+   Replace the sender with an address on the domain verified in Resend. The
+   playbook copies the provider configuration into the private production
+   environment and checks that the running API received it. Existing
+   GUI-managed settings in MySQL take precedence over environment settings.
+
+   Alternatively, sign in as a super administrator. Open **Account & security → Email
    verification settings**. Enter the verified sender and Resend sending API
    key, save, and send a test to your administrator email. The key is write-only
    in the GUI and encrypted in MySQL with the server-owned key.
-4. Create a test account with an inbox you control, receive the six-digit code,
+4. Send a test message from the GUI, then create a test account with an inbox you control, receive the six-digit code,
    verify the account, and sign in. If delivery fails, check the sender domain
    and API logs without sharing secrets.
 
