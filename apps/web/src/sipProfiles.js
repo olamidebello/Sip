@@ -12,6 +12,7 @@ function choices(root,mode){
     for(const [value,text] of mode==='tenant'?[['true','Allow'],['false','Deny']]:mode==='group'?[['','Inherit'],['true','Allow']]:[['','Inherit'],['true','Allow'],['false','Deny']]){
       const option=document.createElement('option');option.value=value;option.textContent=text;input.append(option);
     }
+    if(mode==='tenant')input.value=action==='view'?'true':'false';
     label.append(input);root.append(label);
   }
 }
@@ -34,7 +35,7 @@ export function setupSipProfiles({get,request}){
     if(permissions.edit){const edit=document.createElement('button');edit.type='button';edit.textContent='Edit';edit.onclick=async()=>{
       form.elements.label.value=profile.label;form.elements.username.value=profile.username;
       form.elements.domain.value=profile.domain;form.elements.wssUrl.value=profile.wssUrl;
-      form.dataset.id=profile.id;form.querySelector('button').textContent='Save changes';form.scrollIntoView({behavior:'smooth'});
+      form.dataset.id=profile.id;form.querySelector('button[type=submit]').textContent='Save changes';form.scrollIntoView({behavior:'smooth'});
     };row.append(edit);}
     if(permissions.delete){const remove=document.createElement('button');remove.type='button';remove.textContent='Delete';remove.onclick=async()=>{
       if(!confirm(`Delete SIP profile ${profile.label}?`)) return;
@@ -53,7 +54,7 @@ export function setupSipProfiles({get,request}){
   form.onsubmit=async event=>{
     event.preventDefault();const data=Object.fromEntries(new FormData(form));
     try{await request(form.dataset.id?`/api/sip-profiles/${form.dataset.id}`:'/api/sip-profiles',data,form.dataset.id?'PUT':'POST');
-      delete form.dataset.id;form.reset();form.querySelector('button').textContent='Save profile';await refresh();status.textContent='SIP profile saved.';
+      delete form.dataset.id;form.reset();form.querySelector('button[type=submit]').textContent='Save profile';await refresh();status.textContent='SIP profile saved.';
     }catch(error){status.textContent=error.message;}
   };
   const tenant=admin.querySelector('#sip-policy-tenant'),group=admin.querySelector('#sip-policy-group'),user=admin.querySelector('#sip-policy-user');

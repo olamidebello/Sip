@@ -3,9 +3,10 @@ export function setupClusterAdmin({get,request}){
   const status=$('cluster-status'),capacityStatus=$('cluster-capacity-status');
   let editable=false;
   let nodeConfigs=new Map();
+  let configuredSipDomain='';
   function selectNode(){
     const form=$('kamailio-config-form'),row=nodeConfigs.get(form.elements.nodeId.value);
-    form.elements.sipDomain.value=row?.sip_domain||'';
+    form.elements.sipDomain.value=row?.sip_domain||configuredSipDomain;
     form.elements.maxConcurrentCalls.value=row?.max_concurrent_calls||100;
     $('kamailio-config-preview').textContent=row?
       'Saved revision '+row.revision+' · SIP '+row.listen_ip+':'+row.listen_port+
@@ -17,8 +18,9 @@ export function setupClusterAdmin({get,request}){
     $('kamailio-config-panel').hidden=!editable;
     if(!editable)return;
     try{
-      const [data,config]=await Promise.all([get('/api/admin/servers/kamailio'),
-        get('/api/admin/servers/kamailio-config')]);
+      const [data,config,switchState]=await Promise.all([get('/api/admin/servers/kamailio'),
+        get('/api/admin/servers/kamailio-config'),get('/api/admin/switch')]);
+      configuredSipDomain=switchState.config?.domain||'';
       nodeConfigs=new Map(config.configs.map(row=>[row.node_id,row]));
       const selector=$('kamailio-config-form').elements.nodeId,old=selector.value;
       selector.replaceChildren();

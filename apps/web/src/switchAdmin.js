@@ -33,7 +33,8 @@ export function setupSwitchAdmin(){
       const [switchState,operator,accounts]=await Promise.all([
         api('/api/admin/switch'),api('/api/admin/operator'),api('/api/admin/switch/accounts')]);
       const cfg=switchState.config;
-      form.elements.domain.value=cfg?.domain||'';
+      const accountDomains=[...new Set(accounts.accounts.map(account=>account.domain).filter(Boolean))];
+      form.elements.domain.value=cfg?.domain||(accountDomains.length===1?accountDomains[0]:'');
       form.elements.enabled.checked=!!cfg?.enabled;
       const tariff=form.elements.tariffId,selected=cfg?.tariff_id;
       tariff.replaceChildren();

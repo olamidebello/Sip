@@ -221,7 +221,8 @@ root.innerHTML = `
         <label>Authorization username <input name="username" maxlength="128" required></label>
         <label>SIP domain <input name="domain" maxlength="255" required></label>
         <label>Secure WebSocket URL <input name="wssUrl" type="url" placeholder="wss://sip.example.com:7443" required></label>
-        <button>Save profile</button></form><ul id="sip-profile-list"></ul><p id="sip-profile-status" role="status"></p>
+        <button type="button" id="sip-profile-use-defaults">Use my SIP account</button>
+        <button type="submit">Save profile</button></form><ul id="sip-profile-list"></ul><p id="sip-profile-status" role="status"></p>
     </section>
   </section>
   <section id="dashboard" hidden>
@@ -475,7 +476,8 @@ root.innerHTML = `
     <h2>Administrator</h2>
     <p id="admin-overview"></p>
     <form id="server-config">
-      <label>Default SIP secure WebSocket URL <input name="sipWssUrl" type="url" placeholder="wss://sip.example.com"></label>
+      <label>Default SIP secure WebSocket URL <input name="sipWssUrl" type="url" placeholder="wss://sip.dobhrap.com:7443"></label>
+      <p>Enter this URL only after secure WebSocket service is enabled and reachable. UDP SIP on port 5060 does not provide WSS.</p>
       <button>Save server URL</button>
     </form>
     <p id="admin-status" role="status"></p>
@@ -690,7 +692,7 @@ root.innerHTML = `
       <h3>Kamailio tenant SIP settings</h3>
       <p>Manage tenant SIP domains, authenticated accounts, tariffs and carrier route keys used by the Kamailio adapter. Saving settings does not activate a live SIP host.</p>
       <form id="switch-config">
-        <label>SIP domain <input name="domain" placeholder="sip.example.com" required></label>
+        <label>SIP domain <input name="domain" placeholder="sip.dobhrap.com" required></label>
         <label>Outbound tariff <select name="tariffId"></select></label>
         <label><input name="enabled" type="checkbox"> Enable tenant SIP lookups</label>
         <button>Save switch settings</button>
@@ -894,7 +896,7 @@ root.innerHTML = `
         <p>Save loopback SIP adapter settings for an enabled switch host. These settings are staged; saving does not deploy them.</p>
         <form id="kamailio-config-form">
           <label>Switch node <select name="nodeId" required></select></label>
-          <label>SIP domain <input name="sipDomain" maxlength="255" placeholder="sip.example.com" required></label>
+          <label>SIP domain <input name="sipDomain" maxlength="255" placeholder="sip.dobhrap.com" required></label>
           <label>Planned concurrent calls <input name="maxConcurrentCalls" type="number" min="1" max="5000" value="100" required></label>
           <button type="submit">Save staged configuration</button>
         </form>
@@ -1816,6 +1818,11 @@ function signedIn(user) {
   if(user.authSource==="local") refreshPasskeys();
   $("#sip-account-panel").hidden=false;
   refreshSipAccount();
+  apiGet('/api/config').then(({sipWssUrl})=>{
+    currentSipWssUrl=sipWssUrl||'';
+    $('#server-config').elements.sipWssUrl.value=currentSipWssUrl;
+    applySipDefaults();
+  }).catch(()=>{});
   sipProfiles.refresh();
   $("#sip-profile-admin").hidden=user.role!=="super_admin";
   $("#provider-webhook-admin").hidden=user.role!=="super_admin";
@@ -2145,17 +2152,37 @@ $("#send-message").addEventListener("submit", async (event) => {
     $("#chat-status").textContent = "Message sent";
   } catch (error) { $("#chat-status").textContent = error.message; }
 });
+let currentSipAccount=null;
+let currentSipWssUrl='';
+function applySipDefaults(overwrite=false){
+  const profile=$('#sip-profile-create'),dialer=$('#connect');
+  if(currentSipAccount && !profile.dataset.id){
+    for(const [name,value] of Object.entries({label:'My SIP account',username:currentSipAccount.username,domain:currentSipAccount.domain})){
+      if(overwrite||!profile.elements[name].value)profile.elements[name].value=value;
+    }
+    if(overwrite||!dialer.elements.username.value)dialer.elements.username.value=currentSipAccount.username;
+    if(overwrite||!dialer.elements.aor.value)dialer.elements.aor.value=`sip:${currentSipAccount.username}@${currentSipAccount.domain}`;
+  }
+  if(currentSipWssUrl){
+    if(overwrite||!profile.elements.wssUrl.value)profile.elements.wssUrl.value=currentSipWssUrl;
+    if(overwrite||!dialer.elements.server.value)dialer.elements.server.value=currentSipWssUrl;
+  }
+}
+$('#sip-profile-use-defaults').onclick=()=>applySipDefaults(true);
 $("#server-config").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
     const result = await accountRequest("/api/admin/config",
       Object.fromEntries(new FormData(event.currentTarget)));
+    currentSipWssUrl=result.sipWssUrl;
     $("#connect [name=server]").value = result.sipWssUrl;
+    applySipDefaults();
     $("#admin-status").textContent = "Server URL saved";
   } catch (error) { $("#admin-status").textContent = error.message; }
 });
 apiGet("/api/config").then(({ sipWssUrl }) => {
-  if (sipWssUrl) $("#connect [name=server]").value = sipWssUrl;
+  currentSipWssUrl=sipWssUrl||'';
+  if (sipWssUrl) {$("#server-config").elements.sipWssUrl.value=sipWssUrl;applySipDefaults();}
 }).catch(() => {});
 $("#signup").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -2195,6 +2222,8 @@ async function refreshPasskeys(){
 }
 async function refreshSipAccount(){
   try {const {account,note}=await apiGet('/api/sip-account');
+    currentSipAccount=account;
+    applySipDefaults();
     $("#sip-account-status").textContent=account?`${account.username}@${account.domain}: ${account.status}. ${note}`:'No SIP account record. Contact support.';
     $("#sip-credentials").hidden=!account||account.status!=='active';
   }catch(error){$("#sip-account-status").textContent=error.message;}
@@ -2482,6 +2511,7 @@ $("#logout").onclick = async () => {
     for(const id of ["account-login-group","account-signup-group","account-verify-group","account-directory-group"]) $("#"+id).hidden=false;
     $("#passkey-settings").hidden=true;
     $("#sip-account-panel").hidden=true;$("#sip-credentials-result").textContent='';
+    currentSipAccount=null;currentSipWssUrl='';$('#sip-profile-create').reset();$('#connect').reset();$('#server-config').reset();
     $("#dialplan-marketplace").hidden=true;$("#dialplan-offers").replaceChildren();$("#dialplan-orders").replaceChildren();
     $("#account-password-group").hidden=true;
     activeRole=null;workspaceQuick.clear();resetWorkspace();$("#help-agent").hidden=true;$("#help-admin").hidden=true;$("#signin-role-help").textContent="Your assigned role controls which menus appear after sign-in.";
