@@ -1,0 +1,46 @@
+---
+- name: Stop the carrier-blocked SIP core without deleting private configuration
+  hosts: switch_nodes
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Require local Debian 12 execution
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version == '12'
+          - ansible_connection | default('ssh') == 'local'
+
+    - name: Read installed configuration and private charging flags
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - /etc/kamailio/kamailio.cfg
+        - /opt/olamide/repo/deployment/docker/.env
+      register: core_stop_inputs
+      no_log: true
+
+    - name: Refuse to stop a carrier or prepaid cutover through the core control
+      ansible.builtin.assert:
+        that:
+          - "'Carrier route not commissioned' in (core_stop_inputs.results[0].content | b64decode)"
+          - "'api/switch/prepaid' not in (core_stop_inputs.results[0].content | b64decode)"
+          - "(core_stop_inputs.results[1].content | b64decode) is not search('(?m)^LIVE_PREPAID_ENABLED=true$')"
+        fail_msg: Production carrier or prepaid traffic requires a separate drain and cutover procedure.
+      no_log: true
+
+    - name: Stop Kamailio before RTPengine
+      ansible.builtin.systemd_service:
+        name: kamailio
+        enabled: false
+        state: stopped
+
+    - name: Stop RTPengine
+      ansible.builtin.systemd_service:
+        name: rtpengine-daemon
+        enabled: false
+        state: stopped
+
+    - name: Report limited scope
+      ansible.builtin.debug:
+        msg: Carrier-blocked SIP services stopped; private configuration and GUI remain installed.

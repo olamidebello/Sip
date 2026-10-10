@@ -14,7 +14,7 @@ import urllib.request
 import urllib.error
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-ALLOWED = {'health', 'install', 'upgrade', 'firewall', 'kamailio_test', 'sip_packages', 'sip_core', 'sip_audit'}
+ALLOWED = {'health', 'install', 'upgrade', 'firewall', 'kamailio_test', 'sip_packages', 'sip_core', 'sip_core_stop', 'sip_audit'}
 
 
 def secrets_file(path):
@@ -92,7 +92,9 @@ def deploy_sip(node):
         if address.version != 4 or not address.is_global:
             raise RuntimeError('Core activation requires a verified public IPv4 node address')
     playbook = ('install-requirements.yml' if action == 'sip_packages'
-                else 'monitoring.yml' if action == 'sip_audit' else 'activate-core.yml')
+                else 'monitoring.yml' if action == 'sip_audit'
+                else 'deactivate-core.yml' if action == 'sip_core_stop'
+                else 'activate-core.yml')
     command = ['sudo', '-n', 'ansible-playbook', '-i',
                '/opt/olamide/kamailio-staging/deploy/kamailio/local-inventory.ini',
                '/opt/olamide/kamailio-staging/deploy/kamailio/' + playbook]
@@ -189,13 +191,16 @@ def run_once(base, token, runner_id, inventory, vault_password):
             request(base, token, 'kamailio-check', probe_kamailio(claimed))
             if smoke.returncode or 'Loopback SIP:' not in smoke.stdout:
                 raise RuntimeError('Kamailio loopback SIP test failed; inspect private runner journal')
-        elif claimed['action'] in {'sip_packages', 'sip_core', 'sip_audit'}:
+        elif claimed['action'] in {'sip_packages', 'sip_core', 'sip_core_stop', 'sip_audit'}:
             deploy_sip(claimed)
             check = probe_kamailio(claimed)
             request(base, token, 'kamailio-check', check)
             if claimed['action'] == 'sip_core' and (check['signalingStatus'] != 'active' or
                                                   check['mediaStatus'] != 'active'):
                 raise RuntimeError('SIP core activation did not leave both services active')
+            if claimed['action'] == 'sip_core_stop' and (check['signalingStatus'] != 'inactive' or
+                                                        check['mediaStatus'] != 'inactive'):
+                raise RuntimeError('SIP core stop did not leave both services inactive')
         elif claimed['action'] == 'health':
             check = probe(claimed)
             request(base, token, 'check', check)
@@ -214,6 +219,7 @@ def run_once(base, token, runner_id, inventory, vault_password):
                   'SIP prerequisites checked; no traffic change' if claimed['action'] == 'sip_packages' else
                   'SIP host audit recorded; carrier call acceptance remains separate' if claimed['action'] == 'sip_audit' else
                   'SIP core active; carrier and prepaid remain uncommissioned' if claimed['action'] == 'sip_core' else
+                  'Carrier-blocked SIP core stopped; configurations retained' if claimed['action'] == 'sip_core_stop' else
                   'Approved ' + claimed['action'] + ' job completed')
     except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError,
             RuntimeError, KeyError, IndexError, ValueError, urllib.error.URLError) as error:

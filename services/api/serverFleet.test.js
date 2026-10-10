@@ -50,6 +50,15 @@ test('runner Kamailio report validates service states and bound switch node',asy
   assert.equal(statements[1][1][2],'inactive');
 });
 
+test('only super admins can queue SIP core stop',async()=>{
+  const path='/api/admin/servers/11111111-1111-4111-8111-111111111111/jobs';
+  const pool={query:async()=>({rows:[],rowCount:0}),connect:async()=>{throw Error('No job should be written');}};
+  const result=await handleServerFleetAdmin({req:{method:'POST'},res:{},path,
+    user:{id:'22222222-2222-4222-8222-222222222222',tenant_id:'33333333-3333-4333-8333-333333333333',role:'admin'},
+    pool,send:(_res,status,body)=>({status,body}),readJson:async()=>({action:'sip_core_stop'})});
+  assert.equal(result.status,403);
+});
+
 test('Kamailio node configuration rejects unauthorized and invalid changes before writing',async()=>{
   const path='/api/admin/servers/11111111-1111-4111-8111-111111111111/kamailio-config';
   const send=(_res,status,body)=>({status,body});

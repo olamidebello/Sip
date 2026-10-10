@@ -835,6 +835,14 @@ state, and displays the latest Kamailio/RTPengine reports. The dashboard shows
 prepaid reservation counts and posted prepaid journals from MySQL. To run the
 read-only host audit directly:
 
+After a recent host audit, super admins can queue **Activate reviewed SIP core**
+or **Stop carrier-blocked SIP core** for a registered switch. The stop action
+uses `deactivate-core.yml`: it refuses a config with carrier or prepaid hooks,
+then stops Kamailio before RTPengine while retaining the private files. Jobs,
+service reports and history are stored in the fleet database. Links from the
+fleet page open SIP accounts, configuration revisions, carrier profiles and
+prepaid controls; saving those settings does not commission carrier traffic.
+
 ```bash
 ansible-playbook -i /opt/olamide/kamailio-staging/deploy/kamailio/local-inventory.ini /opt/olamide/kamailio-staging/deploy/kamailio/monitoring.yml
 ```
