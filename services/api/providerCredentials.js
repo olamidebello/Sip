@@ -1,6 +1,7 @@
 import {randomBytes,createCipheriv,createDecipheriv} from 'node:crypto';
 
-const fields={flowroute:['accessKey','secretKey'],didww:['apiKey','environment']};
+const fields={flowroute:['accessKey','secretKey','sipUsername','sipPassword'],didww:['apiKey','environment']};
+const required={flowroute:['accessKey','secretKey'],didww:['apiKey','environment']};
 function masterKey(){
   const raw=process.env.PROVIDER_CREDENTIAL_KEY;
   return /^[a-f0-9]{64}$/i.test(raw||'')?Buffer.from(raw,'hex'):null;
@@ -89,10 +90,14 @@ export async function handleProviderCredentials({req,res,path,user,pool,send,rea
   const value=await readJson(req);
   if(!Number.isSafeInteger(value.expectedRevision)||value.expectedRevision<0||
     Object.keys(value).some(name=>name!=='expectedRevision'&&!fields[provider].includes(name))||
-    fields[provider].some(name=>typeof value[name]!=='string'||!value[name].trim()||value[name].length>256)||
+    required[provider].some(name=>typeof value[name]!=='string'||!value[name].trim()||value[name].length>256)||
+    (provider==='flowroute'&&((value.sipUsername==null)!==(value.sipPassword==null)||
+      (value.sipUsername!=null&&(typeof value.sipUsername!=='string'||typeof value.sipPassword!=='string'||
+      !value.sipUsername.trim()||!value.sipPassword.trim()||
+      value.sipUsername.length>256||value.sipPassword.length>256))))||
     (provider==='didww'&&!['sandbox','production'].includes(value.environment)))
     return send(res,400,{error:'Complete provider credentials and current revision required'});
-  const credentials=Object.fromEntries(fields[provider].map(name=>[name,value[name].trim()]));
+  const credentials=Object.fromEntries(fields[provider].filter(name=>value[name]!=null).map(name=>[name,value[name].trim()]));
   const db=await pool.connect();
   try{
     await db.query('START TRANSACTION');

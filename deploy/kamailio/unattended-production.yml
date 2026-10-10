@@ -29,6 +29,7 @@
     - name: Inspect SIP encryption key without displaying it
       ansible.builtin.set_fact:
         unattended_sip_keys: "{{ (unattended_private_env.content | b64decode) | regex_findall('(?m)^SIP_CREDENTIAL_KEY=([^\\r\\n]*)$') }}"
+        unattended_provider_keys: "{{ (unattended_private_env.content | b64decode) | regex_findall('(?m)^PROVIDER_CREDENTIAL_KEY=([^\\r\\n]*)$') }}"
       no_log: true
 
     - name: Reject duplicate or malformed existing SIP keys
@@ -36,6 +37,8 @@
         that:
           - unattended_sip_keys | length <= 1
           - unattended_sip_keys | length == 0 or unattended_sip_keys[0] | length == 0 or unattended_sip_keys[0] is match('^[a-fA-F0-9]{64}$')
+          - unattended_provider_keys | length <= 1
+          - unattended_provider_keys | length == 0 or unattended_provider_keys[0] | length == 0 or unattended_provider_keys[0] is match('^[a-fA-F0-9]{64}$')
         fail_msg: Existing SIP key is malformed or duplicated; credentials were not rotated.
       no_log: true
 
@@ -55,6 +58,24 @@
         group: root
         mode: '0600'
       when: unattended_new_sip_key.stdout is defined
+      no_log: true
+
+    - name: Generate provider credential encryption key when missing
+      ansible.builtin.command: openssl rand -hex 32
+      register: unattended_new_provider_key
+      when: unattended_provider_keys | length == 0 or unattended_provider_keys[0] | length == 0
+      changed_when: false
+      no_log: true
+
+    - name: Store new provider key only in the private environment
+      ansible.builtin.lineinfile:
+        path: "{{ unattended_env }}"
+        regexp: '^PROVIDER_CREDENTIAL_KEY='
+        line: "PROVIDER_CREDENTIAL_KEY={{ unattended_new_provider_key.stdout }}"
+        owner: root
+        group: root
+        mode: '0600'
+      when: unattended_new_provider_key.stdout is defined
       no_log: true
 
     - name: Back up database and deploy production API and GUI

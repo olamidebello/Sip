@@ -20,7 +20,7 @@ import { migratePayments } from './payments.js';
 import { migrateCluster } from './cluster.js';
 import { migrateProviderWebhooks } from './providerWebhooks.js';
 import { migrateDidwwIntegration } from './didwwIntegration.js';
-import { migrateCarrierProviders } from './carrierProviders.js';
+import { migrateCarrierProviders, seedFlowrouteDrafts } from './carrierProviders.js';
 import { migrateProviderCredentials } from './providerCredentials.js';
 import { migrateAdapterRegistry } from './adapterRegistry.js';
 import { migrateOperatorControl } from './operatorControl.js';
@@ -87,6 +87,7 @@ export async function migrate(pool) {
       ['operator_control', () => migrateOperatorControl(pool)],
       ['freeswitch_bridge', () => migrateSwitch(pool)],
       ['kamailio_bridge', () => migrateKamailio(pool)],
+      ['flowroute_defaults', () => seedFlowrouteDrafts(pool)],
       ['server_fleet', () => migrateServerFleet(pool)],
       ['fleet_network', () => migrateFleetNetwork(pool)],
       ['fleet_firewall', () => migrateFleetFirewall(pool)],

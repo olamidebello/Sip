@@ -37,6 +37,24 @@ export async function migrateCarrierProviders(pool){
   ) ENGINE=InnoDB`);
 }
 
+// Defaults are inert. An administrator must supply their own Flowroute account
+// credentials, verify the assigned PoP and explicitly commission live routing.
+export async function seedFlowrouteDrafts(pool){
+  await pool.query(`INSERT IGNORE INTO pbx_trunks(id,tenant_id,name,host,port,transport,priority,enabled)
+    SELECT UUID(),t.id,'Flowroute default (review PoP)','us-east-va.sip.flowroute.com',5060,'udp',100,FALSE
+    FROM tenants t WHERE NOT EXISTS (
+      SELECT 1 FROM carrier_provider_profiles p WHERE p.tenant_id=t.id AND p.provider='flowroute')
+      AND NOT EXISTS (SELECT 1 FROM pbx_trunks tr WHERE tr.tenant_id=t.id AND tr.name='Flowroute default (review PoP)')`);
+  await pool.query(`INSERT IGNORE INTO carrier_provider_profiles
+    (tenant_id,provider,trunk_id,max_concurrent_calls,routing_mode,status,updated_by)
+    SELECT tr.tenant_id,'flowroute',tr.id,10,'manual','draft',
+      (SELECT id FROM users WHERE role='super_admin' ORDER BY id LIMIT 1)
+    FROM pbx_trunks tr WHERE tr.name='Flowroute default (review PoP)'
+      AND EXISTS (SELECT 1 FROM users WHERE role='super_admin')`);
+  await pool.query(`INSERT IGNORE INTO switch_gateways(tenant_id,provider,gateway_name,enabled)
+    SELECT t.id,'flowroute',CONCAT('flowroute-',t.id),FALSE FROM tenants t`);
+}
+
 export async function carrierActive(pool,tenant,provider){
   const found=await pool.query("SELECT 1 FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider=$2 AND status='active' AND routing_mode<>'disabled'",[tenant,provider]);
   return !!found.rowCount;
@@ -133,6 +151,7 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
     if(!found.rows[0].enabled)return send(res,409,{error:'Carrier disabled'});
   }
   if(!action && req.method==='PUT'){
+    if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
     const {trunkId,maxConcurrentCalls,routingMode}=await readJson(req);
     if(typeof trunkId!=='string'||!/^[0-9a-f-]{36}$/i.test(trunkId)||
       !Number.isSafeInteger(maxConcurrentCalls)||maxConcurrentCalls<1||maxConcurrentCalls>100000||
@@ -151,6 +170,7 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
     return send(res,200,{provider,status:'draft'});
   }
   if(action==='verify' && req.method==='POST'){
+    if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
     if(!await configured(provider)) return send(res,409,{error:providers.includes(provider)?'Provider credentials missing from private server configuration':'HTTPS provisioning adapter required'});
     if(!providers.includes(provider)){
       if(!adapterReady())return send(res,409,{error:'HTTPS provisioning adapter required'});
@@ -170,6 +190,7 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
     }catch(error){return send(res,502,{error:'Provider inventory check failed'});}
   }
   if(action==='activate' && req.method==='POST'){
+    if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
     if(!await configured(provider)||!adapterReady())
       return send(res,409,{error:'Carrier credentials and HTTPS provisioning adapter required'});
     const found=await pool.query("SELECT trunk_id,max_concurrent_calls,routing_mode,status FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider=$2",[user.tenant_id,provider]);
@@ -191,6 +212,7 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
     }
   }
   if(action==='deactivate' && req.method==='POST'){
+    if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
     if(!adapterReady())return send(res,409,{error:'HTTPS provisioning adapter required'});
     const found=await pool.query('SELECT trunk_id,status FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider=$2',
       [user.tenant_id,provider]);

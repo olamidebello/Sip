@@ -638,11 +638,13 @@ root.innerHTML = `
       <p id="carrier-catalog-status" role="status"></p>
       <section id="provider-credentials-admin" hidden>
         <h4>Provider API credentials</h4>
-        <p>Super administrators can save tenant credentials. Secret values are never displayed again. Provider verification calls the inventory API; SIP trunk activation is separate.</p>
+        <p>Enter your Flowroute account access key and secret key here. Secret values are never displayed again. Confirm your assigned SIP PoP and any trunk authentication details with Flowroute before enabling calls. Inventory verification does not activate a SIP trunk.</p>
         <form id="provider-credentials-form" autocomplete="off">
           <label>Provider <select name="provider"><option value="flowroute">Flowroute</option><option value="didww">DIDWW</option></select></label>
           <label id="provider-access-label">Flowroute access key <input name="accessKey" maxlength="256"></label>
           <label id="provider-secret-label">Flowroute secret key <input name="secretKey" type="password" maxlength="256"></label>
+          <label id="provider-sip-user-label">Flowroute SIP username (if assigned) <input name="sipUsername" autocomplete="off" maxlength="256"></label>
+          <label id="provider-sip-pass-label">Flowroute SIP password (if assigned) <input name="sipPassword" type="password" autocomplete="new-password" maxlength="256"></label>
           <label id="provider-api-label" hidden>DIDWW API key <input name="apiKey" type="password" maxlength="256"></label>
           <label id="provider-env-label" hidden>DIDWW environment <select name="environment"><option value="sandbox">Sandbox</option><option value="production">Production</option></select></label>
           <button type="submit">Save credentials</button>
@@ -650,7 +652,8 @@ root.innerHTML = `
         <button id="provider-credentials-refresh" type="button">Refresh credential status</button>
         <p id="provider-credentials-status" role="status"></p><ul id="provider-credentials-list"></ul>
       </section>
-      <form id="flowroute-auto-form" hidden><h4>Flowroute PoP setup</h4>
+      <form id="flowroute-auto-form" hidden><h4>Flowroute trunk settings</h4>
+        <p>A disabled Flowroute draft is preconfigured for each tenant. Review the PoP assigned to your account, then enter your Flowroute API profile above. Save changes here only if your assigned PoP differs from the draft.</p>
         <label>Point of presence <select name="pop"><option value="US-East-VA">US East, Virginia</option><option value="US-West-OR">US West, Oregon</option></select></label>
         <label>Maximum concurrent calls <input name="maxConcurrentCalls" type="number" min="1" max="100000" value="10" required></label>
         <label>Routing intent <select name="routingMode"><option value="manual">Manual</option><option value="least_cost">Least cost</option><option value="priority">Priority</option></select></label>
@@ -1832,6 +1835,7 @@ function signedIn(user) {
   $("#fleet-access-panel").hidden=user.role!=="super_admin";
   $("#fleet-operations-panel").hidden=user.role!=="super_admin";
   $("#flowroute-auto-form").hidden=user.role!=="super_admin";
+  $("#carrier-profile-form").hidden=user.role!=="super_admin";
   $("#carrier-catalog-form").hidden=user.role!=="super_admin";
   $("#provider-credentials-admin").hidden=user.role!=="super_admin";
   if(user.role==="super_admin"){providerWebhooks.refresh();providerCredentialsAdmin.refresh();didwwAdmin.refresh();adapterAdmin.refresh();serverFleet.refresh();fleetNetwork.refresh();fleetGrants.refresh();fleetFirewall.refresh();operationsAdmin.refresh();}
@@ -2264,6 +2268,10 @@ async function refreshCarriers(){
   for(const trunk of trunks.trunks){const option=document.createElement('option');option.value=trunk.id;
     option.textContent=`${trunk.name} (${trunk.host})`;selection.append(option);}
   if(trunks.trunks.some(trunk=>trunk.id===priorTrunk)) selection.value=priorTrunk;
+  else {
+    const draft=data.providers.find(profile=>profile.provider===providerSelect.value);
+    if(draft?.trunk_id&&trunks.trunks.some(trunk=>trunk.id===draft.trunk_id))selection.value=draft.trunk_id;
+  }
   const list=$("#carrier-profiles");list.replaceChildren();
   for(const profile of data.providers){const card=document.createElement('article');
     const title=document.createElement('h4');title.textContent=`${profile.displayName}: ${profile.enabled?profile.status:'disabled'}`;
@@ -2271,14 +2279,14 @@ async function refreshCarriers(){
     const trunk=trunks.trunks.find(item=>item.id===profile.trunk_id);
     const target=document.createElement('p');target.textContent=trunk?`Trunk: ${trunk.name} (${trunk.host}:${trunk.port}/${trunk.transport}) · ${trunk.enabled?'enabled':'disabled'}`:'No trunk selected';
     const verify=document.createElement('button');verify.type='button';verify.textContent='Verify inventory API';
-    verify.disabled=!profile.enabled||(!['flowroute','didww'].includes(profile.provider)?!data.adapterConfigured:!profile.credentialsConfigured);
+    verify.disabled=activeRole!=='super_admin'||!profile.enabled||(!['flowroute','didww'].includes(profile.provider)?!data.adapterConfigured:!profile.credentialsConfigured);
     if(!['flowroute','didww'].includes(profile.provider))verify.textContent='Verify carrier adapter';
     verify.onclick=async()=>{try{const result=await accountRequest(`/api/admin/carriers/${profile.provider}/verify`,{});
       $("#carrier-admin-status").textContent=result.adapterVerified?`${result.provider}: carrier adapter verified. No SIP route activated.`:
         `${result.provider}: credentials valid; ${result.sampleCount} inventory results. No SIP route activated.`;
       }catch(error){$("#carrier-admin-status").textContent=error.message;}};
     const activate=document.createElement('button');activate.type='button';activate.textContent='Provision with switch adapter';
-    activate.disabled=!profile.trunk_id||!data.adapterConfigured||
+    activate.disabled=activeRole!=='super_admin'||!profile.trunk_id||!data.adapterConfigured||
       (['flowroute','didww'].includes(profile.provider)&&!profile.credentialsConfigured);
     if(!['flowroute','didww'].includes(profile.provider))activate.disabled ||= !profile.adapterVerified;
     activate.disabled ||= !profile.enabled;
@@ -2289,7 +2297,7 @@ async function refreshCarriers(){
     if(profile.status==='active'){
       const deactivate=document.createElement('button');deactivate.type='button';
       deactivate.textContent='Deactivate with switch adapter';
-      deactivate.disabled=!data.adapterConfigured;
+      deactivate.disabled=activeRole!=='super_admin'||!data.adapterConfigured;
       deactivate.onclick=async()=>{deactivate.disabled=true;try{
         await accountRequest(`/api/admin/carriers/${profile.provider}/deactivate`,{});
         await refreshCarriers();$("#carrier-admin-status").textContent=`${profile.displayName} deactivated by the switch adapter.`;

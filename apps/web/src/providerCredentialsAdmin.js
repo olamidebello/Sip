@@ -9,6 +9,8 @@ export function setupProviderCredentialsAdmin({get,request}){
     const didww=form.elements.provider.value==='didww';
     root.querySelector('#provider-access-label').hidden=didww;
     root.querySelector('#provider-secret-label').hidden=didww;
+    root.querySelector('#provider-sip-user-label').hidden=didww;
+    root.querySelector('#provider-sip-pass-label').hidden=didww;
     root.querySelector('#provider-api-label').hidden=!didww;
     root.querySelector('#provider-env-label').hidden=!didww;
     form.elements.accessKey.required=!didww;
@@ -29,7 +31,7 @@ export function setupProviderCredentialsAdmin({get,request}){
         if(row){
           const edit=document.createElement('button');edit.type='button';edit.textContent='Edit / rotate';
           edit.onclick=()=>{form.elements.provider.value=provider;form.elements.accessKey.value='';
-            form.elements.secretKey.value='';form.elements.apiKey.value='';choose();
+            form.elements.secretKey.value='';form.elements.sipUsername.value='';form.elements.sipPassword.value='';form.elements.apiKey.value='';choose();
             status.textContent='Enter all new '+provider+' credentials and save to rotate. Existing secrets remain hidden.';
             form.scrollIntoView({behavior:'smooth'});};
           li.append(edit);
@@ -55,15 +57,17 @@ export function setupProviderCredentialsAdmin({get,request}){
     }catch(error){status.textContent=error.message;}
   }
   form.elements.provider.onchange=()=>{form.elements.accessKey.value='';form.elements.secretKey.value='';
-    form.elements.apiKey.value='';choose();};
+    form.elements.sipUsername.value='';form.elements.sipPassword.value='';form.elements.apiKey.value='';choose();};
   form.onsubmit=async event=>{
     event.preventDefault();const provider=form.elements.provider.value,button=form.querySelector('button');
     const body=provider==='didww'?{apiKey:form.elements.apiKey.value,environment:form.elements.environment.value}:
-      {accessKey:form.elements.accessKey.value,secretKey:form.elements.secretKey.value};
+      {accessKey:form.elements.accessKey.value,secretKey:form.elements.secretKey.value,
+        ...(form.elements.sipUsername.value||form.elements.sipPassword.value?{
+          sipUsername:form.elements.sipUsername.value,sipPassword:form.elements.sipPassword.value}:{})};
     body.expectedRevision=revisions.get(provider)||0;button.disabled=true;
     try{
       const result=await request('/api/admin/carriers/credentials/'+provider,body,'PUT');
-      form.elements.accessKey.value='';form.elements.secretKey.value='';form.elements.apiKey.value='';
+      form.elements.accessKey.value='';form.elements.secretKey.value='';form.elements.sipUsername.value='';form.elements.sipPassword.value='';form.elements.apiKey.value='';
       await refresh();status.textContent=provider+' saved at revision '+result.revision+
         '. Use Verify in Carrier provider commissioning to check inventory access.';
     }catch(error){status.textContent=error.message;}

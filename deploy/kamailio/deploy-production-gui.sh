@@ -30,6 +30,19 @@ if ! grep -q '^AI_CONFIG_KEY=' "$env_file"; then
   printf 'AI_CONFIG_KEY=%s\n' "$(openssl rand -hex 32)" >> "$env_file"
   chmod 0600 "$env_file"
 fi
+provider_keys=$(grep -c '^PROVIDER_CREDENTIAL_KEY=' "$env_file" || true)
+[[ $provider_keys -le 1 ]] || { echo 'Duplicate provider encryption keys; deployment stopped' >&2; exit 2; }
+if [[ $provider_keys == 0 ]]; then
+  umask 077
+  printf 'PROVIDER_CREDENTIAL_KEY=%s\n' "$(openssl rand -hex 32)" >> "$env_file"
+  chmod 0600 "$env_file"
+else
+  provider_key=$(sed -n 's/^PROVIDER_CREDENTIAL_KEY=//p' "$env_file")
+  [[ $provider_key =~ ^[[:xdigit:]]{64}$ ]] || {
+    echo 'Invalid provider encryption key; deployment stopped without rotation' >&2; exit 2;
+  }
+  unset provider_key
+fi
 compose() { docker compose --project-name "$project" --env-file "$env_file" -f "$staging/deployment/docker/compose.yml" "$@"; }
 old_compose() { docker compose --project-name "$project" --env-file "$env_file" -f "$production/deployment/docker/compose.yml" "$@"; }
 compose config --quiet
