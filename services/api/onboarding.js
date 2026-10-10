@@ -4,10 +4,11 @@ import { randomUUID } from 'node:crypto';
 import { defaultTenantId } from './tenancy.js';
 import { createSipAccount, provisionSipAccount } from './sipMarketplace.js';
 import { registrationAllowed } from './operationsPolicy.js';
+import {verificationSender,deliverEmail} from './emailConfiguration.js';
 
 const codeHash = (id, code, secret) => createHash('sha256').update(`${id}:${code}:${secret}`).digest('hex');
 const emailAddress = value => typeof value === 'string' && value.length <= 254 ? value.trim().toLowerCase() : '';
-const configured = () => !!(process.env.RESEND_API_KEY && process.env.RESEND_FROM && process.env.OTP_HMAC_SECRET?.length >= 32);
+const otpReady = () => !!(process.env.OTP_HMAC_SECRET?.length >= 32);
 
 export async function migrateOnboarding(pool) {
   await pool.query(`CREATE TABLE IF NOT EXISTS user_profiles (
@@ -40,23 +41,15 @@ export async function migrateOnboarding(pool) {
   ) ENGINE=InnoDB`);
 }
 
-async function sendCode(email, code, origin) {
-  const url = process.env.RESEND_API_URL || 'https://api.resend.com/emails';
-  if (url !== 'https://api.resend.com/emails' &&
-      !(origin.startsWith('http://127.0.0.1:') && /^http:\/\/127\.0\.0\.1:\d+\/emails$/.test(url)))
-    throw new Error('Invalid email delivery URL');
-  const response = await fetch(url, {
-    method:'POST', signal:AbortSignal.timeout(10000),
-    headers:{Authorization:`Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type':'application/json'},
-    body:JSON.stringify({from:process.env.RESEND_FROM,to:[email],subject:'Verify your Olamide account',
-      text:`Your Olamide verification code is ${code}. It expires in 10 minutes. If you did not register, ignore this message.`})
-  });
-  if (!response.ok) throw new Error('Email delivery failed');
+async function sendCode(settings,email,code,origin){
+  await deliverEmail({...settings,to:email,subject:'Verify your Olamide account',
+    text:`Your Olamide verification code is ${code}. It expires in 10 minutes. If you did not register, ignore this message.`,origin});
 }
 
 export async function handleOnboarding({req,res,path,pool,send,readJson,origin}) {
   if (path === '/api/register' && req.method === 'POST') {
-    if (!configured()) return send(res,503,{error:'Email verification is not configured'});
+    const settings=otpReady()?await verificationSender(pool):null;
+    if (!settings) return send(res,503,{error:'Email verification is unavailable. Contact your administrator.'});
     const data = validateRegistration(await readJson(req));
     if(!await registrationAllowed(pool,data.email))return send(res,403,{error:'Registration is closed or this email domain is not permitted'});
     const {salt,hash} = await hashPassword(data.password);
@@ -77,7 +70,7 @@ export async function handleOnboarding({req,res,path,pool,send,readJson,origin})
       if(error.code==='ER_DUP_ENTRY') return send(res,409,{error:'Account already exists'});
       throw error;
     } finally {db.release();}
-    try {await sendCode(data.email,code,origin);}
+    try {await sendCode(settings,data.email,code,origin);}
     catch(error) {
       console.error('Verification delivery failed',error.name);
       // A failed first send should not impose the normal one-minute resend cooldown.
@@ -87,7 +80,8 @@ export async function handleOnboarding({req,res,path,pool,send,readJson,origin})
     return send(res,201,{email:data.email,verificationRequired:true,delivery:'sent'});
   }
   if (path === '/api/register/resend' && req.method === 'POST') {
-    if(!configured()) return send(res,503,{error:'Email verification is not configured'});
+    const settings=otpReady()?await verificationSender(pool):null;
+    if(!settings) return send(res,503,{error:'Email verification is unavailable. Contact your administrator.'});
     const {email}=await readJson(req);const normalized=emailAddress(email);
     if(!normalized) return send(res,400,{error:'Valid email required'});
     const db=await pool.connect();
@@ -97,7 +91,7 @@ export async function handleOnboarding({req,res,path,pool,send,readJson,origin})
       if(found.rowCount && Date.now()-new Date(found.rows[0].sent_at).getTime()>=60000) {
         const id=found.rows[0].id,code=String(randomInt(0,1000000)).padStart(6,'0');
         // Keep the previous code usable if the provider rejects this message.
-        try {await sendCode(normalized,code,origin);}
+        try {await sendCode(settings,normalized,code,origin);}
         catch(error) {console.error('Verification resend failed',error.name);await db.query('ROLLBACK');return send(res,503,{error:'Email delivery unavailable. Try again later.'});}
         await db.query('UPDATE signup_otps SET code_hash=$1,attempts=0,expires_at=DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 10 MINUTE),sent_at=UTC_TIMESTAMP(3) WHERE user_id=$2',
           [codeHash(id,code,process.env.OTP_HMAC_SECRET),id]);
@@ -107,7 +101,7 @@ export async function handleOnboarding({req,res,path,pool,send,readJson,origin})
     return send(res,200,{status:'If this account is awaiting verification, a code has been sent when eligible.'});
   }
   if (path === '/api/register/verify' && req.method === 'POST') {
-    if(!configured()) return send(res,503,{error:'Email verification is not configured'});
+    if(!otpReady()) return send(res,503,{error:'Email verification is unavailable. Contact your administrator.'});
     const {email,code}=await readJson(req);const normalized=emailAddress(email);
     if(!normalized || typeof code!=='string' || !/^\d{6}$/.test(code)) return send(res,400,{error:'Email and six-digit code required'});
     const db=await pool.connect();let verified=false;

@@ -156,6 +156,19 @@ root.innerHTML = `
       <button>Verify and activate</button>
       <button id="signup-resend" type="button">Resend code</button>
     </form>
+    <section id="email-admin" hidden><h3>Email verification settings</h3>
+      <p>Super administrators can save a verified Resend sender and sending key. The key is encrypted on the server and is never shown again. Send a test to your own administrator email before opening registration.</p>
+      <p>Setup: run the server email playbook, verify your sender domain with Resend, save a sending key here, and send a test message before opening registration.</p>
+      <form id="email-admin-form" autocomplete="off">
+        <label>Verified sender address <input name="sender" type="email" autocomplete="off" required></label>
+        <label>Resend sending API key <input name="apiKey" type="password" autocomplete="new-password" minlength="19" required></label>
+        <button>Save email settings</button>
+      </form>
+      <button id="email-admin-refresh" type="button">Refresh email status</button>
+      <button id="email-admin-test" type="button">Send test to my email</button>
+      <button id="email-admin-remove" type="button">Remove stored key</button>
+      <p id="email-admin-status" role="status"></p>
+    </section>
     <form id="login">
       <label>Email or username <input name="email" autocomplete="username" required></label>
       <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
@@ -1816,6 +1829,8 @@ function signedIn(user) {
   document.querySelectorAll('.automation-admin-link').forEach(link=>link.hidden=!['admin','super_admin'].includes(user.role));
   $('#help-ai-config').hidden=user.role!=='super_admin';
   if(user.role==='super_admin')refreshAiKeyStatus();
+  $('#email-admin').hidden=user.role!=='super_admin';
+  if(user.role==='super_admin')refreshEmailConfig();
   $('#help-admin').hidden=!['admin','super_admin'].includes(user.role);
   $("#signin-role-help").textContent=`Signed in with ${activeRole==="super_admin"?"super administrator":activeRole==="admin"?"administrator":"user"} access.`;
   $('#login-menu-label').textContent='My account';$('#login-options-auth').hidden=true;$('#login-options-account').hidden=false;
@@ -2729,5 +2744,36 @@ $('#help-ai-key-remove').onclick=async()=>{
   try{await accountRequest('/api/admin/ai-support',undefined,'DELETE');await refreshAiKeyStatus();
     const {available}=await apiGet('/api/help/agent');$('#help-ask').querySelector('button').disabled=!available;$('#help-automation').querySelector('button').disabled=!available;
   }catch(error){$('#help-ai-key-status').textContent=error.message;}
+};
+async function refreshEmailConfig(){
+  try{
+    const config=await apiGet('/api/admin/email-verification');
+    $('#email-admin-status').textContent=config.configured
+      ?`Sender: ${config.sender}. Key source: ${config.source}. Secret is write-only. ${config.otpReady?'OTP secret ready.':'OTP secret missing; run email-verification.yml.'}`
+      :`No sender configured. ${config.encryptionReady?'Enter a verified sender and Resend key.':'Run email-verification.yml on the server first.'}`;
+    $('#email-admin-test').disabled=!config.configured||!config.otpReady;
+    $('#email-admin-remove').disabled=config.source!=='database';
+    if(config.sender)$('#email-admin-form').elements.sender.value=config.sender;
+  }catch(error){$('#email-admin-status').textContent=error.message;}
+}
+$('#email-admin-form').onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button');button.disabled=true;
+  try{await accountRequest('/api/admin/email-verification',{
+    sender:form.elements.sender.value.trim(),apiKey:form.elements.apiKey.value},'PUT');
+    form.elements.apiKey.value='';await refreshEmailConfig();
+  }catch(error){$('#email-admin-status').textContent=error.message;}
+  finally{button.disabled=false;}
+};
+$('#email-admin-refresh').onclick=refreshEmailConfig;
+$('#email-admin-test').onclick=async()=>{
+  const button=$('#email-admin-test');button.disabled=true;
+  try{const result=await accountRequest('/api/admin/email-verification/test',{});$('#email-admin-status').textContent=result.status;}
+  catch(error){$('#email-admin-status').textContent=error.message;}
+  finally{button.disabled=false;}
+};
+$('#email-admin-remove').onclick=async()=>{
+  if(!confirm('Remove the stored email sending key? New registration emails will stop unless an environment fallback is configured.'))return;
+  try{await accountRequest('/api/admin/email-verification',{},'DELETE');await refreshEmailConfig();}
+  catch(error){$('#email-admin-status').textContent=error.message;}
 };
 $('#help-ticket').onclick=()=>showWorkspace('support');

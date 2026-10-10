@@ -24,6 +24,7 @@ import {effectivePasskeyMode,passkeyGate,handlePasskeyPolicy} from './passkeyPol
 import { handleFlowrouteRates } from './flowrouteRates.js';
 import { handleHelpAgent } from './helpAgent.js';
 import {handleAiConfiguration} from './aiConfiguration.js';
+import {handleEmailConfiguration} from './emailConfiguration.js';
 import { handleFlowrouteWebhook, handleMessagingWebhookAdmin, handleExternalSms, handleSmsNumberAdmin } from './messagingWebhooks.js';
 import { handleCharging } from './charging.js';
 import { handleSettlements } from './settlements.js';
@@ -276,6 +277,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/'))
         return await handleSipMarketplace({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/ai-support')return await handleAiConfiguration({req,res,user,pool,send,readJson});
+      if(path.startsWith('/api/admin/email-verification'))return await handleEmailConfiguration({req,res,path,user,pool,send,readJson,origin});
       if(path==='/api/help/agent') return await handleHelpAgent({req,res,user,pool,send,readJson});
       if(path.startsWith('/api/admin/rates/flowroute') || path==='/api/rates/flowroute/search')
         return await handleFlowrouteRates({req,res,path,user,pool,send});

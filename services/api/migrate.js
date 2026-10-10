@@ -39,6 +39,7 @@ import { migrateTrunkManagement } from './trunkManagement.js';
 import { migrateMessagingWebhooks } from './messagingWebhooks.js';
 import { migrateFlowrouteRates } from './flowrouteRates.js';
 import {migrateAiConfiguration} from './aiConfiguration.js';
+import {migrateEmailConfiguration} from './emailConfiguration.js';
 import {migrateLiveCalls} from './liveCalls.js';
 import {migrateSettlements} from './settlements.js';
 import {migrateRatingEngine} from './ratingEngine.js';
@@ -111,6 +112,7 @@ export async function migrate(pool) {
       ['passkey_policy', () => migratePasskeyPolicy(pool)],
       ['support', () => migrateSupport(pool)],
       ['ai_support_configuration', () => migrateAiConfiguration(pool)],
+      ['email_verification_configuration', () => migrateEmailConfiguration(pool)],
       ['live_call_monitor', () => migrateLiveCalls(pool)],
       ['carrier_settlements', () => migrateSettlements(pool)],
       ['rating_engine', () => migrateRatingEngine(pool)],
