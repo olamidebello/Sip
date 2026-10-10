@@ -1,0 +1,24 @@
+# Local SIP account and carrier commissioning
+
+The tenant super administrator first enables the tenant SIP domain in **Kamailio tenant SIP settings**. The application provisions new accounts automatically. To reconcile existing active users and digest credentials on the production host:
+
+```bash
+cd /opt/olamide/kamailio-staging
+git fetch origin kamailio-rebuild
+git switch --detach origin/kamailio-rebuild
+ansible-playbook -i deploy/kamailio/local-inventory.ini deploy/kamailio/provision-sip-users.yml
+```
+
+The account playbook uses the production API container and its existing `SIP_CREDENTIAL_KEY`. It creates missing accounts, activates pending accounts for enabled tenants, syncs Kamailio digest credentials and reports totals. It does not print passwords. Disabled tenants and suspended accounts are left alone. An account being active in the database does not prove it can register from a device; test a real authenticated REGISTER.
+
+Carrier routing requires a real PBX trunk host and transport, active carrier profile, enabled gateway mapping, tariff rates, a funded prepaid account, reviewed SIP and RTPengine files, and carrier authorization. The combined entry point is:
+
+```bash
+ansible-playbook -i deploy/kamailio/local-inventory.ini \
+  deploy/kamailio/commission-carrier-and-users.yml \
+  -e @/root/olamide-carrier/commission.yml
+```
+
+Use a root-only vars file with the values required by `carrier-prepaid.yml` and `production.yml`, including the real endpoint and paths to nonempty independent carrier and prepaid acceptance reports. Never put peering passwords or API keys in command arguments or Git. The carrier gate parses the reviewed switch configuration and refuses activation if synchronous authorization, call expiry, media handling or settlement callbacks are absent. The generated `prepare-core.yml` configuration deliberately rejects carrier calls, so it cannot be used as the reviewed carrier configuration.
+
+If Kamailio or RTPengine is already running, `production.yml` refuses to replace the live configuration. Plan a maintenance window, backup and rollback before a controlled cutover. Successful package, database and socket checks are not call acceptance: verify outbound and inbound carrier calls, two-way media, call expiry, end-event charging, ledger balance, failure handling and statement reconciliation before marking the service commissioned.
