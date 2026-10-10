@@ -61,7 +61,7 @@ export async function carrierActive(pool,tenant,provider){
 }
 
 export async function handleCarrierProviders({req,res,path,user,pool,send,readJson}){
-  if(!isAdmin(user)) return send(res,403,{error:'Administrator required'});
+  if(user.role!=='super_admin') return send(res,403,{error:'Super administrator required'});
   const configured=async provider=>{
     const stored=await providerCredentials(pool,user.tenant_id,provider);
     if(stored?.disabled)return false;

@@ -62,7 +62,7 @@ export async function migrateSwitch(pool){
   ) ENGINE=InnoDB`);
 }
 export async function handleSwitchAdmin({req,res,path,user,pool,send,readJson}){
-  if(!isAdmin(user))return send(res,403,{error:'Administrator required'});
+  if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
   const tenant=user.tenant_id;
   if(path==='/api/admin/switch'&&req.method==='GET'){
     const [config,gateways,accounts]=await Promise.all([

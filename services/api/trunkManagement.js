@@ -12,6 +12,7 @@ export async function migrateTrunkManagement(pool){
 const readTrunk=async(db,id,tenant)=> (await db.query('SELECT id,name,host,port,transport,priority,enabled,revision,updated_at FROM pbx_trunks WHERE id=$1 AND tenant_id=$2 FOR UPDATE',[id,tenant])).rows[0];
 const event=async(db,tenant,trunk,user,action)=>db.query('INSERT INTO pbx_trunk_events(id,tenant_id,trunk_id,actor_id,action,snapshot) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),tenant,trunk.id,user.id,action,JSON.stringify(snapshot(trunk))]);
 export async function handleTrunks({req,res,path,user,pool,send,readJson}){
+  if(user.role!=='super_admin') return send(res,403,{error:'Super administrator required'});
   const tenant=user.tenant_id;
   if(path==='/api/pbx/trunks'&&req.method==='GET'){
     const rows=await pool.query(`SELECT t.id,t.name,t.host,t.port,t.transport,t.priority,t.enabled,t.revision,t.updated_at,

@@ -628,7 +628,10 @@ root.innerHTML = `
       </form>
       <p id="nigeria-status" role="status"></p>
     </section>
-    <section id="carrier-admin"><h3>Carrier provider commissioning</h3>
+    <section id="carrier-admin"><h3>Trunk management and commissioning</h3>
+      <p>Super admin workspace for trunk configuration, provider peering, credential verification, and guarded activation.</p>
+      <nav aria-label="Trunk workflow"><a href="#pbx-admin">Create or edit tenant trunk</a><a href="#provider-credentials-admin">Set provider credentials</a><a href="#switch-admin">Map carrier route</a><a href="#operator-admin">Review rates</a></nav>
+      <p>Save a trunk and its provider profile before requesting activation. Verify real carrier connectivity and test calls separately.</p>
       <p>Link a tenant trunk, set capacity, verify private provider credentials, then ask the switch adapter to activate. A provider remains blocked from DID requests until activation is acknowledged.</p>
       <form id="carrier-catalog-form" hidden><h4>Add a future carrier</h4>
         <label>Carrier ID <input name="provider" pattern="[a-z][a-z0-9-]{1,15}" maxlength="16" required placeholder="carrier-name"></label>
@@ -692,7 +695,10 @@ root.innerHTML = `
       <p id="operator-quote" role="status"></p><ol id="operator-quote-candidates" aria-label="Ranked carrier routes"></ol><p id="operator-status" role="status"></p>
     </section>
     <section id="switch-admin">
-      <h3>Kamailio tenant SIP settings</h3>
+      <h3>User SIP accounts and commissioning</h3>
+      <p>Super admin workspace for SIP account readiness, tenant domain, credentials, and carrier gateway mappings. New users receive account records through user provisioning.</p>
+      <nav aria-label="SIP account workflow"><a href="#tenant-admin">Create user</a><a href="#sip-profile-admin">Manage profile access</a><a href="#carrier-admin">Review trunk</a></nav>
+      <h4>Tenant SIP configuration</h4>
       <p>Manage tenant SIP domains, authenticated accounts, tariffs and carrier route keys used by the Kamailio adapter. Saving settings does not activate a live SIP host.</p>
       <form id="switch-config">
         <label>SIP domain <input name="domain" placeholder="sip.dobhrap.com" required></label>
@@ -1009,7 +1015,10 @@ root.innerHTML = `
       <h4>Call Events</h4><ul id="didww-call-events"></ul>
     </section>
     <section id="sip-profile-admin" hidden>
-      <h3>SIP profile access</h3><p>Super administrators set tenant defaults, group grants and individual overrides for viewing, adding, editing and deleting SIP profiles.</p>
+      <h3>User profile management and commissioning</h3>
+      <p>Create users in Tenants and administrators, then review their SIP account and assign profile access. Each user can save a SIP client profile only within the permissions set here.</p>
+      <nav aria-label="User profile workflow"><a href="#tenant-admin">Create or manage users</a><a href="#switch-admin">Review provisioned SIP accounts</a><a href="#calling-workspace">SIP client profiles</a></nav>
+      <h4>SIP profile access</h4><p>Super administrators set tenant defaults, group grants and individual overrides for viewing, adding, editing and deleting SIP profiles.</p>
       <label>Tenant <select id="sip-policy-tenant"></select></label>
       <h4>Tenant defaults</h4><div id="sip-tenant-choices"></div><button type="button" id="sip-tenant-save">Save tenant defaults</button>
       <h4>Group grants</h4><label>Group <select id="sip-policy-group"></select></label><div id="sip-group-choices"></div><button type="button" id="sip-group-save">Save group grants</button>
@@ -1209,10 +1218,10 @@ const navigationGroups=[
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["help-preferences","Hints & guides"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
-  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio SIP"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["rating-admin","Call rating"],["settlement-admin","Carrier settlements"],["payment-admin","Stripe gateway"],["cluster-admin","Cluster & capacity"],["live-calls-admin","Live calls"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
+  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["operator-admin","Wholesale tariffs"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["rating-admin","Call rating"],["settlement-admin","Carrier settlements"],["payment-admin","Stripe gateway"],["cluster-admin","Cluster & capacity"],["live-calls-admin","Live calls"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
-  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"],["prepaid-control-admin","Prepaid controls"],["meeting-policy-admin","Meeting controls"]]}
+  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["carrier-admin","Trunks & commissioning"],["switch-admin","SIP accounts & commissioning"],["sip-profile-admin","User profiles & commissioning"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"],["prepaid-control-admin","Prepaid controls"],["meeting-policy-admin","Meeting controls"]]}
 ];
 let activeRole=null;
 let pageRoutes;
