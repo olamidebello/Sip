@@ -14,7 +14,7 @@ import { migrateDashboard } from './dashboard.js';
 import { migrateSupport } from './support.js';
 import { migrateLocales } from './locales.js';
 import { migrateOnboarding } from './onboarding.js';
-import { migrateSipMarketplace } from './sipMarketplace.js';
+import { migrateSipMarketplace, backfillSipAccounts } from './sipMarketplace.js';
 import { migrateSipProfiles } from './sipProfiles.js';
 import { migratePayments } from './payments.js';
 import { migrateCluster } from './cluster.js';
@@ -123,6 +123,7 @@ export async function migrate(pool) {
       await action();
       await pool.query('INSERT INTO schema_components(component) VALUES($1) ON DUPLICATE KEY UPDATE applied_at=CURRENT_TIMESTAMP(3)', [name]);
     }
+    await backfillSipAccounts(pool);
   } finally {
     if (locked) await connection.query("SELECT RELEASE_LOCK('olamide_schema_migration')").finally(() => connection.release());
     else connection.release();

@@ -38,9 +38,37 @@
       register: core_env_content
       no_log: true
 
+    - name: Reject an existing malformed token rather than rotating it
+      ansible.builtin.assert:
+        that:
+          - >-
+            (core_env_content.content | b64decode |
+            regex_findall('(?m)^KAMAILIO_ROUTE_TOKEN=(.*)$') | first | default(''))
+            in ['', (core_env_content.content | b64decode |
+            regex_findall('(?m)^KAMAILIO_ROUTE_TOKEN=([A-Za-z0-9._~+/=-]{32,})$') | first | default(''))]
+        fail_msg: Existing switch token has an unsupported format; review it privately before changing it.
+      no_log: true
+
+    - name: Generate a token only when none exists
+      ansible.builtin.command:
+        argv: [python3, -c, 'import secrets; print(secrets.token_urlsafe(48))']
+      register: generated_switch_token
+      when: not ((core_env_content.content | b64decode) is search('(?m)^KAMAILIO_ROUTE_TOKEN=[A-Za-z0-9._~+/=-]{32,}$'))
+      no_log: true
+
+    - name: Save the new token in the existing private environment
+      ansible.builtin.lineinfile:
+        path: "{{ core_env_file }}"
+        regexp: '^KAMAILIO_ROUTE_TOKEN='
+        line: "KAMAILIO_ROUTE_TOKEN={{ generated_switch_token.stdout }}"
+        mode: '0600'
+        backup: true
+      when: generated_switch_token is changed
+      no_log: true
+
     - name: Extract private switch token
       ansible.builtin.set_fact:
-        kamailio_route_token: "{{ (core_env_content.content | b64decode | regex_findall('(?m)^KAMAILIO_ROUTE_TOKEN=([A-Za-z0-9._~+/=-]{32,})$')) | first | default('') }}"
+        kamailio_route_token: "{{ generated_switch_token.stdout if generated_switch_token is changed else ((core_env_content.content | b64decode | regex_findall('(?m)^KAMAILIO_ROUTE_TOKEN=([A-Za-z0-9._~+/=-]{32,})$')) | first | default('')) }}"
       no_log: true
 
     - name: Require existing strong switch token
@@ -54,6 +82,36 @@
         url: http://127.0.0.1:18080/api/health
         status_code: 200
         timeout: 5
+
+    - name: Reload only the API when its private token was created
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-name
+          - docker
+          - --env-file
+          - "{{ core_env_file }}"
+          - -f
+          - /opt/olamide/kamailio-staging/deployment/docker/compose.yml
+          - up
+          - -d
+          - --no-deps
+          - --force-recreate
+          - api
+      when: generated_switch_token is changed
+      no_log: true
+
+    - name: Check API after token reload
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/api/health
+        status_code: 200
+        timeout: 5
+      register: core_api_reload
+      until: core_api_reload is succeeded
+      retries: 10
+      delay: 2
+      when: generated_switch_token is changed
 
     - name: Inspect existing service state
       ansible.builtin.service_facts:

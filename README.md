@@ -396,10 +396,17 @@ POSTs `{accountId,tenantId,userId,username,password,domain}` with an
 `Idempotency-Key` header and marks the account `active` only after the adapter
 returns JSON `{ "status": "active" }`. The adapter must provision the user on
 the authoritative switch and enforce tenant isolation before acknowledging.
-Without it, the record remains `awaiting_switch` and cannot make calls. The
-account page displays that status; an active user's SIP credentials require
-password reauthentication to reveal. Existing accounts are not retroactively
-assigned credentials by this new signup hook.
+For the local Kamailio adapter, an enabled tenant switch and a configured
+`SIP_CREDENTIAL_KEY` now create and activate the SIP account and digest record
+in the same user-creation transaction. Tenant-admin users and LDAP users also
+get an account; migration backfills missing accounts for existing active users
+without changing existing SIP passwords. If the switch is disabled or the key
+is missing, accounts stay `awaiting_switch`. Enabling the tenant switch
+activates pending accounts when the local adapter is in use. When an external
+`SIP_PROVISION_URL` is configured, its acknowledgment is still required.
+The account page displays status; local users reauthenticate to reveal
+credentials. An active database account does not establish a live SIP listener,
+public reachability, media, or carrier routing.
 
 **Dial plan marketplace** lets administrators create draft or published offers.
 Users browse published offers and request one. The request and unpaid invoice
@@ -802,7 +809,9 @@ transport for the selected carrier and alternates.
 
 For a carrier-blocked public SIP core, the `prepare-core.yml` playbook renders
 private `/root/production-kamailio.cfg` and `/root/production-rtpengine.conf`
-from the tested adapter and the existing private API token. Use the actual
+from the tested adapter. If the private API token is absent, it generates one
+on the host, stores it in the private production environment, and restarts only
+the API. An existing malformed token requires review. Use the actual
 tenant SIP domain, confirm the public IP and network rules, and run:
 
 ```bash

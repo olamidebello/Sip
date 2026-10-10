@@ -3,6 +3,7 @@ import {isAdmin} from './tenancy.js';
 import {selectQuote} from './operatorControl.js';
 import {evaluateOutboundPolicy} from './pbx.js';
 import {syncKamailioCredential} from './kamailio.js';
+import {activateTenantSipAccounts} from './sipMarketplace.js';
 
 const domainPattern=/^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$/i;
 const gatewayPattern=/^[a-z][a-z0-9_-]{1,63}$/;
@@ -121,7 +122,8 @@ export async function handleSwitchAdmin({req,res,path,user,pool,send,readJson}){
     try{await pool.query('INSERT INTO switch_tenants(tenant_id,domain,tariff_id,enabled,updated_by) VALUES($1,$2,$3,$4,$5) ON DUPLICATE KEY UPDATE domain=VALUES(domain),tariff_id=VALUES(tariff_id),enabled=VALUES(enabled),updated_by=VALUES(updated_by)',
       [tenant,b.domain.toLowerCase(),b.tariffId,b.enabled,user.id]);}
     catch(error){if(error.code==='ER_DUP_ENTRY')return send(res,409,{error:'Domain assigned to another tenant'});throw error;}
-    return send(res,200,{domain:b.domain.toLowerCase(),enabled:b.enabled});
+    const provisioning=b.enabled?await activateTenantSipAccounts(pool,tenant,b.domain.toLowerCase()):null;
+    return send(res,200,{domain:b.domain.toLowerCase(),enabled:b.enabled,provisioning});
   }
   if(path==='/api/admin/switch/gateways'&&req.method==='PUT'){
     if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
