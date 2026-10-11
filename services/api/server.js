@@ -1,3 +1,4 @@
+import {handleProductStore,startStoreRenewals} from './productStore.js';
 import { startSipProvisioning, handleSipProvisioning } from './sipProvisioning.js';
 import http from "node:http";
 import { migrate } from './migrate.js';
@@ -292,6 +293,7 @@ async function handler(req, res) {
       }
       if (path==="/api/admin/catalog-policy")
         return await handleCatalogControl({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/store/')||path.startsWith('/api/admin/store/')) return await handleProductStore({req,res,path,user,pool,send,readJson});
       const capability=routeCapability(path,req.method);
       if (capability && !allowed(await catalogPolicy(pool,user.tenant_id),user,capability))
         return send(res,403,{error:"This action is disabled by the tenant's super admin"});
@@ -766,11 +768,13 @@ async function handler(req, res) {
 await migrate(pool);
 const stopSipProvisioning=startSipProvisioning(pool,origin);
 const stopRateSync=startFlowrouteRateSync(pool);
+const stopStoreRenewals=startStoreRenewals(pool);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
 server.on("close",stopSipProvisioning);
 server.on("close",stopRateSync);
+server.on("close",stopStoreRenewals);
 meetingSignaling = attachMeetingSignaling(server, { pool, origin, currentUser });
 server.listen(port, address, () =>
   console.log(`Account API listening on ${address}:${port}`));

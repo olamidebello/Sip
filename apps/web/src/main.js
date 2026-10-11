@@ -1,3 +1,4 @@
+import {setupProductStore} from './productStore.js';
 import { SimpleUser } from "sip.js/lib/platform/web";
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import { checkCurrentLocation } from "./geofence.js";
@@ -303,6 +304,16 @@ root.innerHTML = `
     <p>Look up the current Flowroute customer rate by destination digits. Prices are USD per minute; this is a rate quote, not a live call charge.</p>
     <form id="outbound-rate-search"><label>Destination digits <input name="prefix" inputmode="numeric" pattern="[0-9]{1,15}" placeholder="12065551234" required></label><button>Find rate</button></form>
     <p id="outbound-rate-result" role="status"></p>
+  </section>
+  <section id="product-store" hidden><h2>Olamide products &amp; services</h2>
+    <p>Purchase products or subscribe to services. Subscriptions create monthly, quarterly or annual invoices payable through Billing; automatic card debits are not enabled. Payment and service delivery are tracked separately.</p>
+    <label>Search <input id="store-search" type="search"></label><label>Category <select id="store-category"></select></label><button id="store-refresh" type="button">Refresh catalog</button>
+    <p id="store-status" role="status"></p><div id="store-products"></div><h3>My orders &amp; subscriptions</h3><ul id="store-orders"></ul>
+  </section>
+  <section id="product-store-admin" hidden><h2>Product catalog management</h2>
+    <p>Reference prices come from the August 2010 product list. Import creates drafts. Review current costs, availability, fulfillment and terms before publishing. Existing edits survive re-import. Recurring renewal prices are fixed at purchase; cancellation stops future invoices.</p>
+    <button id="store-import-reference" type="button">Import 177 reference products</button><button id="store-admin-refresh" type="button">Refresh products &amp; orders</button><p id="store-admin-status" role="status"></p>
+    <div id="store-admin-products"></div><h3>Order commissioning &amp; delivery</h3><ul id="store-admin-orders"></ul>
   </section>
   <section id="billing" hidden>
     <h2>Plans and billing</h2>
@@ -1014,9 +1025,9 @@ setupCarrierControl();
 const navigationGroups=[
   {label:"Workspace",items:[["dashboard","Dashboard"],["campaign-inbox-panel","Announcements"],["planner","Events & tasks"],["search-panel","Search"],["support","Support tickets"],["help","Help & tutorials"]]},
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
-  {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
+  {label:"Commerce",items:[["product-store","Products & services"],["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
-  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio services"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
+  {label:"Administration",roles:["admin","super_admin"],items:[["product-store-admin","Product catalog & orders"],["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio services"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
   {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"]]}
@@ -1133,6 +1144,7 @@ const support=setupSupport({get:path=>apiGet(path),request:(path,body,method)=>a
 const localeSettings=setupLocaleSettings({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const groupAdmin = setupGroupAdmin();
 const sipProfiles = setupSipProfiles({get:apiGet,request:accountRequest});
+const productStore=setupProductStore({get:apiGet,request:accountRequest,refreshBilling});
 const commerceOps=setupCommerceOps({get:apiGet,request:accountRequest});
 const serverFleet=setupServerFleetAdmin({get:apiGet,request:accountRequest});
 const fleetNetwork=setupFleetNetworkAdmin({get:apiGet,request:accountRequest});
@@ -1566,6 +1578,9 @@ function signedIn(user) {
   $("#password-change").hidden = user.authSource==="ldap";
   $("#account-status").textContent = `Signed in as ${user.name}`;
   $("#chat").hidden = !user.features?.messaging;
+  $("#product-store").hidden=!user.features?.billing;
+  $("#product-store-admin").hidden=!user.features?.billing||!["admin","super_admin"].includes(user.role);
+  if(user.features?.billing){productStore.refresh();if(["admin","super_admin"].includes(user.role))productStore.refreshAdmin();}
   $("#billing").hidden = !user.features?.billing;
   if (user.features?.meetings) meetings.show();
   else meetings.hide();
@@ -2089,6 +2104,8 @@ $("#logout").onclick = async () => {
     support.clear();
     background.clear();
     $("#chat").hidden = true;
+    $("#product-store").hidden=true;
+    $("#product-store-admin").hidden=true;
     $("#billing").hidden = true;
     meetings.hide();
     $("#agent-panel").hidden = true;
