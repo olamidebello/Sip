@@ -1,0 +1,130 @@
+---
+# For an already commissioned Kamailio server. No prompts, test-user passwords,
+# credential rotation, or switch configuration replacement.
+- name: Deploy automatic user profile and SIP login
+  hosts: switch_nodes
+  become: true
+  vars:
+    login_repo_path: /opt/olamide/repo
+    login_secret_path: /etc/olamide/secrets.env
+    login_domain: sip.dobhrap.com
+  tasks:
+    - name: Validate deployment inputs
+      ansible.builtin.assert:
+        that:
+          - login_repo_path == '/opt/olamide/repo'
+          - login_domain is match('^[a-zA-Z0-9.-]+$')
+    - name: Verify commissioned switch
+      ansible.builtin.command:
+        argv: [systemctl, is-active, --quiet, kamailio]
+      changed_when: false
+    - name: Verify persistent key and existing provisioning configuration
+      ansible.builtin.command:
+        argv:
+          - python3
+          - '-c'
+          - |
+            import pathlib,re,sys
+            p=pathlib.Path(sys.argv[1]);s=p.read_text()
+            def value(name):
+                values=re.findall(r'^'+re.escape(name)+r'=(.*)$',s,re.M)
+                assert len(values)==1, name+' must have one canonical entry'
+                return values[0].strip().strip('\"\x27')
+            assert re.fullmatch(r'[0-9a-fA-F]{64}',value('SIP_CREDENTIAL_KEY')), 'Existing key required; never rotate encrypted accounts'
+            mode=value('SIP_PROVISION_MODE')
+            assert mode in ('kamailio_local','remote'), 'Unsupported provisioning mode'
+            if mode=='remote':
+                assert value('SIP_PROVISION_URL').startswith('https://'), 'Secure commissioned provisioning URL required'
+                assert value('SIP_PROVISION_TOKEN'), 'Provisioning token required'
+            upstream=value('SIP_WS_UPSTREAM')
+            assert upstream and upstream!='127.0.0.1:9', 'Commissioned WebSocket upstream required'
+          - '{{ login_secret_path }}'
+      changed_when: false
+      no_log: true
+    - name: Verify application login integration is present
+      ansible.builtin.command:
+        argv:
+          - python3
+          - '-c'
+          - |
+            import pathlib,sys
+            root=pathlib.Path(sys.argv[1])
+            web=(root/'apps/web/src/main.js').read_text()
+            api=(root/'services/api/sipMarketplace.js').read_text()
+            assert 'autoSip.start(user.id)' in web
+            assert '/api/sip-account/session' in web and '/api/sip-account/session' in api
+            assert 'signed-in-profile' in web, 'Install the accompanying profile patch first'
+          - '{{ login_repo_path }}'
+      changed_when: false
+    - name: Validate encryption key against existing encrypted accounts
+      ansible.builtin.command:
+        argv: [python3, '{{ login_repo_path }}/tools/repair_sip_credential_key.py']
+      register: login_key_check
+      failed_when: login_key_check.rc != 0 or 'rerun with --repair' in login_key_check.stdout
+      changed_when: false
+      no_log: true
+    - name: Configure assigned domain and secure browser transport
+      ansible.builtin.lineinfile:
+        path: '{{ login_secret_path }}'
+        regexp: '^{{ item.name }}='
+        line: '{{ item.name }}={{ item.value }}'
+        mode: '0600'
+        backup: true
+      loop:
+        - name: SIP_ACCOUNT_DOMAIN
+          value: '{{ login_domain }}'
+        - name: SIP_WSS_URL
+          value: 'wss://{{ login_domain }}/ws'
+      no_log: true
+    - name: Build and deploy login integration
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', '{{ login_secret_path }}', up, '-d', '--build', api, web]
+        chdir: '{{ login_repo_path }}/deployment/docker'
+      no_log: true
+    - name: Wait for API readiness inside the container
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', '{{ login_secret_path }}', exec, '-T', api, node, '-e', "fetch('http://127.0.0.1:8080/api/health',{signal:AbortSignal.timeout(5000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+        chdir: '{{ login_repo_path }}/deployment/docker'
+      register: login_health
+      until: login_health.rc == 0
+      retries: 12
+      delay: 5
+      changed_when: false
+      no_log: true
+    - name: Check public HTTPS health
+      ansible.builtin.uri:
+        url: 'https://{{ login_domain }}/api/health'
+        status_code: 200
+        validate_certs: true
+        timeout: 10
+      register: public_login_health
+      until: public_login_health is succeeded
+      retries: 6
+      delay: 5
+    - name: Verify public SIP WebSocket handshake without registering a user
+      ansible.builtin.command:
+        argv:
+          - python3
+          - '-c'
+          - |
+            import base64,hashlib,os,socket,ssl,sys
+            host=sys.argv[1];key=base64.b64encode(os.urandom(16)).decode()
+            with socket.create_connection((host,443),timeout=10) as raw:
+                with ssl.create_default_context().wrap_socket(raw,server_hostname=host) as conn:
+                    request=('GET /ws HTTP/1.1\r\nHost: '+host+'\r\nOrigin: https://'+host+'\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: '+key+'\r\nSec-WebSocket-Protocol: sip\r\n\r\n')
+                    conn.sendall(request.encode());data=b''
+                    while b'\r\n\r\n' not in data:
+                        chunk=conn.recv(4096)
+                        assert chunk and len(data)<65536, 'Invalid WebSocket response'
+                        data+=chunk
+                    lines=data.split(b'\r\n\r\n',1)[0].decode().split('\r\n')
+                    assert lines[0].split()[1]=='101', 'WebSocket upgrade failed'
+                    headers={k.lower():v.strip() for k,v in (line.split(':',1) for line in lines[1:] if ':' in line)}
+                    expected=base64.b64encode(hashlib.sha1((key+'258EAFA5-E914-47DA-95CA-C5AB0DC85B11').encode()).digest()).decode()
+                    assert headers.get('sec-websocket-accept')==expected
+                    assert headers.get('sec-websocket-protocol')=='sip'
+          - '{{ login_domain }}'
+      changed_when: false
+    - name: Report deployment result
+      ansible.builtin.debug:
+        msg: 'Login integration deployed. User name/email and assigned SIP settings populate after sign-in. Confirm Connected and a user-to-user call with two real accounts; transport checks alone do not prove registration or audio.'

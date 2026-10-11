@@ -1,0 +1,6 @@
+all:
+  children:
+    switch_nodes:
+      hosts:
+        local-switch:
+          ansible_connection: local

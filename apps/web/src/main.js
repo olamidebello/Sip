@@ -134,6 +134,7 @@ root.innerHTML = `
     <h2>Welcome to Olamide</h2>
     <p>Registration creates an active account and SIP identity immediately. Calling needs an activated switch account; no number or plan is assigned at signup.</p>
     <p id="signin-role-help">Your assigned role controls which menus appear after sign-in.</p>
+    <section id="signed-in-profile" hidden><h3>My profile</h3><label>Name <input id="profile-name" readonly></label><label>Email <input id="profile-email" readonly></label></section>
     <nav class="auth-pages" aria-label="Account pages"><a href="/pages/login">Sign in</a><a href="/pages/signup">Register</a><a href="/pages/ldap-login">Directory sign in</a></nav>
     <form id="signup">
       <h3>Create an account</h3>
@@ -1675,6 +1676,9 @@ function signedIn(user) {
     $('#account-status').textContent=user.passkeySigninRequired?'Sign out and use passkey sign-in to continue.':'Register a passkey, then sign out and use passkey sign-in.';
     showWorkspace('account');return;
   }
+  $("#signed-in-profile").hidden=false;
+  $("#profile-name").value=user.name || "";
+  $("#profile-email").value=user.email || "";
   activeRole=["admin","super_admin"].includes(user.role)?user.role:"user";
   apiGet('/api/redirector').then(({target})=>{if(target?.wssUrl&&!onCall)$("#connect [name=server]").value=target.wssUrl;}).catch(()=>{});
   document.body.classList.add("workspace-mode");
@@ -2263,6 +2267,8 @@ $("#logout").onclick = async () => {
   try {
     await nativeCalls.stop();
     await nativePush.stop();
+    $("#signed-in-profile").hidden=true;
+    $("#profile-name").value="";$("#profile-email").value="";
     await autoSip.stop();
     if (phone) {
       if (onCall) await phone.hangup().catch(()=>{});
@@ -2372,7 +2378,7 @@ async function registerSip(data,shouldContinue=()=>true) {
     reconnectionAttempts:8,reconnectionDelay:4,registererOptions:{expires:300,refreshFrequency:80},
     media: { remote: { audio: $("#remote") } },
     userAgentOptions: {
-      transportOptions:{keepAliveInterval:30,keepAliveDebounce:10},
+      transportOptions:{server,keepAliveInterval:30,keepAliveDebounce:10},
       authorizationUsername: String(data.get("username")),
       authorizationPassword: String(data.get("password"))
     },
