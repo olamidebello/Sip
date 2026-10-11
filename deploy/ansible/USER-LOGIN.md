@@ -4,7 +4,7 @@ Run on the existing Debian server as root after applying this release to
 `/opt/olamide/repo`:
 
 ```bash
-ansible-playbook -i /opt/olamide/repo/deploy/ansible/user-login.local.yml /opt/olamide/repo/deploy/ansible/user-login-unattended.yml
+bash /opt/olamide/repo/deployment/deploy-user-login.sh
 ```
 
 Requires Ansible, Docker Compose, an already running API/database and commissioned
@@ -34,3 +34,7 @@ If the script stops on key verification, preserve the existing key and investiga
 the saved keys using tools/repair_sip_credential_key.py. If it stops on switch or
 WebSocket readiness, repair that commissioning prerequisite first. Deployment
 recreates API/web containers and can interrupt browser connections.
+
+The runner uses an isolated temporary inventory/playbook directory and explicit
+Ansible configuration so unrelated encrypted group_vars/host_vars in the server
+checkout do not require Vault secrets. It never disables or decrypts those files.
