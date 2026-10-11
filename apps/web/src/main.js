@@ -1061,11 +1061,13 @@ root.innerHTML = `
   <section id="calling-workspace" class="calling-workspace" hidden>
   <h2>Olamide dialer</h2>
   <p id="calling-access" role="status">Internal SIP calls are available without a subscription after your SIP account is activated. External calls require an active plan.</p><a href="#billing">Manage calling plan</a>
+  <button id="connect-assigned-sip" type="button">Connect my SIP account</button>
+  <p>Connection details are assigned automatically when you sign in. Use this button to retry activation or reconnect.</p>
   <form id="connect">
-    <label>SIP address <input name="aor" placeholder="sip:alice@example.com" required></label>
-    <label>Authorization username <input name="username" autocomplete="username" required></label>
-    <label>Password <input name="password" type="password" autocomplete="off" required></label>
-    <label>Secure WebSocket URL <input name="server" type="url" placeholder="wss://sip.example.com:7443" required></label>
+    <label>SIP address <input name="aor" placeholder="Assigned SIP address" autocomplete="off" required></label>
+    <label>Authorization username <input name="username" autocomplete="off" required></label>
+    <label>SIP password <input name="password" type="password" autocomplete="new-password" required></label>
+    <label>Secure WebSocket URL <input name="server" type="url" placeholder="Assigned secure SIP server" autocomplete="off" required></label>
     <button>Connect</button>
   </form>
   <form id="dial" hidden>
@@ -2041,6 +2043,11 @@ async function refreshPasskeys(){
 }
 async function refreshSipAccount(){
   try {const {account,note}=await apiGet('/api/sip-account');
+    if(account&&!phone&&!onCall){
+      connectForm.elements.aor.value=`sip:${account.username}@${account.domain}`;
+      connectForm.elements.username.value=account.username;
+      connectForm.elements.password.value='';
+    }
     $("#sip-account-status").textContent=account?`${account.username}@${account.domain}: ${account.status}. ${note}`:'No SIP account record. Contact support.';
     $("#sip-credentials").hidden=!account||account.status!=='active';
   }catch(error){$("#sip-account-status").textContent=error.message;}
@@ -2365,6 +2372,11 @@ async function registerSip(data,shouldContinue=()=>true) {
     throw error;
   }
 }
+$('#connect-assigned-sip').addEventListener('click',()=>{
+  if(!softphoneUserId){status('Sign in to connect your SIP account.');return;}
+  autoSip.start(softphoneUserId);
+  autoSip.wake();
+});
 connectForm.querySelector('button').addEventListener('click',()=>{if(connectForm.dataset.canEdit!=='true')autoSip.wake();});
 connectForm.addEventListener("submit",async event=>{event.preventDefault();if(connectForm.dataset.canEdit!=='true'){autoSip.wake();return;}try{await registerSip(new FormData(connectForm));}catch(error){report(error);}});
 
