@@ -48,7 +48,7 @@ import {handleSupport} from "./support.js";
 import {handleSearch} from "./search.js";
 import {handleLocales} from "./locales.js";
 import { handleTenants, isAdmin, defaultTenantId } from "./tenancy.js";
-import { availableNumbers } from "./providers.js";
+import { availableNumbers,inventorySearch } from "./providers.js";
 import { attachMeetingSignaling } from "./meetings.js";
 import { validateFeatures, effectiveFeatures } from "./permissions.js";
 import {
@@ -503,13 +503,17 @@ async function handler(req, res) {
         if (!["flowroute","didww"].includes(provider))
           return send(res, 400, { error: "Select Flowroute or DIDWW" });
         if(!await carrierActive(pool,user.tenant_id,provider)) return send(res,409,{error:'Carrier provider awaits administrator activation'});
+        let search;
+        try {const params=new URL(req.url,origin).searchParams;search=inventorySearch({prefix:params.get("prefix"),offset:params.get("offset")});}
+        catch(error) {return send(res,400,{error:error.message});}
         const rule=await pricingRule(pool,user.tenant_id,provider);
         try {
-          const numbers = await availableNumbers(provider);
-          return send(res, 200, { pricing:{mode:rule.mode,setupValue:Number(rule.setupValue),monthlyValue:Number(rule.monthlyValue)},
+          const numbers = await availableNumbers(provider,search);
+          return send(res, 200, { search, nextOffset:provider==="flowroute" && numbers.length===20 && search.offset<10000 ? search.offset+20 : null, currency:"USD", pricing:{mode:rule.mode,setupValue:Number(rule.setupValue),monthlyValue:Number(rule.monthlyValue)},
             numbers: numbers.map(({ monthlyCostCents,setupCostCents,...item }) => ({
               ...item, monthlyCents: sellingCents(monthlyCostCents,rule.mode,Number(rule.monthlyValue)),
-              setupCents: sellingCents(setupCostCents,rule.mode,Number(rule.setupValue))
+              setupCents: sellingCents(setupCostCents,rule.mode,Number(rule.setupValue)),
+              initialCents:sellingCents(setupCostCents,rule.mode,Number(rule.setupValue))+sellingCents(monthlyCostCents,rule.mode,Number(rule.monthlyValue))
             }))
           });
         } catch (error) {
@@ -517,28 +521,35 @@ async function handler(req, res) {
         }
       }
       if (path === "/api/numbers/request" && req.method === "POST") {
-        const {provider,number,inventoryId,skuId}=await readJson(req);
+        const {provider,number,inventoryId,skuId,expectedSetupCents,expectedMonthlyCents,acceptTerms}=await readJson(req);
         if (!["flowroute","didww"].includes(provider) || typeof number!=="string" ||
             !/^\+?[1-9]\d{7,14}$/.test(number) || typeof inventoryId!=="string" || inventoryId.length>128 ||
             typeof skuId!=="undefined" && (typeof skuId!=="string" || skuId.length>128))
           return send(res,400,{error:"Choose a valid inventory number"});
         if(!await carrierActive(pool,user.tenant_id,provider)) return send(res,409,{error:'Carrier provider awaits administrator activation'});
+        if (acceptTerms!==true || ![expectedSetupCents,expectedMonthlyCents].every(value=>Number.isSafeInteger(value)&&value>=0&&value<=10000000))
+          return send(res,400,{error:"Accept fulfillment terms and confirm the displayed setup and monthly prices"});
         let inventory;
-        try {inventory=(await availableNumbers(provider)).find(item=>item.number===number && item.inventoryId===inventoryId && (item.skuId||null)===(skuId||null));}
+        try {inventory=(await availableNumbers(provider,{prefix:number.replace(/^\+/,""),inventoryId})).find(item=>item.number===number && item.inventoryId===inventoryId && (item.skuId||null)===(skuId||null));}
         catch(error) {return send(res,503,{error:error.message});}
         if (!inventory) return send(res,409,{error:"Number is no longer in the current provider listing"});
         const rule=await pricingRule(pool,user.tenant_id,provider);
         const setup=sellingCents(inventory.setupCostCents,rule.mode,Number(rule.setupValue));
         const monthly=sellingCents(inventory.monthlyCostCents,rule.mode,Number(rule.monthlyValue));
+        if (setup!==expectedSetupCents || monthly!==expectedMonthlyCents)
+          return send(res,409,{error:"Provider price changed. Search again and confirm the updated price"});
         const quoteId=randomUUID(),invoiceId=randomUUID(),client=await pool.connect();
         try {
           await client.query("BEGIN");
+          await client.query("SELECT id FROM users WHERE id=$1 FOR UPDATE",[user.id]);
+          const existing=await client.query("SELECT id FROM did_quotes WHERE user_id=$1 AND provider=$2 AND number_e164=$3 AND status IN ('pending_payment','fulfilled')",[user.id,provider,number]);
+          if (existing.rowCount) {await client.query("ROLLBACK");return send(res,409,{error:"You already have an open request for this provider number"});}
           await client.query("INSERT INTO invoices(id,user_id,description,amount_cents) VALUES($1,$2,$3,$4)",
-            [invoiceId,user.id,`Provider DID request ${provider} ${number}`,setup]);
-          await client.query("INSERT INTO did_quotes(id,user_id,provider,number_e164,provider_monthly_cents,provider_setup_cents,monthly_cents,setup_cents,markup_bps,status,invoice_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending_payment',$10)",
-            [quoteId,user.id,provider,number,inventory.monthlyCostCents,inventory.setupCostCents,monthly,setup,rule.mode==="percent"?Number(rule.setupValue):0,invoiceId]);
+            [invoiceId,user.id,`Provider DID request ${provider} ${number}: setup and first month`,setup+monthly]);
+          await client.query("INSERT INTO did_quotes(id,user_id,provider,number_e164,provider_monthly_cents,provider_setup_cents,monthly_cents,setup_cents,markup_bps,status,invoice_id,inventory_id,sku_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending_payment',$10,$11,$12)",
+            [quoteId,user.id,provider,number,inventory.monthlyCostCents,inventory.setupCostCents,monthly,setup,rule.mode==="percent"?Number(rule.setupValue):0,invoiceId,inventoryId,skuId||null]);
           await client.query("COMMIT");
-          return send(res,201,{quoteId,invoiceId,status:"pending_payment",setupCents:setup,monthlyCents:monthly,provisioned:false});
+          return send(res,201,{quoteId,invoiceId,status:"pending_payment",setupCents:setup,monthlyCents:monthly,initialCents:setup+monthly,provisioned:false});
         } catch(error) {await client.query("ROLLBACK");throw error;} finally {client.release();}
       }
       if (path === "/api/numbers/requests" && req.method === "GET") {
@@ -547,7 +558,7 @@ async function handler(req, res) {
       }
       if (path === "/api/admin/numbers/requests" && req.method === "GET") {
         if (!isAdmin(user)) return send(res,403,{error:"Administrator required"});
-        const result=await pool.query("SELECT q.id,q.provider,q.number_e164,q.setup_cents,q.monthly_cents,q.provider_setup_cents,q.provider_monthly_cents,q.status,i.status AS invoice_status,u.email FROM did_quotes q JOIN users u ON u.id=q.user_id LEFT JOIN invoices i ON i.id=q.invoice_id WHERE u.tenant_id=$1 ORDER BY q.created_at DESC LIMIT 200",[user.tenant_id]);
+        const result=await pool.query("SELECT q.id,q.provider,q.number_e164,q.setup_cents,q.monthly_cents,q.provider_setup_cents,q.provider_monthly_cents,q.inventory_id,q.sku_id,q.status,i.status AS invoice_status,u.email FROM did_quotes q JOIN users u ON u.id=q.user_id LEFT JOIN invoices i ON i.id=q.invoice_id WHERE u.tenant_id=$1 ORDER BY q.created_at DESC LIMIT 200",[user.tenant_id]);
         return send(res,200,{requests:result.rows});
       }
       if (path === "/api/porting" && req.method === "GET") {

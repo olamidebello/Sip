@@ -340,8 +340,11 @@ root.innerHTML = `
     <label>Provider <select id="number-provider">
       <option value="inhouse">In-house</option><option value="flowroute">Flowroute</option><option value="didww">DIDWW</option>
     </select></label>
-    <label>Number prefix (optional) <input id="number-prefix" placeholder="+23420315"></label>
+    <label>Number search (prefix for Flowroute; contains for DIDWW) <input id="number-prefix" placeholder="+23420315"></label>
     <button id="search-numbers" type="button">Search numbers</button>
+    <p>Flowroute and DIDWW prices include a 30% increase on provider USD costs. Orders charge setup plus the first month. Availability is checked at submission; carrier purchase and activation require fulfillment review.</p>
+    <label><input id="did-order-terms" type="checkbox"> I accept the displayed setup and monthly prices and understand this is a request pending carrier fulfillment, not an activated DID.</label>
+    <button id="next-numbers" type="button" hidden>Next Flowroute results</button>
     <ul id="numbers"></ul>
     <h3>My number requests</h3><ul id="my-numbers"></ul><ul id="provider-requests"></ul>
     <h3>Port a number</h3>
@@ -1753,12 +1756,17 @@ $("#select-plan").onclick = async () => {
     $("#billing-status").textContent = "Plan requested. Invoice is unpaid.";
   } catch (error) { $("#billing-status").textContent = error.message; }
 };
-$("#search-numbers").onclick = async () => {
+let numberOffset=0;
+$("#next-numbers").onclick=()=>searchProviderNumbers(numberOffset);
+$("#search-numbers").onclick=()=>searchProviderNumbers(0);
+async function searchProviderNumbers(offset) {
   try {
     const inhouse=$("#number-provider").value==="inhouse";
     const data = await apiGet(inhouse ?
       "/api/inhouse/numbers?q="+encodeURIComponent($("#number-prefix").value.trim()) :
-      "/api/numbers?provider=" + $("#number-provider").value);
+      "/api/numbers?provider=" + $("#number-provider").value+"&prefix="+encodeURIComponent($("#number-prefix").value.trim())+"&offset="+offset);
+    numberOffset=data.nextOffset;
+    $("#next-numbers").hidden=data.nextOffset==null;
     $("#numbers").replaceChildren(...data.numbers.map((number) => {
       const li = document.createElement("li");
       li.textContent = `${number.number}: ${money(number.setupCents)} setup, ${money(number.monthlyCents)}/month`;
@@ -1772,18 +1780,22 @@ $("#search-numbers").onclick = async () => {
             $("#search-numbers").click();
             $("#billing-status").textContent="Reserved for 24 hours; invoice unpaid. No SIP service provisioned.";
           } catch(error) {$("#billing-status").textContent=error.message;}
+          finally {request.disabled=false;}
         };
         li.append(request);
       } else {
         li.textContent+=" — ";
-        const request=document.createElement("button");request.type="button";request.textContent="Request DID";
+        const request=document.createElement("button");request.type="button";request.textContent=`Order request (${money(number.initialCents)} initially)`;
         request.onclick=async()=>{
+          request.disabled=true;
           try {
+            if (!$("#did-order-terms").checked) throw new Error("Accept the DID fulfillment terms first");
             await accountRequest("/api/numbers/request",{provider:number.provider,number:number.number,
-              inventoryId:number.inventoryId,skuId:number.skuId});
+              inventoryId:number.inventoryId,skuId:number.skuId,expectedSetupCents:number.setupCents,expectedMonthlyCents:number.monthlyCents,acceptTerms:true});
             await Promise.all([refreshMyNumbers(),refreshBilling()]);
-            $("#billing-status").textContent="Request recorded with an unpaid setup invoice. Carrier ordering and SIP provisioning require separate review.";
+            $("#billing-status").textContent="Request recorded with an unpaid setup and first-month invoice. Carrier ordering and SIP provisioning require separate review.";
           } catch(error) {$("#billing-status").textContent=error.message;}
+          finally {request.disabled=false;}
         };
         li.append(request);
       }

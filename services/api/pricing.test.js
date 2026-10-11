@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validRule,sellingCents,handlePricing } from "./pricing.js";
+import { validRule,sellingCents,handlePricing,pricingRule } from "./pricing.js";
 
 test("pricing supports percentage increase and decrease, fixed adjustment, manual price",()=>{
   assert.equal(sellingCents(125,"percent",3000),163);
@@ -15,11 +15,19 @@ test("pricing supports percentage increase and decrease, fixed adjustment, manua
 test("tenant rule writes require admin and validated values",async()=>{
   let calls=0;
   const pool={query:async(sql,params)=>{calls++;assert.equal(params[sql.includes("security_events")?1:0],"tenant-a");return {rows:[],rowCount:1};}};
-  const req={method:"PUT"},path="/api/admin/pricing/flowroute";
+  const req={method:"PUT"},path="/api/admin/pricing/inhouse";
   const send=(_res,status,body)=>({status,body});
   const readJson=async()=>({mode:"fixed",setupValue:-50,monthlyValue:100});
   assert.equal((await handlePricing({req,res:{},path,user:{role:"user",tenant_id:"tenant-a"},pool,send,readJson})).status,403);
   assert.equal(calls,0);
   const result=await handlePricing({req,res:{},path,user:{role:"admin",id:"actor",tenant_id:"tenant-a"},pool,send,readJson});
-  assert.equal(result.status,200);assert.equal(calls,2);
+  assert.equal(result.status,200);assert.equal(calls,3);
+});
+
+test("supplier DID markup ignores legacy overrides and rejects non-30% writes",async()=>{
+  const pool={query:async()=>{throw Error("Must not read overridden supplier price");}};
+  for(const provider of ["flowroute","didww"]) {
+    assert.deepEqual(await pricingRule(pool,"tenant",provider),{mode:"percent",setupValue:3000,monthlyValue:3000,locked:true});
+    assert.equal((await handlePricing({req:{method:"PUT"},res:{},path:"/api/admin/pricing/"+provider,user:{role:"admin"},pool,send:(_,status)=>status,readJson:async()=>({mode:"percent",setupValue:3500,monthlyValue:3500})})),400);
+  }
 });
