@@ -11,3 +11,14 @@ Monthly, quarterly and annual subscriptions become active after verified fulfill
 Access is tenant scoped, requires billing permission, and honors tenant planRequests/adminPlans controls. Catalog costs are excluded from consumer API responses. Account deactivation pauses renewal. New tenants import the references through the same administrator action.
 
 Run API tests and web build before deploying. Real Stripe test payments, tenant isolation, simultaneous orders, recurring invoice behavior and live fulfillment must be commissioned on staging before sale. The shared server must resolve publicly and the existing private gateway credentials must be configured.
+
+## Publish all products using Ansible
+
+Deploy the latest application image first so the API container contains productPublish.js. The play targets switch_nodes. Run as root on the application server using the bundled local inventory:
+
+```bash
+cd /opt/olamide/repo
+ansible-playbook -i deploy/ansible/product-publish.local.yml deploy/ansible/publish-products.yml
+```
+
+Default scope is **every active tenant**. Suspended tenants are excluded. Use `-e product_all_tenants=false -e product_tenant_id=UUID` to limit execution to one tenant. Publication is atomic per tenant; if a later tenant fails, earlier completed tenants remain published and can be safely retried. New future tenants can be included by rerunning the playbook. Override `product_terms_source` with a controller-local UTF-8 terms file. `--check` previews without writes. Missing reference products are imported; current names, descriptions, prices and meaningful custom terms are preserved. Archived products remain archived unless `-e product_publish_archived=true` is explicitly set. Publication runs in one transaction and records a security event; rerunning does not increment unchanged products. Unknown tenants or tenants without an active administrator fail before modification. The deployed schema must already be migrated. Publication makes products available for orders; it does not commission the underlying services or deliver hardware.

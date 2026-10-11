@@ -1,3 +1,4 @@
+import {publishAllTenantProducts} from './productPublish.js';
 import {renewStoreOrders} from './productStore.js';
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -359,6 +360,10 @@ test("registered users can create and join a room; host controls it", {
   assert.equal(renewal.rows.length,1);assert.equal(renewal.rows[0].amount_cents,2990);
   assert.equal((await post(`/api/store/orders/${order.body.id}/cancel`,{},guestCookie)).status,200);
   assert.equal((await db.query('SELECT i.status FROM store_renewals r JOIN invoices i ON i.id=r.invoice_id WHERE r.order_id=$1',[order.body.id])).rows[0].status,'void');
+  const publishedAll=await publishAllTenantProducts(db,{terms:'Orders require verified service commissioning and delivery before activation.'});
+  assert.equal(publishedAll.tenants,2);assert.ok(publishedAll.results.every(r=>r.referenceCount===177));
+  assert.equal((await publishAllTenantProducts(db,{terms:'Orders require verified service commissioning and delivery before activation.',check:true})).changed,false);
+  assert.equal((await db.query("SELECT COUNT(*) AS total FROM store_products WHERE tenant_id=$1 AND status='published'",[tenant.body.id])).rows[0].total,177);
   const suspend = await fetch(base + `/api/admin/tenants/${tenant.body.id}/status`,{
     method:"PUT",headers:{Origin:origin,Cookie:hostCookie,"Content-Type":"application/json"},
     body:JSON.stringify({status:"suspended"})
