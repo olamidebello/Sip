@@ -1,46 +1,8 @@
 ---
-- name: Apply reviewed dedicated switch firewall policy
+- name: Preserve host firewall until a Kamailio policy is separately reviewed
   hosts: switch_nodes
-  become: true
-  gather_facts: true
-  serial: 1
-  any_errors_fatal: true
+  gather_facts: false
   tasks:
-    - name: Require dedicated Debian switch and reviewed allowlists
-      ansible.builtin.assert:
-        that:
-          - ansible_distribution == 'Debian'
-          - ansible_distribution_major_version == '12'
-          - freeswitch_wss_certificate_source | default('controller') != 'caddy'
-          - freeswitch_ssh_allowed_cidrs | default([]) | length > 0
-          - freeswitch_carrier_allowed_cidrs | default([]) | length <= 32
-        fail_msg: Dedicated Debian 12 switch with SSH allowlist required.
-    - name: Validate CIDR syntax
-      ansible.builtin.assert:
-        that:
-          - item is match('^[0-9.]+/[0-9]{1,2}$')
-      loop: "{{ freeswitch_ssh_allowed_cidrs + freeswitch_carrier_allowed_cidrs }}"
-    - name: Install nftables
-      ansible.builtin.apt:
-        name: nftables
-        update_cache: true
-        state: present
-    - name: Validate rendered policy before replacement
-      ansible.builtin.template:
-        src: roles/switch_node/templates/nftables.conf.j2
-        dest: /etc/nftables.conf
-        owner: root
-        group: root
-        mode: '0644'
-        validate: nft -c -f %s
-      notify: Reload nftables
-    - name: Enable nftables service
-      ansible.builtin.systemd:
-        name: nftables
-        enabled: true
-        state: started
-  handlers:
-    - name: Reload nftables
-      ansible.builtin.systemd:
-        name: nftables
-        state: restarted
+    - name: Explain firewall migration requirement
+      ansible.builtin.fail:
+        msg: Legacy switch firewall retired. Apply a reviewed host firewall covering Kamailio listeners and external media service ports.

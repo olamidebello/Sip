@@ -76,7 +76,6 @@ A super administrator assigns a fleet grant to a user or group in the selected t
 
 ## Current implementation boundary
 
-The fleet runner provisions FreeSWITCH and nftables on supported Debian nodes. Other network device kinds provide inventory, structured desired configuration, revisions and exports; vendor adapters, live configuration collection, telemetry agents and device-specific apply/rollback are not implemented. The Compose capacity action scales API processes on one host; it is not a distributed application or database cluster. Production telecom use requires independent failover, security and call-path acceptance testing.
 
 ## Events, campaigns, and passkey policy
 
@@ -89,4 +88,8 @@ The fleet runner provisions FreeSWITCH and nftables on supported Debian nodes. O
 
 Under **Administration → PBX → Trunk management**, create and edit tenant trunk plans with host, port, transport, and route priority. Each record has a revision; refresh after a conflict before retrying. Select up to 50 trunks to enable or disable their route-preview state in one transaction. History records the actor, timestamp, action, and credential-free configuration snapshot. Export downloads the current credential-free JSON record.
 
-The API prevents editing a trunk tied to an active carrier profile. Delete is allowed only after its rates and carrier profile links have been removed. Disable an active carrier through **Carrier providers** and the adapter first; a PBX preview toggle does not deactivate a switch or carrier. These records are not a live SIP health probe. Confirm actual FreeSWITCH gateway, provider registration, firewall, DNS, and call routing separately before production traffic.
+
+
+## Kamailio service inventory
+
+Open Administration → Kamailio services. A super administrator selects a fleet node, reviewed controller profile and module install/enable requests, then queues a deployment. The private controller records success or failure and collects server evidence. Refresh to inspect installed status, configuration, connection and acceptance evidence. Export downloads the inventory and audit history. See deploy/ansible/README.md for profile commissioning, tokens, dependency checks and rollback. All capabilities remain pending until the actual server provides fresh evidence. Archived and incompatible modules cannot be collectively enabled.

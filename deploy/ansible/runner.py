@@ -35,7 +35,7 @@ def probe(node):
     target = node['ssh_user'] + '@' + node['host']
     cmd = ['ssh', '-p', str(node['ssh_port']), '-o', 'BatchMode=yes',
            '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8', target,
-           'sudo', '-n', 'systemctl', 'is-active', 'freeswitch']
+           'sudo', '-n', 'systemctl', 'is-active', 'kamailio']
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
         status = ('healthy' if result.returncode == 0 and result.stdout.strip() == 'active'
@@ -56,48 +56,8 @@ def probe(node):
 
 
 def deploy(node, inventory, vault_password):
-    # Inherit reviewed group variables, replacing only the selected target host.
-    source = json.loads(pathlib.Path(inventory).read_text())
-    group = source['all']['children']['switch_nodes']
-    vars_ = group['vars']
-    hosts = group['hosts']
-    local_hosts = {str(host.get('ansible_host')) for host in hosts.values()}
-    if node['host'] not in local_hosts and vars_.get('freeswitch_wss_certificate_source') == 'caddy':
-        raise RuntimeError('Remote switch requires controller certificate/key configuration in the private inventory')
-    firewall = node.get('firewallPolicy') if node['action'] == 'firewall' else None
-    if node['action'] == 'firewall':
-        if not firewall or not firewall['enabled']:
-            raise RuntimeError('Firewall policy is unavailable or disabled')
-        if vars_.get('freeswitch_wss_certificate_source') == 'caddy':
-            raise RuntimeError('Co-located Caddy and Docker host firewall is managed outside this runner')
-        cidrs = firewall['ssh_cidrs']
-        peers = firewall['carrier_cidrs']
-        if isinstance(cidrs, str):
-            cidrs = json.loads(cidrs)
-        if isinstance(peers, str):
-            peers = json.loads(peers)
-        source = subprocess.run(['ssh', '-p', str(node['ssh_port']), '-o', 'BatchMode=yes',
-            '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8',
-            node['ssh_user'] + '@' + node['host'], 'printf', '%s', '"$SSH_CONNECTION"'],
-            capture_output=True, text=True, timeout=15, check=True).stdout.split()[0]
-        if not any(ipaddress.ip_address(source) in ipaddress.ip_network(cidr, strict=False) for cidr in cidrs):
-            raise RuntimeError('Controller SSH source is outside the policy SSH allowlist')
-        vars_['manage_firewall'] = True
-        vars_['freeswitch_ssh_allowed_cidrs'] = cidrs
-        vars_['freeswitch_carrier_allowed_cidrs'] = peers
-    group['hosts'] = {'fleet-target': {'ansible_host': node['host'], 'ansible_user': node['ssh_user'],
-                                      'ansible_port': node['ssh_port']}}
-    with tempfile.TemporaryDirectory(prefix='olamide-fleet-') as tmp:
-        path = pathlib.Path(tmp) / 'inventory.json'
-        path.write_text(json.dumps(source))
-        playbook = 'firewall.yml' if node['action'] == 'firewall' else 'site.yml'
-        cmd = ['ansible-playbook', '-i', str(path), str(ROOT / 'deploy/ansible' / playbook),
-               '--vault-password-file', vault_password]
-        result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=3600)
-        # Do not persist Ansible output: tasks could print private configuration.
-        if result.returncode:
-            raise RuntimeError('Ansible exited with code ' + str(result.returncode) + '; inspect the private controller journal')
-
+    # Legacy fleet jobs cannot apply an unreviewed profile.
+    raise RuntimeError('Use the Kamailio services capability plan and private profile controller')
 
 def run_once(base, token, runner_id, inventory, vault_password):
     for node in request(base, token, 'nodes')['nodes']:

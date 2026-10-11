@@ -1,0 +1,50 @@
+---
+- name: Read-only Kamailio and application code audit
+  hosts: switch_nodes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Require node identity for application evidence
+      ansible.builtin.assert:
+        that:
+          - kamailio_node_id is defined
+    - name: Allocate private scratch directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: olamide-audit-
+      register: audit_dir
+    - name: Collect evidence
+      block:
+        - name: Stage sanitized collector and catalog
+          ansible.builtin.copy:
+            src: "{{ item.src }}"
+            dest: "{{ audit_dir.path }}/{{ item.name }}"
+            mode: '0600'
+          loop:
+            - {src: '../../tools/kamailio_audit.py', name: 'audit.py'}
+            - {src: '../../services/api/kamailio-catalog.json', name: 'catalog.json'}
+        - name: Probe local process, configuration, modules and acceptance evidence
+          ansible.builtin.command:
+            argv:
+              - python3
+              - "{{ audit_dir.path }}/audit.py"
+              - --catalog
+              - "{{ audit_dir.path }}/catalog.json"
+              - --output
+              - "{{ audit_dir.path }}/report.json"
+              - --repo
+              - "{{ kamailio_repo_path | default('/opt/olamide') }}"
+              - --node-id
+              - "{{ kamailio_node_id }}"
+          changed_when: false
+          no_log: true
+        - name: Fetch sanitized report
+          ansible.builtin.fetch:
+            src: "{{ audit_dir.path }}/report.json"
+            dest: "{{ kamailio_audit_output | default(playbook_dir + '/audit-reports') }}/{{ inventory_hostname }}.json"
+            flat: true
+      always:
+        - name: Remove staged audit files
+          ansible.builtin.file:
+            path: "{{ audit_dir.path }}"
+            state: absent

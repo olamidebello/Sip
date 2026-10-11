@@ -1,115 +1,45 @@
-# FreeSWITCH switch deployment
+# Kamailio capability deployment
 
-The Ansible role installs FreeSWITCH on dedicated Debian 12 switch nodes, enables authenticated `mod_xml_curl` directory and dialplan lookups, installs a trusted WSS certificate, pins the event socket and node metrics to loopback, configures time synchronization and service restart limits, optionally installs coturn, and applies an opt-in nftables ruleset. The API stores tenant domains, SIP account credentials, tariffs and gateway mappings in MySQL. No carrier traffic is enabled by the role merely installing packages.
+The application catalog tracks 266 upstream module entries, including archived, renamed and experimental modules. It is a discovery inventory, not a claim that Debian 12 packages contain every entry. Bookworm uses an older Kamailio branch than the catalog snapshot. Check the actual package/module version and documentation before commissioning.
 
-## Source installation without a SignalWire package token
+## Application workflow
+1. Create an enabled switch node in fleet administration.
+2. Configure the same 32+ character KAMAILIO_RUNNER_TOKEN on the API and private controller.
+3. Copy profiles.example.json to a private controller file and replace the example host, package list and complete configuration directory.
+4. Open Administration → Kamailio services, choose the node and reviewed profile, select install/enable state, and queue the plan.
+5. Run the controller once or install the sample service/timer after replacing its paths, user and HTTPS URL.
+6. Refresh the screen to inspect deployment results and audit evidence.
 
-On a Debian 12 switch host, the role can build the upstream FreeSWITCH v1.11.3 release from public source. This path compiles the prerequisite libraries, includes `mod_xml_curl`, installs a local systemd service, and then applies the same XML lookup, TLS, gateway and health checks as the package path. It does not use the SignalWire Debian repository or its token. The first run can take substantial time and needs build disk and memory. Dependency repositories are currently fetched from their public default branches; use a reviewed immutable dependency snapshot for reproducible production builds.
-
-The existing private inventory and encrypted Vault still supply `vault_freeswitch_xml_password` and `vault_freeswitch_esl_password`. The package token is ignored in source mode. Do not put passwords in the command line. From the switch host itself, after updating the repository:
-
+Controller command:
 ```sh
-cd /opt/olamide/repo
-ansible-playbook -i deploy/ansible/inventory.yml deploy/ansible/site.yml \
-  -e ansible_connection=local -e freeswitch_install_method=source \
-  --ask-vault-pass
-systemctl is-active freeswitch
-/usr/local/freeswitch/bin/freeswitch -version
+python3 tools/kamailio_controller.py --profiles /etc/olamide/kamailio-profiles.json --base https://sip.example.com
 ```
+Load the token from the private environment file. Never place it on the command line or in Git. Host keys are verified by Ansible. Every target must appear in the profile host allowlist. The worker uses an atomic claim and executes fixed playbooks, with no browser-supplied commands.
 
-The existing `controller-bootstrap.sh` is still for the package workflow and performs an SSH preflight, so use the playbook directly for a local source installation. If the private Vault was generated with a token previously pasted into a chat, revoke that token in SignalWire. It is not needed for this route. Source mode refuses to mix with an already installed FreeSWITCH Debian package and stops if a preexisting `/etc/freeswitch` directory would be overwritten. The source build is marked by `/usr/local/freeswitch/.olamide-source-v1.11.3`; do not treat a marker alone as a live-call test.
+## Complete profile contract
+A profile supplies installedModules, enabledModules, packages and configDirectory. The directory contains a complete reviewed kamailio.cfg plus included routes, certificate references and private dependency configuration. Enabled module choices must match the profile. Packages are restricted to Kamailio package names. External services such as RTPEngine, TURN, databases, charging and IMS peers must be provisioned separately and referenced by this bundle.
 
-This is the upstream FreeSWITCH engine integrated with the Olamide API, not a completed carrier service. Add real gateways, tariffs, DID ingress and call policies, and verify registration, routing and media before opening production traffic.
+A module is not automatically a standalone systemd service. Mutually exclusive TLS backends, deprecated modules and unavailable package builds cannot all be enabled together. The controller reports mismatches as failed with a reason. Do not equate the Select released capabilities button with an approved compatible profile.
 
-## Supported release and upgrade
+The role installs packages with automatic service starts suppressed, snapshots configuration, validates the full configuration before restart, verifies runtime modules and collects a report. An active node requires a drained maintenance window explicitly recorded in the private profile. Rollback restores the prior configuration; package installation is not rolled back. Profile authors must commission tenant isolation, SIP authentication, call routing, media, CDR ingestion and charging against the existing application APIs. The generic capability installer does not invent those provider-specific contracts.
 
-The role requires FreeSWITCH **1.11.3 or newer** from the authenticated SignalWire stable Debian repository. With `freeswitch_upgrade: true`, it checks the repository candidate before installation, updates the FreeSWITCH package set, and verifies both installed and running versions. If the stable repository has an older candidate, the playbook stops; it does not silently install an older switch or fetch unreviewed source. The default playbook processes switch nodes one at a time.
-
-On an existing node, the role checks `show calls count` and stops when calls are active, then saves `/etc/freeswitch` and the previous package version under `/var/backups/olamide-switch` before a package upgrade. It does not automatically drain calls or move traffic to another node. Schedule a maintenance window for a single-node system; for a cluster, remove one node from new-call selection, wait for active calls to reach zero, run the playbook, and verify a test call before moving to the next node. Other configuration changes may also restart FreeSWITCH; treat every playbook run as a maintenance operation.
-
-For rollback, disable new calls to the node, inspect the saved `.version` file and package availability with `apt-cache policy freeswitch`, install the previous package set if still available, restore the matching configuration archive, restart FreeSWITCH, and verify registration, routing, and media. Keep a VM snapshot when the package repository does not retain older versions. No automatic package downgrade is attempted.
-
-## Prepare
-
-1. Create a SignalWire Personal Access Token for FreeSWITCH package downloads.
-2. Obtain a CA-trusted certificate and private key for the WSS SIP domain. Store them at the controller paths set in inventory. Do not commit them.
-3. Set `SIP_CREDENTIAL_KEY` (64 hexadecimal characters) and `FREESWITCH_XML_PASSWORD` (32+ random characters) on the API server. Use the identical XML password in the encrypted Ansible Vault. Keep the API at a private HTTPS URL reachable from the switch. Block public access to `/api/switch/xml` at the proxy when private networking permits; the endpoint also requires HTTP Basic authentication.
-4. Copy `inventory.example.yml` to a private inventory, replace the example host, addresses, domain, API URL and SSH allowlist. Encrypt secrets with Ansible Vault. Do not store unencrypted tokens or credentials in git.
-   Create `group_vars/switch_nodes/vault.yml` with `ansible-vault create` and define `vault_signalwire_token`, `vault_freeswitch_xml_password`, and `vault_freeswitch_esl_password`. Add `vault_coturn_secret` when TURN is enabled. Keep that vault file and the WSS private key outside this repository.
-5. For a dedicated switch node, set `manage_firewall: true`. The role opens WSS TCP 7443, RTP UDP 16384–32768, and SSH only from `freeswitch_ssh_allowed_cidrs`. Optional SIP ingress TCP/UDP 5080 is allowed only from `freeswitch_carrier_allowed_cidrs`. It replaces the node's nftables ruleset; use `manage_firewall: false` where another firewall manager owns the host. Permit the same traffic in the provider's cloud firewall. The example IPs are documentation ranges and must be replaced.
-
-Run from `deploy/ansible`:
-
+## Direct install and audit
 ```sh
-ansible-playbook -i inventory.yml site.yml --ask-vault-pass --syntax-check
-ansible-playbook -i inventory.yml site.yml --ask-vault-pass
+ansible-playbook -i deploy/ansible/inventory.yml deploy/ansible/site.yml
+ansible-playbook -i deploy/ansible/inventory.yml deploy/ansible/audit.yml
 ```
+Reports are stored privately under deploy/ansible/audit-reports unless an output directory is supplied. Code findings contain filenames and line numbers only. The live audit requires the ctl and kex modules for local kamcmd core.modules. It does not export configuration text, credentials or runtime command output.
 
-The role verifies `systemctl is-active freeswitch` and a local ESL `status` command. It does not perform a live carrier call or verify media quality. Repeat the playbook for additional nodes in `switch_nodes`; they share the API's MySQL-backed lookups.
+## Status contract
+- Installed: a module shared object exists on the server.
+- Configured: installed, loaded in the active process and current configuration validation passes.
+- Connected: configured plus a fresh, host/configuration-bound connection-test receipt.
+- Tested: connected plus a successful acceptance-test receipt.
+- Pending: prerequisites or fresh evidence are absent.
 
-## Carrier gateways and GUI
+Receipts are operator-authored results from genuine tests, not generated success flags. Store them at /var/lib/olamide/kamailio-acceptance.json, keyed by module ID, with checkedAt, host, configHash, testId, connectionPassed and acceptancePassed. The hash covers files beneath /etc/kamailio; configuration outside this directory must be included in the test ID evidence and retested after changes. Evidence expires after 24 hours.
 
-A gateway requires a real carrier SIP proxy and, if applicable, SIP credentials and carrier-side IP authorization. Add a vaulted inventory entry, then run Ansible:
+## Recovery and concurrency
+The API serializes claims per node. A controller crash leaves the plan running to avoid an unattended duplicate restart. An operator must inspect actual state before resetting that plan. Reports and plans are tenant scoped; only super administrators may schedule changes to the shared fleet. Ordinary administrators can inspect their tenant's history.
 
-```yaml
-freeswitch_gateways:
-  - name: flowroute_primary
-    proxy: sip.carrier.example
-    register: false
-    username: ''
-    password: ''
-```
-
-In **Administration → FreeSWITCH**, choose the tenant domain and outbound tariff, map its carrier profile to the exact Sofia gateway name, and activate individual SIP accounts. Enable the tenant lookup and gateway mapping after verifying the real gateway on the switch host. New or previously unkeyed accounts receive encrypted SIP credentials on activation and users can retrieve their own credentials through the existing account screen.
-
-The XML endpoint supports authenticated internal extensions and E.164 outbound routes. It checks tenant identity, outbound PBX policy, blocked destination prefixes, tariff effective windows, active carrier profiles, and enabled gateway mappings. Unknown requests return no route. Default public DID ingress, call queues, carrier CDR reconciliation, prepaid balance enforcement, concurrency quotas, emergency dialing policy, lawful intercept, and settlement are **not implemented** by this deployment. Configure those separately before production calling. The GUI does not report a live switch heartbeat.
-
-For browser clients, use `wss://<sip-domain>:7443` in the tenant SIP WSS setting; Sofia's vanilla internal profile exposes WSS on 7443, and the role installs `wss.crt`/`wss.key`. Verify the profile's authenticated calls, TLS chain, DNS and NAT addresses with `fs_cli` before opening traffic. Keep the default public external profile behind the carrier ACL and firewall. Avoid the bundled demo users and default dialplan on any exposed profile; the XML directory binding is exclusive for directory lookups, but validate actual profile behavior and remove unused demonstrations.
-
-If `coturn_enabled: true`, the role provisions coturn with an HMAC shared secret. Set the API `TURN_SECRET` to that same value and configure `TURN_PUBLIC_HOST`; allow TURN 3478 and relay UDP 49160–49260. Configure browser ICE servers and test calls across networks. TURN relays browser candidates; FreeSWITCH itself does not use TURN as a client.
-
-## Recovery
-
-Disable the tenant switch lookup in the GUI to stop new directory and dialplan results. Disable a gateway mapping to stop new outbound selections. Existing calls are not disconnected. The role makes no irreversible database changes beyond the API's idempotent migration. Back up the switch configuration and MySQL before rollout.
-
-## Fleet operations from the super administrator dashboard
-
-`deployment/controller-bootstrap.sh` installs the application and switch, then enables the private
-`olamide-fleet-runner.timer` on a Linux controller with active systemd. The Windows
-`deployment/install-class5.bat` starts the same bootstrap through WSL; a WSL instance
-without systemd requires a persistent Linux controller for scheduled jobs.
-
-The controller keeps `deployment/secrets.env`, encrypted
-`deploy/ansible/group_vars/switch_nodes/vault.yml`, its Ansible Vault password in
-`~/.config/olamide-runner/vault-password`, and SSH keys. These must not be placed
-in the web UI or committed. The timer runs once a minute. Inspect failures with
-`journalctl -u olamide-fleet-runner.service`; manually inspect the next pass with
-`python3 deploy/ansible/runner.py --vault-password-file ~/.config/olamide-runner/vault-password`.
-
-Add a switch in **Server and network operations** using a reviewed IPv4 address,
-SSH user and port. Before queuing an installation, establish the host key in the
-controller's `known_hosts`, verify Debian 12, SSH key access and passwordless sudo,
-and prepare network firewall rules. The GUI queues only health, install and upgrade
-jobs, with a health or upgrade interval of at least 5 or 60 minutes respectively.
-Jobs are leased and retried at most three times; Ansible provisions one node at a
-time. Server inventory, jobs, checks, schedules, events and report thresholds are
-stored in MySQL. The UI shows configured capacity, not tested call capacity.
-
-The generated initial inventory uses Caddy's certificate volume on the application
-host. For a separate switch, configure `freeswitch_wss_certificate_source:
-controller` and `freeswitch_wss_certificate`/`freeswitch_wss_key` in the private
-inventory with a trusted certificate for the SIP domain before installing. Its
-renewal needs an operator managed certificate deployment process. The API does not
-accept arbitrary cron expressions, shell commands, firewall changes or credentials
-from the browser. Application nodes can be registered for inventory but the
-existing Compose capacity controller handles app replica requests on one host.
-
-### Reviewed firewall jobs
-
-The super administrator can save SSH and carrier SIP CIDR allowlists for a dedicated
-Debian switch in the fleet dashboard. A separate `firewall` job runs
-`deploy/ansible/firewall.yml`. The private worker checks that its current SSH
-source is within the SSH allowlist before applying the validated nftables
-ruleset. It rejects a co-located Caddy/Docker host. Keep console access and
-verify new SSH, WSS, RTP and carrier SIP connections after a change. A saved
-policy is not applied until a deploy-authorized operator queues the job.
+The retired XML switch endpoint returns HTTP 410. Historical database tables and credential utilities remain for data compatibility. The new deployment never uses them.

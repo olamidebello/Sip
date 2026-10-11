@@ -22,6 +22,11 @@ MEETING_ICE_SERVERS_JSON=[]
 ENV
   chmod 0600 /etc/olamide/secrets.env
 fi
+if ! grep -q '^KAMAILIO_RUNNER_TOKEN=.' /etc/olamide/secrets.env; then
+  umask 077
+  sed -i '/^KAMAILIO_RUNNER_TOKEN=$/d' /etc/olamide/secrets.env
+  printf 'KAMAILIO_RUNNER_TOKEN=%s\n' "$(openssl rand -hex 32)" >> /etc/olamide/secrets.env
+fi
 validated_ref=$(bash "$SCRIPT_DIR/verified-sha.sh")
 OLAMIDE_DOMAIN="$DOMAIN" ansible-playbook -i 'localhost,' -c local \
   "$SCRIPT_DIR/ansible/site.yml" \

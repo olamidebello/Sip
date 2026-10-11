@@ -1,0 +1,21 @@
+name: Kamailio automation checks
+on:
+  push:
+    paths: ['tools/kamailio*', 'tests/test_kamailio*', 'deploy/ansible/**', '.github/workflows/kamailio.yml']
+  pull_request:
+    paths: ['tools/kamailio*', 'tests/test_kamailio*', 'deploy/ansible/**', '.github/workflows/kamailio.yml']
+jobs:
+  automation:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install ansible-core
+      - run: python -m unittest discover -s tests -p 'test_kamailio*.py'
+      - run: python -m py_compile tools/kamailio_audit.py tools/kamailio_controller.py deploy/ansible/runner.py
+      - run: ansible-playbook -i deploy/ansible/inventory.example.yml deploy/ansible/site.yml --syntax-check
+      - run: ansible-playbook -i deploy/ansible/inventory.example.yml deploy/ansible/audit.yml --syntax-check

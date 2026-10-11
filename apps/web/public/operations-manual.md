@@ -76,4 +76,8 @@ A super administrator assigns a fleet grant to a user or group in the selected t
 
 ## Current implementation boundary
 
-The fleet runner provisions FreeSWITCH and nftables on supported Debian nodes. Other network device kinds provide inventory, structured desired configuration, revisions and exports; vendor adapters, live configuration collection, telemetry agents and device-specific apply/rollback are not implemented. The Compose capacity action scales API processes on one host; it is not a distributed application or database cluster. Production telecom use requires independent failover, security and call-path acceptance testing.
+
+
+## Kamailio service inventory
+
+Open Administration → Kamailio services. A super administrator selects a fleet node, reviewed controller profile and module install/enable requests, then queues a deployment. The private controller records success or failure and collects server evidence. Refresh to inspect installed status, configuration, connection and acceptance evidence. Export downloads the inventory and audit history. See deploy/ansible/README.md for profile commissioning, tokens, dependency checks and rollback. All capabilities remain pending until the actual server provides fresh evidence. Archived and incompatible modules cannot be collectively enabled.

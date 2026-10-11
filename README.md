@@ -2,11 +2,11 @@
 
 Olamide is a development browser softphone with a Node.js account API and MySQL 8.4 database. See the deployment checks below for the current server state.
 
-## FreeSWITCH and Class 5 deployment
+## Kamailio capability deployment
 
-The Debian 12 switch playbook requires FreeSWITCH 1.11.3 or newer from the SignalWire stable repository and upgrades nodes one at a time after checking for active calls and backing up configuration. A FreeSWITCH XML bridge serves tenant-scoped SIP credentials and authenticated internal/outbound dialplans from MySQL. The **Administration → FreeSWITCH** screen manages domains, tariff selection, Sofia gateway mappings, and account activation. A [Debian 12 Ansible role](deploy/ansible/README.md) installs FreeSWITCH, XML curl, WSS certificates, local event socket protection, node telemetry, time synchronization, optional TURN, and a configurable switch firewall. Multiple hosts can share the backend.
+Administration → Kamailio services exposes the 266-entry module inventory, per-node install/enable requests, deployment history and evidence-based status. A private Ansible controller applies reviewed complete configuration profiles. See [Kamailio deployment guide](deploy/ansible/README.md).
 
-This is an installable switch foundation, not a completed carrier-grade Class 5 service. The role needs a SignalWire package token, trusted WSS certificate, private network API URL, SIP carrier settings, and vaulted secrets. It has not been deployed to a server. Public DID ingress, live CDR rating, prepaid enforcement, concurrent call limits, emergency routing, fraud settlement and regulatory controls require further implementation and acceptance testing.
+The former XML switch control and deployment entry points are retired. Historical tables and credential utilities remain for migration compatibility. Catalog entries are not all implemented application services: unavailable packages, conflicting backends and uncommissioned external dependencies remain pending.
 
 ## Generate the MySQL database
 
@@ -70,11 +70,9 @@ For cross-network meetings, configure `MEETING_ICE_SERVERS_JSON` or the optional
 
 ## Limits before service launch
 
-The repository is a development foundation. PBX and call center configuration is a planning control plane; no SIP switch or live call routing is connected by default. It includes a Debian FreeSWITCH installation foundation and browser controls, but live carrier routing, rated billing/settlement, DID purchase automation, full network device adapters, distributed database failover, and production telecom acceptance remain incomplete. Email OTP and passkeys require the configuration described below. The wallet starts with zero balance and has no funding or payout integration. Browser-only geofencing and group flags cannot enforce policies on an external SIP server or inspect peer-to-peer media. Add a trusted SIP/media service, backups, operational monitoring, abuse controls, migrations, and security review before accepting real users or payments. No Acrobits, WhatsApp, Cash App, Zoom, or Zoiper code or branding is included.
 
 ## Feature status and boundaries
 
-This repository contains a browser SIP dialer, a MySQL-backed account API, FreeSWITCH installation and XML bridge, and administration screens. The supported switch deployment can provision tenant SIP accounts and dialplan lookups when commissioned. PBX, queue, DID routing and rate deck features still need live carrier, media, charging and acceptance work. Neither a plan invoice nor a previewed rate is a charge.
 
 | Area | Available now | Additional service required |
 | --- | --- | --- |
@@ -119,7 +117,6 @@ PortaOne's PortaSwitch also provides SIP call processing, media applications, ph
 
 Set `CDR_INGEST_KEYS_JSON` in the private API environment to a JSON object mapping each tenant UUID to a separate random HMAC secret of at least 32 characters. Generate a secret with `openssl rand -hex 32`; do not commit it. The default tenant is `00000000-0000-4000-8000-000000000000`. On the server, edit `/etc/olamide/secrets.env` and rerun bootstrap to apply it. Keep the file mode 0600. Remove a tenant entry to revoke its ingestion key. Rotate keys with a controlled switch cutover; the current configuration permits one key per tenant.
 
-`POST /api/integrations/cdr` accepts at most 8 KiB of normalized JSON with `Content-Type: application/json`. Its `X-CDR-Timestamp` is Unix seconds within five minutes of the API clock. Its `X-CDR-Signature` is lowercase or uppercase hex HMAC-SHA256 of the UTF-8 bytes `timestamp + "." + raw_request_body` with that tenant's secret. The caller must supply `tenantId`, `source` (switch identifier), `legId` (unique per source and call leg), `direction` (`inbound` or `outbound`), E.164 `from` and `to`, `disposition` (`answered`, `missed`, `rejected`, or `failed`), integer `durationSeconds`, integer `billableSeconds`, and UTC ISO `startedAt` (for example `2026-10-04T06:00:00Z`). The adapter connecting a switch must normalize its native event fields, map each call leg to the correct tenant, and sign the raw body. A native FreeSWITCH JSON CDR is **not** this normalized contract.
 
 The API stores each `(tenantId, source, legId)` once. An exact replay returns `duplicate:true`; a changed record under the same key returns HTTP 409 for investigation. The admin **Imported call records** panel shows the 100 latest legs for the selected tenant. These records are unrated and never alter invoices, balances, or payments. Source attribution, clock synchronization, completeness checks, fraud monitoring, lawful retention, and reconciliation with the carrier are required before using CDRs for billing. Protect the endpoint with network controls as well as HMAC; its origin exemption exists for server-to-server delivery.
 
@@ -161,13 +158,9 @@ The API stores each `(tenantId, source, legId)` once. An exact replay returns `d
 
 ### Existing external controller deployment
 
-### Optional FreeSWITCH package staging
 
-The server-side `deployment/bootstrap.sh` remains the validated web/API/MySQL installer used by `deployment/install-all.sh`. For a combined app and FreeSWITCH install from a trusted Debian or Ubuntu controller, run `bash deployment/controller-bootstrap.sh` from a persistent checkout, or use `deployment/install-class5.bat` through WSL on Windows. The controller flow prompts for the application DNS name, public IPv4, SSH user, SignalWire package token and Ansible Vault password, then installs the application and switch. Keep the private inventory, Vault file, runner token and SSH keys on the controller.
 
-The switch playbook installs the official vanilla FreeSWITCH package, blocks package auto-start, deletes bundled demo SIP users and demo dialplan destinations, rotates the event socket password, binds that socket to localhost, and leaves the switch **stopped and disabled**. No customer extension, DID, carrier, outbound route, or WSS endpoint is automatically activated. The package's default demo accounts must never be exposed with their shared password. Keep SIP and RTP ports closed until a separate production configuration has been commissioned.
 
-To commission service, an operator must supply valid numbering allocation/LOA, carrier and Nigerian clearinghouse agreements, authenticated peer endpoints and IP allowlists, emergency-calling policy, abuse controls, rate/charging decisions, media/RTP address and port ranges, TLS certificates for WSS, TURN as needed, and a tested dialplan that synchronizes tenant provisioning from MySQL. Test registration, internal and external calls, inbound DID reachability, CDR completeness, failover, fraud blocking, and restore procedures before starting FreeSWITCH. This repository does **not** provide a complete carrier-grade class 5 switch or automatic live provisioning. A single server is a single point of failure; redundant signaling, media, database, and network nodes are needed for carrier availability. The existing Git updater rebuilds web/API containers and does not hot-reload or reconfigure FreeSWITCH.
 
 An Ansible controller can deploy the same stack after creating a private `deployment/secrets.env` from `deployment/secrets.env.example`. Set `DOMAIN=sip.dobhrap.com`, `MYSQL_URL` with a URL-safe encoded password matching `MYSQL_PASSWORD`, and a distinct `MYSQL_ROOT_PASSWORD`. Verify the server's SSH host key fingerprint through your provider console before adding it to `~/.ssh/known_hosts`. Run:
 
@@ -221,7 +214,6 @@ The offline page explains that a network connection is required. The service wor
 
 The Compose stack includes a **disabled by default** coturn profile. On the Debian host, verify that `sip.dobhrap.com` resolves to its actual public IPv4 address and that the host can accept TCP and UDP port 3478 plus UDP ports 49160–49260. Use the actual address from your provider console; a server IP written in project notes is not a substitute for checking the deployed host. In `/etc/olamide/secrets.env` set `TURN_PUBLIC_HOST=sip.dobhrap.com`, `TURN_PUBLIC_IP=YOUR_VERIFIED_PUBLIC_IPV4`, a newly generated `TURN_SECRET` of at least 32 random characters (for example `openssl rand -hex 32`), and `COMPOSE_PROFILES=turn`. Keep this file mode 0600. Re-run bootstrap or the validated update service and inspect `docker compose --profile turn ps` in `/opt/olamide/repo/deployment/docker`. The API and coturn must use the same secret. After commissioning, join a meeting from two different networks and inspect the WebRTC candidate pair to verify that a `relay` candidate is selected when direct connectivity fails.
 
-`GET /api/meetings/config` gives authenticated participants one-hour coturn REST credentials generated by the API, without exposing the shared secret. The relay uses UDP/TCP TURN on 3478; TURN over TLS on 5349 is not configured. Keep firewall rules limited to the listed ports and provision enough relay bandwidth and ports for the intended concurrency. This profile is for the four-person web meetings; it does not configure SIP WSS, media routing in FreeSWITCH, or an SBC. A successful container start does not prove audio connectivity across provider networks.
 
 ### Bare Debian installation and Ansible automation
 
@@ -258,9 +250,7 @@ Sign in and open **Locale** to choose a language, country or territory, and pref
 
 ### Live telecom and financial commissioning gates
 
-The current FreeSWITCH playbook **stages packages and leaves the switch stopped**. The PBX API stores tenant scoped extensions, queues, DID destinations, trunk intent, rates, and preview policies; it does not yet generate a live FreeSWITCH directory or dialplan. Do not start a public SIP service from this repository as if the stored settings were active. Live WSS registration needs a commissioned SIP profile with trusted TLS, provisioned SIP users and credential lifecycle, verified tenant routing, trunk authentication, media/NAT configuration, and an SBC or equivalent ingress controls. FreeSWITCH [mod_xml_curl](https://developer.signalwire.com/freeswitch/integration/xml-curl/) can fetch directory and dialplan XML from an authenticated backend, while [mod_callcenter](https://developer.signalwire.com/freeswitch/applications/call-queues/) supplies live ACD, and [mod_voicemail](https://developer.signalwire.com/freeswitch/applications/voicemail/) needs recording storage and a delivery service. Those integrations, recording consent and retention rules, queue SLA event capture, and an operator wallboard are not implemented here.
 
-The CDR API accepts signed, idempotent **normalized** records from a configured source but does not subscribe to FreeSWITCH events or rate, settle, reconcile, or charge them. Plan and DID invoices can be paid through an enabled Stripe Checkout gateway; payment does not fulfill or provision an order. Before activating prepaid calling, implement jurisdiction-specific tax calculation, an immutable ledger, real-time balance reservation and call cutoff at the switch, fraud limits, and carrier invoice reconciliation. Do not credit a wallet from a browser success message or treat the current route preview as a fraud or balance control.
 
 Commissioning the server also requires authorized SSH/console access, public DNS control for `sip.dobhrap.com`, the provider's actual interconnect and account credentials, and production firewall rules. The deployment playbook verifies public HTTPS and DNS when run against the server, but this repository cannot change a DNS zone or supply external credentials. Confirm each dependency and perform end-to-end call, failure, emergency routing, payment, tax, CDR, and recovery tests before advertising live service.
 
@@ -315,7 +305,6 @@ To regenerate packages, use the workflow's **Run workflow** button or push packa
 
 ## Integration work required for a live PBX or ASTPP-class service
 
-Choose a licensed and supported switch (for example Asterisk/FreeSWITCH with an SBC and a suitable provisioning layer) and implement tenant-isolated provisioning for PJSIP credentials, TLS/WSS, dialplan, queue engine, voicemail, inbound/outbound carrier routing, emergency calling policy, media/RTP, and CDR ingestion. Require reconciliation and idempotency between the Olamide database and the switch. Add per-tenant carrier credentials, explicit route activation, number ownership checks, fraud limits, call recording consent and storage policy, and monitoring before enabling trunk traffic. For ASTPP-like charging, add authoritative CDRs, prefix effective dates, rounding rules, taxes, prepaid credit reservation, low-balance interruption, dispute adjustments, and audited settlement. For 3CX-like call center operation, add live queue distribution, presence tied to registration and calls, SLA measurement, callbacks, recording, reports, and supervisor controls. The current queue and LCR endpoints are safe previews for that implementation, not an operational substitute.
 # Form pages and account registration
 
 Forms have direct browser routes under `/pages/<form-id>`. For example,
@@ -592,7 +581,6 @@ manual in the GUI until a monitoring worker is deployed.
 
 The [user, administrator and operations manual](docs/operations-manual.md) covers registration, named tenant and personal dashboard views, drag and drop tile ordering, dark custom backgrounds, fleet grants, network device inventory, versioned desired configuration and credential-free exports. The same guide is available from the in-app Help center.
 
-The super administrator fleet screen manages approved FreeSWITCH installation, health, upgrade and dedicated switch nftables policy jobs through a private Ansible controller. It also stores router, firewall and load balancer inventory and configuration drafts; vendor-specific apply/rollback is not available. Registration policy can close public signup or restrict email domains. Healthy WSS discovery targets can be selected by region and weight for new browser connections; this is not SIP 3xx redirection or call failover.
 
 Named dashboard views and up to eight quick links are scoped to a tenant or user. A keyboard command palette (Ctrl/Command K) searches visible pages; previously saved links are filtered against current access. Tenant administrators can publish shared views and control personal overrides. Fleet grants expose shared infrastructure across tenants, so grant them only to trusted operators. API capacity controls still scale only 1–4 API replicas on a single Docker Compose host; MySQL and media are not clustered.
 
