@@ -598,13 +598,19 @@ root.innerHTML = `
         <label>Search module <input name="search" type="search"></label>
         <label>Status <select name="filter"><option value="">All</option><option>pending</option><option>configured</option><option>connected</option><option>tested</option></select></label>
         <button id="kamailio-select" type="button">Select released capabilities</button>
+        <button id="kamailio-same-server" type="button">Select same-server SIP and media profile</button>
+        <button id="kamailio-same-server-trunk" type="button">Select same-server carrier trunk profile</button>
+        <button id="kamailio-same-server-mail" type="button">Select combined SIP, trunk and email profile</button>
+        <button id="kamailio-carrier-grade" type="button">Select carrier deployment and acceptance gate</button>
+        <button id="kamailio-freeswitch-cluster" type="button">Select two FreeSWITCH backends</button>
+        <button id="kamailio-same-server-pbx" type="button">Select same-server PBX profile</button>
         <button id="kamailio-clear" type="button">Clear selection</button>
         <button type="submit">Queue installation and configuration</button>
       </form>
       <button id="kamailio-refresh" type="button">Refresh status</button><button id="kamailio-export" type="button">Export inventory and evidence</button>
       <p id="kamailio-status" role="status"></p>
       <div style="overflow:auto"><table><thead><tr><th>Capability</th><th>Maturity</th><th>Install</th><th>Enable</th><th>Installed</th><th>Status</th><th>Evidence</th><th>Guide</th></tr></thead><tbody id="kamailio-features"></tbody></table></div>
-      <h4>Automatic account provisioning</h4><p id="sip-provisioning-status" role="status"></p><button type="button" id="sip-provisioning-retry">Retry pending accounts</button><ul id="sip-provisioning-accounts"></ul><h4>Deployment history</h4><ul id="kamailio-history"></ul>
+      <h4>Production commissioning</h4><p>Same-server plans install Kamailio and RTPengine using a private reviewed profile. Successful deployment verifies media control, WebSocket transport and public DNS. SIP authentication, two-way audio, carrier calls, billing, backups and capacity tests remain separate acceptance requirements.</p><h4>Carrier and ASTPP-style feature readiness</h4><p>Application integration is separate from live-service acceptance. Pending features require implementation or commissioning; this is not an ASTPP installation.</p><ul id="carrier-readiness"></ul><h4>Automatic account provisioning</h4><p id="sip-provisioning-status" role="status"></p><button type="button" id="sip-provisioning-retry">Retry pending accounts</button><ul id="sip-provisioning-accounts"></ul><h4>Deployment history</h4><ul id="kamailio-history"></ul>
     </section>
     <section id="carrier-adapter-admin" hidden>
       <h3>Carrier adapter nodes</h3>

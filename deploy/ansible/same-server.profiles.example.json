@@ -1,0 +1,471 @@
+{
+  "same-server-trunk": {
+    "allowedHosts": [
+      "154.29.77.102"
+    ],
+    "configDirectory": "/etc/olamide/profiles/same-server/kamailio",
+    "packages": [
+      "kamailio",
+      "kamailio-mysql-modules",
+      "kamailio-websocket-modules"
+    ],
+    "installedModules": [
+      "ctl",
+      "tm",
+      "sl",
+      "rr",
+      "auth",
+      "auth_db",
+      "registrar",
+      "usrloc",
+      "db_mysql",
+      "websocket",
+      "xhttp",
+      "nathelper",
+      "rtpengine",
+      "dispatcher",
+      "permissions",
+      "dialog",
+      "acc",
+      "htable",
+      "pike"
+    ],
+    "enabledModules": [
+      "ctl",
+      "tm",
+      "sl",
+      "rr",
+      "auth",
+      "auth_db",
+      "registrar",
+      "usrloc",
+      "db_mysql",
+      "websocket",
+      "xhttp",
+      "nathelper",
+      "rtpengine",
+      "dispatcher",
+      "permissions",
+      "dialog",
+      "acc",
+      "htable",
+      "pike"
+    ],
+    "maintenanceApproved": false,
+    "repoPath": "/opt/olamide/repo",
+    "sameServer": true,
+    "sameServerSettings": {
+      "sip_domain": "sip.dobhrap.com",
+      "sip_public_ip": "154.29.77.102",
+      "sip_public_interface": "eth0",
+      "sip_bridge_ip": "172.18.0.1",
+      "sip_bridge_interface": "br-11662f59f698",
+      "sip_docker_subnet": "172.18.0.0/16",
+      "sip_rtp_min": 30000,
+      "sip_rtp_max": 39999,
+      "rtpengine_config_source": "/etc/olamide/profiles/same-server/rtpengine.conf",
+      "rtpengine_service": "rtpengine-daemon",
+      "rtpengine_package": "rtpengine-daemon",
+      "sip_carrier_cidrs": [
+        "192.0.2.0/24"
+      ]
+    }
+  },
+  "same-server": {
+    "allowedHosts": [
+      "154.29.77.102"
+    ],
+    "configDirectory": "/etc/olamide/profiles/same-server/kamailio",
+    "packages": [
+      "kamailio",
+      "kamailio-mysql-modules",
+      "kamailio-websocket-modules"
+    ],
+    "installedModules": [
+      "ctl",
+      "tm",
+      "sl",
+      "rr",
+      "auth",
+      "auth_db",
+      "registrar",
+      "usrloc",
+      "db_mysql",
+      "websocket",
+      "xhttp",
+      "nathelper",
+      "rtpengine",
+      "dispatcher",
+      "permissions",
+      "dialog",
+      "acc",
+      "htable",
+      "pike"
+    ],
+    "enabledModules": [
+      "ctl",
+      "tm",
+      "sl",
+      "rr",
+      "auth",
+      "auth_db",
+      "registrar",
+      "usrloc",
+      "db_mysql",
+      "websocket",
+      "xhttp",
+      "nathelper",
+      "rtpengine"
+    ],
+    "maintenanceApproved": false,
+    "repoPath": "/opt/olamide/repo",
+    "sameServer": true,
+    "sameServerSettings": {
+      "sip_domain": "sip.dobhrap.com",
+      "sip_public_ip": "154.29.77.102",
+      "sip_public_interface": "eth0",
+      "sip_bridge_ip": "172.18.0.1",
+      "sip_bridge_interface": "br-11662f59f698",
+      "sip_docker_subnet": "172.18.0.0/16",
+      "sip_rtp_min": 30000,
+      "sip_rtp_max": 39999,
+      "rtpengine_config_source": "/etc/olamide/profiles/same-server/rtpengine.conf",
+      "rtpengine_service": "rtpengine-daemon",
+      "rtpengine_package": "rtpengine-daemon",
+      "sip_carrier_cidrs": [
+        "192.0.2.0/24"
+      ]
+    }
+  },
+  "same-server-mail": {
+    "allowedHosts": [
+      "154.29.77.102"
+    ],
+    "configDirectory": "/etc/olamide/profiles/same-server/kamailio",
+    "packages": [
+      "kamailio",
+      "kamailio-mysql-modules",
+      "kamailio-websocket-modules"
+    ],
+    "installedModules": [
+      "ctl",
+      "tm",
+      "sl",
+      "rr",
+      "auth",
+      "auth_db",
+      "registrar",
+      "usrloc",
+      "db_mysql",
+      "websocket",
+      "xhttp",
+      "nathelper",
+      "rtpengine",
+      "dispatcher",
+      "permissions",
+      "dialog",
+      "acc",
+      "htable",
+      "pike"
+    ],
+    "enabledModules": [
+      "ctl",
+      "tm",
+      "sl",
+      "rr",
+      "auth",
+      "auth_db",
+      "registrar",
+      "usrloc",
+      "db_mysql",
+      "websocket",
+      "xhttp",
+      "nathelper",
+      "rtpengine",
+      "dispatcher",
+      "permissions",
+      "dialog",
+      "acc",
+      "htable",
+      "pike"
+    ],
+    "maintenanceApproved": false,
+    "repoPath": "/opt/olamide/repo",
+    "sameServer": true,
+    "sameServerSettings": {
+      "sip_domain": "sip.dobhrap.com",
+      "sip_public_ip": "154.29.77.102",
+      "sip_public_interface": "eth0",
+      "sip_bridge_ip": "172.18.0.1",
+      "sip_bridge_interface": "br-11662f59f698",
+      "sip_docker_subnet": "172.18.0.0/16",
+      "sip_rtp_min": 30000,
+      "sip_rtp_max": 39999,
+      "rtpengine_config_source": "/etc/olamide/profiles/same-server/rtpengine.conf",
+      "rtpengine_service": "rtpengine-daemon",
+      "rtpengine_package": "rtpengine-daemon",
+      "sip_carrier_cidrs": [
+        "192.0.2.0/24"
+      ],
+      "mail_enabled": true,
+      "mail_hostname": "mail.dobhrap.com",
+      "mail_domain": "dobhrap.com",
+      "mail_config_source": "/etc/olamide/profiles/same-server/mail",
+      "mail_certificate": "/etc/olamide/mail-tls/fullchain.pem",
+      "mail_key": "/etc/olamide/mail-tls/privkey.pem"
+    }
+  },
+  "carrier-grade": {
+    "allowedHosts": [
+      "154.29.77.102"
+    ],
+    "configDirectory": "/etc/olamide/profiles/same-server/kamailio",
+    "packages": [
+      "kamailio",
+      "kamailio-mysql-modules",
+      "kamailio-websocket-modules"
+    ],
+    "installedModules": [
+      "ctl",
+      "tm",
+      "sl",
+      "rr",
+      "auth",
+      "auth_db",
+      "registrar",
+      "usrloc",
+      "db_mysql",
+      "websocket",
+      "xhttp",
+      "nathelper",
+      "rtpengine",
+      "dispatcher",
+      "permissions",
+      "dialog",
+      "acc",
+      "htable",
+      "pike"
+    ],
+    "enabledModules": [
+      "ctl",
+      "tm",
+      "sl",
+      "rr",
+      "auth",
+      "auth_db",
+      "registrar",
+      "usrloc",
+      "db_mysql",
+      "websocket",
+      "xhttp",
+      "nathelper",
+      "rtpengine",
+      "dispatcher",
+      "permissions",
+      "dialog",
+      "acc",
+      "htable",
+      "pike"
+    ],
+    "maintenanceApproved": false,
+    "repoPath": "/opt/olamide/repo",
+    "sameServer": true,
+    "sameServerSettings": {
+      "sip_domain": "sip.dobhrap.com",
+      "sip_public_ip": "154.29.77.102",
+      "sip_public_interface": "eth0",
+      "sip_bridge_ip": "172.18.0.1",
+      "sip_bridge_interface": "br-11662f59f698",
+      "sip_docker_subnet": "172.18.0.0/16",
+      "sip_rtp_min": 30000,
+      "sip_rtp_max": 39999,
+      "rtpengine_config_source": "/etc/olamide/profiles/same-server/rtpengine.conf",
+      "rtpengine_service": "rtpengine-daemon",
+      "rtpengine_package": "rtpengine-daemon",
+      "sip_carrier_cidrs": [
+        "192.0.2.0/24"
+      ],
+      "mail_enabled": true,
+      "mail_hostname": "mail.dobhrap.com",
+      "mail_domain": "dobhrap.com",
+      "mail_config_source": "/etc/olamide/profiles/same-server/mail",
+      "mail_certificate": "/etc/olamide/mail-tls/fullchain.pem",
+      "mail_key": "/etc/olamide/mail-tls/privkey.pem"
+    },
+    "requireProductionAcceptance": true,
+    "acceptanceFile": "/etc/olamide/carrier-acceptance.json",
+    "requiredConcurrentCalls": 500
+  },
+  "same-server-pbx": {
+    "allowedHosts": [
+      "154.29.77.102"
+    ],
+    "configDirectory": "/etc/olamide/profiles/same-server/kamailio",
+    "packages": [
+      "kamailio",
+      "kamailio-mysql-modules",
+      "kamailio-websocket-modules"
+    ],
+    "installedModules": [
+      "ctl",
+      "tm",
+      "sl",
+      "rr",
+      "auth",
+      "auth_db",
+      "registrar",
+      "usrloc",
+      "db_mysql",
+      "websocket",
+      "xhttp",
+      "nathelper",
+      "rtpengine",
+      "dispatcher",
+      "permissions",
+      "dialog",
+      "acc",
+      "htable",
+      "pike"
+    ],
+    "enabledModules": [
+      "ctl",
+      "tm",
+      "sl",
+      "rr",
+      "auth",
+      "auth_db",
+      "registrar",
+      "usrloc",
+      "db_mysql",
+      "websocket",
+      "xhttp",
+      "nathelper",
+      "rtpengine",
+      "dispatcher",
+      "permissions",
+      "dialog",
+      "acc",
+      "htable",
+      "pike"
+    ],
+    "maintenanceApproved": false,
+    "repoPath": "/opt/olamide/repo",
+    "sameServer": true,
+    "sameServerSettings": {
+      "sip_domain": "sip.dobhrap.com",
+      "sip_public_ip": "154.29.77.102",
+      "sip_public_interface": "eth0",
+      "sip_bridge_ip": "172.18.0.1",
+      "sip_bridge_interface": "br-11662f59f698",
+      "sip_docker_subnet": "172.18.0.0/16",
+      "sip_rtp_min": 30000,
+      "sip_rtp_max": 39999,
+      "rtpengine_config_source": "/etc/olamide/profiles/same-server/rtpengine.conf",
+      "rtpengine_service": "rtpengine-daemon",
+      "rtpengine_package": "rtpengine-daemon",
+      "sip_carrier_cidrs": [
+        "192.0.2.0/24"
+      ],
+      "pbx_enabled": true,
+      "pbx_source_archive": "/etc/olamide/artifacts/asterisk-release.tar.gz",
+      "pbx_source_sha256": "REPLACE_WITH_VERIFIED_SHA256",
+      "pbx_config_source": "/etc/olamide/profiles/same-server/asterisk",
+      "pbx_version": "REPLACE_WITH_PINNED_VERSION"
+    }
+  },
+  "same-server-freeswitch-cluster": {
+    "allowedHosts": [
+      "154.29.77.102"
+    ],
+    "configDirectory": "/etc/olamide/profiles/same-server/kamailio",
+    "packages": [
+      "kamailio",
+      "kamailio-mysql-modules",
+      "kamailio-websocket-modules"
+    ],
+    "installedModules": [
+      "ctl",
+      "tm",
+      "sl",
+      "rr",
+      "auth",
+      "auth_db",
+      "registrar",
+      "usrloc",
+      "db_mysql",
+      "websocket",
+      "xhttp",
+      "nathelper",
+      "rtpengine",
+      "dispatcher",
+      "permissions",
+      "dialog",
+      "acc",
+      "htable",
+      "pike"
+    ],
+    "enabledModules": [
+      "ctl",
+      "tm",
+      "sl",
+      "rr",
+      "auth",
+      "auth_db",
+      "registrar",
+      "usrloc",
+      "db_mysql",
+      "websocket",
+      "xhttp",
+      "nathelper",
+      "rtpengine",
+      "dispatcher",
+      "permissions",
+      "dialog",
+      "acc",
+      "htable",
+      "pike"
+    ],
+    "maintenanceApproved": false,
+    "repoPath": "/opt/olamide/repo",
+    "sameServer": true,
+    "sameServerSettings": {
+      "sip_domain": "sip.dobhrap.com",
+      "sip_public_ip": "154.29.77.102",
+      "sip_public_interface": "eth0",
+      "sip_bridge_ip": "172.18.0.1",
+      "sip_bridge_interface": "br-11662f59f698",
+      "sip_docker_subnet": "172.18.0.0/16",
+      "sip_rtp_min": 30000,
+      "sip_rtp_max": 39999,
+      "rtpengine_config_source": "/etc/olamide/profiles/same-server/rtpengine.conf",
+      "rtpengine_service": "rtpengine-daemon",
+      "rtpengine_package": "rtpengine-daemon",
+      "sip_carrier_cidrs": [
+        "192.0.2.0/24"
+      ],
+      "freeswitch_cluster_enabled": true,
+      "freeswitch_image": "REPLACE_WITH_REVIEWED_IMAGE@sha256:REPLACE_WITH_DIGEST",
+      "freeswitch_maintenance_approved": false,
+      "freeswitch_instances": [
+        {
+          "name": "fs2",
+          "sip_port": 5092,
+          "esl_port": 8092,
+          "rtp_min": 40000,
+          "rtp_max": 44999,
+          "config_source": "/etc/olamide/profiles/fs2",
+          "esl_password": "REPLACE_WITH_PRIVATE_32_CHARACTER_PASSWORD"
+        },
+        {
+          "name": "fs3",
+          "sip_port": 5093,
+          "esl_port": 8093,
+          "rtp_min": 45000,
+          "rtp_max": 49999,
+          "config_source": "/etc/olamide/profiles/fs3",
+          "esl_password": "REPLACE_WITH_PRIVATE_32_CHARACTER_PASSWORD"
+        }
+      ]
+    }
+  }
+}

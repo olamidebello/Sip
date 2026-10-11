@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import {randomUUID,timingSafeEqual} from 'node:crypto';
 import {isAdmin} from './tenancy.js';
 export const catalog=JSON.parse(await fs.readFile(new URL('./kamailio-catalog.json',import.meta.url),'utf8'));
+const carrierCapabilities=JSON.parse(await fs.readFile(new URL('./carrier-capabilities.json',import.meta.url),'utf8'));
 const ids=new Set(catalog.modules.map(m=>m.id));
 const states=new Set(['pending','configured','connected','tested']);
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -58,7 +59,7 @@ export async function handleKamailioAdmin({req,res,path,user,pool,send,readJson}
       user.role==='super_admin'?pool.query('SELECT id,name,host FROM deployment_nodes WHERE role=\'switch\' AND deleted_at IS NULL ORDER BY name'):Promise.resolve({rows:[]}),
       pool.query('SELECT id,node_id,profile,modules,status,summary,created_at FROM kamailio_plans WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 50',[user.tenant_id]),
       pool.query('SELECT id,node_id,report,created_at FROM kamailio_audits WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 50',[user.tenant_id])]);
-    return send(res,200,{catalog,nodes:nodes.rows,plans:plans.rows.map(p=>({...p,modules:parse(p.modules)})),audits:audits.rows.map(a=>({...a,report:parse(a.report)}))});
+    return send(res,200,{carrierCapabilities,sameServerTrunkModules:['ctl','tm','sl','rr','auth','auth_db','registrar','usrloc','db_mysql','websocket','xhttp','nathelper','rtpengine','dispatcher','permissions','dialog','acc','htable','pike'],sameServerModules:['ctl','tm','sl','rr','auth','auth_db','registrar','usrloc','db_mysql','websocket','xhttp','nathelper','rtpengine'],catalog,nodes:nodes.rows,plans:plans.rows.map(p=>({...p,modules:parse(p.modules)})),audits:audits.rows.map(a=>({...a,report:parse(a.report)}))});
   }
   if(path==='/api/admin/kamailio/plans'&&req.method==='POST'){
     if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});

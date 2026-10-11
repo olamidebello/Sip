@@ -1,0 +1,8 @@
+[rtpengine]
+# Reviewed baseline: no public control protocol, userspace forwarding.
+interface = 154.29.77.102
+listen-ng = 127.0.0.1:2223
+table = -1
+port-min = 30000
+port-max = 39999
+log-level = 6

@@ -1,0 +1,109 @@
+---
+- name: Validate reviewed mail configuration inputs
+  ansible.builtin.assert:
+    that:
+      - mail_hostname is match('^[a-zA-Z0-9.-]+$')
+      - mail_domain is match('^[a-zA-Z0-9.-]+$')
+      - mail_config_source | length > 0
+      - mail_certificate | length > 0
+      - mail_key | length > 0
+    fail_msg: Mail profile needs reviewed Postfix, Dovecot and Rspamd configurations, mailbox authentication and TLS paths.
+- name: Install mail transport, mailbox and spam filtering packages
+  ansible.builtin.apt:
+    name: [postfix, postfix-mysql, dovecot-core, dovecot-imapd, dovecot-lmtpd, dovecot-mysql, rspamd, redis-server]
+    state: present
+    update_cache: true
+    policy_rc_d: 101
+- name: Allocate mail configuration backup
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: olamide-mail-backup-
+  register: mail_backup
+- name: Preserve existing mail configuration
+  ansible.builtin.copy:
+    src: '/etc/{{ item }}/'
+    dest: '{{ mail_backup.path }}/{{ item }}/'
+    remote_src: true
+    mode: preserve
+  loop: [postfix, dovecot, rspamd]
+- name: Inspect existing service states
+  ansible.builtin.command:
+    argv: [systemctl, is-active, '--quiet', '{{ item }}']
+  loop: [postfix, dovecot, rspamd, redis-server]
+  register: mail_before
+  changed_when: false
+  failed_when: false
+- name: Apply complete reviewed mail bundles
+  block:
+    - name: Copy private configurations without exposing secrets in logs
+      ansible.builtin.copy:
+        src: '{{ mail_config_source }}/{{ item }}/'
+        dest: '/etc/{{ item }}/'
+        owner: root
+        mode: preserve
+      loop: [postfix, dovecot, rspamd]
+      no_log: true
+    - name: Validate Postfix configuration
+      ansible.builtin.command: postfix check
+      changed_when: false
+      no_log: true
+    - name: Validate Dovecot configuration
+      ansible.builtin.command: doveconf -n
+      changed_when: false
+      no_log: true
+    - name: Validate spam filter configuration
+      ansible.builtin.command: rspamadm configtest
+      changed_when: false
+      no_log: true
+    - name: Require TLS on submissions and prevent unauthenticated relay
+      ansible.builtin.command:
+        argv: [python3, '-c', "import subprocess; p=lambda k:subprocess.check_output(['postconf','-h',k],text=True).strip(); r=p('smtpd_relay_restrictions'); assert 'reject_unauth_destination' in r or 'defer_unauth_destination' in r; assert p('smtpd_tls_cert_file')== '{{ mail_certificate }}'; assert p('smtpd_tls_key_file')== '{{ mail_key }}'; assert p('myhostname')=='{{ mail_hostname }}'; master=subprocess.check_output(['postconf','-M'],text=True); assert 'submission' in master; opts=subprocess.check_output(['postconf','-P'],text=True); assert 'submission/inet/smtpd_tls_security_level=encrypt' in opts; assert 'submission/inet/smtpd_sasl_auth_enable=yes' in opts"]
+      changed_when: false
+      no_log: true
+    - name: Enable commissioned mail services
+      ansible.builtin.systemd:
+        name: '{{ item }}'
+        enabled: true
+        state: restarted
+      loop: [redis-server, rspamd, dovecot, postfix]
+    - name: Validate certificate and STARTTLS submission
+      ansible.builtin.command:
+        argv: [python3, '-c', "import smtplib,ssl; s=smtplib.SMTP('{{ mail_hostname }}',587,timeout=10); s.ehlo(); s.starttls(context=ssl.create_default_context()); s.ehlo(); assert s.has_extn('auth'); s.quit()"]
+      changed_when: false
+    - name: Validate encrypted IMAP service
+      ansible.builtin.command:
+        argv: [python3, '-c', "import imaplib,ssl; s=imaplib.IMAP4_SSL('{{ mail_hostname }}',993,ssl_context=ssl.create_default_context(),timeout=10); s.logout()"]
+      changed_when: false
+  rescue:
+    - name: Restore previous mail configurations
+      ansible.builtin.copy:
+        src: '{{ mail_backup.path }}/{{ item }}/'
+        dest: '/etc/{{ item }}/'
+        remote_src: true
+        mode: preserve
+      loop: [postfix, dovecot, rspamd]
+    - name: Restore original process states
+      ansible.builtin.systemd:
+        name: '{{ item.item }}'
+        state: "{{ 'restarted' if item.rc == 0 else 'stopped' }}"
+      loop: '{{ mail_before.results }}'
+    - name: Report mail commissioning failure
+      ansible.builtin.fail:
+        msg: Mail commissioning failed; previous configuration restored. Delivery and mailboxes remain pending.
+- name: Permit SMTP delivery, authenticated submission and encrypted IMAP
+  ansible.builtin.command:
+    argv: [ufw, allow, in, on, '{{ sip_public_interface }}', to, '{{ sip_public_ip }}', port, '{{ item }}', proto, tcp]
+  loop: ['25', '587', '993']
+  register: mail_firewall
+  changed_when: "'Rule added' in mail_firewall.stdout"
+- name: Check public mail exchanger
+  ansible.builtin.uri:
+    url: 'https://dns.google/resolve?name={{ mail_domain }}&type=MX'
+    return_content: true
+  register: mail_mx
+- name: Require published mail exchanger before acknowledging deployment
+  ansible.builtin.assert:
+    that:
+      - mail_mx.json.Status == 0
+      - (mail_mx.json.Answer | default([]) | selectattr('type', 'equalto', 15) | map(attribute='data') | select('search', ' ' + mail_hostname + '\\.?$') | list | length) > 0
+    fail_msg: Mail daemons configured; public MX is pending. SPF, DKIM, DMARC, PTR and real delivery acceptance are also required.

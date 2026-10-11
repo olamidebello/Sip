@@ -1,0 +1,28 @@
+all:
+  children:
+    switch_nodes:
+      hosts:
+        local-switch:
+          ansible_connection: local
+          ansible_host: 154.29.77.102
+          ansible_user: root
+      vars:
+        kamailio_node_id: 00000000-0000-4000-8000-000000000001
+        kamailio_repo_path: /opt/olamide/repo
+        kamailio_config_source: /etc/olamide/profiles/same-server/kamailio
+        kamailio_packages: [kamailio, kamailio-mysql-modules, kamailio-websocket-modules]
+        kamailio_expected_modules: [ctl, tm, sl, rr, auth, auth_db, registrar, usrloc, db_mysql, websocket, xhttp, nathelper, rtpengine]
+        kamailio_maintenance_approved: false
+        rtpengine_package: rtpengine-daemon
+        rtpengine_service: rtpengine-daemon
+        rtpengine_config_source: /etc/olamide/profiles/same-server/rtpengine.conf
+        # Replace documentation networks with carrier-published SIP ranges.
+        sip_carrier_cidrs: [192.0.2.0/24]
+        sip_domain: sip.dobhrap.com
+        sip_public_ip: 154.29.77.102
+        sip_public_interface: eth0
+        sip_bridge_ip: 172.18.0.1
+        sip_bridge_interface: br-11662f59f698
+        sip_docker_subnet: 172.18.0.0/16
+        sip_rtp_min: 30000
+        sip_rtp_max: 39999

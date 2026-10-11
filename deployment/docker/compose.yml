@@ -80,6 +80,7 @@ services:
     restart: unless-stopped
     environment:
       DOMAIN: ${DOMAIN:?set domain}
+      SIP_WS_UPSTREAM: ${SIP_WS_UPSTREAM:-127.0.0.1:9}
     ports:
       - "80:80"
       - "443:443"
