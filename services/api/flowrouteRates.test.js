@@ -12,3 +12,13 @@ test('quoted destination and duplicate prefixes are validated',()=>{
   assert.throws(()=>parseCsv(head+row+row),/duplicate prefix/);
   assert.throws(()=>parseCsv(head+row.replace('Current','Expired')),/Invalid or duplicate/);
 });
+
+import {importRateCsv} from './flowrouteRates.js';
+test('failed rate import rolls back without replacing active deck',async()=>{
+  const statements=[];let released=false;
+  const db={query:async sql=>{statements.push(sql);if(sql.startsWith('INSERT INTO carrier_rate_rows'))throw Error('Database unavailable');return {rows:[],rowCount:0};},release:()=>{released=true;}};
+  await assert.rejects(importRateCsv({connect:async()=>db},'tenant','actor',head+'USA,1,6,6,0.008330,0.008330,0.008330,Current,2026-01-01 00:00:00\r\n'));
+  assert.equal(statements.includes('ROLLBACK'),true);
+  assert.equal(statements.some(s=>s.includes('SET active=FALSE')),false);
+  assert.equal(released,true);
+});

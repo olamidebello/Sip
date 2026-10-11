@@ -20,6 +20,7 @@ import {handleWorkspaceShortcuts} from './workspaceShortcuts.js';
 import {handleWorkPlanner} from './workPlanner.js';
 import {handleCampaigns} from './campaigns.js';
 import {effectivePasskeyMode,passkeyGate,handlePasskeyPolicy} from './passkeyPolicy.js';
+import {startFlowrouteRateSync} from './flowrouteRateSync.js';
 import { handleFlowrouteRates } from './flowrouteRates.js';
 import { handleHelpAgent } from './helpAgent.js';
 import { handleFlowrouteWebhook, handleMessagingWebhookAdmin, handleExternalSms, handleSmsNumberAdmin } from './messagingWebhooks.js';
@@ -764,10 +765,12 @@ async function handler(req, res) {
 
 await migrate(pool);
 const stopSipProvisioning=startSipProvisioning(pool,origin);
+const stopRateSync=startFlowrouteRateSync(pool);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
 server.on("close",stopSipProvisioning);
+server.on("close",stopRateSync);
 meetingSignaling = attachMeetingSignaling(server, { pool, origin, currentUser });
 server.listen(port, address, () =>
   console.log(`Account API listening on ${address}:${port}`));
