@@ -7,8 +7,8 @@ const base={number:'+12125550123',at:Date.parse('2026-10-08T12:00:00Z'),mode:'le
     {id:'a',provider:'flowroute',prefix:'1',cost_cents:1,price_cents:2,priority:1,enabled:true,effective_at:'2026-01-01T00:00:00Z'},
     {id:'b',provider:'didww',prefix:'1212',cost_cents:4,price_cents:6,priority:2,enabled:true,effective_at:'2026-01-01T00:00:00Z'},
     {id:'c',provider:'flowroute',prefix:'1212',cost_cents:5,price_cents:7,priority:1,enabled:true,effective_at:'2026-01-01T00:00:00Z'}]};
-test('longest prefix and mode choose eligible carrier',()=>{
-  assert.equal(selectQuote(base).selected.id,'b');
+test('termination policy selects Flowroute even when another carrier is cheaper',()=>{
+  assert.equal(selectQuote(base).selected.id,'c');
   assert.equal(selectQuote({...base,mode:'priority'}).selected.id,'c');
 });
 test('block and inactive carrier exclude quotes',()=>{
@@ -20,4 +20,9 @@ test('administrator role is required',async()=>{
   let result;await handleOperatorControl({req:{method:'GET'},path:'/api/admin/operator',
     user:{role:'user'},send:(_res,status,body)=>{result={status,body};}});
   assert.equal(result.status,403);
+});
+
+test('unavailable Flowroute never falls back to another active carrier',()=>{
+  const result=selectQuote({...base,carriers:base.carriers.filter(c=>c.provider!=='flowroute')});
+  assert.equal(result.selected,null);assert.deepEqual(result.candidates,[]);
 });

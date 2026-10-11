@@ -1,4 +1,5 @@
 import {randomUUID} from 'node:crypto';
+import {terminationPolicy} from './operatorControl.js';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const slug=/^[a-z][a-z0-9-]{1,39}$/;
@@ -81,7 +82,7 @@ export async function commissionCarrier(pool,user,provider,action,details){
   if(node){
     if(action!=='deactivate'&&(!node.enabled||node.health!=='healthy'))throw Error('No healthy enabled adapter');
     try{
-      await invokeAdapter(node,action,{tenantId:user.tenant_id,provider,adapterId:node.id,...details});
+      await invokeAdapter(node,action,{tenantId:user.tenant_id,provider,adapterId:node.id,...details,terminationPolicy});
       await recordAdapterOperation(pool,{tenant:user.tenant_id,provider,adapterId:node.id,action,outcome:'success',actor:user.id});
       if(action==='activate')await pool.query('INSERT INTO carrier_adapter_assignments(tenant_id,provider,adapter_id) VALUES($1,$2,$3) ON DUPLICATE KEY UPDATE adapter_id=VALUES(adapter_id),assigned_at=UTC_TIMESTAMP(3)',
         [user.tenant_id,provider,node.id]);
@@ -101,7 +102,7 @@ export async function commissionCarrier(pool,user,provider,action,details){
   const response=await fetch(legacy.url,{method:'POST',signal:AbortSignal.timeout(10000),
     headers:{Authorization:`Bearer ${legacy.token}`,'Content-Type':'application/json',
       'Idempotency-Key':`${user.tenant_id}:${provider}:${action}`},
-    body:JSON.stringify({action,tenantId:user.tenant_id,provider,...details})});
+    body:JSON.stringify({action,tenantId:user.tenant_id,provider,...details,terminationPolicy})});
   if(!response.ok||(await response.json()).status!==({verify:'verified',activate:'active',deactivate:'inactive'}[action]))
     throw Error('Legacy adapter did not acknowledge '+action);
   return {adapterId:null};

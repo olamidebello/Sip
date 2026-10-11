@@ -37,13 +37,15 @@ export async function migrateOperatorControl(pool){
   ) ENGINE=InnoDB`);
 }
 
+export const terminationPolicy=Object.freeze({provider:'flowroute',fallback:false,scope:'outbound_pstn'});
+
 export function selectQuote({number,at,mode,rates,blocks,carriers}){
   const digits=String(number||'').replace(/^\+/,'');
   if(!prefix.test(digits)) throw new RangeError('Valid E.164 destination required');
   const blocked=blocks.filter(rule=>rule.enabled&&digits.startsWith(rule.prefix))
     .sort((a,b)=>b.prefix.length-a.prefix.length)[0];
   if(blocked)return {blocked:true,reason:blocked.reason,matchedPrefix:blocked.prefix,candidates:[]};
-  const live=new Set(carriers.filter(row=>row.status==='active'&&row.routing_mode!=='disabled').map(row=>row.provider));
+  const live=new Set(carriers.filter(row=>row.provider===terminationPolicy.provider&&row.status==='active'&&row.routing_mode!=='disabled').map(row=>row.provider));
   const eligible=rates.filter(row=>row.enabled&&digits.startsWith(row.prefix)&&
     Date.parse(row.effective_at)<=at&&(!row.expires_at||Date.parse(row.expires_at)>at)&&live.has(row.provider));
   const longest=eligible.reduce((n,row)=>Math.max(n,row.prefix.length),0);
@@ -63,7 +65,7 @@ export async function handleOperatorControl({req,res,path,user,pool,send,readJso
       pool.query('SELECT id,tariff_id,provider,prefix,cost_cents,price_cents,priority,effective_at,expires_at,enabled FROM operator_tariff_rates WHERE tenant_id=$1 ORDER BY prefix,priority LIMIT 1000',[tenant]),
       pool.query('SELECT id,prefix,reason,enabled FROM operator_fraud_rules WHERE tenant_id=$1 ORDER BY prefix',[tenant]),
       pool.query('SELECT provider,status,routing_mode FROM carrier_provider_profiles WHERE tenant_id=$1',[tenant])]);
-    return send(res,200,{tariffs:tariffs.rows,rates:rates.rows,blocks:blocks.rows,carriers:carriers.rows,liveEnforcement:false});
+    return send(res,200,{terminationPolicy,tariffs:tariffs.rows,rates:rates.rows,blocks:blocks.rows,carriers:carriers.rows,liveEnforcement:false});
   }
   if(path==='/api/admin/operator/tariffs'&&req.method==='POST'){
     const body=await readJson(req);

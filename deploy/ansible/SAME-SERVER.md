@@ -112,3 +112,9 @@ Configure Kamailio dispatcher destinations `sip:127.0.0.1:5092` and `sip:127.0.0
 Run `ansible-playbook -i /etc/olamide/same-server.yml /opt/olamide/repo/deploy/ansible/service-gui.yml` after populating the private inventory. The same-server playbook also imports this step. It installs a once-per-minute systemd collector and mounts only its sanitized output read-only into the API. Super administrators see Kamailio, RTPengine, both FreeSWITCH backends, PBX, SMTP, IMAP and email filtering in the switch commissioning panel, with links to existing carrier and provisioning controls. Evidence expires after three minutes. Missing services remain visible as pending.
 
 This inventory is monitoring and commissioning visibility, not a SIP provisioning or termination adapter. Process health does not activate routes, create accounts, authorize calls or mark full services tested. Private adapters, reviewed routes and real end-to-end acceptance remain required. No ESL password or server credential is sent to the browser.
+
+## Flowroute outbound policy
+
+Flowroute is the sole default outbound PSTN provider. Application quote selection excludes every other provider and fails closed when Flowroute is inactive or lacks a matching rate. Carrier adapter commissioning requests carry the same `terminationPolicy` contract. Other providers remain available for inbound DID services. Local extension calls stay local.
+
+`flowroute-policy.yml` publishes the private switch policy file. Reviewed Kamailio and FreeSWITCH adapters must consume and enforce it; this file alone does not modify a running dialplan. Configure Flowroute authentication, approved PoP, caller ID, rates, capacity and billing controls; test outbound calls on each switch before traffic activation. The retired XML HTTP endpoint is not re-enabled by this change.
