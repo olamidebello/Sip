@@ -1,4 +1,32 @@
 *{box-sizing:border-box}
+.messenger-tabs{display:flex;gap:.5rem;flex-wrap:wrap;margin:.8rem 0}
+.messenger-tabs a{padding:.65rem 1rem;border-radius:999px;color:#d8fff0;text-decoration:none;background:#183e36;font-weight:650}
+.messenger-tabs a:hover,.messenger-tabs a[aria-current=page]{background:#167c60;color:white}
+body.messenger-mode{max-width:1280px;background:#101b20;padding-bottom:3rem}
+body.messenger-mode #app-nav{background:#17272d;border-color:#2b444b;border-radius:18px}
+body.messenger-mode #app-nav .menu-groups{display:none}
+body.messenger-mode #app-nav.show-user-tools .menu-groups{display:flex}
+.communication-status{font-size:.8rem;color:#a4deca;margin-left:auto}
+body.messenger-mode [data-admin-panel]{display:none!important}
+body.messenger-mode #app>section:not(.workspace-inactive):not([hidden]){background:#14252b;border-color:#2b444b;border-radius:18px}
+body.messenger-mode #chat{min-height:70vh;position:relative}
+body.messenger-mode #chat h2{font-size:1.8rem;margin-bottom:.2rem}
+.messenger-subtitle{color:#9db8b4;margin-top:0}
+.chat-shell{display:grid;grid-template-columns:minmax(240px,30%) minmax(0,1fr);gap:1rem}
+.chat-sidebar{border-right:1px solid #2b444b;padding-right:1rem;min-width:0}
+.chat-sidebar>input{width:100%;border-radius:999px}.chat-conversations{margin:.8rem 0;max-height:46vh;overflow:auto}
+.chat-contact{display:block;width:100%;text-align:left;padding:1rem;background:#1c3136;border:0;border-bottom:1px solid #2b444b;border-radius:0;margin:0;color:#e1eee9}
+.chat-contact[aria-pressed=true]{background:#176750}.chat-thread{min-width:0}
+@media(max-width:720px){.chat-shell{grid-template-columns:1fr}.chat-sidebar{border-right:0;border-bottom:1px solid #2b444b;padding-right:0}.chat-conversations{max-height:180px}}
+body.messenger-mode #message-list{background:#0e1b20;background-image:radial-gradient(#26403b 1px,transparent 1px);background-size:22px 22px;border-radius:16px;padding:1.2rem;min-height:28vh}
+body.messenger-mode .message-bubble.sent{background:#075e4b;border-color:#18755e;border-radius:18px 18px 4px 18px}
+body.messenger-mode .message-bubble.received{background:#22343a;border-color:#35494f;border-radius:18px 18px 18px 4px}
+body.messenger-mode #send-message{position:sticky;bottom:0;background:#17272d;padding:.8rem;border-radius:18px;display:flex;align-items:end;gap:.7rem}
+body.messenger-mode #send-message label{flex:1;margin:0}
+body.messenger-mode #send-message textarea{min-height:48px;border-radius:14px;resize:vertical}
+body.messenger-mode #send-message button{background:#16876a;border-radius:999px;min-height:48px}
+body.messenger-mode #chat .bulk-controls,body.messenger-mode #add-contact{margin:.8rem 0}
+@media(max-width:620px){body.messenger-mode{padding:.5rem .5rem 1rem}.messenger-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:.3rem}.messenger-tabs a{text-align:center;padding:.6rem .3rem;font-size:.85rem}body.messenger-mode #chat{padding:.8rem}body.messenger-mode #send-message{padding:.5rem}}
 html{min-height:100%;background:#000}
 body{font:16px/1.55 system-ui,sans-serif;max-width:1180px;margin:0 auto;padding:0 clamp(1rem,4vw,3rem) 3rem;color:#eef4ff}
 html[data-background="midnight"]{background-image:linear-gradient(145deg,#060b19,#142b45 55%,#050b17)}

@@ -2,6 +2,7 @@ import {createNativeCallClient} from './nativeCallClient.js';
 import {createNativePushClient} from './nativePushClient.js';
 import {createAutoSipRegistration} from './autoSipRegistration.js';
 import {setupDialpad,dialTarget} from './dialpad.js';
+import {setupChatLanding} from './chatLanding.js';
 import {setupContactDirectory} from './contactDirectory.js';
 import {setupConversations} from './conversations.js';
 import {setupWorkspaceNavigation,fragmentTarget} from "./workspaceNavigation.js";
@@ -285,7 +286,7 @@ root.innerHTML = `
     <p id="background-user-status" role="status"></p>
   </section>
   <section id="chat" hidden>
-    <h2>Messages</h2>
+    <h2>Chats</h2><p class="messenger-subtitle">Your conversations, close at hand.</p>
     <details id="contact-directory"><summary>Contacts, visibility and forwarding</summary>
       <form id="user-directory-search"><label>Search workspace users <input name="q" minlength="2" maxlength="100" required></label><button>Search users</button></form>
       <ul id="user-directory-results"></ul>
@@ -1118,6 +1119,9 @@ root.append($('#fleet-admin'));
 root.append($('#activity-monitor'));
 $("#activity-monitor").hidden=true;
 setupFormGroups();
+// Keep contact management in its own expandable area while preserving handlers.
+$('#contact-directory').append($('#add-contact'),$('#chat .bulk-controls'));
+setupChatLanding(document);
 setupDownloads();
 setupCarrierControl();
 const navigationGroups=[
@@ -1139,11 +1143,22 @@ const workspaceViews=[...new Set(navigationGroups.flatMap(group=>group.items).ma
   let panel=document.getElementById(id);while(panel&&panel.parentElement!==root)panel=panel.parentElement;
   return panel?.tagName==='SECTION'?panel.id:null;
 }).filter(Boolean))];
+const adminTargets=new Set(navigationGroups.filter(group=>group.roles||group.label==='Fleet operations').flatMap(group=>group.items.map(([id])=>id)));
+adminTargets.add('help-admin');
+for(const id of adminTargets)document.getElementById(id)?.setAttribute('data-admin-panel','true');
+function adminTarget(target){return !!document.getElementById(target)?.closest('[data-admin-panel]');}
+function userHome(){return !$('#chat').hidden?'chat':'calling-workspace';}
 let activeView="dashboard";
 function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
-  if(target==="top")target="dashboard";
+  if(target==="top")target=userHome();
   if(!activeRole) return false;
   if(activeRole.startsWith("pending_")&&target!=="account")return false;
+  if(adminTarget(target)&&!['admin','super_admin'].includes(activeRole))return false;
+  const adminMode=adminTarget(target);
+  const modeChanged=document.body.classList.contains('admin-mode')!==adminMode;
+  document.body.classList.toggle('admin-mode',adminMode);
+  document.body.classList.toggle('messenger-mode',!adminMode);
+  if(modeChanged)updateNavigation();
   const requested=document.getElementById(target);
   if(!requested || requested.closest("[hidden]")) return false;
   for(let parent=requested.parentElement;parent;parent=parent.parentElement) if(parent.tagName==="DETAILS") parent.open=true;
@@ -1152,7 +1167,7 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   activeView=target;
   userActivity?.track("navigate",target);
   if(!preserveForm&&historyMode!=="none") {
-    const url=`/#${target}`;
+    const url=`${adminMode?'/admin':'/'}#${target}`;
     if(location.pathname+location.hash!==url){history[historyMode==='replace'?'replaceState':'pushState'](null,'',url);}
     pageRoutes?.render();
   }
@@ -1174,7 +1189,7 @@ function resetWorkspace() {
   userActivity?.stop();
   $("#activity-monitor").hidden=true;
   $("#fleet-admin").hidden=true;
-  document.body.classList.remove("workspace-mode");
+  document.body.classList.remove("workspace-mode","messenger-mode","admin-mode");
   for(const section of document.querySelectorAll(".workspace-inactive")) section.classList.remove("workspace-inactive");
   $("#admin").classList.remove("admin-subview");
 }
@@ -1184,22 +1199,39 @@ function updateNavigation() {
   nav.hidden=!activeRole;
   if (!activeRole) return;
   const heading=document.createElement("div");heading.className="menu-heading";
-  const title=document.createElement("strong");title.textContent="Olamide workspace";
+  const title=document.createElement("strong");title.textContent=document.body.classList.contains("admin-mode")?"Olamide administration":"Olamide";
   const role=document.createElement("span");role.className="role-badge";role.textContent=activeRole==="super_admin"?"Super admin":activeRole==="admin"?"Administrator":"User";
   heading.append(title,role);nav.append(heading);
+  const connection=document.createElement('span');connection.id='communication-status';connection.className='communication-status';connection.setAttribute('role','status');connection.textContent=sipRegistered?'Connected for calls':'Connecting your SIP account…';heading.append(connection);
   const returnToCall=document.createElement("a");returnToCall.id="return-to-call";returnToCall.href="#calling-workspace";returnToCall.textContent="Return to call";returnToCall.hidden=!onCall;
   nav.append(returnToCall);
+  const tabs=document.createElement('div');tabs.className='messenger-tabs';
+  for(const [id,label] of [['chat','Chats'],['calling-workspace','Calls'],['contact-directory','Contacts'],['account','Settings']]){
+    if(document.getElementById(id)?.closest('[hidden]'))continue;
+    const link=document.createElement('a');link.href=`/#${id}`;link.textContent=label;tabs.append(link);
+  }
+  if(['admin','super_admin'].includes(activeRole)){
+    const link=document.createElement('a');link.href='/admin';link.textContent='Admin';tabs.append(link);
+  }
+  if(document.body.classList.contains('admin-mode')){const link=document.createElement('a');link.href='/#chat';link.textContent='Back to chats';tabs.append(link);}
+  nav.append(tabs);
+  if(!document.body.classList.contains('admin-mode')){
+    const more=document.createElement('button');more.type='button';more.textContent='More tools';more.setAttribute('aria-expanded','false');
+    more.addEventListener('click',()=>{const open=nav.classList.toggle('show-user-tools');more.setAttribute('aria-expanded',String(open));});nav.append(more);
+  }
   const search=document.createElement("input");search.type="search";search.className="menu-search";search.placeholder="Find a menu…";search.setAttribute("aria-label","Find a menu");nav.append(search);
   const groups=document.createElement("div");groups.className="menu-groups";nav.append(groups);
   for(const group of navigationGroups) {
     if(group.roles&&!group.roles.includes(activeRole)) continue;
+    const adminGroup=!!group.roles||group.label==='Fleet operations';
+    if(adminGroup!==document.body.classList.contains('admin-mode'))continue;
     const items=group.items.filter(([id])=>{const section=document.getElementById(id);return section&&!section.closest("[hidden]");});
     if(!items.length) continue;
     const details=document.createElement("details");details.className="menu-group";details.open=group.label==="Workspace";
     const summary=document.createElement("summary");summary.textContent=group.label;details.append(summary);
     const links=document.createElement("div");links.className="menu-links";
     for(const [id,label] of items) {
-      const link=document.createElement("a");link.href=`#${id}`;link.textContent=label;
+      const link=document.createElement("a");link.href=`${adminTarget(id)?"/admin":"/"}#${id}`;link.textContent=label;
       if(location.hash===`#${id}`) link.setAttribute("aria-current","page");
       links.append(link);
     }
@@ -1222,7 +1254,7 @@ function updateNavigation() {
   localeSettings?.refreshQuick();
 }
 updateNavigation();
-pageRoutes=setupPageRoutes({showWorkspace,isSignedIn:()=>!!activeRole});
+pageRoutes=setupPageRoutes({showWorkspace,isSignedIn:()=>!!activeRole,isAdminTarget:adminTarget});
 $("#app-nav").addEventListener("keydown",event=>{
   if(event.key!=="Escape") return;
   for(const menu of $("#app-nav").querySelectorAll("details[open]")) menu.open=false;
@@ -1733,8 +1765,8 @@ function signedIn(user) {
     updateNavigation();
     workspaceQuick.refresh();
   }).catch(()=>{});
-  const requested=fragmentTarget(location.hash)||"";
-  showWorkspace(pageId(location.pathname) ? document.getElementById(pageId(location.pathname))?.closest('section[id]')?.id || 'dashboard' : requested&&document.getElementById(requested)&&!document.getElementById(requested).closest("[hidden]")?requested:"dashboard",{preserveForm:!!pageId(location.pathname)});
+  const requested=fragmentTarget(location.hash)||(location.pathname==='/admin'?'admin':'');
+  showWorkspace(pageId(location.pathname) ? document.getElementById(pageId(location.pathname))?.closest('section[id]')?.id || userHome() : requested&&document.getElementById(requested)&&!document.getElementById(requested).closest("[hidden]")?requested:userHome(),{preserveForm:!!pageId(location.pathname)});
   pageRoutes.render();
   dashboard.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#dashboard-status").textContent=error.message;});
   support.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#support-status").textContent=error.message;});
@@ -2201,7 +2233,7 @@ $("#passkey-login").onclick=async()=>{
   try {const options=await accountRequest('/api/passkeys/login/options',{email});
     const response=await startAuthentication({optionsJSON:options});
     const user=await accountRequest('/api/passkeys/login/verify',{email,response});
-    signedIn(user);if(!user.mustChangePassword){history.replaceState(null,'','/#dashboard');pageRoutes.render();showWorkspace('dashboard');}}
+    signedIn(user);if(!user.mustChangePassword){showWorkspace(userHome());pageRoutes.render();}}
   catch(error){$("#account-status").textContent=error.message;}
 };
 $("#login").addEventListener("submit", async (event) => {
@@ -2211,7 +2243,7 @@ $("#login").addEventListener("submit", async (event) => {
     const user = await accountRequest("/api/login", Object.fromEntries(new FormData(form)));
     form.reset();
     signedIn(user);
-    if(!user.mustChangePassword){history.replaceState(null,'','/#dashboard');pageRoutes.render();showWorkspace('dashboard');}
+    if(!user.mustChangePassword){showWorkspace(userHome());pageRoutes.render();}
   } catch (error) { $("#account-status").textContent = error.message; }
 });
 $("#ldap-login").addEventListener("submit",async(event)=>{
@@ -2219,7 +2251,7 @@ $("#ldap-login").addEventListener("submit",async(event)=>{
   const form=event.currentTarget;
   try {
     const user=await accountRequest("/api/login/ldap",Object.fromEntries(new FormData(form)));
-    form.reset();signedIn(user);history.replaceState(null,'','/#dashboard');pageRoutes.render();showWorkspace('dashboard');
+    form.reset();signedIn(user);showWorkspace(userHome());pageRoutes.render();
   } catch(error) {$("#account-status").textContent=error.message;}
 });
 $("#logout").onclick = async () => {
@@ -2302,7 +2334,7 @@ fetch("/api/me", { credentials: "same-origin" })
   .then(async (response) => response.ok ? signedIn(await response.json()) : undefined)
   .catch(() => { $("#account-status").textContent = "Account service unavailable"; });
 
-function status(message) { $("#status").textContent = message; }
+function status(message) { $("#status").textContent = message;const badge=$('#communication-status');if(badge)badge.textContent=message; }
 function callState(active) {
   onCall = active;
   const nativeCall=window.Capacitor?.Plugins?.NativePush;

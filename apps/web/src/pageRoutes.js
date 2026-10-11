@@ -1,11 +1,11 @@
-export const pagePath = id => `/pages/${encodeURIComponent(id)}`;
+export const pagePath = (id,admin=false) => `${admin?'/admin':''}/pages/${encodeURIComponent(id)}`;
 
 export function pageId(pathname) {
-  const match = /^\/pages\/([a-z][a-z0-9-]*)\/?$/.exec(pathname);
+  const match = /^\/(?:admin\/)?pages\/([a-z][a-z0-9-]*)\/?$/.exec(pathname);
   return match?.[1] || null;
 }
 
-export function setupPageRoutes({ showWorkspace, isSignedIn }) {
+export function setupPageRoutes({ showWorkspace, isSignedIn, isAdminTarget=()=>false }) {
   const forms = [...document.querySelectorAll('form[id]:not(#quick-locale)')];
   const index = new Map(forms.map(form => [form.id, form]));
   const auth = new Set(['signup', 'signup-verify', 'login', 'ldap-login']);
@@ -20,7 +20,7 @@ export function setupPageRoutes({ showWorkspace, isSignedIn }) {
         if(!sectionForms.length)continue;
         const list=document.createElement('div');list.className='page-links';
         for(const form of sectionForms){
-          const link=document.createElement('a');link.href=pagePath(form.id);
+          const link=document.createElement('a');link.href=pagePath(form.id,isAdminTarget(form.id));
           link.textContent=form.querySelector('h3,h4')?.textContent||form.querySelector('button[type=submit],button:not([type])')?.textContent||form.id.replaceAll('-',' ');
           if(pageId(location.pathname)===form.id)link.setAttribute('aria-current','page');
           list.append(link);
@@ -39,6 +39,7 @@ export function setupPageRoutes({ showWorkspace, isSignedIn }) {
     if (!form) { history.replaceState(null, '', isSignedIn()?'/#dashboard':pagePath('login')); if(isSignedIn())showWorkspace('dashboard',{historyMode:'none'}); return render(); }
     if (!isSignedIn() && !auth.has(id)) { history.replaceState(null, '', pagePath('login')); return render(); }
     if (isSignedIn() && form.closest('[hidden]')) { history.replaceState(null, '', '/#dashboard'); showWorkspace('dashboard',{historyMode:'none'}); return render(); }
+    if(isAdminTarget(id)&&!location.pathname.startsWith('/admin/'))history.replaceState(null,'',pagePath(id,true));
     const section = form.closest('section[id]');
     if (!section) return;
     if (isSignedIn()) showWorkspace(section.id,{preserveForm:true});
@@ -59,7 +60,7 @@ export function setupPageRoutes({ showWorkspace, isSignedIn }) {
     document.title = `${form.querySelector('h3,h4')?.textContent || id.replaceAll('-', ' ')} · Olamide`;
   }
   document.addEventListener('click', event => {
-    const link = event.target.closest('a[href^="/pages/"]');
+    const link = event.target.closest('a[href^="/pages/"],a[href^="/admin/pages/"]');
     if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     const form=index.get(pageId(new URL(link.href,location.href).pathname));
@@ -70,5 +71,5 @@ export function setupPageRoutes({ showWorkspace, isSignedIn }) {
   });
   window.addEventListener('popstate', render);
   render();
-  return { render, refresh, go(id) { history.pushState(null, '', pagePath(id)); render(); window.scrollTo(0, 0); } };
+  return { render, refresh, go(id) { history.pushState(null, '', pagePath(id,isAdminTarget(id))); render(); window.scrollTo(0, 0); } };
 }
