@@ -1,3 +1,4 @@
+import { migrateSipProvisioning } from './sipProvisioning.js';
 import fs from 'node:fs/promises';
 import { createDatabase } from './db.js';
 import { migrateTenancy } from './tenancy.js';
@@ -59,6 +60,7 @@ export async function migrate(pool) {
       ['access', () => migrateAccess(pool)],
       ['onboarding', () => migrateOnboarding(pool)],
       ['sip_marketplace', () => migrateSipMarketplace(pool)],
+      ['sip_provisioning', () => migrateSipProvisioning(pool)],
       ['sip_profiles', () => migrateSipProfiles(pool)],
       ['payments', () => migratePayments(pool)],
       ['cluster', () => migrateCluster(pool)],

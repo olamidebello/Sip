@@ -2,7 +2,7 @@ import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import { validateRegistration, hashPassword } from './security.js';
 import { randomUUID } from 'node:crypto';
 import { defaultTenantId } from './tenancy.js';
-import { createSipAccount, provisionSipAccount } from './sipMarketplace.js';
+import { createSipAccount } from './sipMarketplace.js';
 import { registrationAllowed } from './operationsPolicy.js';
 
 const codeHash = (id, code, secret) => createHash('sha256').update(`${id}:${code}:${secret}`).digest('hex');
@@ -119,8 +119,7 @@ export async function handleOnboarding({req,res,path,pool,send,readJson,origin})
       await db.query('COMMIT');
     } catch(error) {await db.query('ROLLBACK');throw error;} finally {db.release();}
     if(verified) {
-      const account=(await pool.query('SELECT user_id FROM sip_accounts WHERE user_id=(SELECT id FROM users WHERE email=$1)',[normalized])).rows[0];
-      if(account) await provisionSipAccount(pool,account.user_id);
+      // Verified accounts are picked up by the durable provisioning worker.
     }
     return send(res,verified?200:400,verified?{status:'verified',sipProvisioning:'Check account status after sign-in'}:{error:'Invalid or expired code. Request another code if needed.'});
   }

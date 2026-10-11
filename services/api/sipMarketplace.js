@@ -1,6 +1,6 @@
 import { randomUUID, randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
 import { verifyPassword } from './security.js';
-import { defaultTenantId, isAdmin } from './tenancy.js';
+import { isAdmin } from './tenancy.js';
 import { sipProfilePermissions } from './sipProfiles.js';
 
 export async function migrateSipMarketplace(pool) {
@@ -32,27 +32,31 @@ export async function migrateSipMarketplace(pool) {
   ) ENGINE=InnoDB`);
 }
 
-function credentialKey(){const value=process.env.SIP_CREDENTIAL_KEY;
+export function credentialKey(){const value=process.env.SIP_CREDENTIAL_KEY;
   return /^[0-9a-f]{64}$/i.test(value||'')?Buffer.from(value,'hex'):null;}
-function encrypt(secret,key){const iv=randomBytes(12),cipher=createCipheriv('aes-256-gcm',key,iv);
+export function encrypt(secret,key){const iv=randomBytes(12),cipher=createCipheriv('aes-256-gcm',key,iv);
   return Buffer.concat([iv,cipher.update(secret,'utf8'),cipher.final(),cipher.getAuthTag()]);}
 function decrypt(value,key){const buffer=Buffer.from(value),iv=buffer.subarray(0,12),tag=buffer.subarray(buffer.length-16);
   const cipher=createDecipheriv('aes-256-gcm',key,iv);cipher.setAuthTag(tag);
   return Buffer.concat([cipher.update(buffer.subarray(12,-16)),cipher.final()]).toString('utf8');}
 export async function createSipAccount(db,userId,domain) {
+  const existing=(await db.query("SELECT id,username,status FROM sip_accounts WHERE user_id=$1",[userId])).rows[0];
+  if(existing) return existing;
+  const owner=(await db.query("SELECT tenant_id FROM users WHERE id=$1",[userId])).rows[0];
+  if(!owner) throw new Error("Account owner unavailable");
   const id=randomUUID();
   // Stable collision-resistant identifier; switch authorization remains separate.
   const username='ol'+randomBytes(12).toString('hex');
   const key=credentialKey();const password=key?randomBytes(32).toString('base64url'):null;
   await db.query("INSERT INTO sip_accounts(id,user_id,tenant_id,username,domain,status,secret_cipher) VALUES($1,$2,$3,$4,$5,'awaiting_switch',$6)",
-    [id,userId,defaultTenantId,username,domain,password?encrypt(password,key):null]);
+    [id,userId,owner.tenant_id,username,domain,password?encrypt(password,key):null]);
   return {id,username,status:'awaiting_switch'};
 }
 
 export async function provisionSipAccount(pool,userId){
   const url=process.env.SIP_PROVISION_URL,token=process.env.SIP_PROVISION_TOKEN,key=credentialKey();
   if(!url||!token||!key||!/^https:\/\//.test(url)) return false;
-  const account=(await pool.query('SELECT id,tenant_id,username,domain,secret_cipher FROM sip_accounts WHERE user_id=$1 AND status=\'awaiting_switch\'',[userId])).rows[0];
+  const account=(await pool.query('SELECT id,tenant_id,username,domain,secret_cipher FROM sip_accounts WHERE user_id=$1 AND status=\'awaiting_switch\' AND EXISTS (SELECT 1 FROM users u JOIN tenants t ON t.id=u.tenant_id WHERE u.id=sip_accounts.user_id AND u.status=\'active\' AND t.status=\'active\')',[userId])).rows[0];
   if(!account?.secret_cipher) return false;
   try {
     const response=await fetch(url,{method:'POST',signal:AbortSignal.timeout(10000),
@@ -62,8 +66,8 @@ export async function provisionSipAccount(pool,userId){
     if(!response.ok) throw new Error(`Switch provisioning HTTP ${response.status}`);
     const result=await response.json();
     if(result.status!=='active') throw new Error('Switch did not acknowledge activation');
-    await pool.query("UPDATE sip_accounts SET status='active' WHERE id=$1 AND status='awaiting_switch'",[account.id]);
-    return true;
+    const updated=await pool.query("UPDATE sip_accounts SET status='active' WHERE id=$1 AND status='awaiting_switch' AND EXISTS (SELECT 1 FROM users u JOIN tenants t ON t.id=u.tenant_id WHERE u.id=sip_accounts.user_id AND u.status='active' AND t.status='active')",[account.id]);
+    return updated.rowCount===1;
   } catch(error){console.error('SIP provisioning pending',error.name);return false;}
 }
 
