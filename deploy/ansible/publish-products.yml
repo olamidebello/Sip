@@ -1,0 +1,37 @@
+---
+- name: Import and publish Olamide reference products in the all active tenants
+  hosts: switch_nodes
+  become: true
+  vars:
+    product_repo_path: /opt/olamide/repo
+    product_all_tenants: true
+    product_tenant_id: '00000000-0000-4000-8000-000000000000'
+    product_publish_archived: false
+    product_terms_source: "{{ playbook_dir }}/files/product-publication-terms.txt"
+  tasks:
+    - name: Validate publication scope and canonical repository
+      ansible.builtin.assert:
+        that:
+          - product_repo_path == '/opt/olamide/repo'
+          - product_tenant_id is match('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+          - product_publish_archived is boolean
+          - product_all_tenants is boolean
+    - name: Read product terms on the Ansible controller
+      ansible.builtin.set_fact:
+        product_publication_terms: "{{ lookup('ansible.builtin.file', product_terms_source) }}"
+    - name: Require meaningful product terms
+      ansible.builtin.assert:
+        that:
+          - product_publication_terms | length >= 20
+          - product_publication_terms | length <= 4000
+    - name: Import missing products and publish the selected reference catalog atomically
+      ansible.builtin.command:
+        argv: "{{ ['docker', 'compose', '--env-file', '/etc/olamide/secrets.env', 'exec', '-T', 'api', 'node', 'productPublish.js'] + (['--all-tenants'] if product_all_tenants else ['--tenant', product_tenant_id]) + (['--check'] if ansible_check_mode else []) + (['--publish-archived'] if product_publish_archived else []) }}"
+        chdir: /opt/olamide/repo/deployment/docker
+        stdin: "{{ product_publication_terms }}"
+      check_mode: false
+      register: product_publication
+      changed_when: (product_publication.stdout | from_json).changed | bool
+    - name: Show publication result
+      ansible.builtin.debug:
+        msg: "{{ product_publication.stdout | from_json }}"
