@@ -9,6 +9,6 @@ all:
       vars:
         kamailio_packages: [kamailio, kamailio-mysql-modules, kamailio-tls-modules, kamailio-websocket-modules, kamailio-presence-modules]
         kamailio_config_source: /srv/olamide/profiles/production/config
-        kamailio_expected_modules: [kex, ctl, tm, sl, rr, auth, auth_db, registrar, usrloc, db_mysql]
+        kamailio_expected_modules: [kex, ctl, tm, sl, rr, auth, auth_db, sqlops, registrar, usrloc, db_mysql]
         kamailio_maintenance_approved: false
         kamailio_repo_path: /opt/olamide

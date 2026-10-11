@@ -11,7 +11,7 @@ all:
         kamailio_repo_path: /opt/olamide/repo
         kamailio_config_source: /etc/olamide/profiles/same-server/kamailio
         kamailio_packages: [kamailio, kamailio-mysql-modules, kamailio-websocket-modules]
-        kamailio_expected_modules: [ctl, tm, sl, rr, auth, auth_db, registrar, usrloc, db_mysql, websocket, xhttp, nathelper, rtpengine]
+        kamailio_expected_modules: [ctl, tm, sl, rr, auth, auth_db, sqlops, registrar, usrloc, db_mysql, websocket, xhttp, nathelper, rtpengine]
         kamailio_maintenance_approved: false
         rtpengine_package: rtpengine-daemon
         rtpengine_service: rtpengine-daemon
