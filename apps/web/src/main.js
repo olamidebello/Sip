@@ -817,7 +817,8 @@ root.innerHTML = `
     </section>
     <section id="didww-admin" hidden>
       <h3>DIDWW API and signed callbacks</h3>
-      <p id="didww-config"></p>
+      <p id="didww-config">Loading DIDWW configuration…</p>
+      <p id="didww-status" role="status" aria-live="polite"></p>
       <label>Callback URL <input id="didww-callback-url" readonly></label>
       <button id="didww-copy-url" type="button">Copy callback URL</button>
       <p>Set a callback secret in DIDWW, enable it, and configure this URL on each supported resource. The server verifies DIDWW signatures. API keys and callback secrets are private server settings.</p>
@@ -830,8 +831,8 @@ root.innerHTML = `
         <label>JSON:API request body for POST/PATCH <textarea name="payload" rows="8" spellcheck="false" placeholder='{"data":{"type":"voice_in_trunks","attributes":{}}}'></textarea></label>
         <button type="submit">Send DIDWW request</button>
       </form>
-      <p id="didww-status" role="status"></p><pre id="didww-response"></pre>
-      <button id="didww-refresh" type="button">Refresh callback events</button>
+      <pre id="didww-response"></pre>
+      <button id="didww-refresh" type="button">Refresh settings and callback events</button>
       <h4>Signed API callbacks</h4><ul id="didww-events"></ul>
       <h4>Call Events</h4><ul id="didww-call-events"></ul>
     </section>

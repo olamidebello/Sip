@@ -130,14 +130,23 @@ export async function handleDidwwCallback({req,res,path,pool,send,origin}){
 
 export async function handleDidwwAdmin({req,res,path,user,pool,send,readJson,origin}){
   if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
-  if(!bound(user.tenant_id))return send(res,409,{error:'DIDWW tenant binding is not configured for this tenant'});
-  if(!base())return send(res,409,{error:'Set DIDWW_API_ENV to sandbox or production'});
-  if(path==='/api/admin/didww/config'&&req.method==='GET')
-    return send(res,200,{environment:process.env.DIDWW_API_ENV,
+  if(path==='/api/admin/didww/config'&&req.method==='GET'){
+    const tenantConfigured=bound(user.tenant_id),environmentConfigured=!!base();
+    const setupIssues=[];
+    if(!tenantConfigured)setupIssues.push('Set DIDWW_TENANT_ID to the current tenant ID: '+user.tenant_id);
+    if(!environmentConfigured)setupIssues.push('Set DIDWW_API_ENV to sandbox or production');
+    if(!process.env.DIDWW_API_KEY)setupIssues.push('Set DIDWW_API_KEY on the server');
+    if(!process.env.DIDWW_CALLBACK_SECRET)setupIssues.push('Set the same DIDWW_CALLBACK_SECRET on the server and in DIDWW');
+    if(!process.env.DIDWW_CALL_EVENTS_TOKEN)setupIssues.push('Set DIDWW_CALL_EVENTS_TOKEN on the server to match DIDWW X-Auth-Token');
+    return send(res,200,{environment:environmentConfigured?process.env.DIDWW_API_ENV:'not configured',
+      tenantConfigured,environmentConfigured,setupIssues,
       apiConfigured:!!process.env.DIDWW_API_KEY,callbackConfigured:!!process.env.DIDWW_CALLBACK_SECRET,
       callbackUrl:callbackUrl(origin,user.tenant_id),
       callEventsConfigured:!!process.env.DIDWW_CALL_EVENTS_TOKEN,
       callEventsUrl:`${callbackUrl(origin,user.tenant_id)}/call-events`,resources:methods});
+  }
+  if(!bound(user.tenant_id))return send(res,409,{error:'DIDWW tenant binding is not configured for this tenant'});
+  if(!base())return send(res,409,{error:'Set DIDWW_API_ENV to sandbox or production'});
   if(path==='/api/admin/didww/events'&&req.method==='GET'){
     const [callbacks,calls]=await Promise.all([
       pool.query('SELECT id,resource_type,resource_id,event_status,received_at FROM didww_callback_events WHERE tenant_id=$1 ORDER BY received_at DESC LIMIT 100',[user.tenant_id]),

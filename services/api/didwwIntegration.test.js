@@ -12,12 +12,25 @@ test('DIDWW published order callback signature example',()=>{
   assert.equal(validDidwwSignature(url,payload,secret,'00f66e9d72eb5e193051fd02952f70d8e934b4ff'),false);
 });
 
-test('DIDWW admin access remains tenant bound',async()=>{
+test('DIDWW configuration remains visible before provider setup',async()=>{
   const result=await handleDidwwAdmin({req:{method:'GET'},path:'/api/admin/didww/config',
     user:{role:'super_admin',tenant_id:'00000000-0000-4000-8000-000000000001'},
     pool:{query:()=>{throw Error('unexpected query');}},origin:'https://sip.example.com',
     send:(_res,status,body)=>({status,body})});
-  assert.equal(result.status,409);
+  assert.equal(result.status,200);
+  assert.equal(result.body.callbackUrl,'https://sip.example.com/api/webhooks/didww/00000000-0000-4000-8000-000000000001');
+  assert.equal(result.body.callEventsUrl,result.body.callbackUrl+'/call-events');
+  assert.deepEqual(result.body.resources.balance,['GET']);
+  assert.equal(result.body.tenantConfigured,false);
+  assert.ok(result.body.setupIssues.length);
+  const blocked=await handleDidwwAdmin({req:{method:'GET'},path:'/api/admin/didww/resources/balance',
+    user:{role:'super_admin',tenant_id:'00000000-0000-4000-8000-000000000001'},
+    send:(_res,status,body)=>({status,body})});
+  assert.equal(blocked.status,409);
+  const denied=await handleDidwwAdmin({req:{method:'GET'},path:'/api/admin/didww/config',
+    user:{role:'admin',tenant_id:'00000000-0000-4000-8000-000000000001'},
+    send:(_res,status,body)=>({status,body})});
+  assert.equal(denied.status,403);
 });
 
 test('signed DIDWW form callback is persisted once and unsigned callback is rejected',async()=>{

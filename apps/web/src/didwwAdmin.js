@@ -6,6 +6,8 @@ export function setupDidwwAdmin({get,request}){
   const result=root.querySelector('#didww-response');
   const eventList=root.querySelector('#didww-events');
   let config;
+  const submit=form.querySelector('button[type="submit"]');
+  submit.disabled=true;
   function updateMethods(){
     const previous=method.value;method.replaceChildren();
     for(const verb of config?.resources?.[resource.value]||[]){
@@ -46,17 +48,23 @@ export function setupDidwwAdmin({get,request}){
         resource.append(option);
       }
       if(config.resources[selected])resource.value=selected;
-      updateMethods();await events();
-    }catch(error){status.textContent=error.message;}
+      updateMethods();
+      submit.disabled=!config.tenantConfigured||!config.environmentConfigured||!config.apiConfigured;
+      status.textContent=config.setupIssues?.length?'Setup required: '+config.setupIssues.join('. '):'DIDWW configuration loaded.';
+      if(config.tenantConfigured&&config.environmentConfigured)await events();
+    }catch(error){submit.disabled=true;status.textContent='Unable to load DIDWW settings: '+error.message;}
   }
   root.querySelector('#didww-copy-url').onclick=async()=>{
-    try{await navigator.clipboard.writeText(root.querySelector('#didww-callback-url').value);
+    const url=root.querySelector('#didww-callback-url').value;
+    if(!url){status.textContent='Load DIDWW settings before copying the callback URL.';return;}
+    try{await navigator.clipboard.writeText(url);
       status.textContent='Callback URL copied.';}
     catch{status.textContent='Select and copy the callback URL manually.';}
   };
-  root.querySelector('#didww-refresh').onclick=()=>events().catch(error=>{status.textContent=error.message;});
+  root.querySelector('#didww-refresh').onclick=refresh;
   form.onsubmit=async event=>{
     event.preventDefault();
+    if(!config?.tenantConfigured||!config.environmentConfigured||!config.apiConfigured){status.textContent='Complete the DIDWW server settings before sending requests.';return;}
     const verb=method.value,id=form.elements.resourceId.value.trim();
     if(['PATCH','DELETE'].includes(verb)&&!id){status.textContent='Resource ID required.';return;}
     if(verb!=='GET'&&!window.confirm(`Send ${verb} to DIDWW ${config.environment}? This can change service or incur charges.`))return;
