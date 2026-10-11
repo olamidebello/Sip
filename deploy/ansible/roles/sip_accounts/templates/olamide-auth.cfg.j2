@@ -1,4 +1,6 @@
-# Include after auth/auth_db/registrar/usrloc modules; invoke first in request_route.
+# Include after auth/auth_db/registrar/usrloc/sqlops modules.
+# Invoke OLAMIDE_REGISTER first, then OLAMIDE_CALL before subscriber routing.
+# Carrier ingress must terminate in a separately authenticated trusted-carrier route.
 modparam("auth_db", "db_url", "mysql://olamide_sip_auth:{{ sip_auth_db_password }}@127.0.0.1:3307/{{ sip_auth_database }}")
 modparam("auth_db", "calculate_ha1", 0)
 modparam("auth_db", "password_column", "ha1")
@@ -27,4 +29,64 @@ route[OLAMIDE_REGISTER] {
     fix_nated_register();
     if (!save("location")) sl_reply_error();
     exit;
+}
+
+# The DB identity has SELECT permission on only the two application views.
+modparam("sqlops", "sqlcon", "olamide=>mysql://olamide_sip_auth:{{ sip_auth_db_password }}@127.0.0.1:3307/{{ sip_auth_database }}")
+route[OLAMIDE_CALL] {
+    if (!is_method("INVITE") || has_totag()) return;
+    if ($fd != "{{ sip_domain }}") {
+        sl_send_reply("403", "Subscriber domain required");
+        exit;
+    }
+    if (!proxy_authorize("$fd", "olamide_sip_auth")) {
+        proxy_challenge("$fd", "1");
+        exit;
+    }
+    if ($au != $fU || $au !~ "^[a-zA-Z0-9]{2,64}$" || $rU !~ "^[a-zA-Z0-9+_.-]{1,64}$" || $rd !~ "^[a-zA-Z0-9.-]{1,253}$") {
+        sl_send_reply("403", "Identity denied");
+        exit;
+    }
+    # Validated character sets above exclude SQL quotes, escapes and metacharacters.
+    if (sql_query("olamide", "SELECT external_calls,tenant_id FROM olamide_sip_call_access WHERE username='$au' AND domain='{{ sip_domain }}'", "caller") < 0) {
+        sl_send_reply("503", "Calling policy unavailable");
+        exit;
+    }
+    if ($dbr(caller=>rows) != 1) {
+        sql_result_free("caller");
+        sl_send_reply("403", "Account unavailable");
+        exit;
+    }
+    $var(external_calls) = $dbr(caller=>[0,0]);
+    $var(caller_tenant) = $dbr(caller=>[0,1]);
+    sql_result_free("caller");
+    if ($rd == "{{ sip_domain }}") {
+        if (sql_query("olamide", "SELECT tenant_id FROM olamide_sip_call_access WHERE username='$rU' AND domain='{{ sip_domain }}'", "callee") < 0) {
+            sl_send_reply("503", "Calling policy unavailable");
+            exit;
+        }
+        if ($dbr(callee=>rows) == 0 && $var(external_calls) == 1 && $rU =~ "^[+]?[1-9][0-9]{6,14}$") {
+            sql_result_free("callee");
+            consume_credentials();
+            return; # Continue to the commissioned paid PSTN route.
+        }
+        if ($dbr(callee=>rows) != 1) {
+            sql_result_free("callee");
+            sl_send_reply("403", "Active SIP user or subscription required");
+            exit;
+        }
+        $var(callee_tenant) = $dbr(callee=>[0,0]);
+        sql_result_free("callee");
+        if ($var(caller_tenant) != $var(callee_tenant)) {
+            sl_send_reply("403", "Workspace denied");
+            exit;
+        }
+    } else if ($var(external_calls) != 1) {
+        sl_send_reply("403", "Active subscription required");
+        exit;
+    }
+    consume_credentials();
+    # Continue through the commissioned registrar/media/carrier/fraud/billing routes.
+    # Unknown local users above NEVER fall back to PSTN routing.
+    return;
 }

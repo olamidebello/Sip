@@ -1,3 +1,5 @@
+import {handleCallAccess,activeSubscription} from './callAccess.js';
+import {handleConversations} from './conversations.js';
 import {handleUserActivity,recordApiActivity} from './userActivity.js';
 import {handleProductStore,startStoreRenewals} from './productStore.js';
 import { startSipProvisioning, handleSipProvisioning } from './sipProvisioning.js';
@@ -271,6 +273,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/rates/flowroute') || path==='/api/rates/flowroute/search')
         return await handleFlowrouteRates({req,res,path,user,pool,send});
       if(path==='/api/admin/messaging/numbers') return await handleSmsNumberAdmin({req,res,path,user,pool,send,readJson});
+      if(path==='/api/external-sms/send' && req.method==='POST' && !await activeSubscription(pool,user))return send(res,403,{error:'An active subscription is required for external texts',configurationUrl:'/#billing'});
       if(path.startsWith('/api/external-sms/')) return await handleExternalSms({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/messaging/webhooks') return await handleMessagingWebhookAdmin({req,res,user,pool,send,origin});
       if(path.startsWith('/api/admin/carrier-adapters')) return await handleAdapterRegistry({req,res,path,user,pool,send,readJson});
@@ -285,6 +288,7 @@ async function handler(req, res) {
         return await handleLocales({req,res,path,user,pool,send,readJson});
       if (path==="/api/search") return await handleSearch({req,res,user,pool,send});
       if (path.startsWith("/api/support/")) return await handleSupport({req,res,path,user,pool,send,readJson});
+      if(path==='/api/softphone/access'||path==='/api/softphone/authorize')return await handleCallAccess({req,res,path,user,pool,send,readJson});
       if (path.startsWith("/api/softphone/"))
         return await handleSoftphoneState({req,res,path,user,pool,send,readJson});
       if (path==="/api/geofence" || path==="/api/admin/geofence")
@@ -381,7 +385,7 @@ async function handler(req, res) {
       }
       if (path === "/api/contacts" && req.method === "GET") {
         const result = await pool.query(
-          "SELECT u.id, u.display_name AS name, u.email FROM contacts c JOIN users u ON u.id=c.contact_id WHERE c.owner_id=$1 AND u.tenant_id=$2 ORDER BY u.display_name LIMIT 1000",
+          "SELECT u.id, u.display_name AS name, u.email, COALESCE(cp.archived,0) AS archived, COALESCE(cp.muted,0) AS muted, CASE WHEN a.status='active' THEN CONCAT('sip:',a.username,'@',a.domain) ELSE NULL END AS sip_address FROM contacts c JOIN users u ON u.id=c.contact_id LEFT JOIN sip_accounts a ON a.user_id=u.id AND a.tenant_id=u.tenant_id LEFT JOIN conversation_preferences cp ON cp.owner_id=c.owner_id AND cp.contact_id=c.contact_id WHERE c.owner_id=$1 AND u.tenant_id=$2 ORDER BY u.display_name LIMIT 1000",
           [user.id,user.tenant_id]
         );
         return send(res, 200, { contacts: result.rows });
@@ -421,37 +425,7 @@ async function handler(req, res) {
         } catch(error) { await db.query("ROLLBACK"); throw error; } finally {db.release();}
         return send(res, 200, {processed:normalized.length,duplicates:emails.length-normalized.length});
       }
-      if (path === "/api/messages" && req.method === "GET") {
-        const contactId = new URL(req.url, origin).searchParams.get("contact");
-        if (!/^[0-9a-f-]{36}$/i.test(contactId || ""))
-          return send(res, 400, { error: "Contact ID required" });
-        const allowed = await pool.query(
-          "SELECT 1 FROM contacts c JOIN users u ON u.id=c.contact_id WHERE c.owner_id=$1 AND c.contact_id=$2 AND u.tenant_id=$3", [user.id, contactId,user.tenant_id]
-        );
-        if (!allowed.rowCount) return send(res, 403, { error: "Add contact first" });
-        const result = await pool.query(
-          "SELECT id, sender_id AS sender, recipient_id AS recipient, body, created_at FROM messages WHERE (sender_id=$1 AND recipient_id=$2) OR (sender_id=$2 AND recipient_id=$1) ORDER BY created_at DESC, id DESC LIMIT 100",
-          [user.id, contactId]
-        );
-        return send(res, 200, { messages: result.rows.reverse() });
-      }
-      if (path === "/api/messages" && req.method === "POST") {
-        const { recipient, body } = await readJson(req);
-        if (typeof recipient !== "string" || !/^[0-9a-f-]{36}$/i.test(recipient) ||
-            typeof body !== "string" || body.trim().length < 1 || body.length > 4000)
-          return send(res, 400, { error: "Valid recipient and message required (max 4000 characters)" });
-        const allowed = await pool.query(
-          "SELECT 1 FROM contacts c JOIN users u ON u.id=c.contact_id WHERE c.owner_id=$1 AND c.contact_id=$2 AND u.tenant_id=$3", [user.id, recipient,user.tenant_id]
-        );
-        if (!allowed.rowCount) return send(res, 403, { error: "Add contact first" });
-        const id = randomUUID();
-        await pool.query(
-          "INSERT INTO messages(id,sender_id,recipient_id,body) VALUES($1,$2,$3,$4)",
-          [id, user.id, recipient, body.trim()]
-        );
-        const result = await pool.query("SELECT id,created_at FROM messages WHERE id=$1", [id]);
-        return send(res, 201, result.rows[0]);
-      }
+      if(path.startsWith('/api/messages'))return await handleConversations({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin)});
       if (path === "/api/billing/invoices" && req.method === "GET") {
         const result = await pool.query(
           "SELECT id,description,amount_cents,currency,status,created_at FROM invoices WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100",

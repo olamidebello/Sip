@@ -1,7 +1,8 @@
+import {migrateConversations} from './conversations.js';
 import {migrateUserActivity} from './userActivity.js';
 import {migrateProviderCredentials} from './providerCredentials.js';
 import {migrateProductStore} from './productStore.js';
-import {migrateKamailioAccounts} from './kamailioAccounts.js';
+import {migrateKamailioAccounts,migrateCallAccessView} from './kamailioAccounts.js';
 import { migrateSipProvisioning } from './sipProvisioning.js';
 import fs from 'node:fs/promises';
 import { createDatabase } from './db.js';
@@ -66,6 +67,7 @@ export async function migrate(pool) {
       ['sip_marketplace', () => migrateSipMarketplace(pool)],
       ['sip_provisioning', () => migrateSipProvisioning(pool)],
       ['kamailio_accounts', () => migrateKamailioAccounts(pool)],
+      ['sip_call_access', () => migrateCallAccessView(pool)],
       ['sip_profiles', () => migrateSipProfiles(pool)],
       ['payments', () => migratePayments(pool)],
       ['product_store', () => migrateProductStore(pool)],
@@ -88,6 +90,7 @@ export async function migrate(pool) {
       ['cdr', () => pool.initialize(awaitSql.cdr)],
       ['dids', () => pool.initialize(awaitSql.dids)],
       ['nigeria', () => pool.initialize(awaitSql.nigeria)],
+      ['conversations', () => migrateConversations(pool)],
       ['user_activity', () => migrateUserActivity(pool)],
       ['provider_credentials', () => migrateProviderCredentials(pool)],
       ['pricing', () => migratePricing(pool)],

@@ -12,7 +12,7 @@
           - kamailio_maintenance_approved | bool
     - name: Verify auth route is invoked before any existing request handling
       ansible.builtin.command:
-        argv: [python3, '-c', "import pathlib,re,sys; s=pathlib.Path(sys.argv[1]+'/kamailio.cfg').read_text(); assert re.search(r'#!include_file\\s+\"olamide-auth.cfg\"',s); assert re.search(r'request_route\\s*\\{\\s*route\\(OLAMIDE_REGISTER\\)\\s*;',s); assert not re.search(r'modparam\\(\\s*\"auth_db\"',s)", '{{ sip_registration_config_source }}']
+        argv: [python3, '-c', "import pathlib,re,sys; s=pathlib.Path(sys.argv[1]+'/kamailio.cfg').read_text(); assert re.search(r'#!include_file\\s+\"olamide-auth.cfg\"',s); assert re.search(r'request_route\\s*\\{\\s*route\\(OLAMIDE_REGISTER\\)\\s*;\\s*route\\(OLAMIDE_CALL\\)\\s*;',s); assert not re.search(r'modparam\\(\\s*\"auth_db\"',s)", '{{ sip_registration_config_source }}']
       changed_when: false
       no_log: true
     - name: Apply application migrations and local-only database publication

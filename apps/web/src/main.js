@@ -1,3 +1,4 @@
+import {setupConversations} from './conversations.js';
 import {setupWorkspaceNavigation,fragmentTarget} from "./workspaceNavigation.js";
 import {setupUserActivity} from "./userActivity.js";
 import {setupProductStore} from './productStore.js';
@@ -292,11 +293,21 @@ root.innerHTML = `
       <button id="contacts-import" type="button" disabled>Import selected contacts</button>
       <button id="contacts-export" type="button">Export contacts CSV</button>
     </div>
+    <label><input id="show-archived-conversations" type="checkbox"> Show archived conversations</label>
     <label>Conversation <select id="contact-list"></select></label>
+    <div class="conversation-toolbar">
+      <button id="call-contact" type="button" disabled>Call contact on SIP</button>
+      <label><input id="conversation-blocked" type="checkbox"> Block messages</label>
+      <label><input id="conversation-muted" type="checkbox"> Mute conversation</label>
+      <label><input id="conversation-archived" type="checkbox"> Archive conversation</label>
+    </div>
+    <p id="conversation-typing" role="status" aria-live="polite"></p>
+    <label>Search this conversation <input id="message-search" type="search" placeholder="Find a message"></label>
     <button id="load-messages" type="button">Refresh messages</button>
     <ol id="message-list"></ol>
+    <div id="message-context" hidden><span id="message-context-text"></span><button id="message-context-cancel" type="button">Cancel</button></div>
     <form id="send-message">
-      <label>Message <input name="body" maxlength="4000" required></label>
+      <label>Message <textarea name="body" maxlength="4000" rows="3" placeholder="Write a message…" required></textarea></label>
       <button>Send</button>
     </form>
     <p id="chat-status" role="status"></p>
@@ -1012,7 +1023,7 @@ root.innerHTML = `
   </section>
   <section id="calling-workspace" class="calling-workspace" hidden>
   <h2>Olamide dialer</h2>
-  <p>Development browser dialer. Use a test account on a WSS and WebRTC enabled SIP server.</p>
+  <p id="calling-access" role="status">Internal SIP calls are available without a subscription after your SIP account is activated. External calls require an active plan.</p><a href="#billing">Manage calling plan</a>
   <form id="connect">
     <label>SIP address <input name="aor" placeholder="sip:alice@example.com" required></label>
     <label>Authorization username <input name="username" autocomplete="username" required></label>
@@ -1536,30 +1547,26 @@ $("#inhouse-price").onsubmit=async(event)=>{
 $("#refresh-cdr").onclick = () => refreshCdr().catch((error) => { $("#cdr-status").textContent = error.message; });
 async function loadContacts() {
   const { contacts } = await apiGet("/api/contacts");
+  conversations.setContacts(contacts);
   const list = $("#contact-list");
   const selected = list.value;
   list.replaceChildren();
   for (const contact of contacts) {
+    if(contact.archived&&!$("#show-archived-conversations").checked)continue;
     const option = document.createElement("option");
     option.value = contact.id;
-    option.textContent = `${contact.name} (${contact.email})`;
+    option.textContent = `${contact.name} (${contact.email})${contact.archived?" · archived":""}${contact.muted?" · muted":""}`;
     list.append(option);
   }
-  if (contacts.some((contact) => contact.id === selected)) list.value = selected;
+  if ([...list.options].some(option=>option.value===selected)) list.value = selected;
   await loadMessages();
 }
-async function loadMessages() {
-  const contact = $("#contact-list").value;
-  const list = $("#message-list");
-  list.replaceChildren();
-  if (!contact) return;
-  const { messages } = await apiGet("/api/messages?contact=" + encodeURIComponent(contact));
-  for (const message of messages) {
-    const item = document.createElement("li");
-    item.textContent = `${new Date(message.created_at).toLocaleString()}: ${message.body}`;
-    list.append(item);
-  }
-}
+$("#show-archived-conversations").onchange=()=>loadContacts().catch(error=>{$("#chat-status").textContent=error.message;});
+const conversations=setupConversations({get:apiGet,request:accountRequest,isSignedIn:()=>!!activeRole,
+  preferencesChanged:()=>loadContacts(),
+  isVisible:()=>!$('#chat').hidden&&!$('#chat').classList.contains('workspace-inactive'),
+  callContact:address=>{dialForm.elements.target.value=address;showWorkspace('calling-workspace');status('Contact selected. Connect your SIP account, then press Call.');}});
+async function loadMessages(){await conversations.refresh();}
 function signedIn(user) {
   if(user.mustChangePassword){
     activeRole='pending_password_change';
@@ -1600,6 +1607,7 @@ function signedIn(user) {
   if(user.authSource==="local") refreshPasskeys();
   $("#sip-account-panel").hidden=false;
   refreshSipAccount();
+  apiGet('/api/softphone/access').then(access=>{$('#calling-access').textContent=access.externalCalls?'Your active plan permits external calling, subject to carrier and billing limits.':'Free account: call active SIP users in your workspace. An active plan is required for external calls and texts.';}).catch(error=>{$('#calling-access').textContent=error.message;});
   sipProfiles.refresh();
   $("#sip-profile-admin").hidden=user.role!=="super_admin";
   $("#provider-webhook-admin").hidden=user.role!=="super_admin";
@@ -1926,20 +1934,18 @@ $("#contacts-export").onclick=async()=>{
     $("#chat-status").textContent=`Exported ${contacts.length} contacts.`;
   } catch(error) {$("#chat-status").textContent=error.message;}
 };
-$("#contact-list").onchange = () => loadMessages().catch((error) => {
+$("#contact-list").onchange = () => {conversations.clearDraft();return loadMessages().catch((error) => {
   $("#chat-status").textContent = error.message;
-});
+});};
 $("#load-messages").onclick = () => loadMessages().catch((error) => {
   $("#chat-status").textContent = error.message;
 });
 $("#send-message").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const form=event.currentTarget;
   try {
-    await accountRequest("/api/messages", {
-      recipient: $("#contact-list").value,
-      body: new FormData(event.currentTarget).get("body")
-    });
-    event.currentTarget.reset();
+    await conversations.send(new FormData(form).get('body'));
+    form.reset();
     await loadMessages();
     $("#chat-status").textContent = "Message sent";
   } catch (error) { $("#chat-status").textContent = error.message; }
@@ -2296,6 +2302,7 @@ dialForm.addEventListener("submit", async (event) => {
   const location = await checkCurrentLocation(geoPolicy);
   $("#geo-result").textContent = location.reason;
   if (!location.allowed) { status("Call blocked: " + location.reason); return; }
+  try {await accountRequest('/api/softphone/authorize',{target});}catch(error){status(error.message);return;}
   currentCall = { direction: "outgoing", address: target };
   try { status("Calling…"); await phone.call(target); }
   catch (error) { finishCall("failed"); report(error); }

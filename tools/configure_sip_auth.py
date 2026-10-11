@@ -17,7 +17,7 @@ password=json.loads(private.read_text())['password'] if private.exists() else se
 if not re.fullmatch(r'[a-f0-9]{64}',password):
     raise SystemExit('Invalid private authentication credential')
 private.write_text(json.dumps({'password':password,'database':name}));private.chmod(0o600)
-sql=f"CREATE USER IF NOT EXISTS 'olamide_sip_auth'@'%' IDENTIFIED BY '{password}'; ALTER USER 'olamide_sip_auth'@'%' IDENTIFIED BY '{password}'; GRANT SELECT ON `{name}`.`olamide_sip_auth` TO 'olamide_sip_auth'@'%';"
+sql=f"CREATE USER IF NOT EXISTS 'olamide_sip_auth'@'%' IDENTIFIED BY '{password}'; ALTER USER 'olamide_sip_auth'@'%' IDENTIFIED BY '{password}'; GRANT SELECT ON `{name}`.`olamide_sip_auth` TO 'olamide_sip_auth'@'%'; GRANT SELECT ON `{name}`.`olamide_sip_call_access` TO 'olamide_sip_auth'@'%';"
 subprocess.run(['docker','compose','--env-file',str(source),'exec','-T','mysql','sh','-c','MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -u root "$MYSQL_DATABASE"'],cwd='/opt/olamide/repo/deployment/docker',input=sql,text=True,check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 # Preserve the existing SIP encryption key; create one only if none is configured.
 key=values.get('SIP_CREDENTIAL_KEY','')

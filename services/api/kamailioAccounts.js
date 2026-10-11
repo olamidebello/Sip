@@ -16,6 +16,16 @@ export async function migrateKamailioAccounts(pool){
     JOIN users u ON u.id=a.user_id AND u.tenant_id=a.tenant_id JOIN tenants t ON t.id=a.tenant_id
     WHERE a.status='active' AND u.status='active' AND t.status='active'`);
 }
+export async function migrateCallAccessView(pool){
+  await pool.query(`CREATE OR REPLACE SQL SECURITY DEFINER VIEW olamide_sip_call_access AS
+    SELECT a.username,a.domain,a.tenant_id,a.user_id,
+      CASE WHEN EXISTS(SELECT 1 FROM subscriptions s JOIN plans p ON p.id=s.plan_id
+        WHERE s.user_id=a.user_id AND s.status='active' AND p.active=true AND p.tenant_id=a.tenant_id)
+      THEN 1 ELSE 0 END AS external_calls
+    FROM sip_accounts a JOIN users u ON u.id=a.user_id AND u.tenant_id=a.tenant_id
+    JOIN tenants t ON t.id=a.tenant_id JOIN olamide_sip_subscribers c ON c.account_id=a.id AND c.username=a.username AND c.domain=a.domain
+    WHERE a.status='active' AND u.status='active' AND t.status='active'`);
+}
 export async function provisionKamailioAccount(pool,account,password){
   const hash=sipDigest(account.username,account.domain,password);
   await pool.query('INSERT INTO olamide_sip_subscribers(account_id,username,domain,ha1,ha1b) VALUES($1,$2,$3,$4,$5) ON DUPLICATE KEY UPDATE username=VALUES(username),domain=VALUES(domain),ha1=VALUES(ha1),ha1b=VALUES(ha1b)',[account.id,account.username,account.domain,hash.ha1,hash.ha1b]);

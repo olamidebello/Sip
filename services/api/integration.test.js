@@ -104,6 +104,29 @@ test("registered users can create and join a room; host controls it", {
   assert.equal(sip.rows[0].status,'awaiting_switch');
   const timezone = await db.query("SELECT @@session.time_zone AS timezone");
   assert.equal(timezone.rows[0].timezone, "+00:00");
+  // Exercise the new policy and chat routes against real MySQL in CI.
+  const freeAccess=await fetch(base+'/api/softphone/access',{headers:{Cookie:hostCookie}});
+  assert.equal((await freeAccess.json()).externalCalls,false);
+  assert.equal((await post('/api/softphone/authorize',{target:'sip:+12025550123@carrier.example'},hostCookie)).status,403);
+  assert.equal((await post('/api/external-sms/send',{to:'+12025550123',body:'blocked'},hostCookie)).status,403);
+  await post('/api/contacts',{email:'guest'+unique+'@example.com'},hostCookie);
+  await post('/api/contacts',{email:'host'+unique+'@example.com'},guestCookie);
+  const sent=await post('/api/messages',{recipient:guestLogin.body.id,body:'hello from MySQL'},hostCookie);
+  assert.equal(sent.status,201);
+  const mutate=async(path,method,body,cookie)=>{
+    const response=await fetch(base+path,{method,headers:{Origin:origin,Cookie:cookie,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    return {status:response.status,body:await response.json()};
+  };
+  assert.equal((await mutate('/api/messages/'+sent.body.id,'PATCH',{body:'wrong sender'},guestCookie)).status,403);
+  assert.equal((await mutate('/api/messages/conversation/'+hostLogin.body.id,'PUT',{read:true},guestCookie)).status,200);
+  const freeThread=await fetch(base+'/api/messages?contact='+guestLogin.body.id,{headers:{Cookie:hostCookie}});
+  assert.ok((await freeThread.json()).messages.find(message=>message.id===sent.body.id).read_at);
+  assert.equal((await mutate('/api/messages/'+sent.body.id,'PUT',{reaction:'❤️'},guestCookie)).status,200);
+  assert.equal((await post('/api/messages',{recipient:guestLogin.body.id,body:'reply',replyTo:sent.body.id},hostCookie)).status,201);
+  assert.equal((await mutate('/api/messages/conversation/'+hostLogin.body.id,'PUT',{blocked:true},guestCookie)).status,200);
+  assert.equal((await post('/api/messages',{recipient:guestLogin.body.id,body:'blocked'},hostCookie)).status,403);
+  assert.equal((await mutate('/api/messages/conversation/'+hostLogin.body.id,'PUT',{blocked:false},guestCookie)).status,200);
+  assert.equal((await mutate('/api/messages/'+sent.body.id,'DELETE',{},hostCookie)).status,200);
   await db.query("UPDATE users SET role='admin' WHERE id=$1", [hostLogin.body.id]);
   const ldapAdmin=await fetch(base+"/api/admin/ldap",{headers:{Cookie:hostCookie}});
   assert.equal((await ldapAdmin.json()).configured,false);
@@ -195,7 +218,7 @@ test("registered users can create and join a room; host controls it", {
     { recipient:guestLogin.body.id, body:"Hello from MySQL" }, hostCookie)).status, 201);
   const thread = await fetch(base + "/api/messages?contact=" + guestLogin.body.id,
     { headers:{ Cookie:hostCookie } });
-  assert.equal((await thread.json()).messages[0].body, "Hello from MySQL");
+  assert.equal((await thread.json()).messages.some(message=>message.body==="Hello from MySQL"), true);
   const plan = await post("/api/admin/plans",
     { name:"Test plan " + unique, monthlyCents:1299 }, hostCookie);
   assert.equal(plan.status, 201);

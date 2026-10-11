@@ -83,7 +83,7 @@ export async function handleOnboarding({req,res,path,pool,send,readJson,origin})
       if(error.code==='ER_DUP_ENTRY') return send(res,409,{error:'Account already exists'});
       throw error;
     } finally {db.release();}
-    return send(res,201,{email:data.email,status:'active',verificationRequired:false,sipProvisioning:'pending'});
+    return send(res,201,{email:data.email,status:'active',verificationRequired:false,sipProvisioning:'pending',callingScope:'internal_only'});
   }
   if (path === '/api/register/resend' && req.method === 'POST') {
     if(!configured()) return send(res,503,{error:'Email verification is not configured'});
