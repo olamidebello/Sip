@@ -1,0 +1,27 @@
+# Included after tm, sl, registrar and http_async_client modules.
+# Invoke route(OLAMIDE_PUSH_WAKE) ONLY for a known, authorized local subscriber
+# when lookup("location") misses, after initial media/record-route setup.
+# After successful authenticated save("location"), call ts_append("location", "$tu").
+loadmodule "tsilo.so"
+modparam("tsilo", "use_domain", 1)
+route[OLAMIDE_PUSH_WAKE] {
+    if (!is_method("INVITE") || has_totag()) return;
+    if ($rd != "{{ native_push_domain }}" || $rU !~ "^[a-zA-Z0-9+_.-]{1,64}$") return;
+    if (!t_newtran()) exit;
+    t_set_fr(45000, 45000);
+    ts_store();
+    t_reply("100", "Waiting for mobile device");
+    $http_req(all) = $null;
+    $http_req(timeout) = 3000;
+    $http_req(suspend) = 0;
+    $http_req(method) = "POST";
+    $http_req(hdr) = "Content-Type: application/json";
+    $http_req(hdr) = "Authorization: Bearer {{ native_push_hook_token }}";
+    $http_req(body) = '{"username":"' + $rU + '","domain":"' + $rd + '","callId":"' + $(ci{s.encode.base64}) + '"}';
+    http_async_query("https://{{ native_push_domain }}/api/native-push/wake", "OLAMIDE_PUSH_RESULT");
+    exit;
+}
+route[OLAMIDE_PUSH_RESULT] {
+    # Do not log payloads, authorization headers or device tokens.
+    # TM owns the 45-second timeout. A new authenticated REGISTER appends branches.
+}

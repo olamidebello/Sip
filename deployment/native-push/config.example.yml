@@ -1,0 +1,23 @@
+# Save private configuration outside Git, e.g. /etc/olamide/native-push.local.yml.
+# The controller needs GitHub read access, server SSH access, and Docker/Ansible.
+deployment_ref: REPLACE_WITH_VALIDATED_40_CHARACTER_COMMIT_SHA
+firebase_service_account_source: /secure/firebase-service-account.json
+google_services_source: /secure/google-services.json
+native_push_domain: sip.dobhrap.com
+enable_native_push: true
+build_native_android: true
+android_sdk_root: /opt/android-sdk
+mobile_build_repo: /opt/olamide/mobile-build
+# Enable only when a complete commissioned registrar/media bundle is available.
+native_push_install_routing: false
+native_push_routing_bundle: /etc/olamide/reviewed-kamailio
+kamailio_packages: [kamailio, kamailio-mysql-modules, kamailio-extra-modules]
+kamailio_expected_modules: [tm, sl, registrar, usrloc, tsilo, http_async_client, rtpengine]
+kamailio_maintenance_approved: false
+
+kamailio_node_id: REPLACE_WITH_EXISTING_COMMISSIONED_NODE_UUID
+
+# Optional cloud provisioning with an already authenticated gcloud CLI on controller.
+auto_provision_firebase: false
+firebase_project_id: REPLACE_WITH_EXISTING_GOOGLE_CLOUD_PROJECT
+firebase_credentials_dir: /secure

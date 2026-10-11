@@ -1,3 +1,4 @@
+import {handleNativePush,pushHookAuthorized,startNativePush} from './nativePush.js';
 import {handleContactSettings} from './contactSettings.js';
 import {handleCallAccess,activeSubscription} from './callAccess.js';
 import {handleConversations} from './conversations.js';
@@ -144,6 +145,7 @@ async function featuresFor(user) {
 }
 async function handler(req, res) {
   const path = new URL(req.url, origin).pathname;
+  const nativePushHook=path==='/api/native-push/wake'&&pushHookAuthorized(req);
   if (req.method === "GET" && path === "/api/health")
     return send(res, 200, { status: "ok" });
   const flowrouteWebhook = path.startsWith("/api/webhooks/flowroute/");
@@ -154,12 +156,13 @@ async function handler(req, res) {
   const switchXml = path === "/api/switch/xml";
   const deployRunner = path.startsWith('/api/integrations/deployment/');
   const kamailioRunner=path.startsWith('/api/integrations/kamailio/');
-  if (req.method !== "GET" && !deployRunner && !kamailioRunner && !switchXml && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
+  if (req.method !== "GET" && !nativePushHook && !deployRunner && !kamailioRunner && !switchXml && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
     return send(res, 403, { error: "Invalid origin" });
-  if (req.method !== "GET" && !limit(req,switchXml ? 3000 : (deployRunner || kamailioRunner || cdrIngest || flowrouteWebhook || stripeWebhook || providerWebhook || didwwWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
+  if (req.method !== "GET" && !limit(req,switchXml ? 3000 : (nativePushHook || deployRunner || kamailioRunner || cdrIngest || flowrouteWebhook || stripeWebhook || providerWebhook || didwwWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
     return send(res, 429, { error: "Too many requests" });
   if(path==="/api/register/captcha"&&req.method==="GET"&&!limit(req,Number(process.env.API_RATE_LIMIT||20)))return send(res,429,{error:"Too many CAPTCHA requests"});
   try {
+    if(path==='/api/native-push/wake')return await handleNativePush({req,res,path,pool,send,readJson});
     if (switchXml) return send(res,410,{error:'Legacy XML integration retired'});
     if(kamailioRunner) return await handleKamailioRunner({req,res,path,pool,send,readJson});
     if (deployRunner) return await handleServerFleetRunner({req,res,path,pool,send,readJson});
@@ -242,7 +245,7 @@ async function handler(req, res) {
         path.startsWith("/api/numbers") || path.startsWith("/api/porting") ||
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
-        path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") ||
+        path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") || path.startsWith("/api/native-push/") ||
         path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path.startsWith("/api/dashboard") || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
         path === "/api/admin/cdr" || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
       const user = await currentUser(req);
@@ -289,6 +292,7 @@ async function handler(req, res) {
         return await handleLocales({req,res,path,user,pool,send,readJson});
       if (path==="/api/search") return await handleSearch({req,res,user,pool,send});
       if (path.startsWith("/api/support/")) return await handleSupport({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/native-push/'))return await handleNativePush({req,res,path,user,pool,send,readJson,sessionHash:tokenHash(currentToken(req))});
       if(path==='/api/softphone/access'||path==='/api/softphone/authorize')return await handleCallAccess({req,res,path,user,pool,send,readJson});
       if (path.startsWith("/api/softphone/"))
         return await handleSoftphoneState({req,res,path,user,pool,send,readJson});
@@ -760,12 +764,14 @@ async function handler(req, res) {
 
 await migrate(pool);
 const stopSipProvisioning=startSipProvisioning(pool,origin);
+const stopNativePush=startNativePush(pool);
 const stopRateSync=startFlowrouteRateSync(pool);
 const stopStoreRenewals=startStoreRenewals(pool);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
 server.on("close",stopSipProvisioning);
+server.on("close",stopNativePush);
 server.on("close",stopRateSync);
 server.on("close",stopStoreRenewals);
 meetingSignaling = attachMeetingSignaling(server, { pool, origin, currentUser });

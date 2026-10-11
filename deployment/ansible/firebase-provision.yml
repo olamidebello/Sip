@@ -1,0 +1,21 @@
+---
+- name: Automatically provision Firebase Android credentials using existing cloud authorization
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: Require the existing Google project and private output location
+      ansible.builtin.assert:
+        that:
+          - firebase_project_id is defined
+          - firebase_credentials_dir is defined
+          - firebase_credentials_dir is match('^/')
+    - name: Check authenticated cloud CLI without printing credentials
+      ansible.builtin.command:
+        argv: [gcloud, auth, print-access-token]
+      changed_when: false
+      no_log: true
+    - name: Provision APIs Android app FCM role and reusable sender credentials
+      ansible.builtin.command:
+        argv: [python3, '{{ playbook_dir }}/../native-push/provision-firebase.py', '--project', '{{ firebase_project_id }}', '--output-dir', '{{ firebase_credentials_dir }}']
+      no_log: true

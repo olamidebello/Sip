@@ -1,3 +1,4 @@
+import {createNativePushClient} from './nativePushClient.js';
 import {createAutoSipRegistration} from './autoSipRegistration.js';
 import {setupContactDirectory} from './contactDirectory.js';
 import {setupConversations} from './conversations.js';
@@ -1646,6 +1647,7 @@ function signedIn(user) {
   $("#sip-account-panel").hidden=false;
   refreshSipAccount();
   autoSip.start(user.id);
+  void nativePush.start();
   apiGet('/api/softphone/access').then(access=>{$('#calling-access').textContent=access.externalCalls?'Your active plan permits external calling, subject to carrier and billing limits.':'Free account: call active SIP users in your workspace. An active plan is required for external calls and texts.';}).catch(error=>{$('#calling-access').textContent=error.message;});
   sipProfiles.refresh();
   $("#sip-profile-admin").hidden=user.role!=="super_admin";
@@ -2211,6 +2213,7 @@ $("#ldap-login").addEventListener("submit",async(event)=>{
 });
 $("#logout").onclick = async () => {
   try {
+    await nativePush.stop();
     await autoSip.stop();
     if (phone) {
       if (onCall) await phone.hangup().catch(()=>{});
@@ -2262,6 +2265,7 @@ $("#password-change").onsubmit=async(event)=>{
     const fresh=await apiGet("/api/me");signedIn(fresh);
   } catch(error) {$("#account-status").textContent=error.message;}
 };
+const nativePush=createNativePushClient({request:accountRequest,onStatus:message=>{$('#sip-account-status').textContent=message;}});
 const autoSip=createAutoSipRegistration({
   session:()=>accountRequest('/api/sip-account/session',{}),
   connected:()=>sipRegistered&&!!phone?.isConnected(),
@@ -2273,7 +2277,7 @@ const autoSip=createAutoSipRegistration({
   },
   async disconnect(){if(phone){const current=phone;phone=undefined;sipRegistered=false;if(onCall)await current.hangup().catch(()=>{});await current.unregister().catch(()=>{});await current.disconnect().catch(()=>{});callState(false);connectForm.hidden=false;dialForm.hidden=true;$('#disconnect').hidden=true;}}
 });
-window.addEventListener('online',()=>autoSip.wake());
+window.addEventListener('online',()=>{autoSip.wake();if(softphoneUserId)void nativePush.start();});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')autoSip.wake();});
 window.addEventListener('pagehide',()=>{void autoSip.stop();});
 window.addEventListener('pageshow',event=>{if(event.persisted&&softphoneUserId)autoSip.start(softphoneUserId);});
@@ -2284,6 +2288,8 @@ fetch("/api/me", { credentials: "same-origin" })
 function status(message) { $("#status").textContent = message; }
 function callState(active) {
   onCall = active;
+  const nativeCall=window.Capacitor?.Plugins?.NativePush;
+  if(nativeCall?.setCallActive)void nativeCall.setCallActive({active}).catch(error=>{$('#status').textContent=error.message;});
   if($("#return-to-call")) $("#return-to-call").hidden=!active;
   $("#active").hidden = !active;
   if (!active) {

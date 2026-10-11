@@ -9,3 +9,12 @@ deploy/ansible/files/
 
 deploy/ansible/audit-reports/
 deploy/ansible/profiles.json
+
+# Generated native build files and private cloud credentials
+**/__pycache__/
+*.pyc
+**/firebase-service-account.json
+**/google-services.json
+**/firebase-android.private.json
+**/native_push.xml
+*.before-native-push

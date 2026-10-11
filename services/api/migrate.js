@@ -1,3 +1,4 @@
+import {migrateNativePush} from './nativePush.js';
 import {migrateConversations} from './conversations.js';
 import {migrateUserActivity} from './userActivity.js';
 import {migrateProviderCredentials} from './providerCredentials.js';
@@ -91,6 +92,7 @@ export async function migrate(pool) {
       ['dids', () => pool.initialize(awaitSql.dids)],
       ['nigeria', () => pool.initialize(awaitSql.nigeria)],
       ['conversations', () => migrateConversations(pool)],
+      ['native_push', () => migrateNativePush(pool)],
       ['user_activity', () => migrateUserActivity(pool)],
       ['provider_credentials', () => migrateProviderCredentials(pool)],
       ['pricing', () => migratePricing(pool)],

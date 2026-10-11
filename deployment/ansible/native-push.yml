@@ -1,0 +1,183 @@
+---
+- name: Deploy Android native incoming-call push services
+  hosts: olamide
+  become: true
+  vars:
+    app_repo: /opt/olamide/repo
+    native_push_install_routing: false
+    native_push_domain: sip.dobhrap.com
+  pre_tasks:
+    - name: Require Firebase credential input and a fixed validated release
+      ansible.builtin.assert:
+        that:
+          - firebase_service_account_source is defined
+          - deployment_ref is defined
+          - deployment_ref is match('^[0-9a-f]{40}$')
+          - native_push_domain is match('^[a-zA-Z0-9.-]+$')
+    - name: Read Firebase credential structure without disclosing secrets
+      ansible.builtin.set_fact:
+        firebase_account: "{{ lookup('file', firebase_service_account_source) | from_json }}"
+      no_log: true
+    - name: Validate service identity
+      ansible.builtin.assert:
+        that:
+          - firebase_account.type == 'service_account'
+          - firebase_account.project_id | length > 0
+          - firebase_account.private_key is match('^-----BEGIN PRIVATE KEY-----')
+      no_log: true
+  tasks:
+    - name: Require clean checkout and save deployed ref for rollback
+      ansible.builtin.command:
+        argv: [git, status, --porcelain, --untracked-files=no]
+        chdir: '{{ app_repo }}'
+      register: checkout_status
+      changed_when: false
+      failed_when: checkout_status.stdout | length > 0
+    - name: Read previous deployed revision
+      ansible.builtin.command:
+        argv: [git, rev-parse, HEAD]
+        chdir: '{{ app_repo }}'
+      register: previous_ref
+      changed_when: false
+    - name: Inspect existing private Firebase credentials
+      ansible.builtin.stat:
+        path: /etc/olamide/native-push/service-account.json
+      register: previous_firebase
+      no_log: true
+    - name: Snapshot existing Firebase credentials for rollback
+      ansible.builtin.copy:
+        src: /etc/olamide/native-push/service-account.json
+        dest: /etc/olamide/native-push/service-account.json.before-native-push
+        remote_src: true
+        mode: '0600'
+      when: previous_firebase.stat.exists
+      no_log: true
+    - name: Save private environment copies for rollback
+      ansible.builtin.copy:
+        src: '{{ item }}'
+        dest: '{{ item }}.before-native-push'
+        remote_src: true
+        mode: '0600'
+      loop: [/etc/olamide/secrets.env, /opt/olamide/repo/deployment/docker/.env]
+      no_log: true
+    - name: Deploy release and credentials with application rollback
+      block:
+        - name: Checkout the requested fixed release
+          ansible.builtin.git:
+            repo: https://github.com/olamidebello/Sip.git
+            dest: '{{ app_repo }}'
+            version: '{{ deployment_ref }}'
+            force: false
+        - name: Create private credentials directory readable by API runtime
+          ansible.builtin.file:
+            path: /etc/olamide/native-push
+            state: directory
+            owner: root
+            group: '1000'
+            mode: '0750'
+        - name: Install Firebase credentials
+          ansible.builtin.copy:
+            src: '{{ firebase_service_account_source }}'
+            dest: /etc/olamide/native-push/service-account.json
+            owner: root
+            group: '1000'
+            mode: '0640'
+          no_log: true
+        - name: Automatically generate and synchronize private push hook credentials
+          ansible.builtin.command:
+            argv: [python3, '{{ app_repo }}/deployment/native-push/provision-secrets.py', '--service-account', /etc/olamide/native-push/service-account.json, '--env', /etc/olamide/secrets.env, '--env', '{{ app_repo }}/deployment/docker/.env']
+          no_log: true
+        - name: Build API and GUI
+          ansible.builtin.command:
+            argv: [docker, compose, build, api, web]
+            chdir: '{{ app_repo }}/deployment/docker'
+        - name: Apply additive database migrations
+          ansible.builtin.command:
+            argv: [docker, compose, run, --rm, migrate]
+            chdir: '{{ app_repo }}/deployment/docker'
+        - name: Start API and GUI with native push configuration
+          ansible.builtin.command:
+            argv: [docker, compose, up, '-d', '--no-deps', api, web]
+            chdir: '{{ app_repo }}/deployment/docker'
+        - name: Verify API health and mounted private push credentials
+          ansible.builtin.command:
+            argv: [docker, compose, exec, '-T', api, node, '-e', "const fs=require('fs');JSON.parse(fs.readFileSync(process.env.NATIVE_PUSH_SERVICE_ACCOUNT_FILE));if((process.env.NATIVE_PUSH_HOOK_TOKEN||'').length<32)process.exit(1);fetch('http://127.0.0.1:8080/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+            chdir: '{{ app_repo }}/deployment/docker'
+          register: push_health
+          until: push_health.rc == 0
+          retries: 12
+          delay: 5
+          changed_when: false
+          no_log: true
+      rescue:
+        - name: Restore previous Firebase credentials when present
+          ansible.builtin.copy:
+            src: /etc/olamide/native-push/service-account.json.before-native-push
+            dest: /etc/olamide/native-push/service-account.json
+            remote_src: true
+            owner: root
+            group: '1000'
+            mode: '0640'
+          when: previous_firebase.stat.exists
+          no_log: true
+        - name: Remove new Firebase credentials when previous deployment had none
+          ansible.builtin.file:
+            path: /etc/olamide/native-push/service-account.json
+            state: absent
+          when: not previous_firebase.stat.exists
+          no_log: true
+        - name: Restore previous private environment files
+          ansible.builtin.copy:
+            src: '{{ item }}.before-native-push'
+            dest: '{{ item }}'
+            remote_src: true
+            mode: '0600'
+          loop: [/etc/olamide/secrets.env, /opt/olamide/repo/deployment/docker/.env]
+          no_log: true
+        - name: Restore application revision
+          ansible.builtin.command:
+            argv: [git, checkout, --detach, '{{ previous_ref.stdout }}']
+            chdir: '{{ app_repo }}'
+        - name: Rebuild previous application
+          ansible.builtin.command:
+            argv: [docker, compose, build, api, web]
+            chdir: '{{ app_repo }}/deployment/docker'
+        - name: Restart restored application
+          ansible.builtin.command:
+            argv: [docker, compose, up, '-d', '--no-deps', api, web]
+            chdir: '{{ app_repo }}/deployment/docker'
+        - name: Report failed deployment
+          ansible.builtin.fail:
+            msg: Native push rollout failed; previous application and environment restored. Additive tables are preserved.
+    - name: Configure optional same-server SIP wake routing
+      when: native_push_install_routing | bool
+      block:
+        - name: Require existing complete reviewed registrar and media bundle
+          ansible.builtin.assert:
+            that:
+              - native_push_routing_bundle is defined
+        - name: Read synchronized hook credential
+          ansible.builtin.slurp:
+            src: /etc/olamide/secrets.env
+          register: private_env
+          no_log: true
+        - name: Render private call wake route into reviewed bundle
+          ansible.builtin.template:
+            src: templates/olamide-push.cfg.j2
+            dest: '{{ native_push_routing_bundle }}/olamide-push.cfg'
+            mode: '0600'
+          vars:
+            native_push_hook_token: "{{ (private_env.content | b64decode).split('\n') | select('match', '^NATIVE_PUSH_HOOK_TOKEN=') | first | regex_replace('^NATIVE_PUSH_HOOK_TOKEN=', '') }}"
+          no_log: true
+        - name: Wire authenticated REGISTER and reviewed lookup-miss integration point
+          ansible.builtin.command:
+            argv: [python3, '{{ app_repo }}/deployment/native-push/install-routing.py', '{{ native_push_routing_bundle }}']
+          no_log: true
+        - name: Install validate and rollback SIP profile using existing deployment role
+          ansible.builtin.include_role:
+            name: '{{ app_repo }}/deploy/ansible/roles/kamailio_node'
+          vars:
+            kamailio_config_source: '{{ native_push_routing_bundle }}'
+    - name: Report remaining device acceptance checks
+      ansible.builtin.debug:
+        msg: Backend and GUI configured. Build/install the Android APK and verify a real incoming call with the app backgrounded. iOS APNs/PushKit/CallKit is not implemented by this Android profile.

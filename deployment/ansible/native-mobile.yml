@@ -1,0 +1,62 @@
+---
+- name: Build Android native incoming-call notification package
+  hosts: mobile_builders
+  become: false
+  vars:
+    mobile_build_repo: /opt/olamide/mobile-build
+  pre_tasks:
+    - name: Require Firebase Android app config and fixed build release
+      ansible.builtin.assert:
+        that:
+          - google_services_source is defined
+          - deployment_ref is defined
+          - deployment_ref is match('^[0-9a-f]{40}$')
+          - android_sdk_root is defined
+    - name: Check existing Android build toolchain
+      ansible.builtin.command:
+        argv: '{{ item }}'
+      loop: [[node, --version], [java, -version], [python3, --version]]
+      changed_when: false
+  tasks:
+    - name: Checkout fixed source on the Android builder
+      ansible.builtin.git:
+        repo: https://github.com/olamidebello/Sip.git
+        dest: '{{ mobile_build_repo }}'
+        version: '{{ deployment_ref }}'
+        force: false
+    - name: Install pinned mobile package dependencies
+      ansible.builtin.command:
+        argv: [npm, install, '--no-audit', '--no-fund']
+        chdir: '{{ mobile_build_repo }}/apps/mobile'
+    - name: Generate Android native project
+      ansible.builtin.command:
+        argv: [npx, cap, add, android]
+        chdir: '{{ mobile_build_repo }}/apps/mobile'
+        creates: '{{ mobile_build_repo }}/apps/mobile/android/app/build.gradle'
+    - name: Synchronize native project
+      ansible.builtin.command:
+        argv: [npx, cap, sync, android]
+        chdir: '{{ mobile_build_repo }}/apps/mobile'
+    - name: Stage Firebase Android configuration privately
+      ansible.builtin.copy:
+        src: '{{ google_services_source }}'
+        dest: '{{ mobile_build_repo }}/firebase-android.private.json'
+        mode: '0600'
+    - name: Install carrier bridge and native incoming-call support
+      ansible.builtin.command:
+        argv: [bash, install-carrier-native.sh]
+        chdir: '{{ mobile_build_repo }}/apps/mobile'
+    - name: Install Firebase resource configuration and notification service
+      ansible.builtin.command:
+        argv: [python3, install-native-push.py, '--google-services', '{{ mobile_build_repo }}/firebase-android.private.json']
+        chdir: '{{ mobile_build_repo }}/apps/mobile'
+    - name: Build testing APK with existing SDK
+      ansible.builtin.command:
+        argv: ['./gradlew', '--no-daemon', assembleDebug]
+        chdir: '{{ mobile_build_repo }}/apps/mobile/android'
+      environment:
+        ANDROID_HOME: '{{ android_sdk_root }}'
+        ANDROID_SDK_ROOT: '{{ android_sdk_root }}'
+    - name: Report package and remaining physical device acceptance
+      ansible.builtin.debug:
+        msg: 'Testing APK: {{ mobile_build_repo }}/apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk. Production distribution requires a signed release build and real-device push/call verification.'
