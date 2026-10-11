@@ -23,7 +23,23 @@ export function setupKamailioAdmin(){
     for(const p of data.plans.filter(p=>p.node_id===form.elements.node.value)){const li=document.createElement('li');li.textContent=p.created_at+' · '+p.profile+' · '+p.status+' · '+p.summary;history.append(li);}
     status.textContent=data.catalog.modules.length+' capabilities tracked. '+(fresh?'Fresh audit: '+audit.checkedAt:'Server evidence pending or expired.');
   }
+  async function refreshProvisioning(){
+    const status=root.querySelector('#sip-provisioning-status'),list=root.querySelector('#sip-provisioning-accounts');
+    try{
+      const response=await fetch('/api/admin/sip-provisioning',{credentials:'same-origin'}),result=await response.json();
+      if(!response.ok)throw new Error(result.error);
+      status.textContent=result.configured?'Automatic provisioning configured. Verified and active accounts sync automatically.':'Pending configuration: provisioning HTTPS endpoint, token and credential encryption key required.';
+      list.replaceChildren();
+      for(const a of result.accounts){const li=document.createElement('li');li.textContent=a.email+' · '+a.username+'@'+a.domain+' · '+a.status+' · '+(a.last_result||'queued')+' · attempts '+(a.attempts||0);list.append(li);}
+    }catch(error){status.textContent=error.message;}
+  }
+  root.querySelector('#sip-provisioning-retry').onclick=async()=>{
+    const response=await fetch('/api/admin/sip-provisioning/retry',{method:'POST',credentials:'same-origin'});
+    if(response.ok){await refreshProvisioning();root.querySelector('#sip-provisioning-status').textContent='Pending accounts queued for the next automatic sync.';}
+    else root.querySelector('#sip-provisioning-status').textContent='Retry request failed';
+  };
   async function refresh(edit=canEdit){
+    await refreshProvisioning();
     canEdit=edit;
     for(const button of form.querySelectorAll('button'))button.disabled=!canEdit;
     try{const response=await fetch('/api/admin/kamailio',{credentials:'same-origin'});const result=await response.json();if(!response.ok)throw new Error(result.error);data=result;

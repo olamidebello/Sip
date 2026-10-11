@@ -604,7 +604,7 @@ root.innerHTML = `
       <button id="kamailio-refresh" type="button">Refresh status</button><button id="kamailio-export" type="button">Export inventory and evidence</button>
       <p id="kamailio-status" role="status"></p>
       <div style="overflow:auto"><table><thead><tr><th>Capability</th><th>Maturity</th><th>Install</th><th>Enable</th><th>Installed</th><th>Status</th><th>Evidence</th><th>Guide</th></tr></thead><tbody id="kamailio-features"></tbody></table></div>
-      <h4>Deployment history</h4><ul id="kamailio-history"></ul>
+      <h4>Automatic account provisioning</h4><p id="sip-provisioning-status" role="status"></p><button type="button" id="sip-provisioning-retry">Retry pending accounts</button><ul id="sip-provisioning-accounts"></ul><h4>Deployment history</h4><ul id="kamailio-history"></ul>
     </section>
     <section id="carrier-adapter-admin" hidden>
       <h3>Carrier adapter nodes</h3>

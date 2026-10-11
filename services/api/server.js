@@ -1,3 +1,4 @@
+import { startSipProvisioning, handleSipProvisioning } from './sipProvisioning.js';
 import http from "node:http";
 import { migrate } from './migrate.js';
 import { randomUUID } from 'node:crypto';
@@ -256,6 +257,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/cluster')) return await handleCluster({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/sip-profiles') || path.startsWith('/api/admin/sip-profile-policy'))
         return await handleSipProfiles({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin)});
+      if(path.startsWith('/api/admin/sip-provisioning')) return await handleSipProvisioning({req,res,path,user,pool,send});
       if(path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/'))
         return await handleSipMarketplace({req,res,path,user,pool,send,readJson});
       if(path==='/api/help/agent') return await handleHelpAgent({req,res,user,send,readJson});
@@ -761,9 +763,11 @@ async function handler(req, res) {
 }
 
 await migrate(pool);
+const stopSipProvisioning=startSipProvisioning(pool,origin);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
+server.on("close",stopSipProvisioning);
 meetingSignaling = attachMeetingSignaling(server, { pool, origin, currentUser });
 server.listen(port, address, () =>
   console.log(`Account API listening on ${address}:${port}`));
