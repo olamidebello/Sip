@@ -1,0 +1,66 @@
+---
+- name: Configure automatic SIP login prerequisites
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Validate public SIP endpoint
+      ansible.builtin.assert:
+        that:
+          - kamailio_repo_path == '/opt/olamide/repo'
+          - sip_domain is match('^[a-zA-Z0-9.-]+$')
+          - sip_wss_url | default('wss://' ~ sip_domain ~ '/ws') is match('^wss://[a-zA-Z0-9.-]+(:[0-9]+)?/[^\s]*$')
+    - name: Ensure persistent encryption key exists without rotating existing credentials
+      ansible.builtin.command:
+        argv:
+          - python3
+          - '-c'
+          - |
+            import pathlib,re,secrets,os
+            p=pathlib.Path('/etc/olamide/secrets.env')
+            text=p.read_text()
+            values=re.findall(r'^SIP_CREDENTIAL_KEY=(.*)$',text,re.M)
+            if values:
+                assert len(values)==1 and re.fullmatch('[0-9a-fA-F]{64}',values[0]), 'Invalid existing SIP key; repair it without rotating encrypted accounts'
+                print('unchanged')
+            else:
+                with p.open('a') as f:
+                    f.write('\nSIP_CREDENTIAL_KEY='+secrets.token_hex(32)+'\n')
+                    f.flush();os.fsync(f.fileno())
+                print('created')
+            os.chmod(p,0o600)
+      register: sip_key_result
+      changed_when: "'created' in sip_key_result.stdout"
+      no_log: true
+    - name: Configure assigned domain and secure transport
+      ansible.builtin.lineinfile:
+        path: /etc/olamide/secrets.env
+        regexp: '^{{ item.name }}='
+        line: '{{ item.name }}={{ item.value }}'
+        mode: '0600'
+      loop:
+        - name: SIP_ACCOUNT_DOMAIN
+          value: '{{ sip_domain }}'
+        - name: SIP_WSS_URL
+          value: "{{ sip_wss_url | default('wss://' ~ sip_domain ~ '/ws') }}"
+      no_log: true
+
+- name: Deploy authenticated Kamailio provisioning
+  ansible.builtin.import_playbook: sip-accounts.yml
+
+- name: Deploy browser automatic registration and backend permissions
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Rebuild API and web from the checked out release
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, up, '-d', '--build', api, web]
+        chdir: /opt/olamide/repo/deployment/docker
+    - name: Check API readiness
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, exec, '-T', api, node, '-e', "fetch('http://127.0.0.1:8080/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+        chdir: /opt/olamide/repo/deployment/docker
+      register: sip_login_ready
+      until: sip_login_ready.rc == 0
+      retries: 12
+      delay: 5
+      changed_when: false

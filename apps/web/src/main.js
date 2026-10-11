@@ -2276,9 +2276,9 @@ const autoSip=createAutoSipRegistration({
     if(onCall)return;
     connectForm.elements.aor.value=`sip:${account.username}@${account.domain}`;
     connectForm.elements.username.value=account.username;
-    connectForm.elements.server.value='wss://'+location.host+'/ws';
+    connectForm.elements.server.value=account.wssUrl;
     connectForm.elements.password.value='';
-    const data=new FormData();for(const [key,value] of Object.entries({aor:`sip:${account.username}@${account.domain}`,username:account.username,password:account.password,server:'wss://'+location.host+'/ws'}))data.set(key,value);
+    const data=new FormData();for(const [key,value] of Object.entries({aor:`sip:${account.username}@${account.domain}`,username:account.username,password:account.password,server:account.wssUrl}))data.set(key,value);
     await registerSip(data,valid);
   },
   async disconnect(){if(phone){const current=phone;phone=undefined;sipRegistered=false;if(onCall)await current.hangup().catch(()=>{});await current.unregister().catch(()=>{});await current.disconnect().catch(()=>{});callState(false);connectForm.hidden=false;dialForm.hidden=true;$('#disconnect').hidden=true;}}

@@ -94,7 +94,14 @@ export async function automaticSipSession(pool,user) {
       account=(await db.query('SELECT username,domain,status,secret_cipher FROM sip_accounts WHERE user_id=$1 AND tenant_id=$2',[user.id,user.tenant_id])).rows[0];
     }
     if(account?.status!=='active'||!account.secret_cipher)return {status:'pending',note:'Your SIP account is waiting for switch activation'};
-    return {status:'active',username:account.username,domain:account.domain,password:decrypt(account.secret_cipher,key)};
+    const setting=(await db.query("SELECT value FROM tenant_settings WHERE tenant_id=$1 AND setting_key='sip_wss_url'",[user.tenant_id])).rows[0]?.value;
+    const wssUrl=setting||process.env.SIP_WSS_URL||'wss://'+new URL(process.env.PUBLIC_ORIGIN||'http://localhost').host+'/ws';
+    let transport;
+    try {transport=new URL(wssUrl);} catch {return {status:'pending',note:'Secure SIP WebSocket URL is invalid'};}
+    if(transport.protocol!=='wss:'||transport.username||transport.password||transport.hash)
+      return {status:'pending',note:'Secure SIP WebSocket URL is invalid'};
+    return {status:'active',aor:`sip:${account.username}@${account.domain}`,wssUrl,
+      username:account.username,domain:account.domain,password:decrypt(account.secret_cipher,key)};
   }finally{try{if(locked)await db.query('SELECT RELEASE_LOCK($1)',['sip-login-'+user.id]);}finally{db.release();}}
 }
 
