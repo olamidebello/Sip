@@ -1,6 +1,7 @@
 import {createNativeCallClient} from './nativeCallClient.js';
 import {createNativePushClient} from './nativePushClient.js';
 import {createAutoSipRegistration} from './autoSipRegistration.js';
+import {setupDialpad,dialTarget} from './dialpad.js';
 import {setupContactDirectory} from './contactDirectory.js';
 import {setupConversations} from './conversations.js';
 import {setupWorkspaceNavigation,fragmentTarget} from "./workspaceNavigation.js";
@@ -1071,8 +1072,10 @@ root.innerHTML = `
     <button>Connect</button>
   </form>
   <form id="dial" hidden>
-    <label>Destination SIP address <input name="target" placeholder="sip:bob@example.com" required></label>
-    <button>Call</button>
+    <label>Number, extension or SIP address <input name="target" placeholder="Extension, +15551234567 or sip:user@domain" autocomplete="off" required></label>
+    <div id="dialpad" class="dialpad" role="group" aria-label="Telephone dialpad"></div>
+    <p class="dialpad-hint">During a connected call, tap the keypad to send menu tones.</p>
+    <button class="dialpad-call">Call</button>
   </form>
   <section id="softphone-tools">
     <h2>Calling tools</h2>
@@ -2380,11 +2383,14 @@ $('#connect-assigned-sip').addEventListener('click',()=>{
 connectForm.querySelector('button').addEventListener('click',()=>{if(connectForm.dataset.canEdit!=='true')autoSip.wake();});
 connectForm.addEventListener("submit",async event=>{event.preventDefault();if(connectForm.dataset.canEdit!=='true'){autoSip.wake();return;}try{await registerSip(new FormData(connectForm));}catch(error){report(error);}});
 
+setupDialpad({root:$('#dialpad'),input:dialForm.elements.target,inCall:()=>onCall,
+  sendTone:digit=>phone.sendDTMF(digit),onError:report});
 dialForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!phone || onCall) return;
-  const target = String(new FormData(dialForm).get("target")).trim();
-  if (!/^sip:[^\s@]+@[^\s@]+$/i.test(target)) { status("Enter a SIP address."); return; }
+  let target;
+  try{target=dialTarget(String(new FormData(dialForm).get('target')),connectForm.elements.aor.value.split('@')[1]);}
+  catch(error){report(error);return;}
   try {await loadGeofencePolicy();} catch {status("Location policy unavailable. Call blocked.");return;}
   if (!geoPolicyLoaded) {status("Location policy unavailable. Call blocked.");return;}
   const location = await checkCurrentLocation(geoPolicy);

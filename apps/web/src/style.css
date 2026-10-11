@@ -144,6 +144,15 @@ body.workspace-mode #app>section:not(.workspace-inactive){max-width:100%}
 .site-copyright{padding:1.5rem 1rem 2rem;text-align:center;color:#aebdd1;font-size:.82rem;border-top:1px solid #ffffff18}
 
 .configuration-links { display:flex; flex-wrap:wrap; gap:.55rem; margin:.8rem 0 1.2rem; }
+.dialpad{grid-column:1/-1;width:min(100%,360px);margin:1rem auto;text-align:center}
+.dialpad-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.65rem;margin-bottom:.8rem}
+.dialpad-grid button{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:76px;width:100%;margin:0;border-radius:18px;background:#174054;border:1px solid #477383;color:#edfaff}
+.dialpad-grid button span{font-size:1.65rem;font-weight:700;line-height:1.2}
+.dialpad-grid button small{font-size:.65rem;letter-spacing:.16em;color:#a7d4df}
+.dialpad-grid button:hover{background:#236177}.dialpad-grid button:active{background:#087b91}
+.dialpad-grid button:focus-visible{outline:3px solid #70dcca;outline-offset:2px}
+.dialpad-hint{grid-column:1/-1;text-align:center;font-size:.85rem;color:#a7d4df}
+#dial .dialpad-call{background:#128471;min-height:52px;width:min(100%,360px);justify-self:center}
 .configuration-links a,.configuration-primary { display:inline-flex; align-items:center; min-height:44px; padding:.55rem .85rem; border:1px solid #477383; border-radius:999px; color:#a7f3e9; text-decoration:none; background:rgba(28,123,145,.12); transition:background .15s,border-color .15s; }
 .configuration-links a:hover,.configuration-primary:hover { background:rgba(28,123,145,.3); border-color:#49c7cf; }
 .configuration-links a:focus-visible,.configuration-primary:focus-visible { outline:3px solid #49c7cf; outline-offset:3px; }
