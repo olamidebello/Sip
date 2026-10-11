@@ -283,7 +283,9 @@ root.innerHTML = `
     </form>
     <div class="bulk-controls">
       <label>Import contacts CSV (email column, up to 500 tenant users) <input id="contacts-file" type="file" accept=".csv,text/csv"></label>
-      <button id="contacts-import" type="button">Import contacts</button>
+      <button id="contacts-preview" type="button">Preview contact import</button>
+      <label><input id="contacts-select-all" type="checkbox"> Select all import rows</label><span id="contacts-import-count" role="status"></span><ul id="contacts-import-rows"></ul>
+      <button id="contacts-import" type="button" disabled>Import selected contacts</button>
       <button id="contacts-export" type="button">Export contacts CSV</button>
     </div>
     <label>Conversation <select id="contact-list"></select></label>
@@ -318,6 +320,14 @@ root.innerHTML = `
   <section id="product-store-admin" hidden><h2>Product catalog management</h2>
     <p>Reference prices come from the August 2010 product list. Import creates drafts. Review current costs, availability, fulfillment and terms before publishing. Existing edits survive re-import. Recurring renewal prices are fixed at purchase; cancellation stops future invoices.</p>
     <button id="store-import-reference" type="button">Import 177 reference products</button><button id="store-admin-refresh" type="button">Refresh products &amp; orders</button><p id="store-admin-status" role="status"></p>
+    <label>Search products <input id="store-admin-search" type="search"></label>
+    <label><input id="store-select-all" type="checkbox"> Select all filtered products</label><button id="store-clear-selection" type="button">Clear selection</button><span id="store-selection-count" role="status"></span>
+    <label>Bulk status <select id="store-bulk-status"><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></label>
+    <label><input id="store-bulk-ready" type="checkbox"> I verified availability, current costs, fulfillment and each selected product’s terms.</label><button id="store-bulk-apply" type="button">Apply to selected products</button>
+    <h3>Mass import</h3><p>Upload CSV or JSON with up to 500 products. Prices use USD cents. New products become drafts; existing SKUs are skipped.</p>
+    <button id="store-import-template" type="button">Download CSV template</button><label>Product file <input id="store-import-file" type="file" accept=".csv,.json,text/csv,application/json"></label>
+    <button id="store-import-preview" type="button">Preview import</button><label><input id="store-import-all" type="checkbox"> Select all import rows</label><span id="store-import-count" role="status"></span>
+    <ul id="store-import-rows"></ul><button id="store-import-selected" type="button" disabled>Import selected products</button>
     <div id="store-admin-products"></div><h3>Order commissioning &amp; delivery</h3><ul id="store-admin-orders"></ul>
   </section>
   <section id="billing" hidden>
@@ -1835,17 +1845,32 @@ $("#add-contact").addEventListener("submit", async (event) => {
     $("#chat-status").textContent = "Contact added";
   } catch (error) { $("#chat-status").textContent = error.message; }
 });
-$("#contacts-import").onclick=async()=>{
-  const status=$("#chat-status"),file=$("#contacts-file").files?.[0];
-  if(!file) {status.textContent="Choose a CSV file first";return;}
-  try {
-    if(file.size>64000) throw new Error("CSV file exceeds 64 KB");
-    const emails=contactEmailsFromCsv(await file.text());
-    const result=await accountRequest("/api/contacts/import",{emails});
-    $("#contacts-file").value="";
-    await loadContacts();
-    status.textContent=`Processed ${result.processed} contacts (${result.duplicates} repeated rows).`;
-  } catch(error) {status.textContent=error.message;}
+let contactImportRows=[],contactImportSelection=new Set();
+function updateContactImport(){
+  const count=contactImportSelection.size,total=contactImportRows.length;
+  $('#contacts-import-count').textContent=`${count} of ${total} selected`;
+  $('#contacts-select-all').checked=total>0&&count===total;$('#contacts-select-all').indeterminate=count>0&&count<total;
+  $('#contacts-import').disabled=!count;
+  $('#contacts-import-rows').replaceChildren(...contactImportRows.map((email,i)=>{
+    const li=document.createElement('li'),label=document.createElement('label'),check=document.createElement('input');
+    check.type='checkbox';check.checked=contactImportSelection.has(i);check.onchange=()=>{check.checked?contactImportSelection.add(i):contactImportSelection.delete(i);updateContactImport();};
+    label.append(check,document.createTextNode(' '+email));li.append(label);return li;
+  }));
+}
+$('#contacts-file').onchange=()=>{contactImportRows=[];contactImportSelection.clear();updateContactImport();};
+$('#contacts-select-all').onchange=e=>{contactImportSelection=new Set(e.target.checked?contactImportRows.map((_,i)=>i):[]);updateContactImport();};
+$('#contacts-preview').onclick=async()=>{
+  contactImportRows=[];contactImportSelection.clear();updateContactImport();
+  try{const file=$('#contacts-file').files?.[0];if(!file)throw Error('Choose a CSV file first');if(file.size>64000)throw Error('CSV file exceeds 64 KB');
+    contactImportRows=[...new Set(contactEmailsFromCsv(await file.text()))];contactImportSelection=new Set(contactImportRows.map((_,i)=>i));updateContactImport();
+  }catch(error){$('#chat-status').textContent=error.message;}
+};
+$('#contacts-import').onclick=async()=>{
+  const button=$('#contacts-import');button.disabled=true;
+  try{const emails=contactImportRows.filter((_,i)=>contactImportSelection.has(i));if(!emails.length)throw Error('Select contact rows first');
+    const result=await accountRequest('/api/contacts/import',{emails});contactImportRows=[];contactImportSelection.clear();$('#contacts-file').value='';updateContactImport();await loadContacts();
+    $('#chat-status').textContent=`Processed ${result.processed} contacts (${result.duplicates} repeated rows).`;
+  }catch(error){$('#chat-status').textContent=error.message;}finally{button.disabled=!contactImportSelection.size;}
 };
 $("#contacts-export").onclick=async()=>{
   try {

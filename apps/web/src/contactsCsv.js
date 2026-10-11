@@ -1,4 +1,4 @@
-function parseCsv(source) {
+export function parseCsv(source) {
   const rows=[];let row=[],field="",quoted=false;
   for (let i=0;i<source.length;i++) {
     const c=source[i];

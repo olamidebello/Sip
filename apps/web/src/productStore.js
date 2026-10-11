@@ -1,6 +1,7 @@
+import {parseProductImport,productHeaders} from './productImport.js';
 export function setupProductStore({get,request,refreshBilling}){
  const $=s=>document.querySelector(s),money=n=>`USD ${(n/100).toFixed(2)}`;
- let products=[],pending=new Map();
+ let products=[],pending=new Map(),adminProducts=[],selection=new Set(),importRows=[],importSelection=new Set();
  const node=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
  const button=(text,fn)=>{const b=node('button',text);b.type='button';b.onclick=async()=>{b.disabled=true;try{await fn();}catch(e){$('#store-status').textContent=e.message;}finally{b.disabled=false;}};return b;};
  function render(){
@@ -30,7 +31,8 @@ export function setupProductStore({get,request,refreshBilling}){
  }}
  async function refreshAdmin(){try{
   const [catalog,orders]=await Promise.all([get('/api/admin/store/products'),get('/api/admin/store/orders')]);const list=$('#store-admin-products');list.replaceChildren();
-  for(const p of catalog.products){const detail=node('details');detail.append(node('summary',`${p.name} · ${money(p.selling_cents)} · ${p.status}`));const form=node('form');
+  adminProducts=catalog.products;selection=new Set([...selection].filter(sku=>adminProducts.some(p=>p.sku===sku)));
+  for(const p of catalog.products){const detail=node('details');detail.append(node('summary',`${p.name} · ${money(p.selling_cents)} · ${p.status}`));const choose=node('input');choose.type='checkbox';choose.dataset.sku=p.sku;choose.checked=selection.has(p.sku);const chooseLabel=node('label',' Select '+p.name);chooseLabel.prepend(choose);detail.querySelector('summary').prepend(chooseLabel);chooseLabel.onclick=e=>e.stopPropagation();choose.onchange=()=>{choose.checked?selection.add(p.sku):selection.delete(p.sku);updateSelection();};const form=node('form');
    for(const [key,title,type,value] of [['name','Name','text',p.name],['description','Description','textarea',p.description],['terms','Service, destination, fair-use, delivery and refund terms','textarea',p.terms],['sellingCents','Selling price (USD cents)','number',p.selling_cents],['resellerCents','Reseller cost (USD cents; private)','number',p.reseller_cents],['setupCents','Setup price (USD cents)','number',p.setup_cents]]){
     const field=node(type==='textarea'?'textarea':'input');field.name=key;if(type!=='textarea')field.type=type;if(type==='number'){field.min=0;field.max=100000000;}field.value=value;field.required=key!=='terms';const label=node('label',title+' ');label.append(field);form.append(label);
    }
@@ -40,10 +42,62 @@ export function setupProductStore({get,request,refreshBilling}){
     try{await request('/api/admin/store/products',b,'PUT');$('#store-admin-status').textContent='Product saved';await refreshAdmin();await refresh();}catch(e){$('#store-admin-status').textContent=e.message;}
    };detail.append(form);list.append(detail);
   }
+  updateSelection();
   const history=$('#store-admin-orders');history.replaceChildren();for(const o of orders.orders){const li=node('li',`${o.name} · user ${o.user_id} · payment ${o.payment_status} · service ${o.status}`);
    if(o.payment_status==='paid'&&o.status==='awaiting_fulfillment')li.append(button('Record verified fulfillment',async()=>{const note=prompt('Enter delivery / provisioning receipt (at least 10 characters)');if(!note)return;await request(`/api/admin/store/orders/${o.id}/fulfill`,{note});await refreshAdmin();}));history.append(li);
   }
  }catch(e){$('#store-admin-status').textContent=e.message;}}
+ function filteredProducts(){const q=$('#store-admin-search').value.toLowerCase();return adminProducts.filter(p=>`${p.sku} ${p.name} ${p.category}`.toLowerCase().includes(q));}
+ function updateSelection(){
+  const visible=filteredProducts(),all=$('#store-select-all'),count=visible.filter(p=>selection.has(p.sku)).length;
+  all.checked=visible.length>0&&count===visible.length;all.indeterminate=count>0&&count<visible.length;
+  $('#store-selection-count').textContent=`${selection.size} selected (${visible.length} matching)`;
+  $('#store-bulk-apply').disabled=!selection.size;
+  for(const check of $('#store-admin-products').querySelectorAll('input[data-sku]')){check.checked=selection.has(check.dataset.sku);check.closest('details').hidden=!visible.some(p=>p.sku===check.dataset.sku);}
+ }
+ $('#store-admin-search').oninput=updateSelection;
+ $('#store-select-all').onchange=e=>{for(const p of filteredProducts())e.target.checked?selection.add(p.sku):selection.delete(p.sku);updateSelection();};
+ $('#store-clear-selection').onclick=()=>{selection.clear();updateSelection();};
+ $('#store-bulk-apply').onclick=async()=>{
+  const b=$('#store-bulk-apply');b.disabled=true;
+  try{
+   const selected=adminProducts.filter(p=>selection.has(p.sku)).map(p=>({sku:p.sku,revision:p.revision}));
+   if(!selected.length)throw Error('Select products first');
+   const status=$('#store-bulk-status').value;
+   if(!confirm(`Set ${selected.length} selected products to ${status}?`))return;
+   const r=await request('/api/admin/store/products/bulk',{products:selected,status,confirmAvailability:$('#store-bulk-ready').checked});
+   selection.clear();await refreshAdmin();await refresh();$('#store-admin-status').textContent=`Updated ${r.updated} products to ${r.status}.`;
+  }catch(e){$('#store-admin-status').textContent=e.message;}finally{updateSelection();}
+ };
+ function renderImport(){
+  const count=importSelection.size,total=importRows.length,all=$('#store-import-all');
+  all.checked=total>0&&count===total;all.indeterminate=count>0&&count<total;
+  $('#store-import-count').textContent=`${count} of ${total} selected`;$('#store-import-selected').disabled=!count;
+  $('#store-import-rows').replaceChildren(...importRows.map((p,i)=>{
+   const li=node('li'),label=node('label',` ${p.sku} · ${p.name} · ${money(p.sellingCents)} · ${p.billing}`),check=node('input');check.type='checkbox';check.checked=importSelection.has(i);
+   check.onchange=()=>{check.checked?importSelection.add(i):importSelection.delete(i);renderImport();};label.prepend(check);li.append(label);return li;
+  }));
+ }
+ $('#store-import-file').onchange=()=>{importRows=[];importSelection.clear();renderImport();};
+ $('#store-import-all').onchange=e=>{importSelection=new Set(e.target.checked?importRows.map((_,i)=>i):[]);renderImport();};
+ $('#store-import-preview').onclick=async()=>{
+  importRows=[];importSelection.clear();renderImport();
+  try{const file=$('#store-import-file').files?.[0];if(!file)throw Error('Choose a CSV or JSON product file');if(file.size>2*1024*1024)throw Error('File exceeds 2 MB');
+   importRows=parseProductImport(await file.text(),file.name.toLowerCase().endsWith('.json'));importSelection=new Set(importRows.map((_,i)=>i));renderImport();
+   $('#store-admin-status').textContent='Preview ready. Select the products to import.';
+  }catch(e){$('#store-admin-status').textContent=e.message;}
+ };
+ $('#store-import-selected').onclick=async()=>{
+  const b=$('#store-import-selected');b.disabled=true;
+  try{const selected=importRows.filter((_,i)=>importSelection.has(i));if(!selected.length)throw Error('Select import rows first');
+   const r=await request('/api/admin/store/import',{products:selected});importRows=[];importSelection.clear();renderImport();await refreshAdmin();
+   $('#store-admin-status').textContent=`Imported ${r.imported} drafts; skipped ${r.skipped} existing SKUs.`;
+  }catch(e){$('#store-admin-status').textContent=e.message;}finally{b.disabled=!importSelection.size;}
+ };
+ $('#store-import-template').onclick=()=>{
+  const source=productHeaders.join(',')+'\r\nCUSTOM-001,Example service,Services,Service description,Review delivery and refund terms before publishing,monthly,1995,1500,0\r\n';
+  const url=URL.createObjectURL(new Blob([source],{type:'text/csv'})),link=node('a');link.href=url;link.download='product-import-template.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ };
  $('#store-search').oninput=render;$('#store-category').onchange=render;$('#store-refresh').onclick=refresh;$('#store-admin-refresh').onclick=refreshAdmin;
  $('#store-import-reference').onclick=async()=>{try{const r=await request('/api/admin/store/import-reference',{});$('#store-admin-status').textContent=`${r.referenceCount} reference products available as drafts. Existing edits preserved.`;await refreshAdmin();}catch(e){$('#store-admin-status').textContent=e.message;}};
  return {refresh,refreshAdmin};

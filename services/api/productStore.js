@@ -3,6 +3,7 @@ import {randomUUID} from 'node:crypto';
 import {allowed,catalogPolicy} from './catalogControl.js';
 export const referenceProducts=JSON.parse(fs.readFileSync(new URL('./data/product-reference.json',import.meta.url),'utf8'));
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const validSku=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/.test(value);
 const cycles={monthly:1,quarterly:3,annual:12};
 export function validateProduct(b){
  return b&&typeof b.name==='string'&&b.name.trim().length>0&&b.name.length<=180&&typeof b.description==='string'&&b.description.length<=4000&&typeof b.terms==='string'&&b.terms.length<=4000&&['draft','published','archived'].includes(b.status)&&['one_time',...Object.keys(cycles)].includes(b.billing)&&['sellingCents','resellerCents','setupCents'].every(k=>Number.isSafeInteger(b[k])&&b[k]>=0&&b[k]<=100000000)&& (b.status!=='published'||(b.terms.trim().length>=20&&b.confirmAvailability===true));
@@ -40,8 +41,46 @@ export async function handleProductStore({req,res,path,user,pool,send,readJson})
    VALUES($1,$2,$3,$4,$5,'',$6,$7,$8,$9,$10)`,[user.tenant_id,p.sku,p.name,p.category,p.description,p.billing,p.sellingCents,p.resellerCents,p.setupCents,p.sourcePage]);
   return send(res,200,{referenceCount:referenceProducts.length,status:'draft',message:'Existing customizations preserved'});
  }
+ if(admin&&path===root+'/import'&&req.method==='POST'){
+  const b=await readJson(req,2*1024*1024);
+  if(!Array.isArray(b?.products)||!b.products.length||b.products.length>500)return send(res,400,{error:'Import 1 to 500 products per batch'});
+  const seen=new Set(),errors=[];
+  for(const [i,p] of b.products.entries()){
+   if(!p||!validSku(p.sku)||seen.has(p.sku)||typeof p.category!=='string'||!p.category.trim()||p.category.length>100||!validateProduct({...p,status:'draft',terms:p.terms??''}))errors.push({row:i+1,error:'Invalid product fields, cents, category or duplicate SKU'});
+   seen.add(p?.sku);
+  }
+  if(errors.length)return send(res,400,{error:'Import validation failed; no products imported',errors});
+  const db=await pool.connect();let imported=0;
+  try{
+   await db.query('START TRANSACTION');
+   for(const p of b.products){const r=await db.query(`INSERT IGNORE INTO store_products(tenant_id,sku,name,category,description,terms,billing,selling_cents,reseller_cents,setup_cents,status)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'draft')`,[user.tenant_id,p.sku,p.name.trim(),p.category.trim(),p.description,p.terms??'',p.billing,p.sellingCents,p.resellerCents,p.setupCents]);imported+=r.rowCount;}
+   await db.query("INSERT INTO security_events(id,tenant_id,actor_id,target_id,action) VALUES($1,$2,$3,NULL,'store_products_imported')",[randomUUID(),user.tenant_id,user.id]);
+   await db.query('COMMIT');return send(res,200,{imported,skipped:b.products.length-imported,status:'draft'});
+  }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
+ }
+ if(admin&&path===root+'/products/bulk'&&req.method==='POST'){
+  const b=await readJson(req,128*1024);
+  if(!Array.isArray(b?.products)||!b.products.length||b.products.length>500||!['draft','published','archived'].includes(b.status)||
+    b.products.some(p=>!p||!validSku(p.sku)||!Number.isSafeInteger(p.revision))||new Set(b.products.map(p=>p.sku)).size!==b.products.length)
+   return send(res,400,{error:'Select 1 to 500 unique products with current revisions and a valid status'});
+  const db=await pool.connect();
+  try{
+   await db.query('START TRANSACTION');
+   for(const p of [...b.products].sort((a,c)=>a.sku.localeCompare(c.sku))){
+    const row=(await db.query('SELECT revision,terms FROM store_products WHERE tenant_id=$1 AND sku=$2 FOR UPDATE',[user.tenant_id,p.sku])).rows[0];
+    if(!row||row.revision!==p.revision){await db.query('ROLLBACK');return send(res,409,{error:'Product changed or unavailable: '+p.sku+'. Refresh before retrying.'});}
+    if(b.status==='published'&&(b.confirmAvailability!==true||row.terms.trim().length<20)){
+     await db.query('ROLLBACK');return send(res,400,{error:'Publishing requires availability confirmation and reviewed terms for '+p.sku});
+    }
+    await db.query('UPDATE store_products SET status=$1,revision=revision+1 WHERE tenant_id=$2 AND sku=$3',[b.status,user.tenant_id,p.sku]);
+   }
+   await db.query("INSERT INTO security_events(id,tenant_id,actor_id,target_id,action) VALUES($1,$2,$3,NULL,'store_products_bulk_status')",[randomUUID(),user.tenant_id,user.id]);
+   await db.query('COMMIT');return send(res,200,{updated:b.products.length,status:b.status});
+  }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
+ }
  if(admin&&path===root+'/products'&&req.method==='PUT'){
-  const b=await readJson(req);if(!validateProduct(b)||!/^OL-PDF-\d{3}$/.test(b.sku||'')||!Number.isSafeInteger(b.revision))return send(res,400,{error:'Valid prices, revision, terms and availability confirmation required'});
+  const b=await readJson(req);if(!validateProduct(b)||!validSku(b.sku)||!Number.isSafeInteger(b.revision))return send(res,400,{error:'Valid prices, revision, terms and availability confirmation required'});
   const r=await pool.query(`UPDATE store_products SET name=$1,description=$2,terms=$3,billing=$4,selling_cents=$5,reseller_cents=$6,setup_cents=$7,status=$8,revision=revision+1 WHERE tenant_id=$9 AND sku=$10 AND revision=$11`,[b.name.trim(),b.description,b.terms,b.billing,b.sellingCents,b.resellerCents,b.setupCents,b.status,user.tenant_id,b.sku,b.revision]);
   return send(res,r.rowCount?200:409,{updated:!!r.rowCount});
  }
@@ -50,7 +89,7 @@ export async function handleProductStore({req,res,path,user,pool,send,readJson})
   return send(res,200,{orders:r.rows});
  }
  if(!admin&&path===root+'/orders'&&req.method==='POST'){
-  const b=await readJson(req);if(!uuid.test(b.requestKey||'')||!/^OL-PDF-\d{3}$/.test(b.sku||'')||!Number.isSafeInteger(b.quantity)||b.quantity<1||b.quantity>100||b.acceptTerms!==true)return send(res,400,{error:'Product, quantity, request key and accepted terms required'});
+  const b=await readJson(req);if(!uuid.test(b.requestKey||'')||!validSku(b.sku)||!Number.isSafeInteger(b.quantity)||b.quantity<1||b.quantity>100||b.acceptTerms!==true)return send(res,400,{error:'Product, quantity, request key and accepted terms required'});
   const db=await pool.connect();try{
    await db.query('START TRANSACTION');
    const existing=(await db.query('SELECT id,invoice_id FROM store_orders WHERE user_id=$1 AND request_key=$2',[user.id,b.requestKey])).rows[0];

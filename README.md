@@ -597,3 +597,22 @@ Copyright © 2026 Olamide Olatayo Bello. All rights reserved. The original Sip a
 ### Trunk management
 
 Tenant administrators can create, edit, inspect, export, and delete PBX trunk plans, review their audit history and linked dependency counts, and update up to 50 preview states atomically. Revision checks reject stale edits. Active carrier-linked trunks must be deactivated through the carrier adapter before changing endpoint settings. Saving a plan or toggling its preview state does not provision, register, or disconnect a live SIP trunk; see the operations manual for commissioning steps.
+
+### Bulk product and contact imports
+
+Product catalog management supports selecting all filtered products, clearing selections,
+and applying draft, published or archived status to up to 500 selected products.
+Publishing requires reviewed terms on every selected product and availability confirmation.
+Stale revisions reject the entire batch; actions stay within the active tenant and are audited.
+
+Upload a CSV or JSON file of up to 500 products (2 MB maximum), preview it, select rows,
+and import selected products as drafts. Existing SKUs are skipped, preserving edits.
+Download the CSV template from the catalog screen. Required columns are
+`sku,name,category,description,terms,billing,sellingCents,resellerCents,setupCents`.
+Prices are integer USD cents; billing is `one_time`, `monthly`, `quarterly` or `annual`.
+JSON accepts an array or a `{ "products": [...] }` object with the same fields.
+Custom SKUs can contain letters, digits, periods, underscores and hyphens, up to 40 characters.
+Imported products can be edited and purchased through the existing store workflows.
+
+Contacts CSV imports now have a preview, row checkboxes and Select all before importing
+selected contacts through the existing tenant-scoped contact endpoint.
