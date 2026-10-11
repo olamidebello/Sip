@@ -1,0 +1,43 @@
+---
+- name: Repair private bridge and deploy current application
+  ansible.builtin.import_playbook: sip-http-bridge.yml
+
+- name: Verify live registration and media control
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Discover installed services
+      ansible.builtin.service_facts:
+    - name: Require installed RTPengine service
+      ansible.builtin.assert:
+        that:
+          - "(sip_rtpengine_service | default('rtpengine-daemon')) ~ '.service' in ansible_facts.services"
+        fail_msg: RTPengine is not installed under the configured service name. Set sip_rtpengine_service to its installed service name.
+    - name: Start installed RTPengine if stopped
+      ansible.builtin.systemd:
+        name: "{{ sip_rtpengine_service | default('rtpengine-daemon') }}"
+        state: started
+        enabled: true
+    - name: Check RTPengine control connectivity and report media hooks
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/sip_media_check.py]
+      register: sip_media_result
+      changed_when: false
+    - name: Display media check results
+      ansible.builtin.debug:
+        var: sip_media_result.stdout_lines
+    - name: Test real secure WebSocket and authenticated SIP registration
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, exec, '-T', '-e', 'SIP_CHECK_USER_ID={{ sip_check_user_id | default("") }}', api, node, sipLiveCheck.js]
+        chdir: /opt/olamide/repo/deployment/docker
+      register: sip_registration_result
+      until: sip_registration_result.rc == 0
+      retries: 3
+      delay: 5
+      changed_when: false
+    - name: Display live registration results
+      ansible.builtin.debug:
+        var: sip_registration_result.stdout_lines
+    - name: Explain final audio acceptance
+      ansible.builtin.debug:
+        msg: Authenticated REGISTER and RTPengine ping passed. Call between two browser or mobile clients and verify audio in both directions. Microphone permission, ICE traversal and UDP media paths are not proved by these checks.
