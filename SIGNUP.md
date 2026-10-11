@@ -1,0 +1,7 @@
+# Immediate account registration
+
+Public registration requires matching password and confirmation fields, a valid user profile and a single-use, five-minute image CAPTCHA. Existing public-signup and email-domain policies still apply. Account, profile, default group and SIP identity are created in one transaction with user status active. Users can sign in immediately. No verification email is sent and Resend/OTP configuration is not required for new registration. Email addresses are user supplied and are not verified ownership claims.
+
+The built-in six-digit CAPTCHA is a self-hosted raster PNG with distortion and noise; no third-party keys are required. Only an answer hash is stored. Challenges are consumed after either a valid or incorrect six-digit attempt and cannot be replayed. Expired records are cleaned during challenge issuance. Issuance and registration are rate limited. This is a basic CAPTCHA and does not provide sophisticated bot detection or an accessible audio alternative. CAPTCHA refresh is available. When behind a proxy, the existing socket-address rate limiter can group clients; a trusted-proxy-aware limiter is needed for large deployments.
+
+Legacy email-verification/resend endpoints remain for accounts already pending verification, and the old verification page is available by direct URL. Newly created accounts do not enter that flow. Existing pending accounts are not silently activated. Calling, number assignment and SIP switch activation still depend on provisioning and commissioning.

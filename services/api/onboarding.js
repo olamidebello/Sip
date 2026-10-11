@@ -1,3 +1,4 @@
+import {issueCaptcha,consumeCaptcha} from './signupCaptcha.js';
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import { validateRegistration, hashPassword } from './security.js';
 import { randomUUID } from 'node:crypto';
@@ -10,6 +11,9 @@ const emailAddress = value => typeof value === 'string' && value.length <= 254 ?
 const configured = () => !!(process.env.RESEND_API_KEY && process.env.RESEND_FROM && process.env.OTP_HMAC_SECRET?.length >= 32);
 
 export async function migrateOnboarding(pool) {
+  await pool.query(`CREATE TABLE IF NOT EXISTS signup_captchas (
+    id CHAR(36) PRIMARY KEY,answer_hash CHAR(64) NOT NULL,expires_at DATETIME(3) NOT NULL,
+    INDEX signup_captcha_expiry(expires_at)) ENGINE=InnoDB`);
   await pool.query(`CREATE TABLE IF NOT EXISTS user_profiles (
     user_id CHAR(36) PRIMARY KEY, phone_e164 VARCHAR(16) NOT NULL,
     address_line1 VARCHAR(160) NOT NULL, address_line2 VARCHAR(160) NOT NULL DEFAULT '',
@@ -55,31 +59,31 @@ async function sendCode(email, code, origin) {
 }
 
 export async function handleOnboarding({req,res,path,pool,send,readJson,origin}) {
+  if(path==='/api/register/captcha'&&req.method==='GET')return send(res,200,await issueCaptcha(pool));
   if (path === '/api/register' && req.method === 'POST') {
-    if (!configured()) return send(res,503,{error:'Email verification is not configured'});
-    const data = validateRegistration(await readJson(req));
+    const input=await readJson(req);
+    if(typeof input.password!=='string'||input.password!==input.confirmPassword)return send(res,400,{error:'Passwords must match'});
+    const data=validateRegistration(input);
+    if(!await consumeCaptcha(pool,input.captchaId,input.captchaAnswer))return send(res,400,{error:'Invalid or expired CAPTCHA. Refresh and try again.'});
     if(!await registrationAllowed(pool,data.email))return send(res,403,{error:'Registration is closed or this email domain is not permitted'});
     const {salt,hash} = await hashPassword(data.password);
-    const id=randomUUID(), code=String(randomInt(0,1000000)).padStart(6,'0');
+    const id=randomUUID();
     const db=await pool.connect();
     try {
       await db.query('START TRANSACTION');
-      await db.query("INSERT INTO users(id,tenant_id,display_name,email,password_salt,password_hash,status) VALUES($1,$2,$3,$4,$5,$6,'pending_email')",
+      await db.query("INSERT INTO users(id,tenant_id,display_name,email,password_salt,password_hash,status) VALUES($1,$2,$3,$4,$5,$6,'active')",
         [id,defaultTenantId,data.name,data.email,salt,hash]);
       await db.query('INSERT INTO user_profiles(user_id,phone_e164,address_line1,address_line2,city,region,postal_code,country) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
         [id,data.phone,data.address1,data.address2,data.city,data.region,data.postalCode,data.country]);
       await db.query("INSERT INTO user_group_members(user_id,group_id) VALUES($1,'00000000-0000-4000-8000-000000000001')",[id]);
-      await db.query('INSERT INTO signup_otps(user_id,code_hash,expires_at) VALUES($1,$2,DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 10 MINUTE))',
-        [id,codeHash(id,code,process.env.OTP_HMAC_SECRET)]);
+      await createSipAccount(db,id,new URL(origin).hostname);
       await db.query('COMMIT');
     } catch(error) {
       await db.query('ROLLBACK');
       if(error.code==='ER_DUP_ENTRY') return send(res,409,{error:'Account already exists'});
       throw error;
     } finally {db.release();}
-    try {await sendCode(data.email,code,origin);}
-    catch(error) {console.error('Verification delivery failed',error.name);return send(res,503,{error:'Email delivery unavailable. Use resend code later.'});}
-    return send(res,201,{email:data.email,verificationRequired:true});
+    return send(res,201,{email:data.email,status:'active',verificationRequired:false,sipProvisioning:'pending'});
   }
   if (path === '/api/register/resend' && req.method === 'POST') {
     if(!configured()) return send(res,503,{error:'Email verification is not configured'});
