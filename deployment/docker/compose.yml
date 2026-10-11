@@ -19,6 +19,8 @@ services:
     networks: [private]
   api:
     image: olamide-api:local
+    ports:
+      - "127.0.0.1:18080:8081"
     build:
       context: ../..
       dockerfile: deployment/docker/api.Dockerfile
@@ -57,6 +59,8 @@ services:
       PAYMENT_CONFIG_KEY: ${PAYMENT_CONFIG_KEY:-}
       SIP_ACCOUNT_DOMAIN: ${SIP_ACCOUNT_DOMAIN:-}
       SIP_WSS_URL: ${SIP_WSS_URL:-}
+      KAMAILIO_HTTP_BRIDGE_ENABLED: ${KAMAILIO_HTTP_BRIDGE_ENABLED:-false}
+      KAMAILIO_HTTP_BRIDGE_TOKEN: ${KAMAILIO_HTTP_BRIDGE_TOKEN:-}
       SIP_PROVISION_MODE: ${SIP_PROVISION_MODE:-remote}
       SIP_PROVISION_URL: ${SIP_PROVISION_URL:-}
       SIP_PROVISION_TOKEN: ${SIP_PROVISION_TOKEN:-}

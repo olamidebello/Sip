@@ -1,0 +1,70 @@
+---
+- name: Restore existing Kamailio HTTP integration and automatic SIP login
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Require canonical host deployment
+      ansible.builtin.assert:
+        that:
+          - kamailio_repo_path == '/opt/olamide/repo'
+          - kamailio_maintenance_approved | default(false) | bool
+    - name: Prepare token and configuration without replacing live routes
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/prepare_kamailio_http_bridge.py]
+      no_log: true
+    - name: Validate staged Kamailio configuration
+      ansible.builtin.command:
+        argv: [kamailio, '-c', '-f', /etc/kamailio/.olamide-bridge.cfg]
+      changed_when: false
+      no_log: true
+    - name: Rebuild API and browser with private bridge
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, up, '-d', '--build', api, web]
+        chdir: /opt/olamide/repo/deployment/docker
+    - name: Wait for protected loopback listener
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/api/switch/kamailio/auth
+        status_code: 401
+      register: bridge_ready
+      until: bridge_ready.status == 401
+      retries: 12
+      delay: 5
+    - name: Apply validated configuration with rollback on service failure
+      block:
+        - name: Save current configuration
+          ansible.builtin.copy:
+            src: /etc/kamailio/kamailio.cfg
+            dest: /etc/kamailio/.pre-http-bridge.cfg
+            remote_src: true
+            mode: '0600'
+        - name: Apply authenticated bridge calls
+          ansible.builtin.copy:
+            src: /etc/kamailio/.olamide-bridge.cfg
+            dest: /etc/kamailio/kamailio.cfg
+            remote_src: true
+            owner: root
+            group: kamailio
+            mode: '0640'
+        - name: Restart Kamailio
+          ansible.builtin.systemd:
+            name: kamailio
+            state: restarted
+        - name: Verify Kamailio remains active
+          ansible.builtin.command: systemctl is-active --quiet kamailio
+          changed_when: false
+      rescue:
+        - name: Restore previous configuration
+          ansible.builtin.copy:
+            src: /etc/kamailio/.pre-http-bridge.cfg
+            dest: /etc/kamailio/kamailio.cfg
+            remote_src: true
+            owner: root
+            group: kamailio
+            mode: '0640'
+        - name: Restart previous Kamailio configuration
+          ansible.builtin.systemd:
+            name: kamailio
+            state: restarted
+        - name: Report unsuccessful cutover
+          ansible.builtin.fail:
+            msg: Bridge cutover failed; previous Kamailio configuration restored.

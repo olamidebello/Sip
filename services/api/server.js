@@ -1,3 +1,4 @@
+import {startKamailioHttpBridge} from './kamailioHttpBridge.js';
 import {handleNativePush,pushHookAuthorized,startNativePush} from './nativePush.js';
 import {handleContactSettings} from './contactSettings.js';
 import {handleCallAccess,activeSubscription} from './callAccess.js';
@@ -763,6 +764,7 @@ async function handler(req, res) {
 }
 
 await migrate(pool);
+const kamailioHttpBridge=startKamailioHttpBridge(pool);
 const stopSipProvisioning=startSipProvisioning(pool,origin);
 const stopNativePush=startNativePush(pool);
 const stopRateSync=startFlowrouteRateSync(pool);
@@ -771,6 +773,7 @@ const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
 server.on("close",stopSipProvisioning);
+server.on("close",()=>kamailioHttpBridge?.close());
 server.on("close",stopNativePush);
 server.on("close",stopRateSync);
 server.on("close",stopStoreRenewals);
