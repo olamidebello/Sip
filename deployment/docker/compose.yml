@@ -29,6 +29,7 @@ services:
       LISTEN_ADDR: 0.0.0.0
       PORT: "8080"
       NODE_ENV: production
+      APP_RELEASE: ${APP_RELEASE:-}
       MEETING_ICE_SERVERS_JSON: ${MEETING_ICE_SERVERS_JSON:-[]}
       TURN_SECRET: ${TURN_SECRET:-}
       TURN_PUBLIC_HOST: ${TURN_PUBLIC_HOST:-}

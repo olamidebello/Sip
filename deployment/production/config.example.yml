@@ -1,0 +1,33 @@
+# Store your completed copy outside Git, mode 0600 (or encrypted with Ansible Vault).
+app_domain: sip.dobhrap.com
+production_public_ip: 154.29.77.102
+app_repo: /opt/olamide/repo
+# Required for the first account in a new, empty database. Existing users are preserved.
+initial_admin_email: REPLACE_WITH_ADMIN_EMAIL
+# Must be explicitly set true for a drained maintenance window.
+production_maintenance_approved: false
+# Require an existing, authenticated Kamailio/RTPengine deployment by default.
+production_require_sip: true
+# For a fresh server, enable both and supply reviewed same-server inventory variables.
+commission_same_server: false
+commission_sip_accounts: false
+# Approved media/call acceptance command on the server, argv list, exit 0 on success.
+# It must test authenticated registration, user-to-user calling, two-way audio,
+# unauthenticated call rejection, and PSTN subscription restrictions.
+production_acceptance_argv: []
+# Optional platform builds and push services. Credentials remain in private files.
+enable_native_push: false
+build_native_android: false
+build_native_ios: false
+# Full native production requires a reviewed native engine and real-device evidence.
+production_require_native: false
+native_device_acceptance_argv: []
+ios_native_media_verified: false
+# Import the remaining private native-push/config.example.yml fields when enabled.
+# External service API keys can be supplied as a private env file on first install.
+# Existing database credentials and encryption keys may never be replaced silently.
+# production_secrets_source: /secure/olamide-secrets.env
+# An off-host backup command receives the new .sql.gz path as its final argument.
+# production_backup_argv: [your-backup-uploader, --encrypted, --destination, your-bucket]
+production_require_offsite_backup: true
+production_backup_argv: []

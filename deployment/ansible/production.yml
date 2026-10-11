@@ -1,0 +1,201 @@
+---
+- name: Validate unattended production inputs before any server changes
+  hosts: localhost
+  connection: local
+  become: false
+  any_errors_fatal: true
+  tasks:
+  - name: Require fixed release, explicit maintenance and single supported application host
+    ansible.builtin.assert:
+      that:
+      - deployment_ref is match('^[0-9a-f]{40}$')
+      - app_repo | default('/opt/olamide/repo') == '/opt/olamide/repo'
+      - app_domain is match('^[a-z0-9.-]+$')
+      - production_public_ip is defined
+      - initial_admin_email is defined
+      - production_maintenance_approved | default(false) | bool
+      - groups['olamide'] | default([]) | length == 1
+      - production_acceptance_argv | default([]) is sequence
+      - production_acceptance_argv | default([]) is not string
+      - production_acceptance_argv | default([]) | length > 0
+      - not (production_require_offsite_backup | default(true) | bool) or production_backup_argv | default([]) | length > 0
+      - not (production_require_native | default(false) | bool) or (enable_native_push | default(false) | bool)
+      - not (production_require_native | default(false) | bool) or native_device_acceptance_argv | default([]) | length > 0
+      - not (build_native_ios | default(false) | bool) or (ios_native_media_verified | default(false) | bool)
+      - not (build_native_ios | default(false) | bool) or (enable_native_push | default(false) | bool)
+      - not (build_native_android | default(false) | bool) or (enable_native_push | default(false) | bool)
+      - production_backup_argv | default([]) is sequence
+      - production_backup_argv | default([]) is not string
+      - native_device_acceptance_argv | default([]) is sequence
+      - native_device_acceptance_argv | default([]) is not string
+      - not (build_native_ios | default(false) | bool) or (production_require_native | default(false) | bool)
+      - initial_admin_email is match('^[^@\s]+@[^@\s]+\.[^@\s]+$')
+      fail_msg: Supply private config, a drained maintenance window, off-host backup command and real-call acceptance command. Native iOS production
+        additionally requires a verified native SIP/media engine.
+  - name: Verify public IPv4 input
+    ansible.builtin.command:
+      argv:
+      - python3
+      - -c
+      - import ipaddress,sys; a=ipaddress.ip_address(sys.argv[1]); assert a.version==4 and a.is_global
+      - '{{ production_public_ip }}'
+    changed_when: false
+  - name: Check controller DNS before TLS commissioning
+    ansible.builtin.command:
+      argv:
+      - python3
+      - -c
+      - import socket,sys; assert sys.argv[2] in {x[4][0] for x in socket.getaddrinfo(sys.argv[1],443,type=socket.SOCK_STREAM)}
+      - '{{ app_domain }}'
+      - '{{ production_public_ip }}'
+    changed_when: false
+  - name: Require same-server inventory and profile data when commissioning
+    ansible.builtin.assert:
+      that:
+      - groups['switch_nodes'] | default([]) == groups['olamide']
+      - kamailio_maintenance_approved | default(false) | bool
+      - sip_domain == app_domain
+      - sip_public_ip == production_public_ip
+      - kamailio_config_source is defined
+      - rtpengine_config_source is defined
+      - sip_registration_config_source is defined
+      - not (pbx_enabled | default(false) | bool)
+      - not (freeswitch_cluster_enabled | default(false) | bool)
+    when: (commission_same_server | default(false) | bool) or (commission_sip_accounts | default(false) | bool)
+  - name: Validate supplied push and build credentials before starting rollout
+    ansible.builtin.assert:
+      that:
+      - firebase_service_account_source is defined
+      - not (build_native_android | default(false) | bool) or google_services_source is defined
+      - not (build_native_android | default(false) | bool) or groups['mobile_builders'] | default([]) | length > 0
+      - not (build_native_ios | default(false) | bool) or groups['ios_builders'] | default([]) | length > 0
+      - not (build_native_ios | default(false) | bool) or apns_key_source is defined
+    when: enable_native_push | default(false) | bool
+- name: Prepare Debian and deploy complete application services
+  hosts: olamide
+  become: true
+  any_errors_fatal: true
+  vars:
+    app_repo: /opt/olamide/repo
+  pre_tasks:
+  - name: Require Debian 12 and supported CPU architecture
+    ansible.builtin.assert:
+      that:
+      - ansible_distribution == 'Debian'
+      - ansible_distribution_major_version == '12'
+      - ansible_architecture in ['x86_64', 'aarch64']
+  - name: Verify acceptance program is already present on server
+    ansible.builtin.stat:
+      path: '{{ production_acceptance_argv[0] }}'
+    register: acceptance_program
+  - name: Require executable acceptance program
+    ansible.builtin.assert:
+      that:
+      - production_acceptance_argv[0] is match('^/')
+      - acceptance_program.stat.exists
+      - acceptance_program.stat.executable
+      fail_msg: Install a reviewed SIP/audio acceptance probe on the server before unattended production rollout.
+  - name: Verify required off-host backup uploader is installed
+    ansible.builtin.stat:
+      path: '{{ production_backup_argv[0] }}'
+    register: backup_program
+    when: production_backup_argv | default([]) | length > 0
+  - name: Require absolute executable off-host backup uploader
+    ansible.builtin.assert:
+      that:
+      - production_backup_argv[0] is match('^/')
+      - backup_program.stat.exists
+      - backup_program.stat.executable
+    when: production_backup_argv | default([]) | length > 0
+  tasks:
+  - name: Install base host tools and Debian security updates
+    ansible.builtin.apt:
+      name:
+      - ca-certificates
+      - curl
+      - git
+      - openssl
+      - python3
+      - python3-apt
+      - unattended-upgrades
+      state: present
+      update_cache: true
+  - name: Enable automatic security updates without call-interrupting reboots
+    ansible.builtin.copy:
+      dest: /etc/apt/apt.conf.d/52olamide-production-security
+      mode: '0644'
+      content: 'APT::Periodic::Update-Package-Lists "1";
+
+        APT::Periodic::Unattended-Upgrade "1";
+
+        Unattended-Upgrade::Automatic-Reboot "false";
+
+        '
+  - name: Inspect Docker Compose toolchain
+    ansible.builtin.command:
+      argv:
+      - docker
+      - compose
+      - version
+    register: docker_probe
+    changed_when: false
+    failed_when: false
+  - name: Install official Docker toolchain when missing
+    when: docker_probe.rc != 0
+    block:
+    - name: Create package key directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+    - name: Install Docker repository signing key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/debian/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+    - name: Configure official Debian Docker repository
+      ansible.builtin.apt_repository:
+        repo: deb [arch={{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian
+          bookworm stable
+        filename: docker
+        state: present
+    - name: Install Docker Engine and Compose
+      ansible.builtin.apt:
+        name:
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io
+        - docker-buildx-plugin
+        - docker-compose-plugin
+        state: present
+        update_cache: true
+  - name: Enable Docker at boot
+    ansible.builtin.systemd:
+      name: docker
+      enabled: true
+      state: started
+  - name: Verify Docker Compose supports explicit service readiness
+    ansible.builtin.command:
+      argv:
+      - docker
+      - compose
+      - up
+      - --help
+    register: compose_help
+    changed_when: false
+    failed_when: compose_help.rc != 0 or '--wait-timeout' not in compose_help.stdout
+  - name: Probe MySQL virtual CPU compatibility without modifying volumes
+    ansible.builtin.command:
+      argv:
+      - docker
+      - run
+      - …2300 tokens truncated…running on this controller' >&2; exit 1; }
+release=${3:-latest-validated}
+if [[ "$release" == latest-validated ]]; then
+  command -v curl >/dev/null && command -v jq >/dev/null || { echo 'curl and jq are required to select a CI-validated release' >&2; exit 1; }
+  release=$(bash "$repo_root/deployment/verified-sha.sh")
+fi
+[[ "$release" =~ ^[0-9a-f]{40}$ ]] || { echo 'An immutable 40-character release SHA is required' >&2; exit 1; }
+# A SHA argument deliberately selects that release; default selects the latest successful CI release.
+ansible-playbook -i "$1" "$repo_root/deployment/ansible/production.yml" --syntax-check -e "@$2" -e "deployment_ref=$release"
+exec ansible-playbook -i "$1" "$repo_root/deployment/ansible/production.yml" -e "@$2" -e "deployment_ref=$release"

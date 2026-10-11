@@ -642,3 +642,13 @@ fixed event categories, applies database-backed rate limits, and removes events 
 90 days in bounded batches during ingestion. Monitor queries exclude older rows. Activity
 recording failures do not interrupt normal app requests. This is application activity
 monitoring; browser events are not evidence that a provider operation succeeded.
+
+## Unattended production deployment
+
+Run `bash deployment/deploy-production.sh /secure/inventory.ini /secure/production.yml`
+from an authorized Ansible controller. See [configuration, acceptance and rollback
+requirements](deployment/production/README.md). The workflow provisions missing internal
+credentials, preserves existing keys, backs up MySQL before migrations, deploys a fixed
+validated release, and requires real-call acceptance before recording readiness.
+Native iOS background media still needs a verified native engine; automation does not
+turn the current WebView media layer into a complete native production softphone.

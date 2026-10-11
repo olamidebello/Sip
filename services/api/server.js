@@ -147,7 +147,7 @@ async function handler(req, res) {
   const path = new URL(req.url, origin).pathname;
   const nativePushHook=path==='/api/native-push/wake'&&pushHookAuthorized(req);
   if (req.method === "GET" && path === "/api/health")
-    return send(res, 200, { status: "ok" });
+    return send(res, 200, { status: "ok", ...(process.env.APP_RELEASE ? {release:process.env.APP_RELEASE} : {}) });
   const flowrouteWebhook = path.startsWith("/api/webhooks/flowroute/");
   const stripeWebhook = path.startsWith("/api/webhooks/stripe/");
   const providerWebhook=path.startsWith("/api/webhooks/providers/");
