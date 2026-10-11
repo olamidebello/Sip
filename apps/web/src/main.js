@@ -11,6 +11,7 @@ import {setupDidwwAdmin} from "./didwwAdmin.js";
 import {setupAdapterAdmin} from "./adapterAdmin.js";
 import {setupOperatorControl} from "./operatorControl.js";
 import {setupSwitchAdmin} from "./switchAdmin.js";
+import {setupKamailioOperations} from "./kamailioOperations.js";
 import {setupClusterAdmin} from "./clusterAdmin.js";
 import {setupServerFleetAdmin} from "./serverFleetAdmin.js";
 import {setupFleetNetworkAdmin} from "./fleetNetworkAdmin.js";
@@ -730,6 +731,22 @@ root.innerHTML = `
       <button id="switch-refresh" type="button">Refresh switch configuration</button>
       <p id="switch-status" role="status"></p>
     </section>
+    <section id="kamailio-ops-admin" hidden>
+      <h3>Kamailio operations and configuration</h3>
+      <p>Review active SIP accounts, digest credentials, carrier mappings and each Kamailio and RTPengine host. Actions queue approved jobs on the private runner; a successful job does not prove live calls or charging.</p>
+      <nav aria-label="Kamailio configuration">
+        <a href="#switch-admin">Tenant SIP and gateway mappings</a>
+        <a href="#cluster-admin">Adapter configuration revisions</a>
+        <a href="#carrier-admin">Trunk commissioning</a>
+        <a href="#fleet-admin">Server inventory and job history</a>
+        <a href="#live-calls-admin">Live call events</a>
+        <a href="#prepaid-control-admin">Prepaid controls</a>
+      </nav>
+      <button id="kamailio-operations-refresh" type="button">Refresh Kamailio readiness and hosts</button>
+      <p id="kamailio-operations-summary" role="status"></p>
+      <ul id="kamailio-operations-nodes"></ul>
+      <p id="kamailio-operations-status" role="status"></p>
+    </section>
     <section id="carrier-adapter-admin" hidden>
       <h3>Carrier adapter nodes</h3>
       <p>Assign multiple private adapter targets to Flowroute, DIDWW, or a future carrier. Health and capacity determine which node commissions a carrier; the active assignment stays pinned until deactivation. Define target URLs and tokens only on the server.</p>
@@ -915,7 +932,7 @@ root.innerHTML = `
       </section>
     </section>
     <section id="fleet-admin" hidden>
-      <h3>Server and network operations</h3><p>Register switch hosts, review connectivity and versions, queue approved installations, and schedule health checks or upgrades. The private Ansible runner requires SSH access and passwordless sudo on managed hosts.</p>
+      <h3>Server and network operations</h3><p>Register Kamailio switch hosts, review service health, audit SIP and media readiness, install SIP prerequisites, and schedule health checks. The private Ansible runner requires SSH access and passwordless sudo on managed hosts.</p>
       <nav aria-label="SIP service management"><a href="#switch-admin">SIP accounts and tenant switch</a><a href="#cluster-admin">Kamailio configuration revisions</a><a href="#carrier-admin">Carrier profiles</a><a href="#prepaid-control-admin">Prepaid controls</a><a href="#help">SIP guide</a></nav>
       <p id="fleet-summary"></p><p id="fleet-status" role="status"></p>
       <h4>Cluster overview by region</h4><p id="fleet-topology"></p>
@@ -1268,7 +1285,7 @@ function updateNavigation() {
   const search=document.createElement("input");search.type="search";search.className="menu-search";search.placeholder="Find a menu…";search.setAttribute("aria-label","Find a menu");nav.append(search);
   const groups=document.createElement("div");groups.className="menu-groups";nav.append(groups);
   if(activeRole==="super_admin"){
-    for(const [id,label] of [["carrier-admin","Trunk management"],["switch-admin","SIP account management"]]){
+    for(const [id,label] of [["carrier-admin","Trunk management"],["switch-admin","SIP account management"],["kamailio-ops-admin","Kamailio operations"]]){
       const section=document.getElementById(id);
       if(!section||section.closest("[hidden]")) continue;
       const item=document.createElement("div");item.className="standalone-menu";
@@ -1381,6 +1398,7 @@ const didwwAdmin=setupDidwwAdmin({get:apiGet,request:accountRequest});
 const adapterAdmin=setupAdapterAdmin({get:apiGet,request:accountRequest});
 const operatorAdmin=setupOperatorControl();
 const switchAdmin=setupSwitchAdmin();
+const kamailioOperations=setupKamailioOperations();
 const clusterAdmin=setupClusterAdmin({get:apiGet,request:accountRequest});
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
@@ -1851,6 +1869,7 @@ function signedIn(user) {
   $("#sip-profile-admin").hidden=user.role!=="super_admin";
   $("#carrier-admin").hidden=user.role!=="super_admin";
   $("#switch-admin").hidden=user.role!=="super_admin";
+  $("#kamailio-ops-admin").hidden=user.role!=="super_admin";
   $("#provider-webhook-admin").hidden=user.role!=="super_admin";
   $("#didww-admin").hidden=user.role!=="super_admin";
   $("#carrier-adapter-admin").hidden=user.role!=="super_admin";
@@ -1865,6 +1884,7 @@ function signedIn(user) {
   if(["admin","super_admin"].includes(user.role)){operatorAdmin.refresh();clusterAdmin.refresh();}
   if(["admin","super_admin"].includes(user.role)){
     switchAdmin.refresh(user.role==="super_admin");
+    if(user.role==="super_admin")kamailioOperations.refresh();
     $("#switch-config").querySelectorAll("input,select,button").forEach(el=>el.disabled=user.role!=="super_admin");
     $("#switch-gateway-form").querySelectorAll("input,select,button").forEach(el=>el.disabled=user.role!=="super_admin");
   }
