@@ -16,6 +16,10 @@ export async function migrateCatalogControl(pool) {
     FOREIGN KEY(tenant_id) REFERENCES tenants(id)) ENGINE=InnoDB`);
   const column=await pool.query("SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='did_quotes' AND column_name='invoice_id'");
   if (!column.rowCount) await pool.query("ALTER TABLE did_quotes ADD COLUMN invoice_id CHAR(36) NULL, ADD INDEX did_quotes_invoice_idx(invoice_id)");
+  for(const [name,type] of [["inventory_id","VARCHAR(128)"],["sku_id","VARCHAR(128)"]]) {
+    const found=await pool.query("SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='did_quotes' AND column_name=$1",[name]);
+    if (!found.rowCount) await pool.query(`ALTER TABLE did_quotes ADD COLUMN ${name} ${type} NULL`);
+  }
 }
 export async function catalogPolicy(pool,tenant) {
   const result=await pool.query("SELECT plan_requests,did_requests,admin_plans,admin_pricing,admin_inventory,admin_users FROM tenant_catalog_policy WHERE tenant_id=$1",[tenant]);

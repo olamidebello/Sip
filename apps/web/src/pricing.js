@@ -15,6 +15,9 @@ export function setupPricing() {
     form.elements.mode.value=rule.mode;
     form.elements.setupValue.value=rule.setupValue;
     form.elements.monthlyValue.value=rule.monthlyValue;
+    for (const field of ["mode","setupValue","monthlyValue"]) form.elements[field].disabled=Boolean(rule.locked);
+    form.querySelector('button').disabled=Boolean(rule.locked);
+    result.textContent=rule.locked?"Provider selling prices are fixed at buying price plus 30%.":"";
   }
   async function refresh() {
     try {({rules}=await request("/api/admin/pricing"));selected();}
@@ -33,7 +36,7 @@ export function setupPricing() {
   document.querySelector("#pricing-preview").onsubmit=async(event)=>{
     event.preventDefault();
     try {
-      const rule={...Object.fromEntries(new FormData(form)),...Object.fromEntries(new FormData(event.currentTarget))};
+      const rule={provider:form.elements.provider.value,mode:form.elements.mode.value,setupValue:form.elements.setupValue.value,monthlyValue:form.elements.monthlyValue.value,...Object.fromEntries(new FormData(event.currentTarget))};
       const calculated=await request("/api/admin/pricing/preview","POST",{
         mode:rule.mode,setupValue:Number(rule.setupValue),monthlyValue:Number(rule.monthlyValue),
         buySetup:Number(rule.buySetup),buyMonthly:Number(rule.buyMonthly)});

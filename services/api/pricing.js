@@ -29,6 +29,7 @@ export async function migratePricing(pool) {
   }
 }
 export async function pricingRule(pool,tenant,provider) {
+  if (["flowroute","didww"].includes(provider)) return {mode:"percent",setupValue:3000,monthlyValue:3000,locked:true};
   const result=await pool.query("SELECT mode,setup_value AS setupValue,monthly_value AS monthlyValue FROM did_pricing_rules WHERE tenant_id=$1 AND provider=$2",[tenant,provider]);
   if (result.rows[0]) return result.rows[0];
   if (provider!=="inhouse") {
@@ -50,12 +51,14 @@ export async function handlePricing({req,res,path,user,pool,send,readJson}) {
   }
   if (path==="/api/admin/pricing" && req.method==="GET") {
     const rules=await Promise.all(SOURCES.map(async provider=>({provider,...await pricingRule(pool,user.tenant_id,provider)})));
-    return send(res,200,{rules,note:"Provider buying costs come from live provider inventory. In-house costs are administrator-entered estimates. Changes to rules affect subsequent searches and reservations only."});
+    return send(res,200,{rules,note:"Flowroute and DIDWW selling rates are locked to live USD buying costs plus 30%, rounded up to the next cent. In-house costs are administrator-entered estimates. Changes to rules affect subsequent searches and reservations only."});
   }
   const match=/^\/api\/admin\/pricing\/(flowroute|didww|inhouse)$/.exec(path);
   if (match && req.method==="PUT") {
     const {mode,setupValue,monthlyValue}=await readJson(req);
     if (!validRule({mode,setupValue,monthlyValue})) return send(res,400,{error:"Invalid pricing mode or setup/monthly values"});
+    if (match[1]!=="inhouse" && (mode!=="percent" || setupValue!==3000 || monthlyValue!==3000))
+      return send(res,400,{error:"Flowroute and DIDWW require a 30% increase for setup and monthly prices"});
     if (match[1]==="inhouse") {
       const maximum=await pool.query("SELECT MAX(buy_setup_cents) AS setup_cost,MAX(buy_monthly_cents) AS monthly_cost FROM inhouse_dids WHERE tenant_id=$1 AND price_mode='rule' AND status IN ('available','unverified','disabled')",[user.tenant_id]);
       try {
