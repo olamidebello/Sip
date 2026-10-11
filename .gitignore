@@ -6,3 +6,6 @@ deployment/ansible/inventory.ini
 deploy/ansible/inventory.yml
 deploy/ansible/group_vars/switch_nodes/vault.yml
 deploy/ansible/files/
+
+deploy/ansible/audit-reports/
+deploy/ansible/profiles.json

@@ -12,7 +12,7 @@ import {handleDidwwCallback,handleDidwwAdmin} from './didwwIntegration.js';
 import { handleCarrierProviders, carrierActive } from './carrierProviders.js';
 import { handleAdapterRegistry } from './adapterRegistry.js';
 import { handleOperatorControl } from './operatorControl.js';
-import { handleSwitchAdmin,handleSwitchXml } from './switch.js';
+import {handleKamailioAdmin,handleKamailioRunner} from './kamailio.js';
 import { handleServerFleetAdmin,handleServerFleetRunner } from './serverFleet.js';
 import {handleOperationsPolicy,resolveWss} from './operationsPolicy.js';
 import {handleWorkspaceShortcuts} from './workspaceShortcuts.js';
@@ -145,12 +145,14 @@ async function handler(req, res) {
   const cdrIngest = req.method === "POST" && path === "/api/integrations/cdr";
   const switchXml = path === "/api/switch/xml";
   const deployRunner = path.startsWith('/api/integrations/deployment/');
-  if (req.method !== "GET" && !deployRunner && !switchXml && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
+  const kamailioRunner=path.startsWith('/api/integrations/kamailio/');
+  if (req.method !== "GET" && !deployRunner && !kamailioRunner && !switchXml && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
     return send(res, 403, { error: "Invalid origin" });
-  if (req.method !== "GET" && !limit(req,switchXml ? 3000 : (deployRunner || cdrIngest || flowrouteWebhook || stripeWebhook || providerWebhook || didwwWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
+  if (req.method !== "GET" && !limit(req,switchXml ? 3000 : (deployRunner || kamailioRunner || cdrIngest || flowrouteWebhook || stripeWebhook || providerWebhook || didwwWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
     return send(res, 429, { error: "Too many requests" });
   try {
-    if (switchXml) return await handleSwitchXml({req,res,pool});
+    if (switchXml) return send(res,410,{error:'Legacy XML integration retired'});
+    if(kamailioRunner) return await handleKamailioRunner({req,res,path,pool,send,readJson});
     if (deployRunner) return await handleServerFleetRunner({req,res,path,pool,send,readJson});
     if (flowrouteWebhook) return await handleFlowrouteWebhook({req,res,path,pool,send});
     if (stripeWebhook) return await handleStripeWebhook({req,res,path,pool,send});
@@ -264,7 +266,8 @@ async function handler(req, res) {
       if(path==='/api/admin/messaging/webhooks') return await handleMessagingWebhookAdmin({req,res,user,pool,send,origin});
       if(path.startsWith('/api/admin/carrier-adapters')) return await handleAdapterRegistry({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/operator')) return await handleOperatorControl({req,res,path,user,pool,send,readJson});
-      if(path.startsWith('/api/admin/switch')) return await handleSwitchAdmin({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/admin/switch')) return send(res,410,{error:'Legacy switch controls retired'});
+      if(path.startsWith('/api/admin/kamailio')) return await handleKamailioAdmin({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/servers')) return await handleServerFleetAdmin({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/carriers')) return await handleCarrierProviders({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/charging/overview') return await handleCharging({req,res,user,pool,send});

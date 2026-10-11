@@ -1,0 +1,44 @@
+{
+  "production": {
+    "allowedHosts": [
+      "192.0.2.10"
+    ],
+    "configDirectory": "/srv/olamide/profiles/production/config",
+    "packages": [
+      "kamailio",
+      "kamailio-mysql-modules",
+      "kamailio-tls-modules",
+      "kamailio-websocket-modules",
+      "kamailio-presence-modules"
+    ],
+    "installedModules": [
+      "kex",
+      "ctl",
+      "tm",
+      "sl",
+      "rr",
+      "auth",
+      "auth_db",
+      "registrar",
+      "usrloc",
+      "db_mysql",
+      "tls",
+      "websocket",
+      "presence"
+    ],
+    "enabledModules": [
+      "kex",
+      "ctl",
+      "tm",
+      "sl",
+      "rr",
+      "auth",
+      "auth_db",
+      "registrar",
+      "usrloc",
+      "db_mysql"
+    ],
+    "maintenanceApproved": false,
+    "repoPath": "/opt/olamide"
+  }
+}

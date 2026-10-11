@@ -9,7 +9,7 @@ import {setupProviderWebhookAdmin} from "./providerWebhookAdmin.js";
 import {setupDidwwAdmin} from "./didwwAdmin.js";
 import {setupAdapterAdmin} from "./adapterAdmin.js";
 import {setupOperatorControl} from "./operatorControl.js";
-import {setupSwitchAdmin} from "./switchAdmin.js";
+import {setupKamailioAdmin} from "./kamailioAdmin.js";
 import {setupServerFleetAdmin} from "./serverFleetAdmin.js";
 import {setupFleetNetworkAdmin} from "./fleetNetworkAdmin.js";
 import {setupFleetAccessAdmin} from "./fleetAccessAdmin.js";
@@ -590,23 +590,21 @@ root.innerHTML = `
       <p id="operator-quote" role="status"></p><p id="operator-status" role="status"></p>
     </section>
     <section id="switch-admin">
-      <h3>FreeSWITCH</h3>
-      <p>Serve active SIP accounts and authenticated outbound dialplans from the tenant database. Configure FreeSWITCH XML curl and Sofia gateways on the switch host before enabling traffic. Public inbound routes and real time charging are not enabled here.</p>
-      <form id="switch-config">
-        <label>SIP domain <input name="domain" placeholder="sip.example.com" required></label>
-        <label>Outbound tariff <select name="tariffId"></select></label>
-        <label><input name="enabled" type="checkbox"> Enable tenant switch lookups</label>
-        <button>Save switch settings</button>
+      <h3>Kamailio services</h3>
+      <p>Install and enable capabilities through reviewed server profiles. Installation, configuration, connection and acceptance status are tracked separately.</p>
+      <form id="kamailio-plan"><h4>Capability deployment</h4>
+        <label>Switch node <select name="node" required></select></label>
+        <label>Reviewed controller profile <input name="profile" pattern="[a-z][a-z0-9_-]{0,63}" value="production" required></label>
+        <label>Search module <input name="search" type="search"></label>
+        <label>Status <select name="filter"><option value="">All</option><option>pending</option><option>configured</option><option>connected</option><option>tested</option></select></label>
+        <button id="kamailio-select" type="button">Select released capabilities</button>
+        <button id="kamailio-clear" type="button">Clear selection</button>
+        <button type="submit">Queue installation and configuration</button>
       </form>
-      <form id="switch-gateway-form">
-        <label>Carrier <select name="provider" id="switch-provider"></select></label>
-        <label>Configured Sofia gateway name <input name="gatewayName" pattern="[a-z][a-z0-9_-]{1,63}" required></label>
-        <label><input name="enabled" type="checkbox"> Enable gateway route</label><button>Save gateway mapping</button>
-      </form>
-      <h4>Gateway mappings</h4><ul id="switch-gateways"></ul>
-      <h4>SIP accounts</h4><ul id="switch-accounts"></ul>
-      <button id="switch-refresh" type="button">Refresh switch configuration</button>
-      <p id="switch-status" role="status"></p>
+      <button id="kamailio-refresh" type="button">Refresh status</button><button id="kamailio-export" type="button">Export inventory and evidence</button>
+      <p id="kamailio-status" role="status"></p>
+      <div style="overflow:auto"><table><thead><tr><th>Capability</th><th>Maturity</th><th>Install</th><th>Enable</th><th>Installed</th><th>Status</th><th>Evidence</th><th>Guide</th></tr></thead><tbody id="kamailio-features"></tbody></table></div>
+      <h4>Deployment history</h4><ul id="kamailio-history"></ul>
     </section>
     <section id="carrier-adapter-admin" hidden>
       <h3>Carrier adapter nodes</h3>
@@ -872,7 +870,7 @@ root.innerHTML = `
         <button>Save DID route</button>
       </form><ul id="pbx-route-list"></ul>
       <h4>Trunk management and rate deck</h4>
-      <p>These trunk records drive route previews. Carrier activation and switch configuration use the separate provider and FreeSWITCH controls; a saved trunk alone does not provision a live SIP connection.</p>
+      <p>These trunk records drive route previews. Carrier activation and switch configuration use the separate provider adapters and Kamailio services; a saved trunk alone does not provision a live SIP connection.</p>
       <form id="pbx-trunk-form">
         <input name="trunkId" type="hidden"><input name="revision" type="hidden">
         <label>Name <input name="name" required></label>
@@ -1011,7 +1009,7 @@ const navigationGroups=[
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
-  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","FreeSWITCH"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
+  {label:"Administration",roles:["admin","super_admin"],items:[["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio services"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
   {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"]]}
@@ -1142,7 +1140,7 @@ const providerWebhooks=setupProviderWebhookAdmin({get:apiGet,request:accountRequ
 const didwwAdmin=setupDidwwAdmin({get:apiGet,request:accountRequest});
 const adapterAdmin=setupAdapterAdmin({get:apiGet,request:accountRequest});
 const operatorAdmin=setupOperatorControl();
-const switchAdmin=setupSwitchAdmin();
+const switchAdmin=setupKamailioAdmin();
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
 const pbx = setupPbx();
@@ -1537,8 +1535,6 @@ function signedIn(user) {
   if(["admin","super_admin"].includes(user.role))operatorAdmin.refresh();
   if(["admin","super_admin"].includes(user.role)){
     switchAdmin.refresh(user.role==="super_admin");
-    $("#switch-config").querySelectorAll("input,select,button").forEach(el=>el.disabled=user.role!=="super_admin");
-    $("#switch-gateway-form").querySelectorAll("input,select,button").forEach(el=>el.disabled=user.role!=="super_admin");
   }
   if(["admin","super_admin"].includes(user.role)){commerceOps.refreshPayment();commerceOps.refreshCluster();}
   if(user.role==="super_admin") sipProfiles.refreshAdmin();

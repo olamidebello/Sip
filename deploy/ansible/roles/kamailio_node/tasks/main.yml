@@ -1,0 +1,89 @@
+---
+- name: Require a complete reviewed configuration profile
+  ansible.builtin.assert:
+    that:
+      - ansible_distribution == 'Debian'
+      - kamailio_config_source | default('') | length > 0
+      - kamailio_packages | default([]) | length > 0
+      - kamailio_expected_modules | default([]) | length > 0
+      - kamailio_node_id is defined
+    fail_msg: Provide the reviewed configuration bundle, package list, expected modules and application node ID.
+- name: Validate package names
+  ansible.builtin.assert:
+    that:
+      - item is match('^kamailio(-[a-z0-9-]+)?$')
+  loop: "{{ kamailio_packages }}"
+- name: Check current service
+  ansible.builtin.command: systemctl is-active --quiet kamailio
+  register: kamailio_before
+  changed_when: false
+  failed_when: false
+- name: Require drained maintenance window before modifying an active server
+  ansible.builtin.assert:
+    that:
+      - kamailio_before.rc != 0 or (kamailio_maintenance_approved | default(false) | bool)
+    fail_msg: Drain active calls and registrations before approving this profile cutover.
+- name: Install requested packages without unattended service starts
+  ansible.builtin.apt:
+    name: "{{ kamailio_packages }}"
+    state: present
+    update_cache: true
+    policy_rc_d: 101
+- name: Snapshot current configuration
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: olamide-kamailio-backup-
+  register: kamailio_backup
+- name: Snapshot existing service configuration
+  ansible.builtin.command:
+    argv: [cp, '-a', /etc/kamailio, "{{ kamailio_backup.path }}/kamailio"]
+  changed_when: false
+- name: Apply and verify profile
+  block:
+    - name: Copy complete reviewed bundle including routes and private dependencies
+      ansible.builtin.copy:
+        src: "{{ kamailio_config_source }}/"
+        dest: /etc/kamailio/
+        owner: root
+        group: kamailio
+        mode: '0640'
+        directory_mode: '0750'
+      no_log: true
+    - name: Validate complete configuration before cutover
+      ansible.builtin.command: kamailio -c -f /etc/kamailio/kamailio.cfg
+      changed_when: false
+      no_log: true
+    - name: Restart the validated commissioned service
+      ansible.builtin.systemd:
+        name: kamailio
+        enabled: true
+        state: restarted
+    - name: Confirm service process
+      ansible.builtin.command: systemctl is-active --quiet kamailio
+      changed_when: false
+    - name: Inspect runtime module set
+      ansible.builtin.command: kamcmd core.modules
+      register: kamailio_runtime
+      changed_when: false
+      no_log: true
+    - name: Confirm every requested enabled capability is loaded
+      ansible.builtin.assert:
+        that:
+          - item in kamailio_runtime.stdout
+      loop: "{{ kamailio_expected_modules }}"
+      no_log: true
+  rescue:
+    - name: Remove unsuccessful configuration bundle
+      ansible.builtin.file:
+        path: /etc/kamailio
+        state: absent
+    - name: Restore previous configuration
+      ansible.builtin.command:
+        argv: [cp, '-a', "{{ kamailio_backup.path }}/kamailio", /etc/kamailio]
+    - name: Restore previous service state
+      ansible.builtin.systemd:
+        name: kamailio
+        state: "{{ 'restarted' if kamailio_before.rc == 0 else 'stopped' }}"
+    - name: Report unsuccessful commissioning
+      ansible.builtin.fail:
+        msg: Profile commissioning failed; previous files restored. Inspect private controller logs.

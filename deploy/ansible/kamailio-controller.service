@@ -1,0 +1,15 @@
+[Unit]
+Description=Olamide Kamailio capability controller
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/opt/olamide
+EnvironmentFile=/etc/olamide/kamailio-controller.env
+ExecStart=/usr/bin/python3 /opt/olamide/tools/kamailio_controller.py --profiles /etc/olamide/kamailio-profiles.json --base https://sip.example.com
+TimeoutStartSec=75000
+UMask=0077
+NoNewPrivileges=true
+[Install]
+WantedBy=multi-user.target
