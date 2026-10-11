@@ -1,0 +1,30 @@
+# Include after auth/auth_db/registrar/usrloc modules; invoke first in request_route.
+modparam("auth_db", "db_url", "mysql://olamide_sip_auth:{{ sip_auth_db_password }}@127.0.0.1:3307/{{ sip_auth_database }}")
+modparam("auth_db", "calculate_ha1", 0)
+modparam("auth_db", "password_column", "ha1")
+modparam("auth_db", "password_column_2", "ha1b")
+modparam("auth_db", "use_domain", 1)
+modparam("auth_db", "version_table", 0)
+modparam("auth_db", "load_credentials", "")
+modparam("nathelper", "received_avp", "$avp(olamide_received)")
+modparam("registrar", "received_avp", "$avp(olamide_received)")
+route[OLAMIDE_REGISTER] {
+    if (!is_method("REGISTER")) return;
+    if ($td != "{{ sip_domain }}") {
+        sl_send_reply("403", "Domain denied");
+        exit;
+    }
+    if (!www_authorize("$td", "olamide_sip_auth")) {
+        www_challenge("$td", "1");
+        exit;
+    }
+    if ($au != $tU) {
+        sl_send_reply("403", "Identity denied");
+        exit;
+    }
+    consume_credentials();
+    force_rport();
+    fix_nated_register();
+    if (!save("location")) sl_reply_error();
+    exit;
+}

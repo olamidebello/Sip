@@ -1,0 +1,65 @@
+---
+- name: Configure automatic same-server SIP accounts and authenticated registration
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Require reviewed registration profile and maintenance approval
+      ansible.builtin.assert:
+        that:
+          - kamailio_repo_path == '/opt/olamide/repo'
+          - sip_domain is match('^[a-zA-Z0-9.-]+$')
+          - sip_registration_config_source is defined
+          - kamailio_maintenance_approved | bool
+    - name: Verify auth route is invoked before any existing request handling
+      ansible.builtin.command:
+        argv: [python3, '-c', "import pathlib,re,sys; s=pathlib.Path(sys.argv[1]+'/kamailio.cfg').read_text(); assert re.search(r'#!include_file\\s+\"olamide-auth.cfg\"',s); assert re.search(r'request_route\\s*\\{\\s*route\\(OLAMIDE_REGISTER\\)\\s*;',s); assert not re.search(r'modparam\\(\\s*\"auth_db\"',s)", '{{ sip_registration_config_source }}']
+      changed_when: false
+      no_log: true
+    - name: Apply application migrations and local-only database publication
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, up, '-d', '--build', api]
+        chdir: /opt/olamide/repo/deployment/docker
+    - name: Wait for schema migration and API readiness
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, exec, '-T', api, node, '-e', "fetch('http://127.0.0.1:8080/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+        chdir: /opt/olamide/repo/deployment/docker
+      register: sip_api_ready
+      until: sip_api_ready.rc == 0
+      retries: 12
+      delay: 5
+      changed_when: false
+    - name: Provision read-only authentication database identity
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/configure_sip_auth.py]
+      no_log: true
+    - name: Read private auth connection data
+      ansible.builtin.slurp:
+        src: /etc/olamide/kamailio-auth.json
+      register: sip_auth_private
+      no_log: true
+    - name: Generate reviewed configuration include without plaintext SIP passwords
+      ansible.builtin.template:
+        src: roles/sip_accounts/templates/olamide-auth.cfg.j2
+        dest: '{{ sip_registration_config_source }}/olamide-auth.cfg'
+        mode: '0600'
+      vars:
+        sip_auth_db_password: '{{ (sip_auth_private.content | b64decode | from_json).password }}'
+        sip_auth_database: '{{ (sip_auth_private.content | b64decode | from_json).database }}'
+      no_log: true
+    - name: Validate and deploy reviewed authenticated registration configuration
+      ansible.builtin.include_role:
+        name: kamailio_node
+      vars:
+        kamailio_config_source: '{{ sip_registration_config_source }}'
+    - name: Enable local provisioning only after configuration cutover succeeded
+      ansible.builtin.lineinfile:
+        path: '{{ item }}'
+        regexp: '^SIP_PROVISION_MODE='
+        line: SIP_PROVISION_MODE=kamailio_local
+        mode: '0600'
+      loop: [/etc/olamide/secrets.env, /opt/olamide/repo/deployment/docker/.env]
+      no_log: true
+    - name: Start automatic provisioning reconciliation
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, up, '-d', '--no-deps', api]
+        chdir: /opt/olamide/repo/deployment/docker

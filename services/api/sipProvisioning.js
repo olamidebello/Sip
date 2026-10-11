@@ -12,7 +12,7 @@ export async function migrateSipProvisioning(pool) {
 }
 
 export function provisioningConfigured() {
-  return !!credentialKey() && /^https:\/\//.test(process.env.SIP_PROVISION_URL || '') && !!process.env.SIP_PROVISION_TOKEN;
+  return !!credentialKey() && (process.env.SIP_PROVISION_MODE==='kamailio_local'||(/^https:\/\//.test(process.env.SIP_PROVISION_URL || '') && !!process.env.SIP_PROVISION_TOKEN));
 }
 
 // The session lock serializes account creation and retries across API replicas.
@@ -26,6 +26,10 @@ export async function reconcileSipAccounts(pool, origin) {
       LEFT JOIN sip_accounts a ON a.user_id=u.id WHERE u.status='active' AND t.status='active'
       AND a.id IS NULL ORDER BY u.id LIMIT 50`)).rows;
     for(const user of users) await createSipAccount(db,user.id,domain);
+    if(process.env.SIP_PROVISION_MODE==='kamailio_local') await db.query(`UPDATE sip_accounts a
+      JOIN users u ON u.id=a.user_id AND u.status='active' JOIN tenants t ON t.id=a.tenant_id AND t.status='active'
+      LEFT JOIN olamide_sip_subscribers c ON c.account_id=a.id
+      SET a.status='awaiting_switch' WHERE a.status='active' AND (c.account_id IS NULL OR c.username<>a.username OR c.domain<>a.domain)`);
     await db.query(`INSERT IGNORE INTO sip_provisioning_jobs(account_id)
       SELECT id FROM sip_accounts WHERE status='awaiting_switch'`);
     const pending=(await db.query(`SELECT a.id,a.user_id,a.secret_cipher,j.attempts FROM sip_accounts a
@@ -67,7 +71,7 @@ export async function handleSipProvisioning({req,res,path,user,pool,send}) {
       j.attempts,j.next_attempt,j.last_result FROM sip_accounts a JOIN users u ON u.id=a.user_id
       LEFT JOIN sip_provisioning_jobs j ON j.account_id=a.id WHERE a.tenant_id=$1
       ORDER BY a.created_at DESC LIMIT 500`,[user.tenant_id]);
-    return send(res,200,{configured:provisioningConfigured(),accounts:result.rows});
+    return send(res,200,{configured:provisioningConfigured(),mode:process.env.SIP_PROVISION_MODE==='kamailio_local'?'kamailio_local':'remote',accounts:result.rows});
   }
   if(path==='/api/admin/sip-provisioning/retry'&&req.method==='POST') {
     await pool.query(`UPDATE sip_provisioning_jobs j JOIN sip_accounts a ON a.id=j.account_id

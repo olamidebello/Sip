@@ -64,3 +64,24 @@ test('pending configuration records a durable delayed retry without activating',
     assert.deepEqual(retry,[120,'configuration_required','a']);assert.equal(released,true);
   } finally {if(saved!==undefined)process.env.SIP_PROVISION_URL=saved;}
 });
+
+test('same-server mode persists digest before activating and does not call an external adapter',async()=>{
+  const saved={mode:process.env.SIP_PROVISION_MODE,key:process.env.SIP_CREDENTIAL_KEY,fetch:globalThis.fetch};
+  process.env.SIP_PROVISION_MODE='kamailio_local';process.env.SIP_CREDENTIAL_KEY='ab'.repeat(32);
+  const writes=[];
+  const db={query:async(sql,args)=>{
+    if(sql.startsWith('SELECT')){assert.ok(sql.includes("u.status='active'"));return {rows:[{id:'account-id',tenant_id:'tenant',username:'ol123',domain:'sip.example.com',secret_cipher:encrypt('x'.repeat(32),Buffer.from(process.env.SIP_CREDENTIAL_KEY,'hex'))}]};}
+    writes.push({sql,args});return {rows:[],rowCount:1};
+  }};
+  try{
+    globalThis.fetch=()=>{throw Error('External adapter must not be used');};
+    assert.equal(provisioningConfigured(),true);
+    assert.equal(await provisionSipAccount(db,'user'),true);
+    assert.ok(writes[0].sql.startsWith('INSERT INTO olamide_sip_subscribers'));
+    assert.ok(writes[1].sql.startsWith('UPDATE sip_accounts'));
+    assert.equal(writes[0].args.includes('x'.repeat(32)),false);
+  }finally{
+    globalThis.fetch=saved.fetch;
+    for(const [name,value] of [['SIP_PROVISION_MODE',saved.mode],['SIP_CREDENTIAL_KEY',saved.key]])if(value===undefined)delete process.env[name];else process.env[name]=value;
+  }
+});
