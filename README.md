@@ -616,3 +616,29 @@ Imported products can be edited and purchased through the existing store workflo
 
 Contacts CSV imports now have a preview, row checkboxes and Select all before importing
 selected contacts through the existing tenant-scoped contact endpoint.
+
+### Configuration shortcuts, provider credentials and user activity
+
+Every visible workspace panel includes links to related settings, credential management,
+activity and help. Links respect panel visibility and account roles. The DIDWW panel's
+**Manage DIDWW configuration** link opens the provider credential editor directly.
+Super administrators can save, rotate, disable or remove encrypted tenant-specific
+Flowroute and DIDWW API credentials. DIDWW settings include environment, callback secret
+and call-events token. Configure matching callback authentication values in DIDWW.
+Secrets are write-only; rotations replace the stored credential set. Stripe and identity
+provider links open their existing configuration forms. SIP trunk commissioning and
+provider account currency remain separate requirements.
+
+The API requires `PROVIDER_CREDENTIAL_KEY` (64 hexadecimal characters) to encrypt stored
+credentials. `deployment/update.sh` provisions it privately if missing, preserves it
+across upgrades and passes it to the API container. Back up the key with the database.
+The migration creates `provider_api_credentials` and `user_activity_events` automatically.
+
+The activity monitor shows users their own recent events and administrators the selected
+tenant's events, refreshing every 30 seconds. Navigation, clicks and visible-tab heartbeats
+are browser-reported events; authenticated API mutations record server-confirmed outcomes.
+No passwords, API keys, form values or request bodies are captured. Ingestion accepts only
+fixed event categories, applies database-backed rate limits, and removes events older than
+90 days in bounded batches during ingestion. Monitor queries exclude older rows. Activity
+recording failures do not interrupt normal app requests. This is application activity
+monitoring; browser events are not evidence that a provider operation succeeded.

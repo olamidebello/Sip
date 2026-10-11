@@ -1,3 +1,4 @@
+import {providerCredentials} from './providerCredentials.js';
 import { randomUUID } from 'node:crypto';
 import { isAdmin } from './tenancy.js';
 import { availableNumbers } from './providers.js';
@@ -43,9 +44,12 @@ export async function carrierActive(pool,tenant,provider){
 
 export async function handleCarrierProviders({req,res,path,user,pool,send,readJson}){
   if(!isAdmin(user)) return send(res,403,{error:'Administrator required'});
-  const configured=provider=>provider==='flowroute'?!!(process.env.FLOWROUTE_ACCESS_KEY&&process.env.FLOWROUTE_SECRET_KEY):
+  let stored={};
+  async function loadCredentials(){stored=Object.fromEntries(await Promise.all(providers.map(async provider=>[provider,await providerCredentials(pool,user.tenant_id,provider)])));}
+  const configured=provider=>stored[provider]?.disabled?false:stored[provider]?true:provider==='flowroute'?!!(process.env.FLOWROUTE_ACCESS_KEY&&process.env.FLOWROUTE_SECRET_KEY):
     provider==='didww' ? !!(process.env.DIDWW_API_KEY&&process.env.DIDWW_ACCOUNT_CURRENCY==='USD'&&['sandbox','production'].includes(process.env.DIDWW_API_ENV)) : adapterReady();
   if(path==='/api/admin/carriers' && req.method==='GET'){
+    await loadCredentials();
     const [rows,custom,verified]=await Promise.all([
       pool.query('SELECT provider,trunk_id,max_concurrent_calls,routing_mode,status,last_error,provisioned_at,updated_at FROM carrier_provider_profiles WHERE tenant_id=$1 ORDER BY provider',[user.tenant_id]),
       catalog(pool,user.tenant_id),
@@ -144,6 +148,7 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
     return send(res,200,{provider,status:'draft'});
   }
   if(action==='verify' && req.method==='POST'){
+    await loadCredentials();
     if(!configured(provider)) return send(res,409,{error:providers.includes(provider)?'Provider credentials missing from private server configuration':'HTTPS provisioning adapter required'});
     if(!providers.includes(provider)){
       if(!adapterReady())return send(res,409,{error:'HTTPS provisioning adapter required'});
@@ -157,12 +162,13 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
         return send(res,200,{provider,adapterVerified:true,note:'Provisioning adapter verified the carrier configuration.'});
       }catch{return send(res,502,{error:'Carrier adapter verification failed'});}
     }
-    try {const inventory=await availableNumbers(provider);
+    try {const inventory=await availableNumbers(provider,{pool,tenant:user.tenant_id});
       return send(res,200,{provider,credentialsValid:true,sampleCount:inventory.length,
         note:'Inventory API responded. This does not authorize or activate a SIP trunk.'});
     }catch(error){return send(res,502,{error:'Provider inventory check failed'});}
   }
   if(action==='activate' && req.method==='POST'){
+    await loadCredentials();
     if(!configured(provider)||!adapterReady())
       return send(res,409,{error:'Carrier credentials and HTTPS provisioning adapter required'});
     const found=await pool.query("SELECT trunk_id,max_concurrent_calls,routing_mode,status FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider=$2",[user.tenant_id,provider]);

@@ -142,3 +142,13 @@ body.workspace-mode #app>section:not(.workspace-inactive){max-width:100%}
 .dashboard-option[draggable="true"]:active,#fleet-nodes li[draggable="true"]:active,#fleet-devices li[draggable="true"]:active{cursor:grabbing}
 
 .site-copyright{padding:1.5rem 1rem 2rem;text-align:center;color:#aebdd1;font-size:.82rem;border-top:1px solid #ffffff18}
+
+.configuration-links { display:flex; flex-wrap:wrap; gap:.55rem; margin:.8rem 0 1.2rem; }
+.configuration-links a,.configuration-primary { display:inline-flex; align-items:center; min-height:44px; padding:.55rem .85rem; border:1px solid #477383; border-radius:999px; color:#a7f3e9; text-decoration:none; background:rgba(28,123,145,.12); transition:background .15s,border-color .15s; }
+.configuration-links a:hover,.configuration-primary:hover { background:rgba(28,123,145,.3); border-color:#49c7cf; }
+.configuration-links a:focus-visible,.configuration-primary:focus-visible { outline:3px solid #49c7cf; outline-offset:3px; }
+.configuration-primary { background:#087b91; color:white; font-weight:600; }
+@media (max-width:600px) { .configuration-links a { flex:1 1 145px; justify-content:center; text-align:center; } }
+.activity-table-wrap { overflow-x:auto; max-width:100%; }
+#activity-monitor table { width:100%; border-collapse:collapse; }
+#activity-monitor th,#activity-monitor td { text-align:left; padding:.7rem; border-bottom:1px solid #355666; }

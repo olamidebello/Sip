@@ -1,3 +1,4 @@
+import {providerCredentials} from './providerCredentials.js';
 import {randomUUID,createHash,createHmac,timingSafeEqual} from 'node:crypto';
 import {gunzipSync} from 'node:zlib';
 
@@ -70,9 +71,10 @@ export function validDidwwSignature(url,payload,secret,signature){
 export async function handleDidwwCallback({req,res,path,pool,send,origin}){
   const callMatch=/^\/api\/webhooks\/didww\/([0-9a-f-]{36})\/call-events$/.exec(path);
   if(callMatch){
-    if(!uuid.test(callMatch[1])||!bound(callMatch[1]))return send(res,404,{error:'Callback unavailable'});
+    const credentials=await didwwSettings(pool,callMatch[1]);
+    if(!uuid.test(callMatch[1])||!credentials.tenantConfigured)return send(res,404,{error:'Callback unavailable'});
     if(req.method!=='POST')return send(res,405,{error:'POST required'});
-    const expected=process.env.DIDWW_CALL_EVENTS_TOKEN;
+    const expected=credentials.callEventsToken;
     const supplied=req.headers['x-auth-token'];
     if(!expected||typeof supplied!=='string'||!timingSafeEqual(hash(expected),hash(supplied)))
       return send(res,401,{error:'Invalid event token'});
@@ -95,7 +97,9 @@ export async function handleDidwwCallback({req,res,path,pool,send,origin}){
     }catch{return send(res,400,{error:'Invalid call event'});}
   }
   const match=/^\/api\/webhooks\/didww\/([0-9a-f-]{36})$/.exec(path);
-  if(!match||!uuid.test(match[1])||!bound(match[1]))return send(res,404,{error:'Callback unavailable'});
+  if(!match||!uuid.test(match[1]))return send(res,404,{error:'Callback unavailable'});
+  const credentials=await didwwSettings(pool,match[1]);
+  if(!credentials.tenantConfigured)return send(res,404,{error:'Callback unavailable'});
   if(!['GET','POST'].includes(req.method))return send(res,405,{error:'Method unavailable'});
   const configured=callbackUrl(origin,match[1]);
   let payload,raw='';
@@ -114,7 +118,7 @@ export async function handleDidwwCallback({req,res,path,pool,send,origin}){
     }catch{return send(res,400,{error:'Invalid callback'});}
   }
   const url=configured;
-  if(!validDidwwSignature(url,payload,process.env.DIDWW_CALLBACK_SECRET,req.headers['x-didww-signature']))
+  if(!validDidwwSignature(url,payload,credentials.callbackSecret,req.headers['x-didww-signature']))
     return send(res,401,{error:'Invalid callback signature'});
   const events=Array.isArray(payload)?payload:[payload];
   if(!events.length||events.length>100||events.some(item=>!item||typeof item!=='object'||
@@ -128,25 +132,38 @@ export async function handleDidwwCallback({req,res,path,pool,send,origin}){
   return send(res,202,{received:true});
 }
 
+
+async function didwwSettings(pool,tenant){
+  const stored=await providerCredentials(pool,tenant,'didww');
+  if(stored?.disabled)return {tenantConfigured:false};
+  const fallback=bound(tenant);
+  return {tenantConfigured:!!stored||fallback,
+    environment:stored?.environment||(fallback?process.env.DIDWW_API_ENV:undefined),
+    apiKey:stored?.apiKey||(fallback?process.env.DIDWW_API_KEY:undefined),
+    callbackSecret:stored?.callbackSecret||(fallback?process.env.DIDWW_CALLBACK_SECRET:undefined),
+    callEventsToken:stored?.callEventsToken||(fallback?process.env.DIDWW_CALL_EVENTS_TOKEN:undefined)};
+}
 export async function handleDidwwAdmin({req,res,path,user,pool,send,readJson,origin}){
   if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
+  const credentials=await didwwSettings(pool,user.tenant_id);
+  const endpoint=credentials.environment==='sandbox'?'https://sandbox-api.didww.com/v3':credentials.environment==='production'?'https://api.didww.com/v3':null;
   if(path==='/api/admin/didww/config'&&req.method==='GET'){
-    const tenantConfigured=bound(user.tenant_id),environmentConfigured=!!base();
+    const tenantConfigured=credentials.tenantConfigured,environmentConfigured=!!endpoint;
     const setupIssues=[];
     if(!tenantConfigured)setupIssues.push('Set DIDWW_TENANT_ID to the current tenant ID: '+user.tenant_id);
     if(!environmentConfigured)setupIssues.push('Set DIDWW_API_ENV to sandbox or production');
-    if(!process.env.DIDWW_API_KEY)setupIssues.push('Set DIDWW_API_KEY on the server');
-    if(!process.env.DIDWW_CALLBACK_SECRET)setupIssues.push('Set the same DIDWW_CALLBACK_SECRET on the server and in DIDWW');
-    if(!process.env.DIDWW_CALL_EVENTS_TOKEN)setupIssues.push('Set DIDWW_CALL_EVENTS_TOKEN on the server to match DIDWW X-Auth-Token');
-    return send(res,200,{environment:environmentConfigured?process.env.DIDWW_API_ENV:'not configured',
+    if(!credentials.apiKey)setupIssues.push('Set DIDWW_API_KEY on the server');
+    if(!credentials.callbackSecret)setupIssues.push('Set the same DIDWW_CALLBACK_SECRET on the server and in DIDWW');
+    if(!credentials.callEventsToken)setupIssues.push('Set DIDWW_CALL_EVENTS_TOKEN on the server to match DIDWW X-Auth-Token');
+    return send(res,200,{environment:environmentConfigured?credentials.environment:'not configured',
       tenantConfigured,environmentConfigured,setupIssues,
-      apiConfigured:!!process.env.DIDWW_API_KEY,callbackConfigured:!!process.env.DIDWW_CALLBACK_SECRET,
+      apiConfigured:!!credentials.apiKey,callbackConfigured:!!credentials.callbackSecret,
       callbackUrl:callbackUrl(origin,user.tenant_id),
-      callEventsConfigured:!!process.env.DIDWW_CALL_EVENTS_TOKEN,
+      callEventsConfigured:!!credentials.callEventsToken,
       callEventsUrl:`${callbackUrl(origin,user.tenant_id)}/call-events`,resources:methods});
   }
-  if(!bound(user.tenant_id))return send(res,409,{error:'DIDWW tenant binding is not configured for this tenant'});
-  if(!base())return send(res,409,{error:'Set DIDWW_API_ENV to sandbox or production'});
+  if(!credentials.tenantConfigured)return send(res,409,{error:'DIDWW tenant binding is not configured for this tenant'});
+  if(!endpoint)return send(res,409,{error:'Set DIDWW_API_ENV to sandbox or production'});
   if(path==='/api/admin/didww/events'&&req.method==='GET'){
     const [callbacks,calls]=await Promise.all([
       pool.query('SELECT id,resource_type,resource_id,event_status,received_at FROM didww_callback_events WHERE tenant_id=$1 ORDER BY received_at DESC LIMIT 100',[user.tenant_id]),
@@ -156,7 +173,7 @@ export async function handleDidwwAdmin({req,res,path,user,pool,send,readJson,ori
   const match=/^\/api\/admin\/didww\/resources\/([a-z_]+)(?:\/([0-9a-f-]{36}))?$/.exec(path);
   if(!match||!methods[match[1]]?.includes(req.method)||match[2]&&!uuid.test(match[2]))
     return send(res,404,{error:'DIDWW resource or method unavailable'});
-  if(!process.env.DIDWW_API_KEY)return send(res,409,{error:'DIDWW API key is not configured'});
+  if(!credentials.apiKey)return send(res,409,{error:'DIDWW API key is not configured'});
   const [,resource,id]=match;
   if(['PATCH','DELETE'].includes(req.method)&&!id)return send(res,400,{error:'Resource ID required'});
   if(req.method==='POST'&&id)return send(res,400,{error:'Create requests use the collection URL'});
@@ -167,7 +184,7 @@ export async function handleDidwwAdmin({req,res,path,user,pool,send,readJson,ori
       (req.method==='PATCH'&&body.data.id!==id))
       return send(res,400,{error:'JSON:API data type and resource ID must match'});
   }
-  const upstream=new URL(`${base()}/${resource}${id?'/'+id:''}`);
+  const upstream=new URL(`${endpoint}/${resource}${id?'/'+id:''}`);
   if(req.method==='GET'){
     const incoming=new URL(req.url,origin);
     for(const [key,value] of incoming.searchParams){
@@ -180,7 +197,7 @@ export async function handleDidwwAdmin({req,res,path,user,pool,send,readJson,ori
   let response,payload;
   try{
     response=await fetch(upstream,{method:req.method,signal:AbortSignal.timeout(15000),
-      headers:{'Api-Key':process.env.DIDWW_API_KEY,'Accept':'application/vnd.api+json',
+      headers:{'Api-Key':credentials.apiKey,'Accept':'application/vnd.api+json',
         'Content-Type':'application/vnd.api+json','X-DIDWW-Api-Version':'2026-04-16'},
       body:serialized});
     const raw=await response.text();

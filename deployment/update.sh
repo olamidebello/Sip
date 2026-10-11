@@ -12,6 +12,21 @@ if ! grep -q '^PAYMENT_CONFIG_KEY=' /etc/olamide/secrets.env; then
   printf 'PAYMENT_CONFIG_KEY=%s\n' "$(openssl rand -hex 32)" >> /etc/olamide/secrets.env
 fi
 env_changed=0
+# Preserve the provider encryption key across upgrades and synchronize private env files.
+if ! grep -q '^PROVIDER_CREDENTIAL_KEY=.' /etc/olamide/secrets.env; then
+  umask 077
+  if grep -q '^PROVIDER_CREDENTIAL_KEY=.' "$compose_dir/.env"; then
+    grep '^PROVIDER_CREDENTIAL_KEY=' "$compose_dir/.env" >> /etc/olamide/secrets.env
+  else
+    sed -i '/^PROVIDER_CREDENTIAL_KEY=$/d' /etc/olamide/secrets.env
+    printf 'PROVIDER_CREDENTIAL_KEY=%s\n' "$(openssl rand -hex 32)" >> /etc/olamide/secrets.env
+  fi
+fi
+if ! grep -q '^PROVIDER_CREDENTIAL_KEY=.' "$compose_dir/.env"; then
+  sed -i '/^PROVIDER_CREDENTIAL_KEY=$/d' "$compose_dir/.env"
+  grep '^PROVIDER_CREDENTIAL_KEY=' /etc/olamide/secrets.env >> "$compose_dir/.env"
+  env_changed=1
+fi
 if ! grep -q '^KAMAILIO_RUNNER_TOKEN=.' /etc/olamide/secrets.env; then
   umask 077
   sed -i '/^KAMAILIO_RUNNER_TOKEN=$/d' /etc/olamide/secrets.env

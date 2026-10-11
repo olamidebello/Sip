@@ -1,3 +1,4 @@
+import {setupUserActivity} from "./userActivity.js";
 import {setupProductStore} from './productStore.js';
 import { SimpleUser } from "sip.js/lib/platform/web";
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
@@ -7,6 +8,8 @@ import { setupGroupAdmin } from "./groups.js";
 import { setupSipProfiles } from "./sipProfiles.js";
 import {setupCommerceOps} from "./commerceOps.js";
 import {setupProviderWebhookAdmin} from "./providerWebhookAdmin.js";
+import {setupProviderCredentialsAdmin} from "./providerCredentialsAdmin.js";
+import {setupConfigurationLinks} from "./configurationLinks.js";
 import {setupDidwwAdmin} from "./didwwAdmin.js";
 import {setupAdapterAdmin} from "./adapterAdmin.js";
 import {setupOperatorControl} from "./operatorControl.js";
@@ -825,8 +828,28 @@ root.innerHTML = `
       <ul id="provider-webhook-list"></ul><h4>Recent verified callback receipts</h4><ul id="provider-webhook-events"></ul>
       <p id="provider-webhook-status" role="status"></p>
     </section>
+      <section id="provider-credentials-admin" hidden>
+        <h4>Provider API credentials</h4>
+        <p>Manage DIDWW credentials for the selected tenant. Secrets are encrypted and never displayed again. Saving replaces the credentials; enter the callback secret and call events token again when rotating settings. Configure matching values in DIDWW.</p>
+        <form id="provider-credentials-form" autocomplete="off">
+          <label>Provider <select name="provider"><option value="didww">DIDWW</option><option value="flowroute">Flowroute</option></select></label>
+          <label id="provider-access-label">Flowroute access key <input name="accessKey" maxlength="256"></label>
+          <label id="provider-secret-label">Flowroute secret key <input name="secretKey" type="password" maxlength="256"></label>
+          <label id="provider-sip-user-label">Flowroute SIP username (if assigned) <input name="sipUsername" autocomplete="off" maxlength="256"></label>
+          <label id="provider-sip-pass-label">Flowroute SIP password (if assigned) <input name="sipPassword" type="password" autocomplete="new-password" maxlength="256"></label>
+          <label id="provider-api-label" hidden>DIDWW API key <input name="apiKey" type="password" maxlength="256"></label>
+          <label id="provider-env-label" hidden>DIDWW environment <select name="environment"><option value="sandbox">Sandbox</option><option value="production">Production</option></select></label>
+          <label>DIDWW callback secret <input name="callbackSecret" type="password" maxlength="256" autocomplete="new-password"></label>
+          <label>DIDWW call events token <input name="callEventsToken" type="password" maxlength="256" autocomplete="new-password"></label>
+          <button type="submit">Save credentials</button>
+        </form>
+        <button id="provider-credentials-refresh" type="button">Refresh credential status</button>
+        <p id="provider-credentials-status" role="status"></p><ul id="provider-credentials-list"></ul>
+      </section>
+    <section id="activity-monitor"><h3>User activity monitor</h3><p>Navigation, interactions and authenticated configuration requests. Passwords, API keys and form contents are excluded. Administrators see the selected tenant; users see their own activity.</p><button type="button">Refresh activity</button><p role="status" aria-live="polite"></p><div class="activity-table-wrap"><table><thead><tr><th>Time</th><th>User ID</th><th>Source</th><th>Event</th><th>Area</th><th>Outcome</th></tr></thead><tbody></tbody></table></div></section>
     <section id="didww-admin" hidden>
       <h3>DIDWW API and signed callbacks</h3>
+      <p><a class="configuration-primary" href="#provider-credentials-admin" id="didww-manage-config">Manage DIDWW configuration</a></p>
       <p id="didww-config">Loading DIDWW configuration…</p>
       <p id="didww-status" role="status" aria-live="polite"></p>
       <label>Callback URL <input id="didww-callback-url" readonly></label>
@@ -1038,6 +1061,7 @@ root.innerHTML = `
 
 const $ = (selector) => document.querySelector(selector);
 root.append($('#fleet-admin'));
+root.append($('#activity-monitor'));
 setupFormGroups();
 setupDownloads();
 setupCarrierControl();
@@ -1045,15 +1069,17 @@ const navigationGroups=[
   {label:"Workspace",items:[["dashboard","Dashboard"],["campaign-inbox-panel","Announcements"],["planner","Events & tasks"],["search-panel","Search"],["support","Support tickets"],["help","Help & tutorials"]]},
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["product-store","Products & services"],["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
-  {label:"My settings",items:[["account","Account & security"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
+  {label:"My settings",items:[["account","Account & security"],["activity-monitor","Activity monitor"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
   {label:"Administration",roles:["admin","super_admin"],items:[["product-store-admin","Product catalog & orders"],["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio services"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
-  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["carrier-adapter-admin","Carrier adapters"]]}
+  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["provider-credentials-admin","Provider credentials"],["carrier-adapter-admin","Carrier adapters"]]}
 ];
+let configurationLinks;
+let userActivity;
 let activeRole=null;
 let pageRoutes;
-const workspaceViews=["account","help","dashboard","planner","campaign-inbox-panel","search-panel","support","locale-settings","background-user","chat","external-sms","outbound-rates","billing","dialplan-marketplace","meetings","admin","fleet-admin","agent-panel","calling-workspace","downloads"];
+const workspaceViews=["activity-monitor","account","help","dashboard","planner","campaign-inbox-panel","search-panel","support","locale-settings","background-user","chat","external-sms","outbound-rates","billing","dialplan-marketplace","meetings","admin","fleet-admin","agent-panel","calling-workspace","downloads"];
 let activeView="dashboard";
 function showWorkspace(target) {
   if(!activeRole) return;
@@ -1063,6 +1089,7 @@ function showWorkspace(target) {
   const rootView=workspaceViews.find(id=>{const section=document.getElementById(id);return section&&(section===requested||section.contains(requested));});
   if(!rootView) return;
   activeView=target;
+  userActivity?.track("navigate",target);
   if(pageId(location.pathname) && target!==document.getElementById(pageId(location.pathname))?.closest('section[id]')?.id) {
     history.pushState(null,'',`/#${target}`);
     pageRoutes?.render();
@@ -1079,11 +1106,13 @@ function showWorkspace(target) {
   workspaceQuick.record(target);
 }
 function resetWorkspace() {
+  userActivity?.stop();
   document.body.classList.remove("workspace-mode");
   for(const section of document.querySelectorAll(".workspace-inactive")) section.classList.remove("workspace-inactive");
   $("#admin").classList.remove("admin-subview");
 }
 function updateNavigation() {
+  configurationLinks?.refresh();
   const nav=$("#app-nav");nav.replaceChildren();
   nav.hidden=!activeRole;
   if (!activeRole) return;
@@ -1175,6 +1204,9 @@ const workPlanner=setupWorkPlanner({get:apiGet,request:accountRequest});
 const campaigns=setupCampaigns();
 const passkeyPolicy=setupPasskeyPolicy();
 const providerWebhooks=setupProviderWebhookAdmin({get:apiGet,request:accountRequest});
+const providerCredentialsAdmin=setupProviderCredentialsAdmin({get:apiGet,request:accountRequest,onSaved:()=>didwwAdmin.refresh()});
+configurationLinks=setupConfigurationLinks({show:showWorkspace});
+userActivity=setupUserActivity({get:apiGet,request:accountRequest});
 const didwwAdmin=setupDidwwAdmin({get:apiGet,request:accountRequest});
 const adapterAdmin=setupAdapterAdmin({get:apiGet,request:accountRequest});
 const operatorAdmin=setupOperatorControl();
@@ -1562,6 +1594,8 @@ function signedIn(user) {
   sipProfiles.refresh();
   $("#sip-profile-admin").hidden=user.role!=="super_admin";
   $("#provider-webhook-admin").hidden=user.role!=="super_admin";
+  $("#provider-credentials-admin").hidden=user.role!=="super_admin";
+  userActivity.start(user.role);
   $("#didww-admin").hidden=user.role!=="super_admin";
   $("#carrier-adapter-admin").hidden=user.role!=="super_admin";
   $("#fleet-admin").hidden=user.role!=="super_admin";
@@ -1569,7 +1603,7 @@ function signedIn(user) {
   $("#fleet-operations-panel").hidden=user.role!=="super_admin";
   $("#flowroute-auto-form").hidden=user.role!=="super_admin";
   $("#carrier-catalog-form").hidden=user.role!=="super_admin";
-  if(user.role==="super_admin"){providerWebhooks.refresh();didwwAdmin.refresh();adapterAdmin.refresh();serverFleet.refresh();fleetNetwork.refresh();fleetGrants.refresh();fleetFirewall.refresh();operationsAdmin.refresh();}
+  if(user.role==="super_admin"){providerCredentialsAdmin.refresh();providerWebhooks.refresh();didwwAdmin.refresh();adapterAdmin.refresh();serverFleet.refresh();fleetNetwork.refresh();fleetGrants.refresh();fleetFirewall.refresh();operationsAdmin.refresh();}
   if(["admin","super_admin"].includes(user.role))operatorAdmin.refresh();
   if(["admin","super_admin"].includes(user.role)){
     switchAdmin.refresh(user.role==="super_admin");

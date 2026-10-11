@@ -15,7 +15,7 @@ test('DIDWW published order callback signature example',()=>{
 test('DIDWW configuration remains visible before provider setup',async()=>{
   const result=await handleDidwwAdmin({req:{method:'GET'},path:'/api/admin/didww/config',
     user:{role:'super_admin',tenant_id:'00000000-0000-4000-8000-000000000001'},
-    pool:{query:()=>{throw Error('unexpected query');}},origin:'https://sip.example.com',
+    pool:{query:async()=>({rowCount:0,rows:[]})},origin:'https://sip.example.com',
     send:(_res,status,body)=>({status,body})});
   assert.equal(result.status,200);
   assert.equal(result.body.callbackUrl,'https://sip.example.com/api/webhooks/didww/00000000-0000-4000-8000-000000000001');
@@ -47,7 +47,7 @@ test('signed DIDWW form callback is persisted once and unsigned callback is reje
   const request=signatureValue=>({method:'POST',
     headers:{'content-type':'application/x-www-form-urlencoded','x-didww-signature':signatureValue},
     async *[Symbol.asyncIterator](){yield Buffer.from(body);}});
-  const opts={path,pool:{query:async(sql,params)=>{calls.push({sql,params});return {rowCount:1,rows:[]};}},
+  const opts={path,pool:{query:async(sql,params)=>{if(sql.includes('provider_api_credentials'))return {rowCount:0,rows:[]};calls.push({sql,params});return {rowCount:1,rows:[]};}},
     origin,send:(_res,status,data)=>({status,data})};
   try{
     const rejected=await handleDidwwCallback({...opts,req:request('0'.repeat(40))});
@@ -75,7 +75,7 @@ test('authenticated gzip CDR batch is recorded without storing call payload',asy
     async *[Symbol.asyncIterator](){yield payload;}};
   try{
     const result=await handleDidwwCallback({req,path:`/api/webhooks/didww/${tenant}/call-events`,
-      origin:'https://sip.example.com',pool:{query:async(sql,params)=>{calls.push({sql,params});return {rowCount:1};}},
+      origin:'https://sip.example.com',pool:{query:async(sql,params)=>{if(sql.includes('provider_api_credentials'))return {rowCount:0,rows:[]};calls.push({sql,params});return {rowCount:1};}},
       send:(_res,status,body)=>({status,body})});
     assert.equal(result.status,202);assert.equal(result.body.count,2);
     assert.equal(calls.length,2);assert.equal(calls[0].params[3],'inbound-cdr');
@@ -100,7 +100,7 @@ test('admin API sends a versioned sandbox request with server-side key',async()=
   try{
     const result=await handleDidwwAdmin({req:{method:'GET',url:'/api/admin/didww/resources/balance'},
       path:'/api/admin/didww/resources/balance',user:{role:'super_admin',tenant_id:tenant},
-      pool:{query:()=>{throw Error('read-only request must not write audit');}},
+      pool:{query:async(sql)=>{if(sql.includes('provider_api_credentials'))return {rowCount:0,rows:[]};throw Error('read-only request must not write audit');}},
       origin:'https://sip.example.com',send:(_res,status,body)=>({status,body})});
     assert.equal(result.status,200);
     assert.equal(outbound.url,'https://sandbox-api.didww.com/v3/balance');

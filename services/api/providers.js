@@ -1,3 +1,4 @@
+import {providerCredentials} from './providerCredentials.js';
 import { parseUsdCents } from "./billing.js";
 
 const uuid = /^[0-9a-f-]{36}$/i;
@@ -22,9 +23,11 @@ export function inventorySearch(input={}) {
 }
 export async function availableNumbers(provider, options={}) {
   const {prefix,offset,inventoryId}=inventorySearch(options);
+  const stored=await providerCredentials(options.pool,options.tenant,provider);
+  if(stored?.disabled)throw new Error("Provider credentials disabled");
   if (provider === "flowroute") {
-    const key = process.env.FLOWROUTE_ACCESS_KEY;
-    const secret = process.env.FLOWROUTE_SECRET_KEY;
+    const key = stored?.accessKey||process.env.FLOWROUTE_ACCESS_KEY;
+    const secret = stored?.secretKey||process.env.FLOWROUTE_SECRET_KEY;
     if (!key || !secret) throw new Error("Flowroute is not configured");
     const query=new URLSearchParams({limit:"20",offset:String(offset)});
     if (prefix) query.set("starts_with",prefix);
@@ -39,16 +42,17 @@ export async function availableNumbers(provider, options={}) {
     }));
   }
   if (provider === "didww") {
-    const key = process.env.DIDWW_API_KEY;
+    const environment=stored?.environment||process.env.DIDWW_API_ENV;
+    const key = stored?.apiKey||process.env.DIDWW_API_KEY;
     if (!key || process.env.DIDWW_ACCOUNT_CURRENCY !== "USD")
       throw new Error("DIDWW USD inventory is not configured");
-    if (!["sandbox","production"].includes(process.env.DIDWW_API_ENV))
+    if (!["sandbox","production"].includes(environment))
       throw new Error("DIDWW environment is not configured");
     const query=new URLSearchParams({include:"did_group.stock_keeping_units","filter[did_group.needs_registration]":"false"});
     if (inventoryId) query.set("filter[id]",inventoryId);
     else if (prefix) query.set("filter[number_contains]",prefix);
     const payload = await providerJson(
-      `${process.env.DIDWW_API_ENV === "sandbox" ? "https://sandbox-api.didww.com" : "https://api.didww.com"}/v3/available_dids?${query}`,
+      `${environment === "sandbox" ? "https://sandbox-api.didww.com" : "https://api.didww.com"}/v3/available_dids?${query}`,
       { "Api-Key": key, Accept: "application/vnd.api+json", "X-DIDWW-Api-Version":"2026-04-16" }
     );
     const included = new Map((payload.included || []).map((item) => [item.type+":"+item.id, item]));

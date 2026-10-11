@@ -1,3 +1,4 @@
+import {handleUserActivity,recordApiActivity} from './userActivity.js';
 import {handleProductStore,startStoreRenewals} from './productStore.js';
 import { startSipProvisioning, handleSipProvisioning } from './sipProvisioning.js';
 import http from "node:http";
@@ -10,6 +11,7 @@ import { handleSipProfiles } from './sipProfiles.js';
 import {handlePaymentAdmin,handlePaymentCheckout,handleStripeWebhook} from './payments.js';
 import {handleCluster} from './cluster.js';
 import {handleProviderWebhook,handleProviderWebhookAdmin} from './providerWebhooks.js';
+import {handleProviderCredentials} from './providerCredentials.js';
 import {handleDidwwCallback,handleDidwwAdmin} from './didwwIntegration.js';
 import { handleCarrierProviders, carrierActive } from './carrierProviders.js';
 import { handleAdapterRegistry } from './adapterRegistry.js';
@@ -248,6 +250,8 @@ async function handler(req, res) {
         const target=await resolveWss(pool,user.id,region);
         return send(res,200,{target,scope:'WSS discovery for healthy switch targets; SIP calls still use the configured switch route.'});
       }
+      if(!path.includes('/activity/')&&!path.startsWith('/api/me'))res.once('finish',()=>{if(['POST','PUT','PATCH','DELETE'].includes(req.method))recordApiActivity(pool,user,req.method,path,res.statusCode).catch(()=>{});});
+      if(path==='/api/activity/events'||path==='/api/admin/activity/events')return await handleUserActivity({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin)});
       if(path.startsWith('/api/workspace/shortcuts'))return await handleWorkspaceShortcuts({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/work/items'))return await handleWorkPlanner({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/campaigns/')||path.startsWith('/api/admin/campaigns'))return await handleCampaigns({req,res,path,user,pool,send,readJson});
@@ -274,6 +278,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/switch')) return send(res,410,{error:'Legacy switch controls retired'});
       if(path.startsWith('/api/admin/kamailio')) return await handleKamailioAdmin({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/servers')) return await handleServerFleetAdmin({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/admin/carriers/credentials')) return await handleProviderCredentials({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/carriers')) return await handleCarrierProviders({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/charging/overview') return await handleCharging({req,res,user,pool,send});
       if (path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales")
@@ -508,7 +513,7 @@ async function handler(req, res) {
         catch(error) {return send(res,400,{error:error.message});}
         const rule=await pricingRule(pool,user.tenant_id,provider);
         try {
-          const numbers = await availableNumbers(provider,search);
+          const numbers = await availableNumbers(provider,{...search,pool,tenant:user.tenant_id});
           return send(res, 200, { search, nextOffset:provider==="flowroute" && numbers.length===20 && search.offset<10000 ? search.offset+20 : null, currency:"USD", pricing:{mode:rule.mode,setupValue:Number(rule.setupValue),monthlyValue:Number(rule.monthlyValue)},
             numbers: numbers.map(({ monthlyCostCents,setupCostCents,...item }) => ({
               ...item, monthlyCents: sellingCents(monthlyCostCents,rule.mode,Number(rule.monthlyValue)),
@@ -530,7 +535,7 @@ async function handler(req, res) {
         if (acceptTerms!==true || ![expectedSetupCents,expectedMonthlyCents].every(value=>Number.isSafeInteger(value)&&value>=0&&value<=10000000))
           return send(res,400,{error:"Accept fulfillment terms and confirm the displayed setup and monthly prices"});
         let inventory;
-        try {inventory=(await availableNumbers(provider,{prefix:number.replace(/^\+/,""),inventoryId})).find(item=>item.number===number && item.inventoryId===inventoryId && (item.skuId||null)===(skuId||null));}
+        try {inventory=(await availableNumbers(provider,{pool,tenant:user.tenant_id,prefix:number.replace(/^\+/,""),inventoryId})).find(item=>item.number===number && item.inventoryId===inventoryId && (item.skuId||null)===(skuId||null));}
         catch(error) {return send(res,503,{error:error.message});}
         if (!inventory) return send(res,409,{error:"Number is no longer in the current provider listing"});
         const rule=await pricingRule(pool,user.tenant_id,provider);

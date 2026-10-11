@@ -1,3 +1,5 @@
+import {migrateUserActivity} from './userActivity.js';
+import {migrateProviderCredentials} from './providerCredentials.js';
 import {migrateProductStore} from './productStore.js';
 import {migrateKamailioAccounts} from './kamailioAccounts.js';
 import { migrateSipProvisioning } from './sipProvisioning.js';
@@ -86,6 +88,8 @@ export async function migrate(pool) {
       ['cdr', () => pool.initialize(awaitSql.cdr)],
       ['dids', () => pool.initialize(awaitSql.dids)],
       ['nigeria', () => pool.initialize(awaitSql.nigeria)],
+      ['user_activity', () => migrateUserActivity(pool)],
+      ['provider_credentials', () => migrateProviderCredentials(pool)],
       ['pricing', () => migratePricing(pool)],
       ['background', () => migrateBackground(pool)],
       ['ldap', () => migrateLdap(pool)],
