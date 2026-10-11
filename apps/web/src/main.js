@@ -743,8 +743,13 @@ root.innerHTML = `
         <a href="#prepaid-control-admin">Prepaid controls</a>
       </nav>
       <button id="kamailio-operations-refresh" type="button">Refresh Kamailio readiness and hosts</button>
+      <label><input id="kamailio-operations-auto" type="checkbox"> Refresh every 30 seconds while this page is open</label>
+      <p id="kamailio-operations-updated"></p>
       <p id="kamailio-operations-summary" role="status"></p>
-      <ul id="kamailio-operations-nodes"></ul>
+      <h4>Commissioning checks</h4><ul id="kamailio-operations-checks"></ul>
+      <h4>Switch hosts and controls</h4><ul id="kamailio-operations-nodes"></ul>
+      <h4>Recent switch jobs</h4><ul id="kamailio-operations-jobs"></ul>
+      <h4>Recent fleet events</h4><ul id="kamailio-operations-events"></ul>
       <p id="kamailio-operations-status" role="status"></p>
     </section>
     <section id="carrier-adapter-admin" hidden>

@@ -11,6 +11,12 @@ export function setupKamailioOperations(){
   const status=$('kamailio-operations-status');
   const nodes=$('kamailio-operations-nodes');
   const summary=$('kamailio-operations-summary');
+  const checks=$('kamailio-operations-checks');
+  const jobs=$('kamailio-operations-jobs');
+  const events=$('kamailio-operations-events');
+  const updated=$('kamailio-operations-updated');
+  const auto=$('kamailio-operations-auto');
+  let timer;
   const actions=[
     ['health','Check Kamailio health'],
     ['kamailio_test','Test SIP challenges'],
@@ -28,7 +34,17 @@ export function setupKamailioOperations(){
         api('/api/admin/switch/kamailio/readiness')
       ]);
       nodes.replaceChildren();
-      summary.textContent=`${readiness.activeAccounts} active accounts, ${readiness.syncedCredentials} digest credentials, ${readiness.enabledCarriers} enabled carrier mappings. ${readiness.blockers.join(' · ')}`;
+      summary.textContent=`${readiness.activeAccounts} active accounts, ${readiness.syncedCredentials} digest credentials, ${readiness.enabledCarriers} enabled carrier mappings. Production ready: no live acceptance has been recorded here.`;
+      checks.replaceChildren();
+      const checklist=[
+        [readiness.activeAccounts>0,'Active SIP accounts'],
+        [readiness.syncedCredentials>=readiness.activeAccounts&&readiness.activeAccounts>0,'Kamailio digest credentials'],
+        [readiness.enabledCarriers>0,'Carrier gateway mapping'],
+        [false,'Observed registration, two-way media, inbound and outbound carrier calls'],
+        [false,'Observed prepaid expiry, CDR rating and carrier reconciliation']
+      ];
+      for(const [passed,label] of checklist){const li=document.createElement('li');li.textContent=`${passed?'Configured':'Pending'}: ${label}`;checks.append(li);}
+      for(const reason of readiness.blockers){const li=document.createElement('li');li.textContent=`Blocker: ${reason}`;checks.append(li);}
       const switches=fleet.nodes.filter(node=>node.role==='switch'&&!node.deleted_at);
       if(!switches.length){
         const item=document.createElement('li');
@@ -66,11 +82,28 @@ export function setupKamailioOperations(){
         }
         item.append(controls);nodes.append(item);
       }
+      jobs.replaceChildren();
+      for(const job of fleet.jobs.filter(job=>switches.some(node=>node.id===job.node_id)).slice(0,20)){
+        const li=document.createElement('li');
+        li.textContent=`${job.node_name||job.node_id} · ${job.action} · ${job.status} · ${job.created_at||''}${job.summary?' · '+job.summary:''}`;
+        jobs.append(li);
+      }
+      events.replaceChildren();
+      for(const event of fleet.events.filter(event=>!event.node_id||switches.some(node=>node.id===event.node_id)).slice(0,20)){
+        const li=document.createElement('li');li.textContent=`${event.created_at} · ${event.node_name||'fleet'} · ${event.category}: ${event.detail}`;events.append(li);
+      }
+      updated.textContent=`Last refreshed ${new Date().toLocaleString()}`;
       status.textContent=fleet.runnerConfigured
         ?'Host actions queue private runner jobs. Refresh after each job; service status alone does not verify carrier calls, media or charging.'
         :'Private deployment runner is unavailable. Configure it on the server before queuing host actions.';
     }catch(error){status.textContent=error.message;}
   }
   $('kamailio-operations-refresh').onclick=refresh;
+  auto.onchange=()=>{
+    if(timer)clearInterval(timer);
+    timer=auto.checked?setInterval(()=>{
+      if(!document.hidden&&!$('kamailio-ops-admin').closest('[hidden]'))refresh();
+    },30000):undefined;
+  };
   return {refresh};
 }
