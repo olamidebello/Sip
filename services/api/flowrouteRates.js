@@ -44,6 +44,11 @@ export function parseCsv(csv){
 }
 
 export async function migrateFlowrouteRates(pool){
+  await pool.query(`CREATE TABLE IF NOT EXISTS flowroute_rate_sync (
+    tenant_id CHAR(36) PRIMARY KEY,enabled BOOLEAN NOT NULL DEFAULT FALSE,requested_by CHAR(36) NOT NULL,
+    last_checked_at DATETIME(3) NULL,last_success_at DATETIME(3) NULL,next_check_at DATETIME(3) NOT NULL,
+    last_error VARCHAR(200) NULL,FOREIGN KEY(tenant_id) REFERENCES tenants(id),FOREIGN KEY(requested_by) REFERENCES users(id)
+  ) ENGINE=InnoDB`);
   await pool.query(`CREATE TABLE IF NOT EXISTS carrier_rate_decks (
     id CHAR(36) PRIMARY KEY, tenant_id CHAR(36) NOT NULL, provider VARCHAR(24) NOT NULL,
     source_sha256 CHAR(64) NOT NULL, row_count INT UNSIGNED NOT NULL, markup_bps INT UNSIGNED NOT NULL,
@@ -62,37 +67,26 @@ export async function migrateFlowrouteRates(pool){
   ) ENGINE=InnoDB`);
 }
 
-async function readCsv(req){
-  if(!/^text\/csv(?:\s*;|\s*$)/i.test(req.headers['content-type']||''))throw new Error('CSV content type required');
-  const parts=[];let size=0;
-  for await(const part of req){size+=part.length;if(size>20*1024*1024)throw new Error('Rate file too large');parts.push(part);}
-  return Buffer.concat(parts).toString('utf8');
-}
-export async function handleFlowrouteRates({req,res,path,user,pool,send}){
-  if(path==='/api/rates/flowroute/search'&&req.method==='GET'){
-    const query=new URL(req.url,'http://localhost').searchParams.get('prefix')||'';
-    if(!/^\d{1,15}$/.test(query))return send(res,400,{error:'Enter destination digits'});
-    const rows=await pool.query(`SELECT r.prefix,r.destination,r.price_usd_per_minute,r.first_interval,r.sub_interval
-      FROM carrier_rate_rows r JOIN carrier_rate_decks d ON d.id=r.deck_id
-      WHERE d.tenant_id=$1 AND d.provider='flowroute' AND d.active=TRUE AND $2 LIKE CONCAT(r.prefix,'%')
-      ORDER BY CHAR_LENGTH(r.prefix) DESC LIMIT 1`,[user.tenant_id,query]);
-    return send(res,200,{rate:rows.rows[0]||null,currency:'USD',unit:'minute',quoteOnly:true});
-  }
-  if(!isAdmin(user))return send(res,403,{error:'Administrator required'});
-  if(path==='/api/admin/rates/flowroute'&&req.method==='GET'){
-    const rows=await pool.query("SELECT id,row_count,markup_bps,source_sha256,active,imported_at FROM carrier_rate_decks WHERE tenant_id=$1 AND provider='flowroute' ORDER BY imported_at DESC LIMIT 20",[user.tenant_id]);
-    return send(res,200,{decks:rows.rows,switchProvisioned:false});
-  }
-  if(path==='/api/admin/rates/flowroute/import'&&req.method==='POST'){
-    let csv,rows;
-    try{csv=await readCsv(req);rows=parseCsv(csv);}catch(error){return send(res,400,{error:error.message});}
+export async function importRateCsv(pool,tenant,actor,csv,{automatic=false}={}){
+    const rows=parseCsv(csv);
     const sha=createHash('sha256').update(csv).digest('hex');
-    const existing=await pool.query("SELECT id,active FROM carrier_rate_decks WHERE tenant_id=$1 AND provider='flowroute' AND source_sha256=$2",[user.tenant_id,sha]);
-    if(existing.rowCount)return send(res,200,{id:existing.rows[0].id,count:rows.length,active:!!existing.rows[0].active,unchanged:true});
     const id=randomUUID(),db=await pool.connect();
     try{
       await db.query('BEGIN');
-      await db.query("INSERT INTO carrier_rate_decks(id,tenant_id,provider,source_sha256,row_count,markup_bps,imported_by) VALUES($1,$2,'flowroute',$3,$4,3000,$5)",[id,user.tenant_id,sha,rows.length,user.id]);
+      await db.query('SELECT id FROM tenants WHERE id=$1 FOR UPDATE',[tenant]);
+      if(automatic){
+        const sync=await db.query('SELECT enabled FROM flowroute_rate_sync WHERE tenant_id=$1 FOR UPDATE',[tenant]);
+        if(!sync.rows[0]?.enabled){await db.query('COMMIT');return {disabled:true};}
+      }else await db.query('UPDATE flowroute_rate_sync SET enabled=FALSE WHERE tenant_id=$1',[tenant]);
+      const existing=await db.query("SELECT id,active FROM carrier_rate_decks WHERE tenant_id=$1 AND provider='flowroute' AND source_sha256=$2",[tenant,sha]);
+      if(existing.rowCount){
+        await db.query("UPDATE carrier_rate_decks SET active=FALSE WHERE tenant_id=$1 AND provider='flowroute' AND active=TRUE",[tenant]);
+        await db.query('UPDATE carrier_rate_decks SET active=TRUE WHERE id=$1',[existing.rows[0].id]);
+        await db.query('COMMIT');
+        return {id:existing.rows[0].id,count:rows.length,active:true,unchanged:true,markupPercent:30};
+      }
+
+      await db.query("INSERT INTO carrier_rate_decks(id,tenant_id,provider,source_sha256,row_count,markup_bps,imported_by) VALUES($1,$2,'flowroute',$3,$4,3000,$5)",[id,tenant,sha,rows.length,actor]);
       for(let i=0;i<rows.length;i+=200){
         const batch=rows.slice(i,i+200),params=[];
         const values=batch.map(r=>{
@@ -101,11 +95,49 @@ export async function handleFlowrouteRates({req,res,path,user,pool,send}){
         }).join(',');
         await db.query(`INSERT INTO carrier_rate_rows(deck_id,prefix,destination,first_interval,sub_interval,cost_usd_per_minute,price_usd_per_minute,effective_at) VALUES ${values}`,params);
       }
-      await db.query("UPDATE carrier_rate_decks SET active=FALSE WHERE tenant_id=$1 AND provider='flowroute' AND active=TRUE",[user.tenant_id]);
+      await db.query("UPDATE carrier_rate_decks SET active=FALSE WHERE tenant_id=$1 AND provider='flowroute' AND active=TRUE",[tenant]);
       await db.query('UPDATE carrier_rate_decks SET active=TRUE WHERE id=$1',[id]);
       await db.query('COMMIT');
-      return send(res,201,{id,count:rows.length,markupPercent:30,active:true,switchProvisioned:false,sha256:sha});
+      return {id,count:rows.length,markupPercent:30,active:true,switchProvisioned:false,sha256:sha};
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+}
+
+async function readCsv(req){
+  if(!/^text\/csv(?:\s*;|\s*$)/i.test(req.headers['content-type']||''))throw new Error('CSV content type required');
+  const parts=[];let size=0;
+  for await(const part of req){size+=part.length;if(size>20*1024*1024)throw new Error('Rate file too large');parts.push(part);}
+  return Buffer.concat(parts).toString('utf8');
+}
+export async function handleFlowrouteRates({req,res,path,user,pool,send}){
+  if(['/api/rates/flowroute/search','/api/admin/rates/flowroute/search'].includes(path)&&req.method==='GET'){
+    const buying=path.startsWith('/api/admin/');
+    if(buying&&!isAdmin(user))return send(res,403,{error:'Administrator required'});
+    const query=new URL(req.url,'http://localhost').searchParams.get('prefix')||'';
+    if(!/^\d{1,15}$/.test(query))return send(res,400,{error:'Enter destination digits'});
+    const rows=await pool.query(`SELECT r.prefix,r.destination,r.price_usd_per_minute,${buying?'r.cost_usd_per_minute,':''}r.first_interval,r.sub_interval
+      FROM carrier_rate_rows r JOIN carrier_rate_decks d ON d.id=r.deck_id
+      WHERE d.tenant_id=$1 AND d.provider='flowroute' AND d.active=TRUE AND r.effective_at<=UTC_TIMESTAMP() AND $2 LIKE CONCAT(r.prefix,'%')
+      ORDER BY CHAR_LENGTH(r.prefix) DESC LIMIT 1`,[user.tenant_id,query]);
+    return send(res,200,{rate:rows.rows[0]||null,currency:'USD',unit:'minute',markupPercent:30,quoteOnly:true});
+  }
+  if(!isAdmin(user))return send(res,403,{error:'Administrator required'});
+  if(path==='/api/admin/rates/flowroute'&&req.method==='GET'){
+    const rows=await pool.query("SELECT id,row_count,markup_bps,source_sha256,active,imported_at FROM carrier_rate_decks WHERE tenant_id=$1 AND provider='flowroute' ORDER BY imported_at DESC LIMIT 20",[user.tenant_id]);
+    return send(res,200,{decks:rows.rows,switchProvisioned:false,sync:(await pool.query('SELECT enabled,last_checked_at,last_success_at,next_check_at,last_error FROM flowroute_rate_sync WHERE tenant_id=$1',[user.tenant_id])).rows[0]||null,source:'Flowroute published default rates',markupPercent:30});
+  }
+  if(path==='/api/admin/rates/flowroute/sync'&&req.method==='POST'){
+    await pool.query('INSERT INTO flowroute_rate_sync(tenant_id,enabled,requested_by,next_check_at) VALUES($1,TRUE,$2,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE enabled=TRUE,requested_by=VALUES(requested_by),next_check_at=UTC_TIMESTAMP()', [user.tenant_id,user.id]);
+    return send(res,202,{status:'queued',source:'published_default',markupPercent:30});
+  }
+  if(path==='/api/admin/rates/flowroute/sync/disable'&&req.method==='POST'){
+    await pool.query('UPDATE flowroute_rate_sync SET enabled=FALSE WHERE tenant_id=$1',[user.tenant_id]);
+    return send(res,200,{enabled:false});
+  }
+  if(path==='/api/admin/rates/flowroute/import'&&req.method==='POST'){
+    let csv,rows;
+    try{csv=await readCsv(req);rows=parseCsv(csv);}catch(error){return send(res,400,{error:error.message});}
+    const result=await importRateCsv(pool,user.tenant_id,user.id,csv);
+    return send(res,result.unchanged?200:201,result);
   }
   return send(res,404,{error:'Rate route unavailable'});
 }

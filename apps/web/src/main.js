@@ -631,6 +631,7 @@ root.innerHTML = `
     <section id="flowroute-rate-admin"><h3>Flowroute outbound rate deck</h3>
       <p>Import a Flowroute outbound_rates.csv. The server validates every prefix and applies a fixed 30% markup at six decimal places before atomically activating the new database deck. Live switch rating is separate.</p>
       <form id="flowroute-rate-import"><label>Carrier rate CSV <input name="rateFile" type="file" accept=".csv,text/csv" required></label><button>Import and activate rate deck</button></form>
+      <button id="flowroute-rate-sync" type="button">Enable automatic public rate checks</button><button id="flowroute-rate-sync-disable" type="button">Stop automatic checks</button><p>Published default buying rate × 1.30 = selling rate. Checks run every six hours. Account discounts, fees and live billing require separate verification. Manual import stops automatic checks to preserve account-specific rates. Re-enabling checks replaces the manual deck with published defaults.</p>
       <button id="flowroute-rate-refresh" type="button">Refresh rate decks</button><div id="flowroute-rate-decks"></div>
       <p id="flowroute-rate-status" role="status"></p>
     </section>
@@ -2298,7 +2299,9 @@ async function refreshFlowrouteRateDeck(){
     list.append(row);
   }
   if(!result.decks.length)list.textContent='No imported carrier rates.';
+  $('#flowroute-rate-status').textContent='Automatic checks: '+(result.sync?.enabled?'enabled':'disabled')+' · '+(result.sync?.last_error||('Last success: '+(result.sync?.last_success_at||'pending')));
 }
+for(const [id,path] of [['flowroute-rate-sync','sync'],['flowroute-rate-sync-disable','sync/disable']])$('#'+id).onclick=async()=>{try{await accountRequest('/api/admin/rates/flowroute/'+path,{});await refreshFlowrouteRateDeck();}catch(error){$('#flowroute-rate-status').textContent=error.message;}};
 $('#flowroute-rate-refresh').onclick=()=>refreshFlowrouteRateDeck().catch(error=>{$('#flowroute-rate-status').textContent=error.message;});
 $('#flowroute-rate-import').onsubmit=async event=>{
   event.preventDefault();const file=event.currentTarget.elements.rateFile.files?.[0];
