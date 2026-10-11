@@ -1,0 +1,19 @@
+---
+- name: Publish Flowroute-only outbound termination policy for reviewed switch adapters
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Create private policy directory
+      ansible.builtin.file:
+        path: /etc/olamide
+        state: directory
+        mode: '0700'
+    - name: Publish authoritative outbound carrier intent
+      ansible.builtin.copy:
+        dest: /etc/olamide/termination-policy.json
+        mode: '0600'
+        content: |
+          {"provider":"flowroute","fallback":false,"scope":"outbound_pstn","commissioning":"pending"}
+    - name: Explain remaining live switch requirement
+      ansible.builtin.debug:
+        msg: Policy saved. Reviewed Kamailio/FreeSWITCH adapters must enforce Flowroute-only PSTN routes and verify carrier calls before activation. Local extension calls and inbound DIDs retain their existing routing.

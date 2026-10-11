@@ -543,7 +543,7 @@ root.innerHTML = `
       </form>
       <p id="nigeria-status" role="status"></p>
     </section>
-    <section id="carrier-admin"><h3>Carrier provider commissioning</h3>
+    <section id="carrier-admin"><h3>Carrier provider commissioning</h3><p>Default outbound call termination: Flowroute. Other providers are excluded from outbound route selection. Calls require an active, commissioned Flowroute trunk and matching rate; there is no automatic provider fallback.</p>
       <p>Link a tenant trunk, set capacity, verify private provider credentials, then ask the switch adapter to activate. A provider remains blocked from DID requests until activation is acknowledged.</p>
       <form id="carrier-catalog-form" hidden><h4>Add a future carrier</h4>
         <label>Carrier ID <input name="provider" pattern="[a-z][a-z0-9-]{1,15}" maxlength="16" required placeholder="carrier-name"></label>
