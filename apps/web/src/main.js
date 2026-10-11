@@ -81,7 +81,7 @@ root.innerHTML = `
     <p>Find a quick answer, follow a guided tour, or contact support.</p>
     <nav class="help-links" aria-label="Help topics"><a href="#help-faq">FAQs</a><a href="#help-user">User tutorial</a><a href="#help-admin">Administrator tutorial</a><a href="#help-technical">Technical guide</a><a href="#help-agent">AI support</a><a href="#support">Support tickets</a></nav>
     <section id="help-faq"><h3>Frequently asked questions</h3>
-      <details><summary>How do I register and sign in?</summary><p>Choose Create an account in the Sign in menu, enter your details, then verify the email code. Return to Sign in with your email or assigned username.</p></details>
+      <details><summary>How do I register and sign in?</summary><p>Choose Create an account in the Sign in menu, enter your details, type the password twice, and complete the CAPTCHA. Your account is created immediately. Return to Sign in with your email or assigned username.</p></details>
       <details><summary>How do I make a call?</summary><p>Open Dialer, enter the secure SIP WebSocket server and your provisioned SIP account, connect, and dial an allowed number. Your administrator must activate the account on a real switch.</p></details>
       <details><summary>Why can I not send an external text?</summary><p>Your administrator must assign an SMS enabled Flowroute number, set a daily allowance, and configure the carrier account. Check Communications → Text messages for your sender.</p></details>
       <details><summary>How do I buy a number or plan?</summary><p>Open Plans, numbers & billing. Requests create an invoice; payment, number assignment and carrier activation need operational review.</p></details>
@@ -142,7 +142,7 @@ root.innerHTML = `
       <p>Your account is created immediately. Email verification is not required.</p>
       <button>Create account</button>
     </form>
-    <form id="signup-verify"><h3>Verify your email</h3>
+    <form id="signup-verify"><h3>Legacy email verification</h3>
       <p>Enter the six-digit code we sent. It expires after 10 minutes.</p>
       <label>Email <input name="email" type="email" autocomplete="email" required></label>
       <label>Verification code <input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label>
