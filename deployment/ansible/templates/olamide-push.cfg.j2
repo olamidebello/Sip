@@ -17,7 +17,7 @@ route[OLAMIDE_PUSH_WAKE] {
     $http_req(method) = "POST";
     $http_req(hdr) = "Content-Type: application/json";
     $http_req(hdr) = "Authorization: Bearer {{ native_push_hook_token }}";
-    $http_req(body) = '{"username":"' + $rU + '","domain":"' + $rd + '","callId":"' + $(ci{s.encode.base64}) + '"}';
+    $http_req(body) = '{"username":"' + $rU + '","domain":"' + $rd + '","callIdEncoding":"base64","callId":"' + $(ci{s.encode.base64}) + '"}';
     http_async_query("https://{{ native_push_domain }}/api/native-push/wake", "OLAMIDE_PUSH_RESULT");
     exit;
 }

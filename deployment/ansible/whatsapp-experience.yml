@@ -76,7 +76,7 @@
         dest: /opt/olamide/experience-readiness.json
         mode: '0644'
         content: |
-          {{ {'release': deployment_ref, 'installed': ['contact CSV and vCard import', 'opt-in workspace search', 'presence and status', 'reply edit remove reactions', 'typing and read receipts', 'mute block archive', 'app call forwarding', 'message forwarding copies', 'automatic SIP login and reconnect'], 'acceptance_required': ['actual SIP registration and two-way audio', 'Firebase authorization and native notification permission', 'background Android call wake and late SIP branch delivery'], 'not_implemented': ['WhatsApp end-to-end encryption', 'WhatsApp account/network interoperability', 'iOS PushKit and CallKit', 'stories/status media', 'WhatsApp-scale group calling']} | to_nice_json }}
+          {{ {'release': deployment_ref, 'installed': ['contact CSV and vCard import', 'opt-in workspace search', 'presence and status', 'reply edit remove reactions', 'typing and read receipts', 'mute block archive', 'app call forwarding', 'message forwarding copies', 'automatic SIP login and reconnect'], 'acceptance_required': ['actual SIP registration and two-way audio', 'Firebase authorization and native notification permission', 'background Android call wake and late SIP branch delivery'], 'not_implemented': ['WhatsApp end-to-end encryption', 'WhatsApp account/network interoperability', 'native iOS SIP/media engine for suspended WebView calls', 'stories/status media', 'WhatsApp-scale group calling']} | to_nice_json }}
 - name: Deploy optional Android push backend and SIP wake integration
   ansible.builtin.import_playbook: native-push.yml
   when: enable_native_push | default(false) | bool

@@ -18,3 +18,10 @@ deploy/ansible/profiles.json
 **/firebase-android.private.json
 **/native_push.xml
 *.before-native-push
+**/apple-provider.p8
+**/apns.json
+**/ios-build/
+**/*.xcarchive/
+**/apps/mobile/android/
+**/apps/mobile/ios/
+*.before-native-callkit

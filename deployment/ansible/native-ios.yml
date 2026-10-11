@@ -1,0 +1,50 @@
+---
+- name: Build signed iOS CallKit and PushKit application
+  hosts: ios_builders
+  become: false
+  vars:
+    ios_build_repo: /opt/olamide/ios-build
+  pre_tasks:
+    - name: Require fixed release and authorized Apple build identity
+      ansible.builtin.assert:
+        that:
+          - deployment_ref is match('^[0-9a-f]{40}$')
+          - apple_team_id is match('^[A-Z0-9]{10}$')
+          - apns_environment in ['sandbox', 'production']
+          - ansible_system == 'Darwin'
+    - name: Check preinstalled authorized macOS build tools
+      ansible.builtin.command:
+        argv: '{{ item }}'
+      loop: [[xcodebuild, -version], [node, --version], [ruby, '-e', "require 'xcodeproj'"]]
+      changed_when: false
+  tasks:
+    - name: Checkout fixed release
+      ansible.builtin.git:
+        repo: https://github.com/olamidebello/Sip.git
+        dest: '{{ ios_build_repo }}'
+        version: '{{ deployment_ref }}'
+        force: false
+    - name: Install pinned mobile dependencies
+      ansible.builtin.command:
+        argv: [npm, install, '--no-audit', '--no-fund']
+        chdir: '{{ ios_build_repo }}/apps/mobile'
+    - name: Generate Capacitor iOS project
+      ansible.builtin.command:
+        argv: [npx, cap, add, ios]
+        chdir: '{{ ios_build_repo }}/apps/mobile'
+        creates: '{{ ios_build_repo }}/apps/mobile/ios/App/App.xcodeproj/project.pbxproj'
+    - name: Synchronize iOS project
+      ansible.builtin.command:
+        argv: [npx, cap, sync, ios]
+        chdir: '{{ ios_build_repo }}/apps/mobile'
+    - name: Install native system call interface and signing capabilities
+      ansible.builtin.command:
+        argv: [ruby, install-callkit.rb, '--team', '{{ apple_team_id }}', '--environment', '{{ apns_environment }}']
+        chdir: '{{ ios_build_repo }}/apps/mobile'
+    - name: Archive with authorized Xcode automatic signing
+      ansible.builtin.command:
+        argv: [xcodebuild, '-project', ios/App/App.xcodeproj, '-scheme', App, '-configuration', "{{ 'Debug' if apns_environment == 'sandbox' else 'Release' }}", '-destination', generic/platform=iOS, '-archivePath', '{{ ios_build_repo }}/Olamide.xcarchive', '-allowProvisioningUpdates', archive]
+        chdir: '{{ ios_build_repo }}/apps/mobile'
+    - name: Record required device acceptance
+      ansible.builtin.debug:
+        msg: 'Signed archive: {{ ios_build_repo }}/Olamide.xcarchive. Verify APNs environment, locked-screen answer/end and audio on physical iPhones. A native SIP/media engine remains required for reliable calls while WKWebView is suspended; do not release on CallKit UI alone.'

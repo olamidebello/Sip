@@ -1,0 +1,165 @@
+# Existing authorized server and Apple account access are required.
+- name: Validate Apple inputs before modifying cloud or server configuration
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+  - name: Require authorized provider key and Apple account
+    ansible.builtin.assert:
+      that:
+      - apns_key_source is defined
+      - apple_team_id is match('^[A-Z0-9]{10}$')
+      - apns_key_id is match('^[A-Z0-9]{10}$')
+      - apns_environment in ['sandbox', 'production']
+      - apns_environment != 'production' or (ios_native_media_verified | default(false) | bool)
+  - name: Validate supplied Apple key without disclosing it
+    ansible.builtin.command:
+      argv:
+      - openssl
+      - pkey
+      - -in
+      - '{{ apns_key_source }}'
+      - -check
+      - -noout
+    changed_when: false
+    no_log: true
+- name: Provision optional Firebase service-account and Android application files
+  ansible.builtin.import_playbook: firebase-provision.yml
+  when: auto_provision_firebase | default(false) | bool
+- name: Deploy existing push backend and authenticated SIP wake routing
+  ansible.builtin.import_playbook: native-push.yml
+- name: Configure Apple provider credentials on existing application server
+  hosts: olamide
+  become: true
+  vars:
+    app_repo: /opt/olamide/repo
+  pre_tasks:
+  - name: Require authorized Apple APNs identity
+    ansible.builtin.assert:
+      that:
+      - apns_key_source is defined
+      - apple_team_id is match('^[A-Z0-9]{10}$')
+      - apns_key_id is match('^[A-Z0-9]{10}$')
+      - apns_environment in ['sandbox', 'production']
+  tasks:
+  - name: Inspect existing Apple credentials and environment for rollback
+    ansible.builtin.stat:
+      path: '{{ item }}'
+    loop:
+    - /etc/olamide/native-push/apns.json
+    - /etc/olamide/native-push/apple-provider.p8
+    - /etc/olamide/secrets.env
+    - '{{ app_repo }}/deployment/docker/.env'
+    register: apns_previous_files
+    no_log: true
+  - name: Snapshot private files before Apple configuration
+    ansible.builtin.copy:
+      src: '{{ item.item }}'
+      dest: '{{ item.item }}.before-native-callkit'
+      remote_src: true
+      mode: '0600'
+    loop: '{{ apns_previous_files.results }}'
+    when: item.stat.exists
+    no_log: true
+  - name: Configure APNs with rollback
+    block:
+    - name: Stage private Apple provider key
+      ansible.builtin.copy:
+        src: '{{ apns_key_source }}'
+        dest: /etc/olamide/native-push/apple-provider.p8
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+    - name: Validate and package APNs runtime service credentials
+      ansible.builtin.command:
+        argv:
+        - python3
+        - '{{ app_repo }}/deployment/native-push/provision-apns.py'
+        - --key
+        - /etc/olamide/native-push/apple-provider.p8
+        - --team
+        - '{{ apple_team_id }}'
+        - --key-id
+        - '{{ apns_key_id }}'
+        - --environment
+        - '{{ apns_environment }}'
+        - --output
+        - /etc/olamide/native-push/apns.json
+        - --env
+        - /etc/olamide/secrets.env
+        - --env
+        - '{{ app_repo }}/deployment/docker/.env'
+      no_log: true
+    - name: Set provider file runtime group
+      ansible.builtin.file:
+        path: /etc/olamide/native-push/apns.json
+        owner: root
+        group: '1000'
+        mode: '0640'
+      no_log: true
+    - name: Restart API with mounted APNs configuration
+      ansible.builtin.command:
+        argv:
+        - docker
+        - compose
+        - up
+        - -d
+        - --no-deps
+        - api
+        chdir: '{{ app_repo }}/deployment/docker'
+    - name: Verify mounted APNs configuration and application health
+      ansible.builtin.command:
+        argv:
+        - docker
+        - compose
+        - exec
+        - -T
+        - api
+        - node
+        - -e
+        - const fs=require('fs');const c=JSON.parse(fs.readFileSync(process.env.NATIVE_PUSH_APNS_CONFIG_FILE));require('crypto').createPrivateKey(c.privateKey);fetch('http://127.0.0.1:8080/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+        chdir: '{{ app_repo }}/deployment/docker'
+      register: apns_health
+      until: apns_health.rc == 0
+      retries: 12
+      delay: 5
+      changed_when: false
+      no_log: true
+    rescue:
+    - name: Restore previous private files
+      ansible.builtin.copy:
+        src: '{{ item.item }}.before-native-callkit'
+        dest: '{{ item.item }}'
+        remote_src: true
+        owner: root
+        group: '{{ ''1000'' if item.item.endswith(''/apns.json'') else ''root'' }}'
+        mode: '{{ ''0640'' if item.item.endswith(''/apns.json'') else ''0600'' }}'
+      loop: '{{ apns_previous_files.results }}'
+      when: item.stat.exists
+      no_log: true
+    - name: Remove new private files absent from previous configuration
+      ansible.builtin.file:
+        path: '{{ item.item }}'
+        state: absent
+      loop: '{{ apns_previous_files.results }}'
+      when: not item.stat.exists
+      no_log: true
+    - name: Restart API with previous provider environment
+      ansible.builtin.command:
+        argv:
+        - docker
+        - compose
+        - up
+        - -d
+        - --no-deps
+        - api
+        chdir: '{{ app_repo }}/deployment/docker'
+    - name: Report failed Apple configuration
+      ansible.builtin.fail:
+        msg: Apple provider configuration failed; previous credential files and environment restored. Earlier base push rollout remains installed.
+- name: Build optional Android notification application
+  ansible.builtin.import_playbook: native-mobile.yml
+  when: build_native_android | default(false) | bool
+- name: Build iOS CallKit application on authorized Mac
+  ansible.builtin.import_playbook: native-ios.yml

@@ -21,3 +21,14 @@ kamailio_node_id: REPLACE_WITH_EXISTING_COMMISSIONED_NODE_UUID
 auto_provision_firebase: false
 firebase_project_id: REPLACE_WITH_EXISTING_GOOGLE_CLOUD_PROJECT
 firebase_credentials_dir: /secure
+
+# Native iOS system call profile (native-system-calls.yml).
+# Apple Developer key and Xcode signing authorization must already be available.
+apple_team_id: REPLACE_WITH_APPLE_TEAM_ID
+apns_key_id: REPLACE_WITH_APNS_KEY_ID
+apns_key_source: /secure/apple-provider.p8
+apns_environment: sandbox
+# Use a separate build checkout for each environment; never mix their device tokens.
+ios_build_repo: /Users/builder/olamide-ios-build
+# Production is blocked until a native SIP/media engine passes locked-screen testing.
+ios_native_media_verified: false

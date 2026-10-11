@@ -1,0 +1,49 @@
+---
+# Run via an existing authorized administrative SSH connection.
+- name: Generate a private deployment SSH key on the controller
+  hosts: localhost
+  connection: local
+  become: false
+  tasks:
+    - name: Require an absolute private credentials directory
+      ansible.builtin.assert:
+        that:
+          - firebase_credentials_dir is match('^/')
+    - name: Create private credentials directory
+      ansible.builtin.file:
+        path: '{{ firebase_credentials_dir }}'
+        state: directory
+        mode: '0700'
+    - name: Generate dedicated SSH key without replacing an existing key
+      ansible.builtin.command:
+        argv: [ssh-keygen, '-t', ed25519, '-f', '{{ firebase_credentials_dir }}/olamide-deploy', '-N', '', '-C', olamide-deployment]
+        creates: '{{ firebase_credentials_dir }}/olamide-deploy'
+      no_log: true
+- name: Install explicitly authorized service access on the existing server
+  hosts: olamide
+  become: true
+  tasks:
+    - name: Create deployment service user
+      ansible.builtin.user:
+        name: olamide-deploy
+        shell: /bin/bash
+        create_home: true
+        password_lock: true
+    - name: Create private SSH directory
+      ansible.builtin.file:
+        path: /home/olamide-deploy/.ssh
+        state: directory
+        owner: olamide-deploy
+        group: olamide-deploy
+        mode: '0700'
+    - name: Install deployment public key without replacing other access
+      ansible.builtin.lineinfile:
+        path: /home/olamide-deploy/.ssh/authorized_keys
+        line: "{{ lookup('file', firebase_credentials_dir + '/olamide-deploy.pub') }}"
+        create: true
+        owner: olamide-deploy
+        group: olamide-deploy
+        mode: '0600'
+    - name: Report access scope
+      ansible.builtin.debug:
+        msg: 'Deployment SSH identity created. It has no administrative or Docker privileges; continue privileged deployment through the existing authorized administrator connection. Verify host keys before using the new identity.'
