@@ -1,0 +1,137 @@
+---
+- name: Verify and repair SIP WebSocket transport
+  hosts: sip
+  become: true
+  gather_facts: false
+  vars:
+    sip_domain: sip.dobhrap.com
+    ws_port: 8080
+    repair_proxy: false
+    nginx_site: ''
+    managed_include: /etc/nginx/snippets/sip-websocket-repair.conf
+  tasks:
+    - name: Validate explicit repair inputs
+      ansible.builtin.assert:
+        that:
+          - sip_domain is match('^[a-zA-Z0-9.-]+$')
+          - ws_port | int > 0
+          - ws_port | int < 65536
+          - not (repair_proxy | bool) or nginx_site is match('^/etc/nginx/.+')
+        fail_msg: Set the actual Nginx TLS site path and Kamailio WebSocket port before enabling repair_proxy.
+    - name: Check Kamailio configuration
+      ansible.builtin.command: kamailio -c -f /etc/kamailio/kamailio.cfg
+      changed_when: false
+    - name: Verify local WebSocket listener
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: '{{ ws_port }}'
+        timeout: 5
+    - name: Install handshake verifier
+      ansible.builtin.copy:
+        src: probe.py
+        dest: /usr/local/bin/sip-ws-probe.py
+        mode: '0755'
+    - name: Check Kamailio SIP WebSocket handshake before proxy changes
+      ansible.builtin.command:
+        argv: [python3, /usr/local/bin/sip-ws-probe.py, 'ws://127.0.0.1:{{ ws_port }}/ws', 'https://{{ sip_domain }}', '{{ sip_domain }}']
+      changed_when: false
+    - name: Repair selected Nginx site
+      when: repair_proxy | bool
+      block:
+        - name: Inspect existing TLS site
+          ansible.builtin.slurp:
+            src: '{{ nginx_site }}'
+          register: site_original
+        - name: Refuse ambiguous site or existing WebSocket route
+          ansible.builtin.assert:
+            that:
+              - (site_original.content | b64decode | regex_findall('(?m)^\\s*server\\s*\\{')) | length == 1
+              - (site_original.content | b64decode | regex_findall('(?m)^\\s*listen\\s+[^;]*443')) | length > 0
+              - (site_original.content | b64decode | regex_findall('(?m)^\\s*location\\s+(?:=\\s+)?/ws(?:\\s|\\{)')) | length == 0
+              - "'include' not in (site_original.content | b64decode) or managed_include in (site_original.content | b64decode)"
+            fail_msg: Site has multiple server blocks, an existing /ws route, or includes needing review. No proxy changes made. Supply a dedicated single TLS server file with no other includes.
+        - name: Create snippet directory
+          ansible.builtin.file:
+            path: /etc/nginx/snippets
+            state: directory
+            mode: '0755'
+        - name: Inspect prior managed snippet
+          ansible.builtin.stat:
+            path: '{{ managed_include }}'
+          register: prior_snippet
+        - name: Retain prior managed snippet
+          ansible.builtin.slurp:
+            src: '{{ managed_include }}'
+          register: original_snippet
+          when: prior_snippet.stat.exists
+        - name: Install WebSocket proxy snippet
+          ansible.builtin.copy:
+            dest: '{{ managed_include }}'
+            mode: '0644'
+            content: |
+              location = /ws {
+                  proxy_pass http://127.0.0.1:{{ ws_port }};
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection "upgrade";
+                  proxy_set_header Host $host;
+                  proxy_set_header Origin $http_origin;
+                  proxy_read_timeout 3600s;
+                  proxy_send_timeout 3600s;
+                  proxy_buffering off;
+              }
+          register: snippet_change
+        - name: Attach snippet within the TLS server
+          ansible.builtin.lineinfile:
+            path: '{{ nginx_site }}'
+            insertafter: '^\s*server\s*\{'
+            line: '    include {{ managed_include }};'
+            backup: true
+          register: site_change
+        - name: Validate Nginx
+          ansible.builtin.command: nginx -t
+          changed_when: false
+        - name: Reload changed proxy
+          ansible.builtin.service:
+            name: nginx
+            state: reloaded
+          when: snippet_change.changed or site_change.changed
+        - name: Validate public secure SIP WebSocket handshake
+          ansible.builtin.command:
+            argv: [python3, /usr/local/bin/sip-ws-probe.py, 'wss://{{ sip_domain }}/ws', 'https://{{ sip_domain }}', '{{ sip_domain }}']
+          changed_when: false
+      rescue:
+        - name: Restore prior snippet
+          ansible.builtin.copy:
+            content: '{{ original_snippet.content | b64decode }}'
+            dest: '{{ managed_include }}'
+            mode: '0644'
+          when: original_snippet is defined and original_snippet.content is defined
+        - name: Remove new snippet on failed repair
+          ansible.builtin.file:
+            path: '{{ managed_include }}'
+            state: absent
+          when: prior_snippet is defined and not (prior_snippet.stat.exists | default(true))
+        - name: Restore original site when modified
+          ansible.builtin.copy:
+            content: '{{ site_original.content | b64decode }}'
+            dest: '{{ nginx_site }}'
+            mode: '0644'
+          when: site_change is defined and site_change.changed | default(false)
+        - name: Validate restored configuration
+          ansible.builtin.command: nginx -t
+          changed_when: false
+        - name: Reload restored configuration
+          ansible.builtin.service:
+            name: nginx
+            state: reloaded
+        - name: Report failure
+          ansible.builtin.fail:
+            msg: Repair failed; original site restored where modified. Inspect failed task above. No SIP password was changed.
+    - name: Verify secure public transport
+      ansible.builtin.command:
+        argv: [python3, /usr/local/bin/sip-ws-probe.py, 'wss://{{ sip_domain }}/ws', 'https://{{ sip_domain }}', '{{ sip_domain }}']
+      changed_when: false
+    - name: Explain transport verification boundary
+      ansible.builtin.debug:
+        msg: WebSocket SIP handshake passed. User credential provisioning, SIP REGISTER, call routing and audio require separate application tests.
