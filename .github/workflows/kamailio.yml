@@ -26,3 +26,6 @@ jobs:
       - run: python -m py_compile tools/freeswitch_cluster_validate.py
 
       - run: ansible-playbook -i deploy/ansible/same-server.inventory.example.yml deploy/ansible/service-gui.yml --syntax-check
+
+      - run: ansible-playbook -i deploy/ansible/same-server.inventory.example.yml deploy/ansible/sip-accounts.yml --syntax-check
+      - run: python -m py_compile tools/configure_sip_auth.py

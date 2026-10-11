@@ -14,6 +14,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 30
+    ports:
+      - "127.0.0.1:3307:3306"
     networks: [private]
   api:
     image: olamide-api:local
@@ -52,6 +54,7 @@ services:
       KAMAILIO_RUNNER_TOKEN: ${KAMAILIO_RUNNER_TOKEN:-}
       PAYMENT_CONFIG_KEY: ${PAYMENT_CONFIG_KEY:-}
       SIP_ACCOUNT_DOMAIN: ${SIP_ACCOUNT_DOMAIN:-}
+      SIP_PROVISION_MODE: ${SIP_PROVISION_MODE:-remote}
       SIP_PROVISION_URL: ${SIP_PROVISION_URL:-}
       SIP_PROVISION_TOKEN: ${SIP_PROVISION_TOKEN:-}
       CARRIER_PROVISION_URL: ${CARRIER_PROVISION_URL:-}

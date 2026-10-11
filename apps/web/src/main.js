@@ -170,7 +170,7 @@ root.innerHTML = `
       <p id="passkey-status" role="status"></p>
     </section>
     <section id="sip-account-panel" hidden><h3>My SIP account</h3><p id="sip-account-status" role="status"></p>
-      <form id="sip-credentials"><label>Account password to reveal SIP credentials <input name="password" type="password" autocomplete="current-password" required></label><button>Reveal SIP credentials</button></form>
+      <form id="sip-credentials"><label>Account password to reveal SIP credentials <input name="password" type="password" autocomplete="current-password" required></label><label><input name="autoRegister" type="checkbox" checked> Register on this server after password verification</label><button>Verify and connect SIP account</button></form>
       <p id="sip-credentials-result" role="status"></p>
       <h3>Saved SIP connection profiles</h3><p>Save connection settings without storing your SIP password.</p>
       <form id="sip-profile-create"><label>Profile name <input name="label" maxlength="100" required></label>
@@ -1894,7 +1894,9 @@ async function refreshSipAccount(){
 $("#sip-credentials").onsubmit=async event=>{
   event.preventDefault();const form=event.currentTarget;
   try {const result=await accountRequest('/api/sip-account/credentials',{password:form.elements.password.value});
-    form.reset();$("#sip-credentials-result").textContent=`SIP username: ${result.username}; domain: ${result.domain}; password: ${result.password}`;
+    const auto=form.elements.autoRegister.checked;form.reset();
+    if(auto){const data=new FormData();for(const [key,value] of Object.entries({aor:'sip:'+result.username+'@'+result.domain,username:result.username,password:result.password,server:'wss://'+location.host+'/ws'}))data.set(key,value);await registerSip(data);$('#sip-credentials-result').textContent='Password verified; SIP registration requested. Check calling status.';}
+    else $('#sip-credentials-result').textContent=`SIP username: ${result.username}; domain: ${result.domain}; password: ${result.password}`;
     setTimeout(()=>{$("#sip-credentials-result").textContent='Credentials cleared from this page.';},60000);
   }catch(error){form.reset();$("#sip-credentials-result").textContent=error.message;}
 };
@@ -2127,10 +2129,9 @@ function report(error) {
   status(error instanceof Error ? error.message : String(error));
 }
 
-connectForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
+async function registerSip(data) {
   if (!softphoneUserId) {status("Sign in to Olamide before connecting a SIP account.");return;}
-  const data = new FormData(connectForm);
+  if(phone){if(onCall)throw new Error("End the current call before changing registration.");await phone.unregister();await phone.disconnect();phone=null;}
   const aor = String(data.get("aor")).trim();
   const server = String(data.get("server")).trim();
   if (!/^sip:[^\s@]+@[^\s@]+$/i.test(aor) || !server.startsWith("wss://")) {
@@ -2174,7 +2175,8 @@ connectForm.addEventListener("submit", async (event) => {
     report(error);
     await candidate.disconnect().catch(() => {});
   }
-});
+}
+connectForm.addEventListener("submit",async event=>{event.preventDefault();try{await registerSip(new FormData(connectForm));}catch(error){report(error);}});
 
 dialForm.addEventListener("submit", async (event) => {
   event.preventDefault();

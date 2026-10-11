@@ -33,7 +33,7 @@ export function setupKamailioAdmin(){
     try{
       const response=await fetch('/api/admin/sip-provisioning',{credentials:'same-origin'}),result=await response.json();
       if(!response.ok)throw new Error(result.error);
-      status.textContent=result.configured?'Automatic provisioning configured. Verified and active accounts sync automatically.':'Pending configuration: provisioning HTTPS endpoint, token and credential encryption key required.';
+      status.textContent=result.configured?'Automatic provisioning configured ('+result.mode+'). Verified and active accounts sync automatically.':'Pending configuration: commission the local Kamailio authentication backend or configure the HTTPS adapter, plus the credential encryption key.';
       list.replaceChildren();
       for(const a of result.accounts){const li=document.createElement('li');li.textContent=a.email+' · '+a.username+'@'+a.domain+' · '+a.status+' · '+(a.last_result||'queued')+' · attempts '+(a.attempts||0);list.append(li);}
     }catch(error){status.textContent=error.message;}

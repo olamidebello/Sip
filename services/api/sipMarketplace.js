@@ -1,3 +1,4 @@
+import {provisionKamailioAccount} from './kamailioAccounts.js';
 import { randomUUID, randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
 import { verifyPassword } from './security.js';
 import { isAdmin } from './tenancy.js';
@@ -55,10 +56,13 @@ export async function createSipAccount(db,userId,domain) {
 
 export async function provisionSipAccount(pool,userId){
   const url=process.env.SIP_PROVISION_URL,token=process.env.SIP_PROVISION_TOKEN,key=credentialKey();
-  if(!url||!token||!key||!/^https:\/\//.test(url)) return false;
+  const local=process.env.SIP_PROVISION_MODE==='kamailio_local';
+  if(!key||(!local&&(!url||!token||!/^https:\/\//.test(url)))) return false;
   const account=(await pool.query('SELECT id,tenant_id,username,domain,secret_cipher FROM sip_accounts WHERE user_id=$1 AND status=\'awaiting_switch\' AND EXISTS (SELECT 1 FROM users u JOIN tenants t ON t.id=u.tenant_id WHERE u.id=sip_accounts.user_id AND u.status=\'active\' AND t.status=\'active\')',[userId])).rows[0];
   if(!account?.secret_cipher) return false;
   try {
+    if(local) await provisionKamailioAccount(pool,account,decrypt(account.secret_cipher,key));
+    else {
     const response=await fetch(url,{method:'POST',signal:AbortSignal.timeout(10000),
       headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json','Idempotency-Key':account.id},
       body:JSON.stringify({accountId:account.id,tenantId:account.tenant_id,userId,
@@ -66,6 +70,7 @@ export async function provisionSipAccount(pool,userId){
     if(!response.ok) throw new Error(`Switch provisioning HTTP ${response.status}`);
     const result=await response.json();
     if(result.status!=='active') throw new Error('Switch did not acknowledge activation');
+    }
     const updated=await pool.query("UPDATE sip_accounts SET status='active' WHERE id=$1 AND status='awaiting_switch' AND EXISTS (SELECT 1 FROM users u JOIN tenants t ON t.id=u.tenant_id WHERE u.id=sip_accounts.user_id AND u.status='active' AND t.status='active')",[account.id]);
     return updated.rowCount===1;
   } catch(error){console.error('SIP provisioning pending',error.name);return false;}
