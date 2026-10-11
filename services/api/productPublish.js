@@ -9,8 +9,8 @@ export async function publishReferenceProducts(pool,{tenantId,terms,check=false,
   await db.query('START TRANSACTION');
   const tenant=(await db.query("SELECT id FROM tenants WHERE id=$1 AND status='active' FOR UPDATE",[tenantId])).rows[0];
   if(!tenant)throw Error('Active tenant not found');
-  const actor=(await db.query("SELECT id FROM users WHERE tenant_id=$1 AND status='active' AND role IN ('admin','super_admin') ORDER BY CASE WHEN role='super_admin' THEN 0 ELSE 1 END,id LIMIT 1",[tenantId])).rows[0];
-  if(!actor)throw Error('Tenant must have an active administrator');
+  // Root maintenance publication uses a reserved system actor, never impersonates a user.
+  const actorId='00000000-0000-0000-0000-000000000000';
   const current=await db.query('SELECT sku,status,terms FROM store_products WHERE tenant_id=$1 FOR UPDATE',[tenantId]);
   const known=new Set(referenceProducts.map(p=>p.sku)),existing=new Map(current.rows.filter(p=>known.has(p.sku)).map(p=>[p.sku,p]));
   const missing=referenceProducts.filter(p=>!existing.has(p.sku));
@@ -19,7 +19,7 @@ export async function publishReferenceProducts(pool,{tenantId,terms,check=false,
   if(check){await db.query('ROLLBACK');return report;}
   for(const p of missing)await db.query(`INSERT INTO store_products(tenant_id,sku,name,category,description,terms,billing,selling_cents,reseller_cents,setup_cents,source_page) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,[tenantId,p.sku,p.name,p.category,p.description,terms.trim(),p.billing,p.sellingCents,p.resellerCents,p.setupCents,p.sourcePage]);
   for(const p of changing){const row=existing.get(p.sku);await db.query("UPDATE store_products SET status='published',terms=$1,revision=revision+1 WHERE tenant_id=$2 AND sku=$3",[row?.terms.trim().length>=20?row.terms:terms.trim(),tenantId,p.sku]);}
-  if(changing.length)await db.query("INSERT INTO security_events(id,tenant_id,actor_id,target_id,action) VALUES($1,$2,$3,NULL,'reference_products_published')",[randomUUID(),tenantId,actor.id]);
+  if(changing.length)await db.query("INSERT INTO security_events(id,tenant_id,actor_id,target_id,action) VALUES($1,$2,$3,NULL,'reference_products_published')",[randomUUID(),tenantId,actorId]);
   await db.query('COMMIT');return report;
  }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
 }
