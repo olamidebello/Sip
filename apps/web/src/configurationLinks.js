@@ -35,11 +35,10 @@ export function setupConfigurationLinks({show}){
       for(const target of targets){
         const link=document.createElement('a');link.href='#'+target.id;
         const heading=target.querySelector('h2,h3,h4');link.textContent=heading?.textContent||target.id.replaceAll('-',' ');
-        link.onclick=event=>{event.preventDefault();show(target.id);location.hash=target.id;
-          const focus=target.querySelector('input:not([type="hidden"]),select,button,a');focus?.focus({preventScroll:true});};nav.append(link);
+nav.append(link);
       }
     }
   }
-  document.getElementById('didww-manage-config').onclick=()=>show('provider-credentials-admin');
+
   return {refresh};
 }

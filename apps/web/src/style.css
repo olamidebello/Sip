@@ -152,3 +152,6 @@ body.workspace-mode #app>section:not(.workspace-inactive){max-width:100%}
 .activity-table-wrap { overflow-x:auto; max-width:100%; }
 #activity-monitor table { width:100%; border-collapse:collapse; }
 #activity-monitor th,#activity-monitor td { text-align:left; padding:.7rem; border-bottom:1px solid #355666; }
+
+body.workspace-mode .public-nav a[href="#experience"] { display:none; }
+section[id],details[id] { scroll-margin-top:7rem; }

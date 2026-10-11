@@ -1,5 +1,9 @@
 import {fleetLevel} from './fleetNetwork.js';
-const all=new Set(['dashboard','planner','campaign-inbox-panel','support','account','calling-workspace','help','chat','external-sms','meetings','billing','agent-panel','admin','report-admin','fleet-admin','cluster-admin','tenant-admin','background-user','locale-settings']);
+const common=['dashboard','planner','campaign-inbox-panel','search-panel','support','account','calling-workspace','geo','help','background-user','locale-settings','activity-monitor','downloads','outbound-rates'];
+const adminTargets=['admin','product-store-admin','group-admin','catalog-controls','inhouse-admin','pricing-admin','pbx-admin','carrier-admin','operator-admin','switch-admin','flowroute-rate-admin','messaging-webhooks','charging-admin','payment-admin','cluster-admin','report-admin','cdr-admin','nigeria-admin','ldap-admin','auth-providers-admin','passkey-policy-admin','geofence-admin','background-admin','locale-admin','dashboard-admin','campaign-admin','mobile-admin'];
+const superTargets=['tenant-admin','sip-profile-admin','provider-webhook-admin','didww-admin','provider-credentials-admin','carrier-adapter-admin'];
+const features=[['messaging',['chat','external-sms']],['meetings',['meetings']],['billing',['billing','product-store','dialplan-marketplace']],['call_center',['agent-panel']]];
+const all=new Set([...common,...adminTargets,...superTargets,...features.flatMap(([,ids])=>ids),'fleet-admin']);
 export async function migrateWorkspaceShortcuts(pool){
   await pool.query(`CREATE TABLE IF NOT EXISTS workspace_shortcuts (
     user_id CHAR(36) NOT NULL,tenant_id CHAR(36) NOT NULL,targets JSON NOT NULL,
@@ -9,11 +13,10 @@ export async function migrateWorkspaceShortcuts(pool){
   ) ENGINE=InnoDB`);
 }
 async function available(pool,user){
-  const allowed=new Set(['dashboard','planner','campaign-inbox-panel','support','account','calling-workspace','help','background-user','locale-settings']);
-  for(const [feature,targets] of [['messaging',['chat','external-sms']],['meetings',['meetings']],['billing',['billing']],['call_center',['agent-panel']]])
-    if(user.features?.[feature])targets.forEach(t=>allowed.add(t));
-  if(['admin','super_admin'].includes(user.role))['admin','report-admin','cluster-admin'].forEach(t=>allowed.add(t));
-  if(user.role==='super_admin')allowed.add('tenant-admin');
+  const allowed=new Set(common);
+  for(const [feature,targets] of features)if(user.features?.[feature])targets.forEach(t=>allowed.add(t));
+  if(['admin','super_admin'].includes(user.role))adminTargets.filter(t=>t!=='product-store-admin'||user.features?.billing).forEach(t=>allowed.add(t));
+  if(user.role==='super_admin')superTargets.forEach(t=>allowed.add(t));
   if((await fleetLevel(pool,user))!=='none')allowed.add('fleet-admin');
   return allowed;
 }

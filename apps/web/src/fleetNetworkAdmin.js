@@ -10,7 +10,7 @@ export function setupFleetNetworkAdmin({get,request}){
   const form=$('fleet-device-form');
   function setForm(device){
     form.elements.deviceId.value=device?.id||'';
-    for(const [field,key] of [['name','name'],['kind','kind'],['host','host'],['port','port'],['site','site']])form.elements[field].value=device?.[key]??(field==='port'?'22':'');
+    for(const [field,key] of [['name','name'],['kind','kind'],['host','host'],['port','port'],['site','site']])form.elements[field].value=device?.[key]??(field==='port'?'22':field==='kind'?'server':'');
     form.elements.enabled.checked=device?!!device.enabled:true;
     form.elements.nodeId.replaceChildren(new Option('No linked switch',''));
     for(const n of nodes.filter(n=>n.role==='switch'))form.elements.nodeId.append(new Option(n.name,n.id));
@@ -27,7 +27,7 @@ export function setupFleetNetworkAdmin({get,request}){
       li.dataset.id=d.id;li.draggable=can('manage');
       li.ondragstart=event=>{event.dataTransfer.setData('text/plain',d.id);event.dataTransfer.effectAllowed='move';};
       li.ondragover=event=>{if(can('manage'))event.preventDefault();};
-      li.ondrop=async event=>{event.preventDefault();const source=event.dataTransfer.getData('text/plain');const from=devices.findIndex(x=>x.id===source);if(from<0||source===d.id)return;const [moved]=devices.splice(from,1);devices.splice(devices.findIndex(x=>x.id===d.id),0,moved);try{await persistOrder();}catch(e){status.textContent=e.message;await refresh();}};
+      li.ondrop=async event=>{event.preventDefault();const source=event.dataTransfer.getData('text/plain');const from=devices.findIndex(x=>x.id===source);if(from<0||source===d.id)return;const [moved]=devices.splice(from,1);devices.splice(devices.findIndex(x=>x.id===d.id),0,moved);try{await persistOrder();}catch(e){status.textContent=e.message;await refresh().catch(error=>status.textContent=error.message);}};
       if(can('manage')){
         act(li,'Edit',async()=>{setForm(d);form.scrollIntoView({block:'center'});});
         act(li,'Move up',async()=>{if(index>0){[devices[index-1],devices[index]]=[devices[index],devices[index-1]];await persistOrder();}});
@@ -61,5 +61,5 @@ export function setupFleetNetworkAdmin({get,request}){
   input.ondrop=async e=>{e.preventDefault();const file=e.dataTransfer.files[0];if(!file||file.size>12000){status.textContent='Drop a JSON configuration file under 12 KB.';return;}
     try{input.value=JSON.stringify(JSON.parse(await file.text()),null,2);status.textContent='Configuration loaded for review. Save to create a version.';}catch{status.textContent='Invalid JSON configuration.';}};
   $('fleet-device-refresh').onclick=()=>refresh().catch(e=>status.textContent=e.message);
-  return {refresh};
+  return {refresh:()=>refresh().catch(e=>status.textContent=e.message)};
 }

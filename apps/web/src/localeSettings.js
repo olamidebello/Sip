@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);
 export function setupLocaleSettings({get,request}) {
-  let catalog,epoch=0;
+  let catalog,effective,epoch=0;
   function fill(formId,preference) {
     const form=$(formId);
     for(const [field,items] of [["language",catalog.languages],["country",catalog.countries],["currency",catalog.currencies]]) {
@@ -21,7 +21,7 @@ export function setupLocaleSettings({get,request}) {
     const token=++epoch;
     const [data,options]=await Promise.all([get("/api/locales"),catalog?Promise.resolve(catalog):get("/api/locales/catalog")]);
     if(token!==epoch) return;
-    catalog=options;
+    catalog=options;effective=data.effective;
     $("locale-admin").hidden=!admin;
     fill("locale-user-form",data.effective);fill("locale-admin-form",data.tenant);
     fillQuick(data.effective);
@@ -55,5 +55,5 @@ export function setupLocaleSettings({get,request}) {
     catch(error){$("locale-admin-status").textContent=error.message;}
   };
   function clear() {++epoch;document.documentElement.lang="en";$("locale-status").textContent="";}
-  return {refresh,clear};
+  return {refresh,clear,refreshQuick(){if(catalog&&effective)fillQuick(effective);}};
 }

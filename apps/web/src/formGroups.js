@@ -33,7 +33,7 @@ function addGroupIndex(sectionId) {
   const index=document.createElement("nav");index.className="section-index";index.setAttribute("aria-label","Form groups");
   for(const group of groups) {
     const link=document.createElement("a");link.href=`#${group.id}`;link.textContent=group.querySelector("summary").textContent;
-    link.onclick=()=>{group.open=true;};index.append(link);
+    index.append(link);
   }
   const heading=section.querySelector(":scope > h2, :scope > h3");
   if(heading) heading.after(index);else section.prepend(index);

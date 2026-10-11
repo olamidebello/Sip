@@ -12,3 +12,12 @@ test('quick links are scoped to user and tenant and reject hidden admin targets'
     readJson:async()=>({targets:['admin']})});
   assert.equal(write.code,400);
 });
+test('new navigation destinations can be saved without exposing privileged shortcuts',async()=>{
+  const pool={query:async()=>({rows:[],rowCount:1})};
+  const save=(role,targets,features={})=>handleWorkspaceShortcuts({req:{method:'PUT'},res:{},path:'/api/workspace/shortcuts',user:{id:'u1',tenant_id:'t1',role,features},pool,send,readJson:async()=>({targets})});
+  assert.equal((await save('user',['activity-monitor','outbound-rates','product-store'],{billing:true})).code,200);
+  assert.equal((await save('user',['provider-credentials-admin'])).code,400);
+  assert.equal((await save('admin',['carrier-admin','passkey-policy-admin'])).code,200);
+  assert.equal((await save('admin',['didww-admin'])).code,400);
+  assert.equal((await save('super_admin',['provider-credentials-admin','didww-admin'])).code,200);
+});

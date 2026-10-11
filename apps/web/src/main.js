@@ -1,3 +1,4 @@
+import {setupWorkspaceNavigation,fragmentTarget} from "./workspaceNavigation.js";
 import {setupUserActivity} from "./userActivity.js";
 import {setupProductStore} from './productStore.js';
 import { SimpleUser } from "sip.js/lib/platform/web";
@@ -1062,6 +1063,7 @@ root.innerHTML = `
 const $ = (selector) => document.querySelector(selector);
 root.append($('#fleet-admin'));
 root.append($('#activity-monitor'));
+$("#activity-monitor").hidden=true;
 setupFormGroups();
 setupDownloads();
 setupCarrierControl();
@@ -1071,42 +1073,54 @@ const navigationGroups=[
   {label:"Commerce",items:[["product-store","Products & services"],["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["activity-monitor","Activity monitor"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
   {label:"Administration",roles:["admin","super_admin"],items:[["product-store-admin","Product catalog & orders"],["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio services"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
-  {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
+  {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["passkey-policy-admin","Passkey requirements"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
   {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["provider-credentials-admin","Provider credentials"],["carrier-adapter-admin","Carrier adapters"]]}
 ];
 let configurationLinks;
+let localeSettings;
 let userActivity;
 let activeRole=null;
 let pageRoutes;
-const workspaceViews=["activity-monitor","account","help","dashboard","planner","campaign-inbox-panel","search-panel","support","locale-settings","background-user","chat","external-sms","outbound-rates","billing","dialplan-marketplace","meetings","admin","fleet-admin","agent-panel","calling-workspace","downloads"];
+const workspaceViews=[...new Set(navigationGroups.flatMap(group=>group.items).map(([id])=>{
+  let panel=document.getElementById(id);while(panel&&panel.parentElement!==root)panel=panel.parentElement;
+  return panel?.tagName==='SECTION'?panel.id:null;
+}).filter(Boolean))];
 let activeView="dashboard";
-function showWorkspace(target) {
-  if(!activeRole) return;
+function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
+  if(target==="top")target="dashboard";
+  if(!activeRole) return false;
+  if(activeRole.startsWith("pending_")&&target!=="account")return false;
   const requested=document.getElementById(target);
-  if(!requested || requested.closest("[hidden]")) return;
+  if(!requested || requested.closest("[hidden]")) return false;
   for(let parent=requested.parentElement;parent;parent=parent.parentElement) if(parent.tagName==="DETAILS") parent.open=true;
   const rootView=workspaceViews.find(id=>{const section=document.getElementById(id);return section&&(section===requested||section.contains(requested));});
-  if(!rootView) return;
+  if(!rootView) return false;
   activeView=target;
   userActivity?.track("navigate",target);
-  if(pageId(location.pathname) && target!==document.getElementById(pageId(location.pathname))?.closest('section[id]')?.id) {
-    history.pushState(null,'',`/#${target}`);
+  if(!preserveForm&&historyMode!=="none") {
+    const url=`/#${target}`;
+    if(location.pathname+location.hash!==url){history[historyMode==='replace'?'replaceState':'pushState'](null,'',url);}
     pageRoutes?.render();
   }
   for(const id of workspaceViews) document.getElementById(id)?.classList.toggle("workspace-inactive",id!==rootView);
   const admin=$("#admin");
   admin.classList.toggle("admin-subview",rootView==="admin"&&target!=="admin");
   for(const section of admin.querySelectorAll(":scope > section[id]"))
-    section.classList.toggle("workspace-inactive",rootView==="admin"&&section.id!==target);
+    section.classList.toggle("workspace-inactive",rootView==="admin"&&!(section===requested||section.contains(requested)));
   for(const link of $("#app-nav").querySelectorAll(".menu-links a")) {
     if(link.hash===`#${target}`) link.setAttribute("aria-current","page");
     else link.removeAttribute("aria-current");
   }
-  workspaceQuick.record(target);
+  workspaceQuick.record(requested.closest("section[id]")?.id||target);
+  if(requested.tagName==="DETAILS")requested.open=true;
+  if(!preserveForm){const heading=requested.querySelector("h2,h3,h4,summary");if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});}requested.scrollIntoView({block:"start",behavior:"auto"});}
+  return true;
 }
 function resetWorkspace() {
   userActivity?.stop();
+  $("#activity-monitor").hidden=true;
+  $("#fleet-admin").hidden=true;
   document.body.classList.remove("workspace-mode");
   for(const section of document.querySelectorAll(".workspace-inactive")) section.classList.remove("workspace-inactive");
   $("#admin").classList.remove("admin-subview");
@@ -1121,7 +1135,7 @@ function updateNavigation() {
   const role=document.createElement("span");role.className="role-badge";role.textContent=activeRole==="super_admin"?"Super admin":activeRole==="admin"?"Administrator":"User";
   heading.append(title,role);nav.append(heading);
   const returnToCall=document.createElement("a");returnToCall.id="return-to-call";returnToCall.href="#calling-workspace";returnToCall.textContent="Return to call";returnToCall.hidden=!onCall;
-  returnToCall.onclick=()=>showWorkspace("calling-workspace");nav.append(returnToCall);
+  nav.append(returnToCall);
   const search=document.createElement("input");search.type="search";search.className="menu-search";search.placeholder="Find a menu…";search.setAttribute("aria-label","Find a menu");nav.append(search);
   const groups=document.createElement("div");groups.className="menu-groups";nav.append(groups);
   for(const group of navigationGroups) {
@@ -1133,7 +1147,6 @@ function updateNavigation() {
     const links=document.createElement("div");links.className="menu-links";
     for(const [id,label] of items) {
       const link=document.createElement("a");link.href=`#${id}`;link.textContent=label;
-      link.onclick=()=>{showWorkspace(id);details.open=false;};
       if(location.hash===`#${id}`) link.setAttribute("aria-current","page");
       links.append(link);
     }
@@ -1153,6 +1166,7 @@ function updateNavigation() {
     empty.hidden=!query||visible>0;
   };
   pageRoutes?.refresh();
+  localeSettings?.refreshQuick();
 }
 updateNavigation();
 pageRoutes=setupPageRoutes({showWorkspace,isSignedIn:()=>!!activeRole});
@@ -1165,14 +1179,9 @@ document.addEventListener("click",event=>{
   if($("#app-nav").contains(event.target)) return;
   for(const menu of $("#app-nav").querySelectorAll("details[open]")) menu.open=false;
 });
-$(".public-nav a[href='#downloads']").addEventListener("click",()=>showWorkspace("downloads"));
-$('#public-help').addEventListener('click',()=>{if(activeRole) showWorkspace('help');});
 $(".login-menu").addEventListener('click',event=>{if(event.target.closest('button,a'))$(".login-menu").open=false;});
-$(".brand-mark").addEventListener("click",()=>{if(activeRole) showWorkspace("dashboard");});
-window.addEventListener("hashchange",()=>{
-  const target=decodeURIComponent(location.hash.slice(1));
-  if(activeRole&&$("#app-nav").querySelector(`a[href="#${CSS.escape(target)}"]`)) showWorkspace(target);
-});
+
+setupWorkspaceNavigation({navigate:showWorkspace,isSignedIn:()=>!!activeRole});
 for(const [id,label] of [["signin-user","user"],["signin-admin","administrator"],["signin-super","super administrator"]]) {
   $("#"+id).onclick=()=>{
     if(pageId(location.pathname)!=='login') pageRoutes.go('login');
@@ -1189,7 +1198,7 @@ const dialForm = $("#dial");
 const meetings = setupMeetings();
 const dashboard=setupDashboard({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const support=setupSupport({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
-const localeSettings=setupLocaleSettings({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
+localeSettings=setupLocaleSettings({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const groupAdmin = setupGroupAdmin();
 const sipProfiles = setupSipProfiles({get:apiGet,request:accountRequest});
 const productStore=setupProductStore({get:apiGet,request:accountRequest,refreshBilling});
@@ -1595,6 +1604,7 @@ function signedIn(user) {
   $("#sip-profile-admin").hidden=user.role!=="super_admin";
   $("#provider-webhook-admin").hidden=user.role!=="super_admin";
   $("#provider-credentials-admin").hidden=user.role!=="super_admin";
+  $("#activity-monitor").hidden=false;
   userActivity.start(user.role);
   $("#didww-admin").hidden=user.role!=="super_admin";
   $("#carrier-adapter-admin").hidden=user.role!=="super_admin";
@@ -1651,6 +1661,7 @@ function signedIn(user) {
     .catch((error)=>{$("#nin-status").textContent=error.message;});
   if (user.features?.messaging)
     refreshExternalSms().catch(error=>{$("#sms-status").textContent=error.message;});
+  $("#outbound-rates").hidden=false;
   $("#external-sms").hidden=!user.features?.messaging;
   if (user.features?.messaging)
     loadContacts().catch((error) => { $("#chat-status").textContent = error.message; });
@@ -1667,8 +1678,8 @@ function signedIn(user) {
     updateNavigation();
     workspaceQuick.refresh();
   }).catch(()=>{});
-  const requested=decodeURIComponent(location.hash.slice(1));
-  showWorkspace(pageId(location.pathname) ? document.getElementById(pageId(location.pathname))?.closest('section[id]')?.id || 'dashboard' : $("#app-nav").querySelector(`a[href="#${CSS.escape(requested)}"]`)?requested:"dashboard");
+  const requested=fragmentTarget(location.hash)||"";
+  showWorkspace(pageId(location.pathname) ? document.getElementById(pageId(location.pathname))?.closest('section[id]')?.id || 'dashboard' : requested&&document.getElementById(requested)&&!document.getElementById(requested).closest("[hidden]")?requested:"dashboard",{preserveForm:!!pageId(location.pathname)});
   pageRoutes.render();
   dashboard.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#dashboard-status").textContent=error.message;});
   support.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#support-status").textContent=error.message;});
