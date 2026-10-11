@@ -26,11 +26,11 @@ export function setupSipProfiles({get,request}){
   function entry(profile,permissions){
     const row=document.createElement('li');
     const title=document.createElement('span');title.textContent=`${profile.label}: ${profile.username}@${profile.domain} · ${profile.wssUrl} `;row.append(title);
-    const use=document.createElement('button');use.type='button';use.textContent='Use in dialer';use.onclick=()=>{
+    if(permissions.edit){const use=document.createElement('button');use.type='button';use.textContent='Use in dialer';use.onclick=()=>{
       const dialer=document.querySelector('#connect');dialer.elements.aor.value=`sip:${profile.username}@${profile.domain}`;
       dialer.elements.username.value=profile.username;dialer.elements.server.value=profile.wssUrl;
       document.querySelector('a[href="#calling-workspace"]')?.click();dialer.elements.password.focus();
-    };row.append(use);
+    };row.append(use);}
     if(permissions.edit){const edit=document.createElement('button');edit.type='button';edit.textContent='Edit';edit.onclick=async()=>{
       form.elements.label.value=profile.label;form.elements.username.value=profile.username;
       form.elements.domain.value=profile.domain;form.elements.wssUrl.value=profile.wssUrl;
@@ -45,10 +45,18 @@ export function setupSipProfiles({get,request}){
   }
   async function refresh(){
     try{
-      const result=await get('/api/sip-profiles');profiles=result.profiles;list.replaceChildren(...profiles.map(profile=>entry(profile,result.permissions)));
+      const result=await get('/api/sip-profiles');
+      const dialer=document.querySelector('#connect');
+      for(const input of dialer.querySelectorAll('input')) input.readOnly=!result.permissions.edit;
+      dialer.dataset.canEdit=String(result.permissions.edit);
+      dialer.querySelector('button').type=result.permissions.edit?'submit':'button';
+      dialer.querySelector('button').textContent=result.permissions.edit?'Connect':'Connect my SIP account';
+      profiles=result.profiles;list.replaceChildren(...profiles.map(profile=>entry(profile,result.permissions)));
       form.hidden=!result.permissions.add&&!result.permissions.edit;
       if(!profiles.length) status.textContent='No saved connection profiles. SIP password is entered only when connecting.';
-    }catch(error){list.replaceChildren();form.hidden=true;status.textContent=error.message;}
+    }catch(error){list.replaceChildren();form.hidden=true;
+      const dialer=document.querySelector('#connect');for(const input of dialer.querySelectorAll('input'))input.readOnly=true;dialer.dataset.canEdit='false';dialer.querySelector('button').type='button';
+      status.textContent=error.message;}
   }
   form.onsubmit=async event=>{
     event.preventDefault();const data=Object.fromEntries(new FormData(form));
