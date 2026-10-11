@@ -76,11 +76,39 @@ export async function provisionSipAccount(pool,userId){
   } catch(error){console.error('SIP provisioning pending',error.name);return false;}
 }
 
+export async function automaticSipSession(pool,user) {
+  const key=credentialKey();
+  if(!key)return {status:'pending',note:'SIP credential encryption is not configured'};
+  const db=await pool.connect();let locked=false;
+  try {
+    locked=Number((await db.query("SELECT GET_LOCK($1,0) AS acquired",['sip-login-'+user.id])).rows[0]?.acquired)===1;
+    if(!locked)return {status:'pending',note:'SIP provisioning is already in progress'};
+    const owner=(await db.query("SELECT u.tenant_id FROM users u JOIN tenants t ON t.id=u.tenant_id WHERE u.id=$1 AND u.tenant_id=$2 AND u.status='active' AND t.status='active'",[user.id,user.tenant_id])).rows[0];
+    if(!owner)return {status:'unavailable',note:'SIP account owner is unavailable in this workspace'};
+    const domain=process.env.SIP_ACCOUNT_DOMAIN||new URL(process.env.PUBLIC_ORIGIN||'http://localhost').hostname;
+    await createSipAccount(db,user.id,domain);
+    await db.query('UPDATE sip_accounts SET secret_cipher=$1 WHERE user_id=$2 AND tenant_id=$3 AND secret_cipher IS NULL AND status=\'awaiting_switch\'',[encrypt(randomBytes(32).toString('base64url'),key),user.id,user.tenant_id]);
+    let account=(await db.query('SELECT username,domain,status,secret_cipher FROM sip_accounts WHERE user_id=$1 AND tenant_id=$2',[user.id,user.tenant_id])).rows[0];
+    if(account?.status==='awaiting_switch') {
+      await provisionSipAccount(db,user.id);
+      account=(await db.query('SELECT username,domain,status,secret_cipher FROM sip_accounts WHERE user_id=$1 AND tenant_id=$2',[user.id,user.tenant_id])).rows[0];
+    }
+    if(account?.status!=='active'||!account.secret_cipher)return {status:'pending',note:'Your SIP account is waiting for switch activation'};
+    return {status:'active',username:account.username,domain:account.domain,password:decrypt(account.secret_cipher,key)};
+  }finally{try{if(locked)await db.query('SELECT RELEASE_LOCK($1)',['sip-login-'+user.id]);}finally{db.release();}}
+}
+
 export async function handleSipMarketplace({req,res,path,user,pool,send,readJson}) {
   if(path.startsWith('/api/dialplan/') && !user.features?.billing && !isAdmin(user))
     return send(res,403,{error:'Billing unavailable for your groups'});
   if(path.startsWith('/api/sip-account') && !(await sipProfilePermissions(pool,user)).view)
     return send(res,403,{error:'SIP profile view permission required'});
+  if(path==='/api/sip-account/session' && req.method==='POST') {
+    res.setHeader('Cache-Control','no-store');
+    if(user.must_change_password||user.passkeyGate)return send(res,403,{error:'Complete sign-in requirements first'});
+    const result=await automaticSipSession(pool,user);
+    return send(res,result.status==='active'?200:result.status==='pending'?202:403,result);
+  }
   if(path==='/api/sip-account' && req.method==='GET') {
     const account=await pool.query('SELECT id,username,domain,status,created_at FROM sip_accounts WHERE user_id=$1 AND tenant_id=$2',[user.id,user.tenant_id]);
     return send(res,200,{account:account.rows[0]||null,

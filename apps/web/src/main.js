@@ -1,3 +1,4 @@
+import {createAutoSipRegistration} from './autoSipRegistration.js';
 import {setupContactDirectory} from './contactDirectory.js';
 import {setupConversations} from './conversations.js';
 import {setupWorkspaceNavigation,fragmentTarget} from "./workspaceNavigation.js";
@@ -181,7 +182,7 @@ root.innerHTML = `
       <button id="passkey-add" type="button">Add a passkey</button><ul id="passkey-list"></ul>
       <p id="passkey-status" role="status"></p>
     </section>
-    <section id="sip-account-panel" hidden><h3>My SIP account</h3><p id="sip-account-status" role="status"></p>
+    <section id="sip-account-panel" hidden><h3>My SIP account</h3><p>Your account connects automatically after sign-in and reconnects while this app is open. Closing the app or browser suspension can interrupt incoming calls.</p><p id="sip-account-status" role="status"></p>
       <form id="sip-credentials"><label>Account password to reveal SIP credentials <input name="password" type="password" autocomplete="current-password" required></label><label><input name="autoRegister" type="checkbox" checked> Register on this server after password verification</label><button>Verify and connect SIP account</button></form>
       <p id="sip-credentials-result" role="status"></p>
       <h3>Saved SIP connection profiles</h3><p>Save connection settings without storing your SIP password.</p>
@@ -1276,6 +1277,7 @@ const authProviders = setupAuthProviders();
 const catalogControl = setupCatalogControl();
 setupInstall();
 let phone;
+let sipRegistered=false;
 let onCall = false;
 let onHold = false;
 let muted = false;
@@ -1428,7 +1430,7 @@ async function accountRequest(path, body, method="POST") {
     body: JSON.stringify(body)
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Account request failed");
+  if (!response.ok) {const error=new Error(data.error || "Account request failed");error.status=response.status;throw error;}
   return data;
 }
 async function apiGet(path) {
@@ -1643,6 +1645,7 @@ function signedIn(user) {
   if(user.authSource==="local") refreshPasskeys();
   $("#sip-account-panel").hidden=false;
   refreshSipAccount();
+  autoSip.start(user.id);
   apiGet('/api/softphone/access').then(access=>{$('#calling-access').textContent=access.externalCalls?'Your active plan permits external calling, subject to carrier and billing limits.':'Free account: call active SIP users in your workspace. An active plan is required for external calls and texts.';}).catch(error=>{$('#calling-access').textContent=error.message;});
   sipProfiles.refresh();
   $("#sip-profile-admin").hidden=user.role!=="super_admin";
@@ -2208,6 +2211,7 @@ $("#ldap-login").addEventListener("submit",async(event)=>{
 });
 $("#logout").onclick = async () => {
   try {
+    await autoSip.stop();
     if (phone) {
       if (onCall) await phone.hangup().catch(()=>{});
       await phone.unregister().catch(()=>{});
@@ -2258,6 +2262,21 @@ $("#password-change").onsubmit=async(event)=>{
     const fresh=await apiGet("/api/me");signedIn(fresh);
   } catch(error) {$("#account-status").textContent=error.message;}
 };
+const autoSip=createAutoSipRegistration({
+  session:()=>accountRequest('/api/sip-account/session',{}),
+  connected:()=>sipRegistered&&!!phone?.isConnected(),
+  onStatus:message=>{$('#sip-account-status').textContent=message;status(message);},
+  async connect(account,valid){
+    if(onCall)return;
+    const data=new FormData();for(const [key,value] of Object.entries({aor:`sip:${account.username}@${account.domain}`,username:account.username,password:account.password,server:'wss://'+location.host+'/ws'}))data.set(key,value);
+    await registerSip(data,valid);
+  },
+  async disconnect(){if(phone){const current=phone;phone=undefined;sipRegistered=false;if(onCall)await current.hangup().catch(()=>{});await current.unregister().catch(()=>{});await current.disconnect().catch(()=>{});callState(false);connectForm.hidden=false;dialForm.hidden=true;$('#disconnect').hidden=true;}}
+});
+window.addEventListener('online',()=>autoSip.wake());
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')autoSip.wake();});
+window.addEventListener('pagehide',()=>{void autoSip.stop();});
+window.addEventListener('pageshow',event=>{if(event.persisted&&softphoneUserId)autoSip.start(softphoneUserId);});
 fetch("/api/me", { credentials: "same-origin" })
   .then(async (response) => response.ok ? signedIn(await response.json()) : undefined)
   .catch(() => { $("#account-status").textContent = "Account service unavailable"; });
@@ -2279,7 +2298,7 @@ function report(error) {
   status(error instanceof Error ? error.message : String(error));
 }
 
-async function registerSip(data) {
+async function registerSip(data,shouldContinue=()=>true) {
   if (!softphoneUserId) {status("Sign in to Olamide before connecting a SIP account.");return;}
   if(phone){if(onCall)throw new Error("End the current call before changing registration.");await phone.unregister();await phone.disconnect();phone=null;}
   const aor = String(data.get("aor")).trim();
@@ -2290,8 +2309,10 @@ async function registerSip(data) {
   }
   const candidate = new SimpleUser(server, {
     aor,
+    reconnectionAttempts:8,reconnectionDelay:4,registererOptions:{expires:300,refreshFrequency:80},
     media: { remote: { audio: $("#remote") } },
     userAgentOptions: {
+      transportOptions:{keepAliveInterval:30,keepAliveDebounce:10},
       authorizationUsername: String(data.get("username")),
       authorizationPassword: String(data.get("password"))
     },
@@ -2307,23 +2328,26 @@ async function registerSip(data) {
       },
       onCallAnswered: () => { if (currentCall) currentCall.answered = true; showWorkspace("calling-workspace"); callState(true); status("Call connected"); },
       onCallHangup: () => { finishCall(currentCall?.answered ? "completed" : "missed or unanswered"); callState(false); status("Call ended"); },
-      onRegistered: () => status("Registered"),
-      onUnregistered: () => status("Unregistered")
+      onServerDisconnect: () => {sipRegistered=false;status("Connection lost. Reconnecting…");autoSip.dropped();},
+      onRegistered: () => {if(shouldContinue()){sipRegistered=true;status("Registered");}},
+      onUnregistered: () => {sipRegistered=false;status("Unregistered");autoSip.dropped();}
     }
   });
   try {
     status("Connecting…");
     await candidate.connect();
     await candidate.register();
+    if(!shouldContinue()){await candidate.unregister().catch(()=>{});await candidate.disconnect();return;}
     phone = candidate;
     connectForm.hidden = true;
     dialForm.hidden = false;
     $("#disconnect").hidden = false;
-    status("Registered");
+    status(sipRegistered?"Registered":"Waiting for SIP registration…");
     refreshAudioOutputs();
   } catch (error) {
     report(error);
     await candidate.disconnect().catch(() => {});
+    throw error;
   }
 }
 connectForm.addEventListener("submit",async event=>{event.preventDefault();try{await registerSip(new FormData(connectForm));}catch(error){report(error);}});
@@ -2374,6 +2398,7 @@ $("#send-tone").onclick = async () => {
   try { await phone.sendDTMF(tone); $("#tone").value = ""; } catch (error) { report(error); }
 };
 $("#disconnect").onclick = async () => {
+  await autoSip.stop();
   if (!phone) return;
   try {
     if (onCall) await phone.hangup();
