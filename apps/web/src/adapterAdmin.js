@@ -5,6 +5,15 @@ export function setupAdapterAdmin({get,request}){
   const list=root.querySelector('#adapter-list');
   const history=root.querySelector('#adapter-history');
   const provider=form.elements.provider,target=form.elements.targetKey;
+  const configure=root.querySelector('#adapter-configure');
+  const configuration=root.querySelector('#adapter-target-configuration');
+  configure.onclick=event=>{
+    event.preventDefault();configuration.open=true;
+    configure.setAttribute('aria-expanded','true');
+    configuration.querySelector('summary').focus();
+    configuration.scrollIntoView({behavior:'smooth',block:'nearest'});
+  };
+  configuration.addEventListener('toggle',()=>configure.setAttribute('aria-expanded',String(configuration.open)));
   async function refresh(){
     try{
       const [registry,carriers]=await Promise.all([
