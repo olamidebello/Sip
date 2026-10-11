@@ -3,6 +3,7 @@ import {createNativePushClient} from './nativePushClient.js';
 import {createAutoSipRegistration} from './autoSipRegistration.js';
 import {setupDialpad,dialTarget} from './dialpad.js';
 import {setupChatLanding} from './chatLanding.js';
+import {icon} from './messengerIcons.js';
 import {setupContactDirectory} from './contactDirectory.js';
 import {setupConversations} from './conversations.js';
 import {setupWorkspaceNavigation,fragmentTarget} from "./workspaceNavigation.js";
@@ -1165,6 +1166,7 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   const rootView=workspaceViews.find(id=>{const section=document.getElementById(id);return section&&(section===requested||section.contains(requested));});
   if(!rootView) return false;
   activeView=target;
+  for(const link of $('#app-nav').querySelectorAll('.messenger-tabs a')){if(link.hash===`#${target}`)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
   userActivity?.track("navigate",target);
   if(!preserveForm&&historyMode!=="none") {
     const url=`${adminMode?'/admin':'/'}#${target}`;
@@ -1206,18 +1208,21 @@ function updateNavigation() {
   const returnToCall=document.createElement("a");returnToCall.id="return-to-call";returnToCall.href="#calling-workspace";returnToCall.textContent="Return to call";returnToCall.hidden=!onCall;
   nav.append(returnToCall);
   const tabs=document.createElement('div');tabs.className='messenger-tabs';
-  for(const [id,label] of [['chat','Chats'],['calling-workspace','Calls'],['contact-directory','Contacts'],['account','Settings']]){
+  for(const [id,label,symbol] of [['chat','Chats','chat'],['campaign-inbox-panel','Updates','updates'],['meetings','Meetings','people'],['calling-workspace','Calls','calls']]){
     if(document.getElementById(id)?.closest('[hidden]'))continue;
-    const link=document.createElement('a');link.href=`/#${id}`;link.textContent=label;tabs.append(link);
+    const link=document.createElement('a');link.href=`/#${id}`;link.innerHTML=icon(symbol);const caption=document.createElement('span');caption.textContent=label;link.append(caption);if(activeView===id)link.setAttribute('aria-current','page');tabs.append(link);
   }
   if(['admin','super_admin'].includes(activeRole)){
-    const link=document.createElement('a');link.href='/admin';link.textContent='Admin';tabs.append(link);
+    const link=document.createElement('a');link.href='/admin';link.textContent='Admin';link.className='admin-entry';tabs.append(link);
   }
   if(document.body.classList.contains('admin-mode')){const link=document.createElement('a');link.href='/#chat';link.textContent='Back to chats';tabs.append(link);}
   nav.append(tabs);
   if(!document.body.classList.contains('admin-mode')){
-    const more=document.createElement('button');more.type='button';more.textContent='More tools';more.setAttribute('aria-expanded','false');
-    more.addEventListener('click',()=>{const open=nav.classList.toggle('show-user-tools');more.setAttribute('aria-expanded',String(open));});nav.append(more);
+    const actions=document.createElement('div');actions.className='messenger-app-actions';
+    const searchChat=document.createElement('button');searchChat.type='button';searchChat.innerHTML=icon('search');searchChat.setAttribute('aria-label','Search chats');searchChat.onclick=()=>{showWorkspace('chat');$('#chat').classList.remove('thread-open');$('#chat .chat-sidebar>input').focus();};actions.append(searchChat);
+    const more=document.createElement('button');more.type='button';more.innerHTML=icon('more');more.setAttribute('aria-label','Open menu');more.setAttribute('aria-expanded','false');
+    more.addEventListener('click',()=>{const open=nav.classList.toggle('show-user-tools');more.setAttribute('aria-expanded',String(open));});actions.append(more);nav.append(actions);
+    const settings=document.createElement('a');settings.href='/#account';settings.textContent='Settings';settings.className='messenger-settings-entry';nav.append(settings);
   }
   const search=document.createElement("input");search.type="search";search.className="menu-search";search.placeholder="Find a menu…";search.setAttribute("aria-label","Find a menu");nav.append(search);
   const groups=document.createElement("div");groups.className="menu-groups";nav.append(groups);
@@ -1641,7 +1646,7 @@ async function loadContacts() {
 $("#show-archived-conversations").onchange=()=>loadContacts().catch(error=>{$("#chat-status").textContent=error.message;});
 const conversations=setupConversations({get:apiGet,request:accountRequest,isSignedIn:()=>!!activeRole,
   preferencesChanged:()=>loadContacts(),
-  isVisible:()=>!$('#chat').hidden&&!$('#chat').classList.contains('workspace-inactive'),
+  isVisible:()=>!$('#chat').hidden&&!$('#chat').classList.contains('workspace-inactive')&&(!window.matchMedia('(max-width:900px)').matches||$('#chat').classList.contains('thread-open')),
   callContact:address=>{dialForm.elements.target.value=address;showWorkspace('calling-workspace');status('Contact selected. Connect your SIP account, then press Call.');}});
 async function loadMessages(){await conversations.refresh();}
 function signedIn(user) {
