@@ -1,0 +1,215 @@
+{
+  "schemaVersion": 1,
+  "features": [
+    {
+      "id": "accounts",
+      "name": "Customer accounts and tenant isolation",
+      "applicationIntegration": "tenancy.js",
+      "status": "pending",
+      "reason": "End-to-end commissioning evidence required"
+    },
+    {
+      "id": "sip_accounts",
+      "name": "Verified SIP accounts and credential provisioning",
+      "applicationIntegration": "sipProvisioning.js",
+      "status": "pending",
+      "reason": "End-to-end commissioning evidence required"
+    },
+    {
+      "id": "billing",
+      "name": "Invoices and subscription plans",
+      "applicationIntegration": "payments.js",
+      "status": "pending",
+      "reason": "End-to-end commissioning evidence required"
+    },
+    {
+      "id": "wallet",
+      "name": "Prepaid wallet and transfers",
+      "applicationIntegration": "wallet.js",
+      "status": "pending",
+      "reason": "End-to-end commissioning evidence required"
+    },
+    {
+      "id": "rates",
+      "name": "Tariffs, markups and scheduled carrier rates",
+      "applicationIntegration": "pricing.js",
+      "status": "pending",
+      "reason": "End-to-end commissioning evidence required"
+    },
+    {
+      "id": "routing",
+      "name": "Trunk policies and route selection",
+      "applicationIntegration": "trunkManagement.js",
+      "status": "pending",
+      "reason": "End-to-end commissioning evidence required"
+    },
+    {
+      "id": "dids",
+      "name": "DID inventory, ordering and porting",
+      "applicationIntegration": "didwwIntegration.js",
+      "status": "pending",
+      "reason": "End-to-end commissioning evidence required"
+    },
+    {
+      "id": "cdr",
+      "name": "CDR ingestion and reporting",
+      "applicationIntegration": "cdr.js",
+      "status": "pending",
+      "reason": "End-to-end commissioning evidence required"
+    },
+    {
+      "id": "payments",
+      "name": "Payment gateways and webhook handling",
+      "applicationIntegration": "payments.js",
+      "status": "pending",
+      "reason": "End-to-end commissioning evidence required"
+    },
+    {
+      "id": "fraud",
+      "name": "Destination blocks and fraud policy",
+      "applicationIntegration": "operatorControl.js",
+      "status": "pending",
+      "reason": "End-to-end commissioning evidence required"
+    },
+    {
+      "id": "resellers",
+      "name": "Multi-level reseller hierarchy and settlements",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    },
+    {
+      "id": "ocs",
+      "name": "Real-time credit reservations and call cutoff",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    },
+    {
+      "id": "tax",
+      "name": "Tax jurisdiction and invoice compliance",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    },
+    {
+      "id": "reconciliation",
+      "name": "Carrier cost reconciliation and dispute handling",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    },
+    {
+      "id": "lcr",
+      "name": "Live carrier LCR failover and quality routing",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    },
+    {
+      "id": "billing_jobs",
+      "name": "Recurring billing, dunning and credit notes",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    },
+    {
+      "id": "calling_cards",
+      "name": "Calling cards, PINs and vouchers",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    },
+    {
+      "id": "packages",
+      "name": "Bundles, free minutes and promotions",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    },
+    {
+      "id": "cnam",
+      "name": "Caller-name lookup and billing",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    },
+    {
+      "id": "pbx",
+      "name": "Tenant PBX policy and extension management",
+      "applicationIntegration": "pbx.js",
+      "status": "pending",
+      "reason": "End-to-end commissioning evidence required"
+    },
+    {
+      "id": "ivr",
+      "name": "Live IVR flows, schedules and announcements",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    },
+    {
+      "id": "voicemail",
+      "name": "Live voicemail and message waiting",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    },
+    {
+      "id": "queues",
+      "name": "Live queues and agent lifecycle",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    },
+    {
+      "id": "conferences",
+      "name": "Live conference bridges and moderation",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    },
+    {
+      "id": "recording",
+      "name": "Recording access, retention and consent",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    },
+    {
+      "id": "fax",
+      "name": "Fax delivery and billing",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    },
+    {
+      "id": "mailboxes",
+      "name": "Tenant mailbox creation and send/receive GUI",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    },
+    {
+      "id": "sip_security",
+      "name": "Registration, relay rejection and SIP flood tests",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    },
+    {
+      "id": "disaster_recovery",
+      "name": "Verified restore and separate-host failover",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    },
+    {
+      "id": "capacity",
+      "name": "500 simultaneous call acceptance",
+      "applicationIntegration": null,
+      "status": "pending",
+      "reason": "Implementation and acceptance required"
+    }
+  ]
+}

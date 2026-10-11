@@ -1,0 +1,117 @@
+---
+- name: Require pinned Asterisk source and reviewed PBX configuration
+  ansible.builtin.assert:
+    that:
+      - pbx_source_archive | length > 0
+      - pbx_source_sha256 is match('^[a-f0-9]{64}$')
+      - pbx_config_source | length > 0
+      - pbx_version is match('^[0-9]+\.[0-9]+\.[0-9]+$')
+    fail_msg: Provide an official pinned Asterisk release archive, independently verified SHA256 and complete reviewed configuration.
+- name: Install PBX build dependencies
+  ansible.builtin.apt:
+    name: [build-essential, pkg-config, libedit-dev, libjansson-dev, libsqlite3-dev, libssl-dev, libxml2-dev, uuid-dev, libncurses-dev, libcurl4-openssl-dev, libnewt-dev, libspeex-dev, libspeexdsp-dev, libsrtp2-dev]
+    state: present
+    update_cache: true
+- name: Create private build directory
+  ansible.builtin.file:
+    path: '/usr/local/src/olamide-asterisk-{{ pbx_version }}'
+    state: directory
+    mode: '0700'
+- name: Stage pinned source archive
+  ansible.builtin.copy:
+    src: '{{ pbx_source_archive }}'
+    dest: '/usr/local/src/olamide-asterisk-{{ pbx_version }}/source.tar.gz'
+    mode: '0600'
+- name: Verify source SHA256 before building
+  ansible.builtin.stat:
+    path: '/usr/local/src/olamide-asterisk-{{ pbx_version }}/source.tar.gz'
+    checksum_algorithm: sha256
+  register: pbx_archive
+- name: Reject modified build artifacts
+  ansible.builtin.assert:
+    that: pbx_archive.stat.checksum == pbx_source_sha256
+- name: Extract verified release
+  ansible.builtin.unarchive:
+    src: '/usr/local/src/olamide-asterisk-{{ pbx_version }}/source.tar.gz'
+    dest: '/usr/local/src/olamide-asterisk-{{ pbx_version }}'
+    remote_src: true
+    extra_opts: [--strip-components=1]
+    creates: '/usr/local/src/olamide-asterisk-{{ pbx_version }}/configure'
+- name: Configure bundled PJSIP PBX build
+  ansible.builtin.command:
+    argv: ['./configure', '--with-pjproject-bundled', '--with-jansson-bundled']
+    chdir: '/usr/local/src/olamide-asterisk-{{ pbx_version }}'
+    creates: '/usr/local/src/olamide-asterisk-{{ pbx_version }}/config.status'
+- name: Build pinned PBX release
+  ansible.builtin.command:
+    argv: [make, '-j2']
+    chdir: '/usr/local/src/olamide-asterisk-{{ pbx_version }}'
+- name: Install PBX binary and modules without sample configuration
+  ansible.builtin.command:
+    argv: [make, install]
+    chdir: '/usr/local/src/olamide-asterisk-{{ pbx_version }}'
+- name: Create PBX service identity
+  ansible.builtin.user:
+    name: asterisk
+    system: true
+    home: /var/lib/asterisk
+    shell: /usr/sbin/nologin
+- name: Create PBX runtime and data directories
+  ansible.builtin.file:
+    path: '{{ item }}'
+    state: directory
+    owner: asterisk
+    group: asterisk
+    mode: '0750'
+  loop: [/etc/asterisk, /var/lib/asterisk, /var/spool/asterisk, /var/log/asterisk]
+- name: Copy reviewed PBX configuration and tenant routing
+  ansible.builtin.copy:
+    src: '{{ pbx_config_source }}/'
+    dest: /etc/asterisk/
+    owner: root
+    group: asterisk
+    mode: '0640'
+    directory_mode: '0750'
+  no_log: true
+- name: Install private PBX service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/olamide-pbx.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Olamide private Asterisk PBX
+      After=network-online.target kamailio.service
+      Wants=network-online.target
+      [Service]
+      Type=simple
+      User=asterisk
+      Group=asterisk
+      RuntimeDirectory=asterisk
+      ExecStart=/usr/sbin/asterisk -f -C /etc/asterisk/asterisk.conf
+      Restart=on-failure
+      LimitNOFILE=65536
+      NoNewPrivileges=true
+      PrivateTmp=true
+      ProtectHome=true
+      [Install]
+      WantedBy=multi-user.target
+- name: Enable PBX service
+  ansible.builtin.systemd:
+    name: olamide-pbx
+    enabled: true
+    state: restarted
+    daemon_reload: true
+- name: Confirm PBX process
+  ansible.builtin.command: systemctl is-active --quiet olamide-pbx
+  changed_when: false
+- name: Require PBX PJSIP, voicemail, queues and conferencing runtime modules
+  ansible.builtin.command:
+    argv: ['/usr/sbin/asterisk', '-rx', 'module show like {{ item }}']
+  loop: [res_pjsip.so, app_voicemail.so, app_queue.so, app_confbridge.so, app_playback.so, app_record.so]
+  register: pbx_module
+  changed_when: false
+  failed_when: "pbx_module.rc != 0 or 'Running' not in pbx_module.stdout"
+- name: Require PBX signaling to remain on loopback port 5062
+  ansible.builtin.command:
+    argv: [python3, '-c', "import subprocess; s=subprocess.check_output(['ss','-H','-lunpt'],text=True); lines=[l for l in s.splitlines() if 'asterisk' in l]; assert lines and any('127.0.0.1:5062' in l for l in lines); assert all(('127.0.0.1:' in l or '[::1]:' in l) for l in lines), 'PBX signaling/management must be private; use Kamailio as edge'"]
+  changed_when: false

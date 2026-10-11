@@ -35,7 +35,7 @@ def probe(node):
     target = node['ssh_user'] + '@' + node['host']
     cmd = ['ssh', '-p', str(node['ssh_port']), '-o', 'BatchMode=yes',
            '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8', target,
-           'sudo', '-n', 'systemctl', 'is-active', 'kamailio']
+           *([] if node['ssh_user']=='root' else ['sudo','-n']), 'systemctl', 'is-active', 'kamailio']
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
         status = ('healthy' if result.returncode == 0 and result.stdout.strip() == 'active'
@@ -44,7 +44,7 @@ def probe(node):
         if status == 'healthy':
             package = subprocess.run(['ssh', '-p', str(node['ssh_port']), '-o', 'BatchMode=yes',
                 '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8', target,
-                'dpkg-query', '-W', '-f=${Version}', 'freeswitch'], capture_output=True,
+                'dpkg-query', '-W', '-f=${Version}', 'kamailio'], capture_output=True,
                 text=True, timeout=15)
             if package.returncode == 0:
                 version = package.stdout.strip()[:80]

@@ -57,6 +57,13 @@ services:
       CARRIER_PROVISION_URL: ${CARRIER_PROVISION_URL:-}
       CARRIER_PROVISION_TOKEN: ${CARRIER_PROVISION_TOKEN:-}
       CARRIER_ADAPTER_TARGETS_JSON: ${CARRIER_ADAPTER_TARGETS_JSON:-}
+    volumes:
+      - type: bind
+        source: /var/lib/olamide/service-inventory
+        target: /var/lib/olamide/service-inventory
+        read_only: true
+        bind:
+          create_host_path: true
     depends_on:
       mysql:
         condition: service_healthy
@@ -80,6 +87,7 @@ services:
     restart: unless-stopped
     environment:
       DOMAIN: ${DOMAIN:?set domain}
+      SIP_WS_UPSTREAM: ${SIP_WS_UPSTREAM:-127.0.0.1:9}
     ports:
       - "80:80"
       - "443:443"

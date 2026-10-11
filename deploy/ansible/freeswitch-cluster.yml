@@ -1,0 +1,6 @@
+---
+- name: Add two same-host FreeSWITCH backends behind Kamailio
+  hosts: switch_nodes
+  become: true
+  roles:
+    - freeswitch_cluster

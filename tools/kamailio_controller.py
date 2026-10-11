@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Private allowlisted controller. Run once from a timer; never accepts shell code."""
-import argparse, json, os, pathlib, re, subprocess, tempfile, urllib.request
+import argparse, datetime, json, os, pathlib, re, subprocess, tempfile, urllib.request
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 def call(base, token, endpoint, body=None):
@@ -24,7 +24,40 @@ def validate_profile(plan, profiles):
         raise ValueError('Invalid package recipe')
     config = pathlib.Path(profile['configDirectory']).resolve()
     if not config.is_dir() or not (config/'kamailio.cfg').is_file(): raise ValueError('Complete configuration bundle required')
+    if profile.get('sameServer'):
+        settings=profile.get('sameServerSettings',{})
+        required={'sip_domain','sip_public_ip','sip_public_interface','sip_bridge_ip','sip_bridge_interface','sip_docker_subnet','sip_rtp_min','sip_rtp_max','rtpengine_config_source','rtpengine_service','rtpengine_package','sip_carrier_cidrs'}
+        if not required <= set(settings) or set(settings)-required-{'mail_enabled','mail_hostname','mail_config_source','mail_certificate','mail_key','mail_domain','pbx_enabled','pbx_source_archive','pbx_source_sha256','pbx_config_source','pbx_version','freeswitch_cluster_enabled','freeswitch_instances','freeswitch_image','freeswitch_maintenance_approved'}: raise ValueError('Complete private same-server settings required')
+        addresses=json.loads(subprocess.check_output(['ip','-j','-4','address'],text=True))
+        local={a['local'] for interface in addresses for a in interface.get('addr_info',[])}
+        if plan['host'] not in local or settings['sip_public_ip']!=plan['host']:
+            raise ValueError('Same-server controller must run on the selected application host')
+        if os.geteuid()!=0 or plan['ssh_user']!='root':
+            raise ValueError('Local same-server controller requires root identity')
+        if settings.get('mail_enabled') and not {'mail_hostname','mail_config_source','mail_certificate','mail_key','mail_domain'} <= set(settings):
+            raise ValueError('Complete private mail settings required')
+        if settings.get('pbx_enabled'):
+            if not {'pbx_source_archive','pbx_source_sha256','pbx_config_source','pbx_version'} <= set(settings):
+                raise ValueError('Complete pinned PBX build settings required')
+            if not re.fullmatch(r'[a-f0-9]{64}',settings['pbx_source_sha256']) or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+',settings['pbx_version']):
+                raise ValueError('Verified PBX checksum and pinned version required')
+            if not pathlib.Path(settings['pbx_source_archive']).is_file() or not pathlib.Path(settings['pbx_config_source']).is_dir():
+                raise ValueError('Private PBX artifact and configuration required')
+        if not pathlib.Path(settings['rtpengine_config_source']).is_file():
+            raise ValueError('Reviewed media relay configuration required')
     return profile,config
+
+def verify_acceptance(report, receipt, required_calls):
+    expected={'registration','invalid_credentials_rejected','unauthenticated_relay_rejected','two_way_audio','dtmf','carrier_inbound','carrier_outbound','billing_reservation','billing_settlement','fraud_limits','credential_revocation','backup_restore','monitoring_alert','failover','smtp_delivery','imap_login','spf_dkim_dmarc','ptr'}
+    at=datetime.datetime.fromisoformat(receipt['checkedAt'].replace('Z','+00:00'))
+    age=(datetime.datetime.now(datetime.timezone.utc)-at).total_seconds()
+    if not 0<=age<=86400 or receipt.get('host')!=report['host'] or receipt.get('nodeId')!=report['nodeId'] or receipt.get('configHash')!=report['configHash']:
+        raise ValueError('Fresh acceptance evidence bound to this host, node and configuration is required')
+    if any(receipt.get('tests',{}).get(key) is not True for key in expected):
+        raise ValueError('Production acceptance tests remain pending')
+    if type(receipt.get('concurrentCalls')) is not int or receipt['concurrentCalls']<required_calls:
+        raise ValueError('Target concurrent-call load acceptance remains pending')
+    return True
 
 def apply(plan, profile, config, vault=None):
     with tempfile.TemporaryDirectory(prefix='olamide-kamailio-') as tmp:
@@ -36,8 +69,12 @@ def apply(plan, profile, config, vault=None):
                 'kamailio_expected_modules':profile['enabledModules'],
                 'kamailio_maintenance_approved':profile.get('maintenanceApproved',False),
                 'kamailio_repo_path':profile.get('repoPath','/opt/olamide'),'kamailio_audit_output':tmp}}}}}
+        if profile.get('sameServer'):
+            group=inventory['all']['children']['switch_nodes']
+            group['hosts']['target']['ansible_connection']='local'
+            group['vars'].update(profile['sameServerSettings'])
         inv=path/'inventory.json';inv.write_text(json.dumps(inventory));inv.chmod(0o600)
-        cmd=['ansible-playbook','-i',str(inv),str(ROOT/'deploy/ansible/site.yml')]
+        cmd=['ansible-playbook','-i',str(inv),str(ROOT/('deploy/ansible/same-server.yml' if profile.get('sameServer') else 'deploy/ansible/site.yml'))]
         if vault: cmd += ['--vault-password-file',vault]
         result=subprocess.run(cmd,cwd=ROOT/'deploy/ansible',capture_output=True,text=True,timeout=3600)
         if result.returncode: raise RuntimeError('Ansible commissioning failed; inspect the private controller logs')
@@ -45,6 +82,9 @@ def apply(plan, profile, config, vault=None):
         expected=set(profile['enabledModules'])
         configured={f['id'] for f in report['features'] if f['status']!='pending'}
         if not expected <= configured: raise RuntimeError('Runtime audit did not confirm expected capabilities')
+        if profile.get('requireProductionAcceptance'):
+            receipt=json.loads(pathlib.Path(profile['acceptanceFile']).read_text())
+            verify_acceptance(report,receipt,profile.get('requiredConcurrentCalls',500))
         return report
 
 def main():
@@ -60,8 +100,8 @@ def main():
         try:
             profile,config=validate_profile(plan,profiles)
             report=apply(plan,profile,config,args.vault_password_file)
-            result={'id':plan['id'],'status':'succeeded','summary':'Commissioned profile; see per-module acceptance status','report':report}
-        except (KeyError,ValueError,RuntimeError,OSError,subprocess.TimeoutExpired) as e:
+            result={'id':plan['id'],'status':'succeeded','summary':('Commissioned profile; private acceptance evidence validated' if profile.get('requireProductionAcceptance') else 'Services commissioned; production acceptance remains pending'),'report':report}
+        except (KeyError,TypeError,ValueError,RuntimeError,OSError,subprocess.TimeoutExpired) as e:
             result={'id':plan['id'],'status':'failed','summary':str(e)[:500]}
         call(args.base,token,'result',result)
 

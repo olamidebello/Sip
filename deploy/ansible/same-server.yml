@@ -1,0 +1,160 @@
+---
+- name: Deploy the SIP edge and media relay alongside Olamide
+  hosts: switch_nodes
+  become: true
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+  tasks:
+    - name: Validate private same-server commissioning variables
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version == '12'
+          - sip_domain is match('^[a-zA-Z0-9.-]+$')
+          - sip_public_ip in ansible_all_ipv4_addresses
+          - sip_bridge_ip in ansible_all_ipv4_addresses
+          - sip_bridge_interface is match('^[a-zA-Z0-9_.-]+$')
+          - sip_public_interface is match('^[a-zA-Z0-9_.-]+$')
+          - sip_carrier_cidrs | default([]) | length > 0
+          - sip_docker_subnet is match('^[0-9./]+$')
+          - sip_rtp_min | int >= 1024
+          - sip_rtp_max | int <= 65535
+          - sip_rtp_max | int > sip_rtp_min | int
+          - rtpengine_config_source | length > 0
+          - rtpengine_service is match('^[a-zA-Z0-9_.-]+$')
+          - rtpengine_package in ['rtpengine-daemon', 'ngcp-rtpengine-daemon']
+          - kamailio_maintenance_approved | default(false) | bool
+          - "'websocket' in kamailio_expected_modules"
+          - "'rtpengine' in kamailio_expected_modules"
+          - "'nathelper' in kamailio_expected_modules or 'outbound' in kamailio_expected_modules"
+        fail_msg: Supply a reviewed SIP/WebRTC configuration and drained maintenance window; shared-host addresses must exist locally.
+    - name: Validate explicit carrier IPv4 networks
+      ansible.builtin.command:
+        argv: [python3, '-c', "import ipaddress,sys; n=ipaddress.ip_network(sys.argv[1]); assert n.version==4 and n.prefixlen>=8 and n.is_global", '{{ item }}']
+      loop: '{{ sip_carrier_cidrs }}'
+      changed_when: false
+    - name: Confirm application compose configuration exists
+      ansible.builtin.stat:
+        path: "{{ kamailio_repo_path }}/deployment/docker/compose.yml"
+      register: same_host_compose
+    - name: Require an installed application on this switch host
+      ansible.builtin.assert:
+        that: same_host_compose.stat.exists
+    - name: Install media relay and UFW without automatic service starts
+      ansible.builtin.apt:
+        name: ['{{ rtpengine_package }}', ufw]
+        state: present
+        update_cache: true
+        policy_rc_d: 101
+    - name: Allocate unique relay backup
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: olamide-rtpengine-backup-
+      register: relay_backup
+    - name: Snapshot relay configuration
+      ansible.builtin.copy:
+        src: /etc/rtpengine/
+        dest: "{{ relay_backup.path }}/"
+        remote_src: true
+        mode: preserve
+    - name: Inspect original relay state
+      ansible.builtin.command:
+        argv: [systemctl, is-active, '--quiet', '{{ rtpengine_service }}']
+      register: relay_before
+      changed_when: false
+      failed_when: false
+    - name: Commission media relay and signaling with rollback
+      block:
+        - name: Install reviewed relay configuration
+          ansible.builtin.copy:
+            src: "{{ rtpengine_config_source }}"
+            dest: /etc/rtpengine/rtpengine.conf
+            owner: root
+            group: root
+            mode: '0644'
+        - name: Start media relay
+          ansible.builtin.systemd:
+            name: "{{ rtpengine_service }}"
+            enabled: true
+            state: restarted
+        - name: Check loopback-only RTPengine control protocol
+          ansible.builtin.command:
+            argv: [python3, '-c', "import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.settimeout(3); s.sendto(b'olamide d7:command4:pinge',('127.0.0.1',2223)); data=s.recv(4096); assert data.startswith(b'olamide ') and b'4:pong' in data"]
+          changed_when: false
+        - name: Apply reviewed Kamailio profile
+          ansible.builtin.include_role:
+            name: kamailio_node
+      rescue:
+        - name: Restore relay configuration
+          ansible.builtin.copy:
+            src: "{{ relay_backup.path }}/"
+            dest: /etc/rtpengine/
+            remote_src: true
+            mode: preserve
+        - name: Restore original relay process state
+          ansible.builtin.systemd:
+            name: "{{ rtpengine_service }}"
+            state: "{{ 'restarted' if relay_before.rc == 0 else 'stopped' }}"
+        - name: Stop unsuccessful commissioning
+          ansible.builtin.fail:
+            msg: Same-server commissioning failed; service configuration rollback attempted.
+    - name: Permit Docker bridge to private SIP WebSocket listener only
+      ansible.builtin.command:
+        argv: [ufw, allow, in, on, '{{ sip_bridge_interface }}', from, '{{ sip_docker_subnet }}', to, '{{ sip_bridge_ip }}', port, '8088', proto, tcp]
+      register: bridge_rule
+      changed_when: "'Rule added' in bridge_rule.stdout"
+    - name: Permit inbound SIP only from reviewed carrier networks
+      ansible.builtin.command:
+        argv: [ufw, allow, in, on, '{{ sip_public_interface }}', from, '{{ item.0 }}', to, '{{ sip_public_ip }}', port, '5060', proto, '{{ item.1 }}']
+      loop: '{{ sip_carrier_cidrs | product(["udp", "tcp"]) | list }}'
+      register: carrier_rule
+      changed_when: "'Rule added' in carrier_rule.stdout"
+    - name: Permit configured media relay UDP range
+      ansible.builtin.command:
+        argv: [ufw, allow, in, on, '{{ sip_public_interface }}', to, '{{ sip_public_ip }}', port, '{{ sip_rtp_min }}:{{ sip_rtp_max }}', proto, udp]
+      register: media_rule
+      changed_when: "'Rule added' in media_rule.stdout"
+    - name: Update private compose upstream without altering tracked files
+      ansible.builtin.lineinfile:
+        path: '{{ item }}'
+        regexp: '^SIP_WS_UPSTREAM='
+        line: 'SIP_WS_UPSTREAM={{ sip_bridge_ip }}:8088'
+        mode: '0600'
+      loop:
+        - /etc/olamide/secrets.env
+        - '{{ kamailio_repo_path }}/deployment/docker/.env'
+      no_log: true
+    - name: Rebuild Caddy with managed WebSocket route
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, up, '-d', '--build', '--no-deps', web]
+        chdir: '{{ kamailio_repo_path }}/deployment/docker'
+    - name: Verify TLS and WebSocket handshake through Caddy
+      ansible.builtin.command:
+        argv: [python3, '-c', "import socket,ssl; host='{{ sip_domain }}'; ctx=ssl.create_default_context(); s=ctx.wrap_socket(socket.create_connection(('{{ sip_public_ip }}',443),timeout=5),server_hostname=host); s.sendall(('GET /ws HTTP/1.1\r\nHost: '+host+'\r\nOrigin: https://'+host+'\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Protocol: sip\r\n\r\n').encode()); data=s.recv(4096); assert data.startswith(b'HTTP/1.1 101 ') and b's3pPLMBiTxaQ9kYGzzhZRbK+xOo=' in data; s.close()"]
+      changed_when: false
+    - name: Check public DNS separately from local hosts overrides
+      ansible.builtin.uri:
+        url: 'https://dns.google/resolve?name={{ sip_domain }}&type=A'
+        return_content: true
+      register: public_dns
+    - name: Require public A record before declaring the transport commissioned
+      ansible.builtin.assert:
+        that:
+          - public_dns.json.Status == 0
+          - sip_public_ip in (public_dns.json.Answer | default([]) | map(attribute='data') | list)
+        fail_msg: Services installed, but public DNS is pending. Publish the domain record at the authoritative provider.
+    - name: Build optional same-server PBX profile
+      ansible.builtin.include_role:
+        name: pbx_node
+      when: pbx_enabled | default(false) | bool
+    - name: Commission optional same-server email profile
+      ansible.builtin.include_role:
+        name: mail_node
+      when: mail_enabled | default(false) | bool
+    - name: Commission optional two-instance FreeSWITCH cluster
+      ansible.builtin.include_role:
+        name: freeswitch_cluster
+      when: freeswitch_cluster_enabled | default(false) | bool
+- import_playbook: service-gui.yml
+- import_playbook: audit.yml

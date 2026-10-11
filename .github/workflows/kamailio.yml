@@ -19,3 +19,10 @@ jobs:
       - run: python -m py_compile tools/kamailio_audit.py tools/kamailio_controller.py deploy/ansible/runner.py
       - run: ansible-playbook -i deploy/ansible/inventory.example.yml deploy/ansible/site.yml --syntax-check
       - run: ansible-playbook -i deploy/ansible/inventory.example.yml deploy/ansible/audit.yml --syntax-check
+
+      - run: ansible-playbook -i deploy/ansible/same-server.inventory.example.yml deploy/ansible/same-server.yml --syntax-check
+
+      - run: ansible-playbook -i deploy/ansible/same-server.inventory.example.yml deploy/ansible/freeswitch-cluster.yml --syntax-check
+      - run: python -m py_compile tools/freeswitch_cluster_validate.py
+
+      - run: ansible-playbook -i deploy/ansible/same-server.inventory.example.yml deploy/ansible/service-gui.yml --syntax-check
