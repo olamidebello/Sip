@@ -542,7 +542,7 @@ async function handler(req, res) {
         try {
           await client.query("BEGIN");
           await client.query("SELECT id FROM users WHERE id=$1 FOR UPDATE",[user.id]);
-          const existing=await client.query("SELECT id FROM did_quotes WHERE user_id=$1 AND provider=$2 AND number_e164=$3 AND status IN ('pending_payment','pending_provisioning','active')",[user.id,provider,number]);
+          const existing=await client.query("SELECT id FROM did_quotes WHERE user_id=$1 AND provider=$2 AND number_e164=$3 AND status IN ('pending_payment','fulfilled')",[user.id,provider,number]);
           if (existing.rowCount) {await client.query("ROLLBACK");return send(res,409,{error:"You already have an open request for this provider number"});}
           await client.query("INSERT INTO invoices(id,user_id,description,amount_cents) VALUES($1,$2,$3,$4)",
             [invoiceId,user.id,`Provider DID request ${provider} ${number}: setup and first month`,setup+monthly]);
