@@ -1,3 +1,4 @@
+import {setupContactDirectory} from './contactDirectory.js';
 import {setupConversations} from './conversations.js';
 import {setupWorkspaceNavigation,fragmentTarget} from "./workspaceNavigation.js";
 import {setupUserActivity} from "./userActivity.js";
@@ -281,6 +282,28 @@ root.innerHTML = `
   </section>
   <section id="chat" hidden>
     <h2>Messages</h2>
+    <details id="contact-directory"><summary>Contacts, visibility and forwarding</summary>
+      <form id="user-directory-search"><label>Search workspace users <input name="q" minlength="2" maxlength="100" required></label><button>Search users</button></form>
+      <ul id="user-directory-results"></ul>
+      <form id="contact-presence-settings">
+        <label><input name="searchable" type="checkbox"> Allow workspace users to find me</label>
+        <label>Presence <select name="presence"><option value="available">Available</option><option value="away">Away</option><option value="busy">Busy</option><option value="invisible">Invisible</option><option value="dnd">Do not disturb</option></select></label>
+        <label>Status <input name="status_text" maxlength="160"></label>
+        <label><input name="share_presence" type="checkbox"> Share presence and status in search</label>
+        <label><input name="accept_forwarded" type="checkbox"> Accept forwarded calls and messages</label>
+        <label>Forward app calls to contact <select name="call_forward"><option value="">Off</option></select></label>
+        <label>Copy incoming account messages to contact <select name="message_forward"><option value="">Off</option></select></label>
+        <p>Forwarding uses active workspace contacts who accept forwarding. Messages stay in your inbox and are copied once. Call forwarding applies to calls placed from this app; other SIP clients require switch routing configuration.</p>
+        <button>Save visibility and forwarding</button>
+      </form>
+      <button id="contact-settings-refresh" type="button">Refresh contact settings</button>
+      <h3>Private phone and email address book</h3>
+      <button id="phone-contact-import" type="button">Choose contacts from phone</button>
+      <form id="address-book-import"><label>Phone vCard or email contacts CSV <input name="file" type="file" accept=".vcf,.vcard,.csv,text/vcard,text/csv" required></label><button>Preview import</button></form>
+      <p>Export contacts from Google Contacts, Outlook, or your phone and upload the file. Phone selection is available in supported mobile browsers.</p>
+      <ul id="address-book-preview"></ul><button id="address-book-save" type="button" disabled>Import selected contacts</button>
+      <ul id="address-book-list"></ul><p id="contact-directory-status" role="status"></p>
+    </details>
     <p>Account messages are stored on this server. They are not end-to-end encrypted.</p>
     <form id="add-contact">
       <label>Contact email <input name="email" type="email" required></label>
@@ -1556,7 +1579,9 @@ $("#inhouse-price").onsubmit=async(event)=>{
   } catch(error) {$("#inhouse-status").textContent=error.message;}
 };
 $("#refresh-cdr").onclick = () => refreshCdr().catch((error) => { $("#cdr-status").textContent = error.message; });
+const contactDirectory=setupContactDirectory({get:apiGet,request:accountRequest,contactsChanged:()=>loadContacts()});
 async function loadContacts() {
+  await contactDirectory.refresh();
   const { contacts } = await apiGet("/api/contacts");
   conversations.setContacts(contacts);
   const list = $("#contact-list");
@@ -2313,9 +2338,10 @@ dialForm.addEventListener("submit", async (event) => {
   const location = await checkCurrentLocation(geoPolicy);
   $("#geo-result").textContent = location.reason;
   if (!location.allowed) { status("Call blocked: " + location.reason); return; }
-  try {await accountRequest('/api/softphone/authorize',{target});}catch(error){status(error.message);return;}
+  let authorizedTarget=target;
+  try {const access=await accountRequest('/api/softphone/authorize',{target});authorizedTarget=access.target||target;}catch(error){status(error.message);return;}
   currentCall = { direction: "outgoing", address: target };
-  try { status("Calling…"); await phone.call(target); }
+  try { status("Calling…"); await phone.call(authorizedTarget); }
   catch (error) { finishCall("failed"); report(error); }
 });
 $("#check-location").onclick = async () => {

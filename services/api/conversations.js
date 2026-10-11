@@ -2,6 +2,16 @@ import {randomUUID} from 'node:crypto';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const reactions=['👍','❤️','😂','😮','😢','🙏'];
 export async function migrateConversations(pool) {
+  await pool.query(`CREATE TABLE IF NOT EXISTS personal_address_book (
+    id CHAR(36) PRIMARY KEY,owner_id CHAR(36) NOT NULL,name VARCHAR(160) NOT NULL,email VARCHAR(254) NOT NULL DEFAULT '',
+    phone VARCHAR(64) NOT NULL DEFAULT '', FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE KEY owner_contact(owner_id,email,phone)) ENGINE=InnoDB`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS user_presence (
+    user_id CHAR(36) PRIMARY KEY, searchable BOOLEAN NOT NULL DEFAULT FALSE,
+    presence VARCHAR(16) NOT NULL DEFAULT 'available', status_text VARCHAR(160) NOT NULL DEFAULT '',
+    share_presence BOOLEAN NOT NULL DEFAULT FALSE, accept_forwarded BOOLEAN NOT NULL DEFAULT FALSE,
+    call_forward CHAR(36) NULL, message_forward CHAR(36) NULL,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB`);
   for(const [name,definition] of [['reply_to','CHAR(36) NULL'],['read_at','DATETIME(3) NULL'],['edited_at','DATETIME(3) NULL'],['deleted_at','DATETIME(3) NULL']]) {
     const found=await pool.query("SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='messages' AND column_name=$1",[name]);
     if(!found.rowCount)await pool.query(`ALTER TABLE messages ADD COLUMN ${name} ${definition}`);
@@ -60,6 +70,18 @@ export async function handleConversations({req,res,path,user,pool,send,readJson,
       }
       const id=randomUUID();
       await db.query('INSERT INTO messages(id,sender_id,recipient_id,body,reply_to) VALUES($1,$2,$3,$4,$5)',[id,user.id,recipient,body.trim(),replyTo]);
+      const forwarding=(await db.query('SELECT message_forward FROM user_presence WHERE user_id=$1',[recipient])).rows[0]?.message_forward;
+      if(forwarding && forwarding!==user.id && forwarding!==recipient) {
+        const destination=await db.query(`SELECT u.id FROM users u JOIN user_presence p ON p.user_id=u.id
+          JOIN contacts c ON c.contact_id=u.id AND c.owner_id=$1
+          WHERE u.id=$2 AND u.tenant_id=$3 AND u.status='active' AND p.accept_forwarded=true`,[recipient,forwarding,user.tenant_id]);
+        const denied=await db.query(`SELECT 1 FROM conversation_preferences WHERE blocked=true AND
+          ((owner_id=$1 AND contact_id=$2) OR (owner_id=$2 AND contact_id=$1))`,[user.id,forwarding]);
+        if(destination.rowCount&&!denied.rowCount){
+          await db.query('INSERT IGNORE INTO contacts(owner_id,contact_id) VALUES($1,$2)',[forwarding,user.id]);
+          await db.query('INSERT INTO messages(id,sender_id,recipient_id,body) VALUES($1,$2,$3,$4)',[randomUUID(),user.id,forwarding,'[Forwarded account message]\n'+body.trim()]);
+        }
+      }
       await db.query('COMMIT');return send(res,201,{id,status:'sent'});
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }

@@ -40,3 +40,10 @@ test('message schema upgrades repeat safely without storing plaintext provider c
  const statements=[];await migrateConversations({query:async sql=>{statements.push(sql);return {rowCount:1};}});
  assert.ok(!statements.some(sql=>sql.startsWith('ALTER TABLE')));assert.ok(statements.some(sql=>sql.includes('CREATE TABLE IF NOT EXISTS message_reactions')));
 });
+test('forwarded account messages copy only once to a consenting same-tenant contact',async()=>{
+ const destination='44444444-4444-4444-8444-444444444444';
+ const response=await invoke({body:{recipient:peer,body:'hello'},rows:sql=>sql.includes('SELECT message_forward')?[{message_forward:destination}]:sql.includes('FROM contacts')||sql.includes('SELECT u.id FROM users')?[{}]:[]});
+ assert.equal(response.status,201);const copies=response.statements.filter(q=>q.sql.startsWith('INSERT INTO messages'));assert.equal(copies.length,2);assert.equal(copies[1].params[2],destination);assert.match(copies[1].params[3],/Forwarded account message/);
+ const policy=response.statements.find(q=>q.sql.includes('SELECT u.id FROM users'));assert.match(policy.sql,/u.tenant_id=\$3/);assert.match(policy.sql,/p.accept_forwarded=true/);
+ const rejected=await invoke({body:{recipient:peer,body:'hello'},rows:sql=>sql.includes('SELECT message_forward')?[{message_forward:destination}]:sql.includes('FROM contacts')?[{}]:[]});assert.equal(rejected.statements.filter(q=>q.sql.startsWith('INSERT INTO messages')).length,1);
+});

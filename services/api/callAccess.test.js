@@ -7,7 +7,7 @@ function pool({internal=[],local=false,paid=false}={}){return {query:async sql=>
  return {rows,rowCount:rows.length};
 }};}
 test('free accounts can call active users in their own tenant without a plan',async()=>{
- assert.deepEqual(await callAccess(pool({internal:[{tenant_id:'tenant'}]}),user,'sip:ol123@sip.example.com'),{allowed:true,scope:'internal'});
+ assert.deepEqual(await callAccess(pool({internal:[{tenant_id:'tenant'}]}),user,'sip:ol123@sip.example.com'),{allowed:true,scope:'internal',target:'sip:ol123@sip.example.com'});
 });
 test('external calls require an active subscription and malformed SIP addresses fail closed',async()=>{
  for(const target of ['sip:alice@carrier.example','sip:+12025550123@sip.example.com'])assert.equal((await callAccess(pool({local:target.includes('sip.example')}),user,target)).allowed,false);
@@ -25,4 +25,10 @@ test('subscription lookup is tenant-bound, active, and checks plan availability'
 test('HTTP authorization returns a useful billing link on rejection',async()=>{
  let response;await handleCallAccess({req:{method:'POST'},path:'/api/softphone/authorize',user,pool:pool(),readJson:async()=>({target:'sip:x@carrier'}),send:(_,status,body)=>{response={status,body};}});
  assert.equal(response.status,403);assert.equal(response.body.configurationUrl,'/#billing');
+});
+test('app call forwarding is one hop, consent checked, and DND rejects calls',async()=>{
+ const queries=[];const forwardingPool={query:async(sql,params)=>{queries.push({sql,params});const rows=sql.includes('SELECT a.user_id')?[{user_id:'peer',tenant_id:'tenant'}]:sql.includes('SELECT presence,call_forward')?[{presence:'dnd',call_forward:'destination'}]:sql.includes('SELECT a.username')?[{username:'dest',domain:'sip.example',presence:'available'}]:[];return {rows,rowCount:rows.length};}};
+ assert.deepEqual(await callAccess(forwardingPool,user,'sip:peer@sip.example'),{allowed:true,scope:'internal',target:'sip:dest@sip.example',forwarded:true});assert.match(queries.at(-1).sql,/p.accept_forwarded=true/);
+ const dndPool={query:async sql=>{const rows=sql.includes('SELECT a.user_id')?[{user_id:'peer',tenant_id:'tenant'}]:[{presence:'dnd'}];return {rows,rowCount:rows.length};}};
+ assert.equal((await callAccess(dndPool,user,'sip:peer@sip.example')).allowed,false);
 });

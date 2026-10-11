@@ -13,8 +13,21 @@ export async function callAccess(pool,user,target) {
   const internal=await pool.query(`SELECT a.user_id,a.tenant_id FROM sip_accounts a
     JOIN users u ON u.id=a.user_id AND u.tenant_id=a.tenant_id JOIN tenants t ON t.id=a.tenant_id
     WHERE a.username=$1 AND a.domain=$2 AND a.status='active' AND u.status='active' AND t.status='active'`,[address.username,address.domain]);
-  if(internal.rowCount) return internal.rows[0].tenant_id===user.tenant_id?
-    {allowed:true,scope:'internal'}:{allowed:false,error:'Calls to another workspace are unavailable'};
+  if(internal.rowCount) {
+    const recipient=internal.rows[0];
+    if(recipient.tenant_id!==user.tenant_id)return {allowed:false,error:'Calls to another workspace are unavailable'};
+    const profile=(await pool.query('SELECT presence,call_forward FROM user_presence WHERE user_id=$1',[recipient.user_id])).rows[0];
+    if(profile?.call_forward && profile.call_forward!==user.id && profile.call_forward!==recipient.user_id) {
+      const destination=(await pool.query(`SELECT a.username,a.domain,p.presence FROM sip_accounts a
+        JOIN users u ON u.id=a.user_id JOIN user_presence p ON p.user_id=u.id
+        JOIN contacts c ON c.owner_id=$1 AND c.contact_id=u.id
+        WHERE u.id=$2 AND u.tenant_id=$3 AND u.status='active' AND a.status='active' AND p.accept_forwarded=true`,
+        [recipient.user_id,profile.call_forward,user.tenant_id])).rows[0];
+      if(destination && destination.presence!=='dnd')return {allowed:true,scope:'internal',target:`sip:${destination.username}@${destination.domain}`,forwarded:true};
+    }
+    if(profile?.presence==='dnd')return {allowed:false,error:'This user is not accepting calls'};
+    return {allowed:true,scope:'internal',target};
+  }
   // Never send an unknown local identity to a carrier route.
   const local=await pool.query('SELECT 1 FROM sip_accounts WHERE domain=$1 LIMIT 1',[address.domain]);
   if(local.rowCount && !/^\+?[1-9][0-9]{6,14}$/.test(address.username))return {allowed:false,error:'This SIP user is unavailable'};
