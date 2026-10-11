@@ -1,4 +1,5 @@
 import { WebSocketServer, WebSocket } from "ws";
+import {meetingPolicy} from './meetingPolicy.js';
 
 const roomSockets = new Map();
 const assistGrants = new Map();
@@ -19,9 +20,15 @@ export function attachMeetingSignaling(server, { pool, origin, currentUser }) {
       );
       const room = result.rows[0];
       if (!room || room.ended_at) throw new Error("Meeting unavailable");
+      const policy=await meetingPolicy(pool,user.tenant_id);
+      if((policy.requireInvitation||!policy.allowLinks)&&user.id!==room.host_id){
+        const invitation=await pool.query('SELECT 1 FROM meeting_invitations WHERE room_id=$1 AND tenant_id=$2 AND recipient_id=$3',
+          [match[1],user.tenant_id,user.id]);
+        if(!invitation.rowCount)throw new Error('Invitation required');
+      }
       const peers = roomSockets.get(match[1]) || new Map();
       if (room.locked && user.id !== room.host_id) throw new Error("Meeting locked");
-      if (peers.size >= 4 || peers.has(user.id)) throw new Error("Meeting full or already joined");
+      if (peers.size >= policy.maxParticipants || peers.has(user.id)) throw new Error("Meeting full or already joined");
       wss.handleUpgrade(req, socket, head, (ws) => {
         ws.roomId = match[1];
         ws.userId = user.id;
@@ -29,6 +36,7 @@ export function attachMeetingSignaling(server, { pool, origin, currentUser }) {
         ws.name = user.display_name;
         ws.hostId = room.host_id;
         ws.features = user.features;
+        ws.policy = policy;
         ws.screenActive = false;
         ws.pendingAssist = new Set();
         ws.rate = { start: Date.now(), count: 0 };
@@ -58,7 +66,7 @@ export function attachMeetingSignaling(server, { pool, origin, currentUser }) {
   wss.on("connection", (ws) => {
     const peers = roomSockets.get(ws.roomId) || new Map();
     roomSockets.set(ws.roomId, peers);
-    send(ws, { type: "welcome", id: ws.userId, hostId: ws.hostId,
+    send(ws, { type: "welcome", id: ws.userId, hostId: ws.hostId,policy:ws.policy,
       peers: [...peers.values()].map((peer) => ({
         id: peer.userId, name: peer.name, screenActive: peer.screenActive
       })) });
@@ -80,24 +88,28 @@ export function attachMeetingSignaling(server, { pool, origin, currentUser }) {
               (["offer","answer"].includes(signal.type) && typeof signal.sdp === "string")) {
             send(participants.get(msg.to), { type: "signal", from: ws.userId, signal });
           }
-        } else if (msg.type === "chat" && typeof msg.text === "string" &&
+        } else if (msg.type === "chat" && ws.policy.allowChat && typeof msg.text === "string" &&
                    msg.text.trim().length && msg.text.length <= 2000) {
           for (const peer of participants.values())
             send(peer, { type: "chat", from: ws.userId, name: ws.name, text: msg.text.trim() });
-        } else if (msg.type === "screen-state" && ws.features.screen_share &&
+        } else if (msg.type === 'hand' && ws.policy.allowHand && typeof msg.raised === 'boolean') {
+          for(const peer of participants.values()) send(peer,{type:'hand',from:ws.userId,name:ws.name,raised:msg.raised});
+        } else if (msg.type === 'reaction' && ws.policy.allowReactions && msg.reaction === 'applause') {
+          for(const peer of participants.values()) send(peer,{type:'reaction',from:ws.userId,name:ws.name,reaction:'applause'});
+        } else if (msg.type === "screen-state" && ws.features.screen_share && ws.policy.allowScreenShare &&
                    typeof msg.active === "boolean") {
           ws.screenActive = msg.active;
           if (!msg.active) revokeFor(ws.roomId, ws.userId);
           for (const peer of participants.values()) if (peer !== ws)
             send(peer, { type:"screen-state", from:ws.userId, active:msg.active });
-        } else if (msg.type === "assist-request" && ws.features.remote_assist &&
+        } else if (msg.type === "assist-request" && ws.features.remote_assist && ws.policy.allowScreenShare &&
                    typeof msg.to === "string" && msg.to !== ws.userId) {
           const sharer = participants.get(msg.to);
           if (sharer?.features.screen_share && sharer.screenActive) {
             sharer.pendingAssist.add(ws.userId);
             send(sharer, { type:"assist-request", from:ws.userId, name:ws.name });
           }
-        } else if (msg.type === "assist-response" && ws.features.screen_share &&
+        } else if (msg.type === "assist-response" && ws.features.screen_share && ws.policy.allowScreenShare &&
                    ws.screenActive && typeof msg.to === "string" &&
                    typeof msg.approved === "boolean" && ws.pendingAssist.delete(msg.to)) {
           const viewer = participants.get(msg.to);
@@ -169,6 +181,20 @@ export function attachMeetingSignaling(server, { pool, origin, currentUser }) {
       for (const ws of roomSockets.get(id)?.values() || [])
         ws.close(1000, "Meeting ended");
       assistGrants.delete(id);
+    },
+    participants(id){return [...(roomSockets.get(id)?.values()||[])].map(ws=>({id:ws.userId,name:ws.name}));},
+    removeParticipant(id,userId){roomSockets.get(id)?.get(userId)?.close(1008,'Removed by administrator');},
+    applyPolicy(tenantId,policy){
+      for(const [roomId,peers] of roomSockets){
+        const members=[...peers.values()].filter(ws=>ws.tenantId===tenantId);
+        for(const ws of members){
+          ws.policy=policy;
+          if(!policy.allowScreenShare&&ws.screenActive){ws.screenActive=false;revokeFor(roomId,ws.userId);
+            send(ws,{type:'screen-stop'});
+            for(const peer of peers.values())if(peer!==ws)send(peer,{type:'screen-state',from:ws.userId,active:false});}
+          send(ws,{type:'policy',policy});
+        }
+      }
     }
   };
 }

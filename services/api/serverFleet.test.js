@@ -25,3 +25,50 @@ test('fleet rejects non-super-admin before database access',async()=>{
     pool:null,send:(_res,code,body)=>{runnerResult={code,body};}});
   assert.equal(runnerResult.code,401);
 });
+
+test('runner Kamailio report validates service states and bound switch node',async()=>{
+  const secret='z'.repeat(48);
+  process.env.DEPLOY_RUNNER_TOKEN=secret;
+  const statements=[];
+  const pool={query:async(sql,args)=>{
+    statements.push([sql,args]);
+    if(sql.includes('SELECT id FROM deployment_nodes'))return {rows:[{id:'node'}],rowCount:1};
+    if(sql.includes('INSERT INTO kamailio_node_checks'))return {rows:[],rowCount:1};
+    throw Error('Unexpected query');
+  }};
+  const send=(_res,status,body)=>({status,body});
+  const base={req:{method:'POST',headers:{authorization:'Bearer '+secret}},
+    res:{},path:'/api/integrations/deployment/kamailio-check',pool,send};
+  const valid={nodeId:'11111111-1111-4111-8111-111111111111',
+    signalingStatus:'inactive',mediaStatus:'inactive',version:'5.6.3',latencyMs:10};
+  const bad=await handleServerFleetRunner({...base,readJson:async()=>({...valid,signalingStatus:'magic'})});
+  assert.equal(bad.status,400);
+  assert.equal(statements.length,0);
+  const good=await handleServerFleetRunner({...base,readJson:async()=>valid});
+  assert.equal(good.status,200);
+  assert.equal(statements.length,2);
+  assert.equal(statements[1][1][2],'inactive');
+});
+
+test('only super admins can queue SIP core stop',async()=>{
+  const path='/api/admin/servers/11111111-1111-4111-8111-111111111111/jobs';
+  const pool={query:async()=>({rows:[],rowCount:0}),connect:async()=>{throw Error('No job should be written');}};
+  const result=await handleServerFleetAdmin({req:{method:'POST'},res:{},path,
+    user:{id:'22222222-2222-4222-8222-222222222222',tenant_id:'33333333-3333-4333-8333-333333333333',role:'admin'},
+    pool,send:(_res,status,body)=>({status,body}),readJson:async()=>({action:'sip_core_stop'})});
+  assert.equal(result.status,403);
+});
+
+test('Kamailio node configuration rejects unauthorized and invalid changes before writing',async()=>{
+  const path='/api/admin/servers/11111111-1111-4111-8111-111111111111/kamailio-config';
+  const send=(_res,status,body)=>({status,body});
+  const pool={query:async sql=>{if(sql.includes('fleet_access_grants'))return {rows:[]};
+    throw Error('Unexpected query');},connect:async()=>{throw Error('Unexpected connection');}};
+  const req={method:'PUT'};
+  const denied=await handleServerFleetAdmin({req,res:{},path,user:{role:'admin'},pool,send,
+    readJson:async()=>({})});
+  assert.equal(denied.status,403);
+  const invalid=await handleServerFleetAdmin({req,res:{},path,user:{role:'super_admin'},pool,send,
+    readJson:async()=>({sipDomain:'bad/domain',maxConcurrentCalls:100,expectedRevision:0})});
+  assert.equal(invalid.status,400);
+});

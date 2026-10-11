@@ -1,0 +1,205 @@
+---
+# Run locally on the application host. Generates only local cryptographic keys;
+# a Resend sending key must be issued by the account and entered in the GUI.
+- name: Prepare production email verification and super admin configuration
+  hosts: switch_nodes
+  become: true
+  gather_facts: true
+  vars:
+    email_env_file: /opt/olamide/repo/deployment/docker/.env
+    email_checkout: /opt/olamide/kamailio-staging
+    # Optional: set both values in a root-only local vars file, never with -e on a command line.
+    email_provider_key_file: ''
+    email_sender: ''
+  tasks:
+    - name: Require the local production Debian host
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version == '12'
+          - ansible_user_id == 'root'
+          - ansible_connection | default('ssh') == 'local'
+          - email_checkout == '/opt/olamide/kamailio-staging'
+
+    - name: Check private environment and staged source
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+      loop:
+        - "{{ email_env_file }}"
+        - "{{ email_checkout }}/deploy/kamailio/deploy-production-gui.sh"
+      register: email_inputs
+
+    - name: Require existing regular inputs
+      ansible.builtin.assert:
+        that:
+          - item.stat.isreg | default(false)
+        fail_msg: An existing private environment and staged deployment script are required.
+      loop: "{{ email_inputs.results }}"
+
+    - name: Install outbound HTTPS and email diagnostic prerequisites
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - openssl
+          - dnsutils
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Read existing private values without logging them
+      ansible.builtin.slurp:
+        src: "{{ email_env_file }}"
+      register: email_env_raw
+      no_log: true
+
+    - name: Inspect existing key lengths without disclosing values
+      ansible.builtin.set_fact:
+        email_otp_values: "{{ (email_env_raw.content | b64decode) | regex_findall('(?m)^OTP_HMAC_SECRET=([^\\r\\n]*)$') }}"
+        email_cipher_values: "{{ (email_env_raw.content | b64decode) | regex_findall('(?m)^EMAIL_CONFIG_KEY=([^\\r\\n]*)$') }}"
+      no_log: true
+
+    - name: Refuse to rotate existing keys or accept invalid duplicates
+      ansible.builtin.assert:
+        that:
+          - email_otp_values | length <= 1
+          - email_cipher_values | length <= 1
+          - email_otp_values | length == 0 or email_otp_values[0] | length == 0 or email_otp_values[0] | length >= 32
+          - email_cipher_values | length == 0 or email_cipher_values[0] | length == 0 or email_cipher_values[0] is match('^[a-fA-F0-9]{64}$')
+        fail_msg: Existing email cryptographic values are invalid; repair them privately before proceeding.
+
+    - name: Generate missing OTP secret
+      ansible.builtin.command: openssl rand -hex 32
+      register: email_new_otp
+      changed_when: false
+      when: email_otp_values | length == 0 or email_otp_values[0] | length == 0
+      no_log: true
+
+    - name: Generate missing database encryption key
+      ansible.builtin.command: openssl rand -hex 32
+      register: email_new_cipher
+      changed_when: false
+      when: email_cipher_values | length == 0 or email_cipher_values[0] | length == 0
+      no_log: true
+
+    - name: Store only the missing OTP secret in the private environment
+      ansible.builtin.lineinfile:
+        path: "{{ email_env_file }}"
+        regexp: '^OTP_HMAC_SECRET='
+        line: "OTP_HMAC_SECRET={{ email_new_otp.stdout }}"
+        mode: '0600'
+      when: email_new_otp.stdout is defined
+      no_log: true
+
+    - name: Store only the missing email encryption key
+      ansible.builtin.lineinfile:
+        path: "{{ email_env_file }}"
+        regexp: '^EMAIL_CONFIG_KEY='
+        line: "EMAIL_CONFIG_KEY={{ email_new_cipher.stdout }}"
+        mode: '0600'
+      when: email_new_cipher.stdout is defined
+      no_log: true
+
+    - name: Require both provider inputs when provisioning delivery
+      ansible.builtin.assert:
+        that:
+          - (email_provider_key_file | length == 0) == (email_sender | length == 0)
+          - email_provider_key_file | length == 0 or email_provider_key_file is match('^/[^\r\n]+$')
+          - email_sender | length == 0 or email_sender is match('^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$')
+        fail_msg: Provide a verified sender and an absolute root-only Resend key file together.
+
+    - name: Check private provider key file
+      ansible.builtin.stat:
+        path: "{{ email_provider_key_file }}"
+        follow: false
+      register: email_provider_key_stat
+      when: email_provider_key_file | length > 0
+      no_log: true
+
+    - name: Require a root-only regular provider key file
+      ansible.builtin.assert:
+        that:
+          - email_provider_key_stat.stat.isreg | default(false)
+          - email_provider_key_stat.stat.uid | default(-1) == 0
+          - (email_provider_key_stat.stat.mode | default('777')) == '0600'
+          - email_provider_key_stat.stat.size | default(0) < 1024
+        fail_msg: Provider key file must be a small root-owned regular file with mode 0600.
+      when: email_provider_key_file | length > 0
+
+    - name: Read provider key without logging it
+      ansible.builtin.slurp:
+        src: "{{ email_provider_key_file }}"
+      register: email_provider_key_raw
+      when: email_provider_key_file | length > 0
+      no_log: true
+
+    - name: Validate provider key format
+      ansible.builtin.assert:
+        that:
+          - (email_provider_key_raw.content | b64decode | trim) is match('^re_[A-Za-z0-9_]{16,}$')
+        fail_msg: Provider key file does not contain a Resend sending key.
+      when: email_provider_key_file | length > 0
+      no_log: true
+
+    - name: Install provider key in private production environment
+      ansible.builtin.lineinfile:
+        path: "{{ email_env_file }}"
+        regexp: '^RESEND_API_KEY='
+        line: "RESEND_API_KEY={{ email_provider_key_raw.content | b64decode | trim }}"
+        mode: '0600'
+      when: email_provider_key_file | length > 0
+      no_log: true
+
+    - name: Install verified sender in private production environment
+      ansible.builtin.lineinfile:
+        path: "{{ email_env_file }}"
+        regexp: '^RESEND_FROM='
+        line: "RESEND_FROM={{ email_sender }}"
+        mode: '0600'
+      when: email_provider_key_file | length > 0
+      no_log: true
+
+    - name: Deploy the GUI, API and migrations after database backup
+      ansible.builtin.command:
+        argv: [bash, "{{ email_checkout }}/deploy/kamailio/deploy-production-gui.sh"]
+      when: email_deploy_application | default(true) | bool
+      register: email_gui_deployment
+      changed_when: email_gui_deployment.rc == 0
+
+    - name: Confirm the private API is healthy
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/api/health
+        status_code: 200
+        return_content: false
+        timeout: 10
+
+    - name: Verify the running API received the local cryptographic and provider configuration
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-name
+          - docker
+          - --env-file
+          - "{{ email_env_file }}"
+          - -f
+          - "{{ email_checkout }}/deployment/docker/compose.yml"
+          - exec
+          - -T
+          - api
+          - node
+          - -e
+          - >-
+            const e=process.env;
+            process.exit(e.OTP_HMAC_SECRET?.length>=32 && /^[0-9a-f]{64}$/i.test(e.EMAIL_CONFIG_KEY||'')
+              && (!process.argv.includes('provider') || (!!e.RESEND_API_KEY && !!e.RESEND_FROM)) ? 0 : 1);
+          - "{{ 'provider' if email_provider_key_file | length > 0 else 'keys' }}"
+      changed_when: false
+      no_log: true
+
+    - name: Report the remaining external-provider step
+      ansible.builtin.debug:
+        msg: >-
+          Local OTP and encryption keys are ready. {{ 'Provider configuration was installed in the API environment.' if email_provider_key_file | length > 0 else 'A super administrator must save a Resend sending key and a verified sender in Email verification settings, or provide a private key file and sender to this playbook.' }}
+          Send a test message and verify a test registration before relying on delivery.

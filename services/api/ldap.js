@@ -2,6 +2,7 @@ import { randomBytes,randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { hashPassword } from "./security.js";
 import { isAdmin } from "./tenancy.js";
+import { createSipAccount } from './sipMarketplace.js';
 
 const uuid=/^[0-9a-f-]{36}$/i;
 const emailPattern=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -99,6 +100,7 @@ export async function loginWithLdap({pool,connections,slug,email,password,authen
       const {salt,hash}=await hashPassword(randomBytes(48).toString("hex"));
       await db.query("INSERT INTO users(id,tenant_id,display_name,email,password_salt,password_hash,role,auth_source,ldap_dn) VALUES($1,$2,$3,$4,$5,$6,'user','ldap',$7)",
         [id,tenant.id,identity.name,identity.email,salt,hash,identity.dn]);
+      await createSipAccount(db,id,new URL(process.env.PUBLIC_ORIGIN||'https://sip.dobhrap.com').hostname,tenant.id);
     }
     await db.query("DELETE FROM user_group_members WHERE user_id=$1",[id]);
     for(const groupId of groupIds)

@@ -1,0 +1,7 @@
+# Compose override for an isolated local pilot.
+# Use a separate project name so the MySQL volume and API container stay separate.
+services:
+  api:
+    image: olamide-api:kamailio-pilot
+  migrate:
+    image: olamide-api:kamailio-pilot

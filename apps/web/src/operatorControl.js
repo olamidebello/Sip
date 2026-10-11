@@ -53,9 +53,17 @@ export function setupOperatorControl(){
   $('#operator-quote-form').onsubmit=async event=>{
     event.preventDefault();try{
       const quote=await api('/api/admin/operator/quote','POST',{tariffId:tariffSelect.value,number:event.currentTarget.elements.number.value});
+      const ranked=$('#operator-quote-candidates');
+      ranked.replaceChildren();
+      for(const candidate of (quote.candidates||[]).slice(0,10)){
+        const item=document.createElement('li');
+        item.textContent=candidate.provider+' · prefix '+candidate.prefix+
+          ' · cost '+candidate.cost_cents+'¢ · price '+candidate.price_cents+'¢';
+        ranked.append(item);
+      }
       $('#operator-quote').textContent=quote.blocked?'Blocked: '+quote.reason:
         quote.selected?quote.selected.provider+' · '+quote.selected.prefix+' · '+quote.selected.cost_cents+'¢ cost / '+quote.selected.price_cents+'¢ price · '+quote.candidates.length+' candidate(s). Preview only.':quote.reason;
-    }catch(e){$('#operator-quote').textContent=e.message;}
+    }catch(e){$('#operator-quote-candidates').replaceChildren();$('#operator-quote').textContent=e.message;}
   };
   return {refresh};
 }

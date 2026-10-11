@@ -1,0 +1,120 @@
+---
+# Idempotent local host audit and package repair. Never stops or starts SIP,
+# changes a listener, imports carrier credentials or enables prepaid charging.
+- name: Audit and install Kamailio, media and billing host prerequisites
+  hosts: switch_nodes
+  become: true
+  gather_facts: true
+  serial: 1
+  vars:
+    requirements_checkout: /opt/olamide/kamailio-staging
+    requirements_packages:
+      - ca-certificates
+      - curl
+      - jq
+      - openssl
+      - python3
+      - python3-venv
+      - mariadb-client
+      - kamailio
+      - kamailio-extra-modules
+      - kamailio-utils-modules
+      - kamailio-json-modules
+      - kamailio-websocket-modules
+      - kamailio-tls-modules
+      - rtpengine-daemon
+    requirements_files:
+      - /opt/olamide/repo/deployment/docker/.env
+      - /opt/olamide/kamailio-staging/deployment/docker/compose.yml
+      - /opt/olamide/kamailio-staging/deploy/kamailio/production.yml
+      - /opt/olamide/kamailio-staging/deploy/kamailio/carrier-prepaid.yml
+      - /opt/olamide/kamailio-staging/services/api/ratingEngine.js
+      - /opt/olamide/kamailio-staging/services/api/prepaidAuthorizer.js
+      - /opt/olamide/kamailio-staging/services/api/billingLedger.js
+      - /opt/olamide/kamailio-staging/services/api/carrierReconciliation.js
+  tasks:
+    - name: Require root execution on the local Debian 12 host
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version == '12'
+          - ansible_connection | default('ssh') == 'local'
+          - ansible_user_id == 'root'
+          - requirements_checkout == '/opt/olamide/kamailio-staging'
+        fail_msg: Use the local switch_nodes inventory as root on Debian 12.
+
+    - name: Inspect host package state before repair
+      ansible.builtin.package_facts:
+        manager: apt
+
+    - name: Record missing host packages
+      ansible.builtin.set_fact:
+        requirements_missing_packages: "{{ requirements_packages | difference(ansible_facts.packages.keys() | list) | sort }}"
+
+    - name: Install missing host packages without starting services
+      ansible.builtin.apt:
+        name: "{{ requirements_packages }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+        policy_rc_d: 101
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+
+    - name: Create private billing artifact directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+      loop:
+        - /opt/olamide/billing
+        - /opt/olamide/billing/reports
+        - /opt/olamide/billing/reconciliation
+        - /opt/olamide/billing/backups
+
+    - name: Inspect required source and deployment inputs
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        get_checksum: false
+      loop: "{{ requirements_files }}"
+      register: requirements_input_state
+
+    - name: Record missing inputs without disclosing environment contents
+      ansible.builtin.set_fact:
+        requirements_missing_files: "{{ requirements_input_state.results | rejectattr('stat.isreg') | map(attribute='item') | list }}"
+
+    - name: Verify Docker CLI and Compose plugin
+      ansible.builtin.command:
+        argv: [docker, compose, version]
+      changed_when: false
+      failed_when: false
+      register: requirements_compose
+
+    - name: Verify private API health
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/api/health
+        method: GET
+        status_code: 200
+        timeout: 5
+      register: requirements_api
+      failed_when: false
+
+    - name: Inspect current service state without changing it
+      ansible.builtin.service_facts:
+
+    - name: Report repairs and remaining configuration gates
+      ansible.builtin.debug:
+        msg:
+          packages_installed_by_this_run: "{{ requirements_missing_packages }}"
+          missing_source_or_environment: "{{ requirements_missing_files }}"
+          docker_compose_available: "{{ requirements_compose.rc == 0 }}"
+          api_healthy: "{{ requirements_api.status | default(0) == 200 }}"
+          kamailio_state: "{{ ansible_facts.services.get('kamailio.service', {}).get('state', 'missing') }}"
+          rtpengine_state: "{{ ansible_facts.services.get('rtpengine-daemon.service', {}).get('state', 'missing') }}"
+          commissioning: >-
+            Packages and directories alone do not provision a carrier or
+            authorize prepaid charging. Review the missing inputs and run
+            carrier-prepaid.yml only with real carrier peering, production
+            configurations, and observed acceptance evidence.

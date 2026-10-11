@@ -70,8 +70,23 @@ export async function handleCdrIngest({req,res,pool,send,keys}) {
   }
 }
 
+export function cdrFilters(url){
+  const q=new URL(url,'http://localhost').searchParams;
+  const direction=q.get('direction')||'',disposition=q.get('disposition')||'',source=q.get('source')||'';
+  const page=Number(q.get('page')||1);
+  if(direction&&!['inbound','outbound'].includes(direction)||
+    disposition&&!['answered','missed','rejected','failed'].includes(disposition)||
+    source&&!identifier.test(source)||!Number.isSafeInteger(page)||page<1||page>100)
+    throw new RangeError('Invalid CDR filter');
+  return {direction,disposition,source,page};
+}
 export async function handleCdrAdmin({req,res,user,pool,send}) {
   if (!isAdmin(user)) return send(res,403,{error:"Administrator required"});
-  const records = await pool.query("SELECT id,source,leg_id,direction,caller_e164,callee_e164,disposition,duration_seconds,billable_seconds,started_at,received_at FROM cdr_records WHERE tenant_id=$1 ORDER BY received_at DESC,id DESC LIMIT 100",[user.tenant_id]);
-  return send(res,200,{records:records.rows,charged:false,note:"Unrated switch-imported records. No payment or balance changes."});
+  let filter;try{filter=cdrFilters(req.url);}catch(error){return send(res,400,{error:error.message});}
+  const params=[user.tenant_id,filter.direction,filter.disposition,filter.source];
+  const where=`tenant_id=$1 AND ($2='' OR direction=$2) AND ($3='' OR disposition=$3) AND ($4='' OR source=$4)`;
+  const records=await pool.query(`SELECT id,source,leg_id,direction,caller_e164,callee_e164,disposition,duration_seconds,billable_seconds,started_at,received_at
+    FROM cdr_records WHERE ${where} ORDER BY received_at DESC,id DESC LIMIT 101 OFFSET $5`,[...params,(filter.page-1)*100]);
+  return send(res,200,{records:records.rows.slice(0,100),page:filter.page,hasMore:records.rows.length>100,
+    charged:false,note:'Unrated switch-imported records. No payment or balance changes.'});
 }

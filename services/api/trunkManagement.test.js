@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {handleTrunks} from './trunkManagement.js';
 const id='11111111-1111-4111-8111-111111111111';
-const user={id:'22222222-2222-4222-8222-222222222222',tenant_id:'33333333-3333-4333-8333-333333333333'};
+const user={id:'22222222-2222-4222-8222-222222222222',tenant_id:'33333333-3333-4333-8333-333333333333',role:'admin'};
 async function call(path,method,body,pool){let result;await handleTrunks({req:{method},res:{},path,user,pool,readJson:async()=>body,send:(res,status,data)=>{result={status,data};}});return result;}
 test('trunk edits require a matching revision and block active carrier links',async()=>{
-  const seen=[];const db={query:async(sql,args)=>{seen.push(sql);if(sql.startsWith('SELECT id,name,host'))return {rows:[{id,name:'A',host:'sip.example.com',port:5061,transport:'tls',priority:100,enabled:false,revision:2}]};if(sql.startsWith('SELECT (SELECT COUNT'))return {rows:[{rates:0,carriers:1}]};if(sql.includes("status='active'"))return {rowCount:1};return {rowCount:1};},release(){}};
+  const seen=[];const db={query:async(sql,args)=>{seen.push(sql);if(sql.startsWith('SELECT id,name,host'))return {rows:[{id,name:'A',host:'sip.example.com',port:5061,transport:'tls',priority:100,enabled:false,revision:2}]};if(sql.includes("provider='flowroute'"))return {rowCount:0};if(sql.startsWith('SELECT (SELECT COUNT'))return {rows:[{rates:0,carriers:1}]};if(sql.includes("status='active'"))return {rowCount:1};return {rowCount:1};},release(){}};
   const pool={connect:async()=>db};const body={name:'B',host:'new.example.com',port:5061,transport:'tls',priority:100,revision:2};
   assert.equal((await call(`/api/pbx/trunks/${id}`,'PUT',{...body,revision:1},pool)).status,409);
   assert.equal((await call(`/api/pbx/trunks/${id}`,'PUT',body,pool)).status,409);
@@ -17,8 +17,32 @@ test('batch rejects duplicate ids before opening a transaction',async()=>{
   const r=await call('/api/pbx/trunks/batch','PUT',{enabled:true,trunks:[{id,revision:1},{id,revision:1}]},pool);
   assert.equal(r.status,400);
 });
+test('tenant admin cannot edit a linked Flowroute trunk',async()=>{
+  const seen=[];
+  const db={query:async(sql)=>{seen.push(sql);
+    if(sql.startsWith('SELECT id,name,host'))return {rows:[{id,revision:2}]};
+    if(sql.includes("provider='flowroute'"))return {rowCount:1};
+    return {rowCount:1};},release(){}};
+  const pool={connect:async()=>db};
+  const r=await call(`/api/pbx/trunks/${id}/status`,'PUT',{enabled:true,revision:2},pool);
+  assert.equal(r.status,403);
+  assert.equal(seen.some(sql=>sql.startsWith('UPDATE pbx_trunks')),false);
+});
 test('trunk list is restricted to selected tenant',async()=>{
   let params;const pool={query:async(sql,args)=>{params=args;return {rows:[]}}};
   assert.equal((await call('/api/pbx/trunks','GET',null,pool)).status,200);
   assert.deepEqual(params,[user.tenant_id]);
+});
+
+test('trunk detail includes only selected tenant links',async()=>{
+  const calls=[];
+  const pool={query:async(sql,args)=>{
+    calls.push(args);
+    if(sql.includes('FROM pbx_trunks'))return {rows:[{id,name:'A',revision:2}]};
+    return {rows:[]};
+  }};
+  const result=await call('/api/pbx/trunks/'+id,'GET',null,pool);
+  assert.equal(result.status,200);
+  assert.equal(result.data.trunk.id,id);
+  assert.deepEqual(calls,[[id,user.tenant_id],[id,user.tenant_id],[id,user.tenant_id]]);
 });

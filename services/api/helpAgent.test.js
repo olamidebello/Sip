@@ -29,3 +29,18 @@ test('configured AI request stays server-side and is not stored by provider',asy
     assert.equal(request.options.headers.Authorization,'Bearer server-only-test-key');
   }finally{if(old)process.env.OPENAI_SUPPORT_API_KEY=old;else delete process.env.OPENAI_SUPPORT_API_KEY;}
 });
+test('automation request drafts guidance without executing controls',async()=>{
+  const old=process.env.OPENAI_SUPPORT_API_KEY;process.env.OPENAI_SUPPORT_API_KEY='server-only-test-key';
+  let request,result;
+  try{
+    await handleHelpAgent({req:{method:'POST'},res:{},user:{id:'automation-user',role:'user'},
+      readJson:async()=>({question:'Schedule a reminder',mode:'automation'}),
+      send:(_res,status,body)=>{result={status,body};},
+      fetchImpl:async(_url,options)=>{request=JSON.parse(options.body);return {ok:true,json:async()=>({output:[{content:[{type:'output_text',text:'1. Open Events & tasks and review the date.'}]}]})};}});
+    assert.equal(result.status,200);
+    assert.equal(result.body.source,'AI automation draft');
+    assert.match(request.instructions,/Never claim a task has been scheduled/);
+    assert.match(request.instructions,/User role: user/);
+    assert.equal(request.store,false);
+  }finally{if(old)process.env.OPENAI_SUPPORT_API_KEY=old;else delete process.env.OPENAI_SUPPORT_API_KEY;}
+});

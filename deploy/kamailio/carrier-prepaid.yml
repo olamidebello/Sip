@@ -1,0 +1,141 @@
+---
+# Run locally after the super admin has configured an actual carrier, tariff,
+# prepaid policy and balance. This playbook never invents peering credentials.
+- name: Gate carrier dispatch and prepaid cutoff before SIP activation
+  hosts: switch_nodes
+  become: true
+  gather_facts: true
+  vars:
+    carrier_api_url: http://127.0.0.1:18080
+    carrier_env_file: /opt/olamide/repo/deployment/docker/.env
+  tasks:
+    - name: Require local Debian 12 and explicit commissioning inputs
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version == '12'
+          - ansible_connection | default('ssh') == 'local'
+          - production_kamailio_config is defined
+          - production_rtpengine_config is defined
+          - production_carrier_endpoint is defined
+          - production_carrier_endpoint != 'YOUR_ASSIGNED_SIP_ENDPOINT'
+          - production_carrier_profile_reviewed | default(false) | bool
+          - carrier_prepaid_cutoff_reviewed | default(false) | bool
+          - carrier_acceptance_report is defined
+          - prepaid_acceptance_report is defined
+          - carrier_acceptance_report is match('^/')
+          - prepaid_acceptance_report is match('^/')
+        fail_msg: >-
+          Configure a real carrier in the GUI and supply reviewed SIP/media
+          configs plus carrier and prepaid cutoff acceptance reports.
+
+    - name: Check acceptance reports and private API environment
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ carrier_acceptance_report }}"
+        - "{{ prepaid_acceptance_report }}"
+        - "{{ carrier_env_file }}"
+      register: commissioning_files
+
+    - name: Require nonempty evidence and private environment
+      ansible.builtin.assert:
+        that:
+          - commissioning_files.results[0].stat.isreg | default(false)
+          - commissioning_files.results[0].stat.size | default(0) | int > 0
+          - commissioning_files.results[1].stat.isreg | default(false)
+          - commissioning_files.results[1].stat.size | default(0) | int > 0
+          - commissioning_files.results[2].stat.isreg | default(false)
+          - commissioning_files.results[2].stat.mode | default('0000') in ['0400', '0600', '0640']
+
+    - name: Read reviewed switch configuration and private environment
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - "{{ production_kamailio_config }}"
+        - "{{ carrier_env_file }}"
+      register: commissioning_private
+      no_log: true
+
+    - name: Require actual dispatch, synchronous authorization and expiry hooks
+      ansible.builtin.assert:
+        that:
+          - "production_carrier_endpoint in (commissioning_private.results[0].content | b64decode)"
+          - "'api/switch/kamailio/route' in (commissioning_private.results[0].content | b64decode)"
+          - "'api/switch/prepaid' in (commissioning_private.results[0].content | b64decode)"
+          - "'action' in (commissioning_private.results[0].content | b64decode)"
+          - "'maxSeconds' in (commissioning_private.results[0].content | b64decode)"
+          - "'billableSeconds' in (commissioning_private.results[0].content | b64decode)"
+          - "'dlg_set_timeout' in (commissioning_private.results[0].content | b64decode)"
+          - "'rtpengine_offer' in (commissioning_private.results[0].content | b64decode)"
+          - "'rtpengine_answer' in (commissioning_private.results[0].content | b64decode)"
+          - "'Carrier route not commissioned' not in (commissioning_private.results[0].content | b64decode)"
+          - "(commissioning_private.results[1].content | b64decode) is search('(?m)^KAMAILIO_ROUTE_TOKEN=.{32,}$')"
+        fail_msg: >-
+          Reviewed switch configuration lacks carrier dispatch, media, or
+          prepaid start/end and timeout wiring. No live traffic was enabled.
+      no_log: true
+
+    - name: Check private API health before cutover
+      ansible.builtin.uri:
+        url: "{{ carrier_api_url }}/api/health"
+        method: GET
+        status_code: 200
+        timeout: 5
+        return_content: false
+
+    - name: Check configured carrier, tariff and SIP subscriber chain
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-name
+          - docker
+          - --env-file
+          - "{{ carrier_env_file }}"
+          - -f
+          - /opt/olamide/kamailio-staging/deployment/docker/compose.yml
+          - exec
+          - -T
+          - -e
+          - "CARRIER_ENDPOINT={{ production_carrier_endpoint }}"
+          - api
+          - node
+          - carrierReadiness.js
+      register: carrier_database_readiness
+      changed_when: false
+
+    - name: Report carrier database preflight without credentials
+      ansible.builtin.debug:
+        var: carrier_database_readiness.stdout
+
+    - name: Parse reviewed Kamailio configuration
+      ansible.builtin.command:
+        argv: [/usr/sbin/kamailio, -c, -f, "{{ production_kamailio_config }}"]
+      changed_when: false
+
+- import_playbook: production.yml
+
+- name: Report post-activation acceptance boundary
+  hosts: switch_nodes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Run host commissioning checks
+      ansible.builtin.command:
+        argv: [bash, "{{ playbook_dir }}/commission-check.sh"]
+      register: commissioning_check
+      changed_when: false
+
+    - name: Show host check result
+      ansible.builtin.debug:
+        var: commissioning_check.stdout_lines
+
+    - name: Require observed carrier and charged-call acceptance after activation
+      ansible.builtin.debug:
+        msg: >-
+          Services and host checks passed. Verify an authenticated outbound
+          call, two-way media, carrier response, automatic BYE at maxSeconds,
+          end-event settlement, balance and journal before setting
+          LIVE_PREPAID_ENABLED and LIVE_PREPAID_SWITCH_VERIFIED in the private
+          API environment. This playbook does not mark billing commissioned.

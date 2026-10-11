@@ -49,6 +49,34 @@ export async function migrateServerFleet(pool){
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     FOREIGN KEY(node_id) REFERENCES deployment_nodes(id),INDEX node_check_time(node_id,created_at)
   ) ENGINE=InnoDB`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS kamailio_node_checks (
+    id CHAR(36) PRIMARY KEY,node_id CHAR(36) NOT NULL,
+    signaling_status VARCHAR(16) NOT NULL,media_status VARCHAR(16) NOT NULL,
+    version VARCHAR(80) NULL,latency_ms INT UNSIGNED NULL,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    FOREIGN KEY(node_id) REFERENCES deployment_nodes(id),
+    INDEX kamailio_node_time(node_id,created_at)
+  ) ENGINE=InnoDB`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS kamailio_node_configs (
+    node_id CHAR(36) PRIMARY KEY,sip_domain VARCHAR(255) NOT NULL,
+    listen_ip VARCHAR(45) NOT NULL DEFAULT '127.0.0.1',
+    listen_port SMALLINT UNSIGNED NOT NULL DEFAULT 5062,
+    api_url VARCHAR(255) NOT NULL DEFAULT 'http://127.0.0.1:18080',
+    media_socket VARCHAR(80) NOT NULL DEFAULT 'udp:127.0.0.1:2223',
+    max_concurrent_calls INT UNSIGNED NOT NULL DEFAULT 100,
+    revision INT UNSIGNED NOT NULL DEFAULT 1,
+    updated_by CHAR(36) NOT NULL,updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    FOREIGN KEY(node_id) REFERENCES deployment_nodes(id),
+    FOREIGN KEY(updated_by) REFERENCES users(id)
+  ) ENGINE=InnoDB`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS kamailio_node_config_audit (
+    id CHAR(36) PRIMARY KEY,node_id CHAR(36) NOT NULL,revision INT UNSIGNED NOT NULL,
+    sip_domain VARCHAR(255) NOT NULL,max_concurrent_calls INT UNSIGNED NOT NULL,
+    actor_id CHAR(36) NULL,created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    FOREIGN KEY(node_id) REFERENCES deployment_nodes(id),
+    FOREIGN KEY(actor_id) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX kamailio_config_history(node_id,created_at)
+  ) ENGINE=InnoDB`);
   await pool.query(`CREATE TABLE IF NOT EXISTS deployment_schedules (
     id CHAR(36) PRIMARY KEY,node_id CHAR(36) NOT NULL,action VARCHAR(16) NOT NULL,
     interval_minutes INT UNSIGNED NOT NULL,enabled BOOLEAN NOT NULL DEFAULT TRUE,
@@ -95,6 +123,69 @@ async function queue(pool,nodeId,action,userId){
 export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJson}){
   const level=await fleetLevel(pool,user);
   const granted=needed=>({view:1,manage:2,deploy:3})[level]>=({view:1,manage:2,deploy:3})[needed];
+  if(path==='/api/admin/servers/kamailio'&&req.method==='GET'){
+    if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
+    const result=await pool.query(`SELECT n.id,n.name,n.region,n.capacity,n.enabled,
+      c.signaling_status,c.media_status,c.version,c.latency_ms,c.created_at
+      FROM deployment_nodes n LEFT JOIN kamailio_node_checks c ON c.id=(
+        SELECT c2.id FROM kamailio_node_checks c2 WHERE c2.node_id=n.id
+        ORDER BY c2.created_at DESC,c2.id DESC LIMIT 1)
+      WHERE n.role='switch' AND n.deleted_at IS NULL ORDER BY n.name LIMIT 500`);
+    return send(res,200,{nodes:result.rows,scope:'Reported systemd service state only; calls and RTP quality are not measured'});
+  }
+  if(path==='/api/admin/servers/commissioning'&&req.method==='GET'){
+    if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
+    const [calls,journals,overdue]=await Promise.all([
+      pool.query("SELECT status,COUNT(*) AS count FROM prepaid_calls GROUP BY status"),
+      pool.query("SELECT COUNT(*) AS count FROM billing_journals WHERE source_type='prepaid_call'"),
+      pool.query("SELECT COUNT(*) AS count FROM prepaid_calls WHERE status='active' AND DATE_ADD(created_at,INTERVAL authorized_seconds SECOND)<UTC_TIMESTAMP(3)")]);
+    return send(res,200,{reservations:calls.rows,prepaidJournals:Number(journals.rows[0]?.count||0),overdueReservations:Number(overdue.rows[0]?.count||0),
+      liveCarrierVerified:false,scope:'Database counts only; reconcile each carrier CDR and observe call expiry before commissioning'});
+  }
+  if(path==='/api/admin/servers/kamailio-config'&&req.method==='GET'){
+    if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
+    const configs=await pool.query(`SELECT c.node_id,n.name,n.region,c.sip_domain,c.listen_ip,c.listen_port,
+      c.api_url,c.media_socket,c.max_concurrent_calls,c.revision,c.updated_at
+      FROM kamailio_node_configs c JOIN deployment_nodes n ON n.id=c.node_id
+      WHERE n.deleted_at IS NULL ORDER BY n.name`);
+    const history=await pool.query(`SELECT a.node_id,a.revision,a.sip_domain,a.max_concurrent_calls,a.created_at
+      FROM kamailio_node_config_audit a ORDER BY a.created_at DESC LIMIT 50`);
+    return send(res,200,{configs:configs.rows,history:history.rows,
+      scope:'Saved loopback adapter intent only; live SIP services and carrier routes are unchanged'});
+  }
+  const kamailioConfig=/^\/api\/admin\/servers\/([0-9a-f-]{36})\/kamailio-config$/.exec(path);
+  if(kamailioConfig&&req.method==='PUT'){
+    if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
+    const b=await readJson(req);
+    if(!/^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?$/i.test(b.sipDomain||'')||
+       !Number.isSafeInteger(b.maxConcurrentCalls)||b.maxConcurrentCalls<1||b.maxConcurrentCalls>5000||
+       !Number.isSafeInteger(b.expectedRevision)||b.expectedRevision<0)
+      return send(res,400,{error:'Valid SIP domain, call capacity, and expected revision required'});
+    const db=await pool.connect();
+    try{
+      await db.query('START TRANSACTION');
+      const node=await db.query("SELECT role,enabled FROM deployment_nodes WHERE id=$1 AND deleted_at IS NULL FOR UPDATE",[kamailioConfig[1]]);
+      if(!node.rowCount||node.rows[0].role!=='switch'||!node.rows[0].enabled){
+        await db.query('ROLLBACK');return send(res,404,{error:'Enabled switch node unavailable'});
+      }
+      const existing=await db.query('SELECT revision FROM kamailio_node_configs WHERE node_id=$1 FOR UPDATE',[kamailioConfig[1]]);
+      const previous=Number(existing.rows[0]?.revision||0);
+      if(previous!==b.expectedRevision){
+        await db.query('ROLLBACK');return send(res,409,{error:'Configuration changed; refresh before saving'});
+      }
+      const revision=previous+1;
+      await db.query(`INSERT INTO kamailio_node_configs(node_id,sip_domain,max_concurrent_calls,revision,updated_by)
+        VALUES($1,$2,$3,$4,$5) ON DUPLICATE KEY UPDATE sip_domain=VALUES(sip_domain),
+        max_concurrent_calls=VALUES(max_concurrent_calls),revision=VALUES(revision),
+        updated_by=VALUES(updated_by)`,
+        [kamailioConfig[1],b.sipDomain.toLowerCase(),b.maxConcurrentCalls,revision,user.id]);
+      await db.query(`INSERT INTO kamailio_node_config_audit(id,node_id,revision,sip_domain,max_concurrent_calls,actor_id)
+        VALUES($1,$2,$3,$4,$5,$6)`,
+        [randomUUID(),kamailioConfig[1],revision,b.sipDomain.toLowerCase(),b.maxConcurrentCalls,user.id]);
+      await db.query('COMMIT');
+      return send(res,200,{nodeId:kamailioConfig[1],revision,state:'staged'});
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
   if(path==='/api/admin/servers/permissions'&&req.method==='GET')return send(res,200,{accessLevel:level});
   if(path==='/api/admin/servers/firewall'||/^\/api\/admin\/servers\/[0-9a-f-]{36}\/firewall$/.test(path))
     return handleFleetFirewall({req,res,path,user,pool,send,readJson,level,queue});
@@ -109,7 +200,7 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
       pool.query('SELECT stale_seconds,warning_latency_ms,retention_days FROM deployment_report_settings WHERE id=1'),
       pool.query('SELECT id,node_id,action,interval_minutes,enabled,next_run_at FROM deployment_schedules ORDER BY next_run_at LIMIT 200'),
       pool.query('SELECT e.id,e.node_id,n.name AS node_name,e.category,e.detail,e.created_at FROM deployment_events e LEFT JOIN deployment_nodes n ON n.id=e.node_id ORDER BY e.created_at DESC LIMIT 100')]);
-    return send(res,200,{nodes:nodes.rows,jobs:jobs.rows,settings:settings.rows[0],schedules:schedules.rows,events:events.rows,accessLevel:level,
+    return send(res,200,{nodes:nodes.rows,jobs:jobs.rows,settings:settings.rows[0],schedules:schedules.rows,events:events.rows,accessLevel:level,superAdmin:user.role==='super_admin',
       runnerConfigured:!!process.env.DEPLOY_RUNNER_TOKEN,scope:'Switch jobs require the private Ansible runner. App capacity remains on the existing Compose cluster control.'});
   }
   if(path==='/api/admin/servers'&&req.method==='POST'){
@@ -223,7 +314,8 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
   if(job&&uuid.test(job[1])&&req.method==='POST'){
     if(!granted('deploy'))return send(res,403,{error:'Fleet deployment access required'});
     const {action}=await readJson(req);
-    if(!['install','upgrade','health'].includes(action))return send(res,400,{error:'Approved job action required'});
+    if(!['health','kamailio_test','sip_packages','sip_core','sip_core_stop','sip_audit'].includes(action))return send(res,400,{error:'Approved SIP job action required'});
+    if(['sip_core','sip_core_stop'].includes(action)&&user.role!=='super_admin')return send(res,403,{error:'Super administrator required for SIP service control'});
     if(!process.env.DEPLOY_RUNNER_TOKEN)return send(res,409,{error:'Private deployment runner is not configured'});
     const outcome=await queue(pool,job[1],action,user.id);
     return send(res,outcome.code,outcome.error?{error:outcome.error}:outcome);
@@ -232,9 +324,9 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
   if(schedule&&uuid.test(schedule[1])&&req.method==='POST'){
     if(!granted('deploy'))return send(res,403,{error:'Fleet deployment access required'});
     const b=await readJson(req);
-    if(!['health','upgrade'].includes(b.action)||!Number.isInteger(b.intervalMinutes)||
-      b.intervalMinutes<(b.action==='upgrade'?60:5)||b.intervalMinutes>10080)
-      return send(res,400,{error:'Health or upgrade schedule with valid interval required'});
+    if(b.action!=='health'||!Number.isInteger(b.intervalMinutes)||
+      b.intervalMinutes<5||b.intervalMinutes>10080)
+      return send(res,400,{error:'Health schedule with valid interval required'});
     if(!process.env.DEPLOY_RUNNER_TOKEN)return send(res,409,{error:'Private deployment runner is not configured'});
     const node=await pool.query("SELECT role,enabled FROM deployment_nodes WHERE id=$1 AND deleted_at IS NULL",[schedule[1]]);
     if(!node.rowCount||node.rows[0].role!=='switch'||!node.rows[0].enabled)
@@ -300,12 +392,28 @@ export async function handleServerFleetRunner({req,res,path,pool,send,readJson})
       const found=await db.query("SELECT node_id,action FROM deployment_jobs WHERE id=$1 AND runner_id=$2 AND status='leased' AND lease_until>UTC_TIMESTAMP(3) FOR UPDATE",[b.jobId,b.runnerId]);
       if(!found.rowCount){await db.query('ROLLBACK');return send(res,409,{error:'Job lease unavailable'});}
       await db.query("UPDATE deployment_jobs SET status=$1,summary=$2,finished_at=UTC_TIMESTAMP(3),lease_until=NULL WHERE id=$3",[b.status,b.summary,b.jobId]);
-      await db.query("UPDATE deployment_nodes SET status=$1,last_error=$2 WHERE id=$3",
-        [b.status==='succeeded'?'ready':'error',b.status==='failed'?b.summary:null,found.rows[0].node_id]);
+      if(found.rows[0].action!=='kamailio_test')
+        await db.query("UPDATE deployment_nodes SET status=$1,last_error=$2 WHERE id=$3",
+          [b.status==='failed'?'error':found.rows[0].action==='sip_core_stop'?'stopped':'ready',
+            b.status==='failed'?b.summary:null,found.rows[0].node_id]);
       await db.query('INSERT INTO deployment_events(id,node_id,job_id,category,detail) VALUES($1,$2,$3,$4,$5)',
         [randomUUID(),found.rows[0].node_id,b.jobId,'job_'+b.status,b.summary.slice(0,500)]);
       await db.query('COMMIT');return send(res,200,{accepted:true});
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
+  if(path==='/api/integrations/deployment/kamailio-check'&&req.method==='POST'){
+    const b=await readJson(req);
+    if(!uuid.test(b.nodeId||'')||
+      !['active','inactive','unreachable'].includes(b.signalingStatus)||
+      !['active','inactive','unreachable'].includes(b.mediaStatus)||
+      (b.version!=null&&(typeof b.version!=='string'||b.version.length>80))||
+      (b.latencyMs!=null&&(!Number.isInteger(b.latencyMs)||b.latencyMs<0||b.latencyMs>300000)))
+      return send(res,400,{error:'Valid Kamailio service report required'});
+    const found=await pool.query("SELECT id FROM deployment_nodes WHERE id=$1 AND enabled=TRUE AND deleted_at IS NULL AND role='switch'",[b.nodeId]);
+    if(!found.rowCount)return send(res,404,{error:'Switch node unavailable'});
+    await pool.query('INSERT INTO kamailio_node_checks(id,node_id,signaling_status,media_status,version,latency_ms) VALUES($1,$2,$3,$4,$5,$6)',
+      [randomUUID(),b.nodeId,b.signalingStatus,b.mediaStatus,b.version||null,b.latencyMs??null]);
+    return send(res,200,{accepted:true});
   }
   if(path==='/api/integrations/deployment/check'&&req.method==='POST'){
     const b=await readJson(req);

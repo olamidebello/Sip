@@ -1,0 +1,65 @@
+---
+- name: Provision SIP accounts for active users in enabled tenants
+  hosts: switch_nodes
+  become: true
+  gather_facts: true
+  vars:
+    sip_checkout: /opt/olamide/kamailio-staging
+    sip_env_file: /opt/olamide/repo/deployment/docker/.env
+  tasks:
+    - name: Require local Debian 12 host
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version == '12'
+          - ansible_connection | default('ssh') == 'local'
+          - ansible_user_id == 'root'
+
+    - name: Check existing private environment and provisioning source
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+      loop:
+        - "{{ sip_env_file }}"
+        - "{{ sip_checkout }}/services/api/provisionSipAccounts.js"
+      register: sip_inputs
+
+    - name: Require existing files
+      ansible.builtin.assert:
+        that:
+          - item.stat.isreg | default(false)
+      loop: "{{ sip_inputs.results }}"
+
+    - name: Require a private production environment
+      ansible.builtin.assert:
+        that:
+          - sip_inputs.results[0].stat.mode in ['0400', '0600', '0640']
+
+    - name: Check private API health
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/api/health
+        status_code: 200
+        timeout: 10
+
+    - name: Provision accounts with the application encryption key and verify credential coverage
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --project-name
+          - docker
+          - --env-file
+          - "{{ sip_env_file }}"
+          - -f
+          - "{{ sip_checkout }}/deployment/docker/compose.yml"
+          - exec
+          - -T
+          - api
+          - node
+          - provisionSipAccounts.js
+      register: sip_provision
+      changed_when: (sip_provision.stdout | from_json).created | int > 0 or (sip_provision.stdout | from_json).activated | int > 0
+
+    - name: Report provisioned account totals without disclosing credentials
+      ansible.builtin.debug:
+        var: sip_provision.stdout

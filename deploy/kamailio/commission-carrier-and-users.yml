@@ -1,0 +1,5 @@
+---
+# Local orchestration. An enabled tenant is provisioned first; carrier
+# activation remains gated on real peering and measured prepaid acceptance.
+- import_playbook: provision-sip-users.yml
+- import_playbook: carrier-prepaid.yml

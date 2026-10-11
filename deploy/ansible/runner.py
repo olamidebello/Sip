@@ -14,7 +14,7 @@ import urllib.request
 import urllib.error
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-ALLOWED = {'health', 'install', 'upgrade', 'firewall'}
+ALLOWED = {'health', 'install', 'upgrade', 'firewall', 'kamailio_test', 'sip_packages', 'sip_core', 'sip_core_stop', 'sip_audit'}
 
 
 def secrets_file(path):
@@ -35,7 +35,7 @@ def probe(node):
     target = node['ssh_user'] + '@' + node['host']
     cmd = ['ssh', '-p', str(node['ssh_port']), '-o', 'BatchMode=yes',
            '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8', target,
-           'sudo', '-n', 'systemctl', 'is-active', 'freeswitch']
+           'sudo', '-n', 'systemctl', 'is-active', 'kamailio']
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
         status = ('healthy' if result.returncode == 0 and result.stdout.strip() == 'active'
@@ -44,7 +44,7 @@ def probe(node):
         if status == 'healthy':
             package = subprocess.run(['ssh', '-p', str(node['ssh_port']), '-o', 'BatchMode=yes',
                 '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8', target,
-                'dpkg-query', '-W', '-f=${Version}', 'freeswitch'], capture_output=True,
+                'dpkg-query', '-W', '-f=\\${Version}', 'kamailio'], capture_output=True,
                 text=True, timeout=15)
             if package.returncode == 0:
                 version = package.stdout.strip()[:80]
@@ -53,6 +53,63 @@ def probe(node):
         version = None
     latency = int((time.monotonic() - start) * 1000)
     return {'nodeId': node['id'], 'status': status, 'latencyMs': latency, 'version': version}
+
+
+
+def probe_kamailio(node):
+    start = time.monotonic()
+    target = node['ssh_user'] + '@' + node['host']
+    ssh = ['ssh', '-p', str(node['ssh_port']), '-o', 'BatchMode=yes',
+           '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8', target]
+    try:
+        signal = subprocess.run(ssh + ['sudo', '-n', 'systemctl', 'is-active', 'kamailio'],
+                                capture_output=True, text=True, timeout=15)
+        media = subprocess.run(ssh + ['sudo', '-n', 'systemctl', 'is-active', 'rtpengine-daemon'],
+                               capture_output=True, text=True, timeout=15)
+        version = subprocess.run(ssh + ['dpkg-query', '-W', '-f=\\${Version}', 'kamailio'],
+                                 capture_output=True, text=True, timeout=15)
+        signaling_status = ('unreachable' if signal.returncode == 255 else
+                            'active' if signal.returncode == 0 and signal.stdout.strip() == 'active'
+                            else 'inactive')
+        media_status = ('unreachable' if media.returncode == 255 else
+                        'active' if media.returncode == 0 and media.stdout.strip() == 'active'
+                        else 'inactive')
+        installed_version = version.stdout.strip()[:80] if version.returncode == 0 else None
+    except (subprocess.TimeoutExpired, OSError):
+        signaling_status = media_status = 'unreachable'
+        installed_version = None
+    return {'nodeId': node['id'], 'signalingStatus': signaling_status,
+            'mediaStatus': media_status, 'version': installed_version,
+            'latencyMs': int((time.monotonic() - start) * 1000)}
+
+
+def deploy_sip(node):
+    """Run only fixed, reviewed playbooks on the switch's own checkout."""
+    target = node['ssh_user'] + '@' + node['host']
+    action = node['action']
+    if action == 'sip_core':
+        address = ipaddress.ip_address(node['host'])
+        if address.version != 4 or not address.is_global:
+            raise RuntimeError('Core activation requires a verified public IPv4 node address')
+    playbook = ('install-requirements.yml' if action == 'sip_packages'
+                else 'monitoring.yml' if action == 'sip_audit'
+                else 'deactivate-core.yml' if action == 'sip_core_stop'
+                else 'activate-core.yml')
+    command = ['sudo', '-n', 'ansible-playbook', '-i',
+               '/opt/olamide/kamailio-staging/deploy/kamailio/local-inventory.ini',
+               '/opt/olamide/kamailio-staging/deploy/kamailio/' + playbook]
+    if action == 'sip_core':
+        command += ['-e', 'production_public_ip=' + node['host'],
+                    '-e', 'production_kamailio_config=/root/production-kamailio.cfg',
+                    '-e', 'production_rtpengine_config=/root/production-rtpengine.conf',
+                    '-e', 'core_network_reviewed=true']
+    # ssh joins command arguments through a remote shell. All strings above
+    # are constants except the validated IP address.
+    ssh = ['ssh', '-p', str(node['ssh_port']), '-o', 'BatchMode=yes',
+           '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8', target]
+    result = subprocess.run(ssh + command, capture_output=True, text=True, timeout=3600)
+    if result.returncode:
+        raise RuntimeError('SIP Ansible job failed; inspect the private runner and host journals')
 
 
 def deploy(node, inventory, vault_password):
@@ -103,6 +160,7 @@ def run_once(base, token, runner_id, inventory, vault_password):
     for node in request(base, token, 'nodes')['nodes']:
         try:
             request(base, token, 'check', probe(node))
+            request(base, token, 'kamailio-check', probe_kamailio(node))
         except (urllib.error.URLError, OSError, ValueError) as error:
             print('Health report failed for ' + node['name'] + ': ' + type(error).__name__, flush=True)
     claimed = request(base, token, 'claim', {'runnerId': runner_id}).get('job')
@@ -123,18 +181,46 @@ def run_once(base, token, runner_id, inventory, vault_password):
     renewer = threading.Thread(target=renew, daemon=True)
     renewer.start()
     try:
-        if claimed['action'] == 'health':
+        if claimed['action'] == 'kamailio_test':
+            target = claimed['ssh_user'] + '@' + claimed['host']
+            cmd = ['ssh', '-p', str(claimed['ssh_port']), '-o', 'BatchMode=yes',
+                   '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8',
+                   target, 'sudo', '-n', 'python3',
+                   '/opt/olamide/kamailio-staging/deploy/kamailio/sip-smoke.py']
+            smoke = subprocess.run(cmd, capture_output=True, text=True, timeout=45)
+            request(base, token, 'kamailio-check', probe_kamailio(claimed))
+            if smoke.returncode or 'Loopback SIP:' not in smoke.stdout:
+                raise RuntimeError('Kamailio loopback SIP test failed; inspect private runner journal')
+        elif claimed['action'] in {'sip_packages', 'sip_core', 'sip_core_stop', 'sip_audit'}:
+            deploy_sip(claimed)
+            check = probe_kamailio(claimed)
+            request(base, token, 'kamailio-check', check)
+            if claimed['action'] == 'sip_core' and (check['signalingStatus'] != 'active' or
+                                                  check['mediaStatus'] != 'active'):
+                raise RuntimeError('SIP core activation did not leave both services active')
+            if claimed['action'] == 'sip_core_stop' and (check['signalingStatus'] != 'inactive' or
+                                                        check['mediaStatus'] != 'inactive'):
+                raise RuntimeError('SIP core stop did not leave both services inactive')
+        elif claimed['action'] == 'health':
             check = probe(claimed)
             request(base, token, 'check', check)
             if check['status'] != 'healthy':
                 raise RuntimeError('Switch health probe: ' + check['status'])
+        elif claimed['action'] in {'install', 'upgrade'}:
+            raise RuntimeError('Legacy FreeSWITCH job retired; use SIP requirements or core activation')
         else:
             deploy(claimed, inventory, vault_password)
             check = probe(claimed)
             request(base, token, 'check', check)
             if check['status'] != 'healthy':
                 raise RuntimeError('Switch did not pass post-deployment health probe')
-        result = ('succeeded', 'Approved ' + claimed['action'] + ' job completed; switch active')
+        result = ('succeeded', 'Kamailio loopback SIP challenge passed' if
+                  claimed['action'] == 'kamailio_test' else
+                  'SIP prerequisites checked; no traffic change' if claimed['action'] == 'sip_packages' else
+                  'SIP host audit recorded; carrier call acceptance remains separate' if claimed['action'] == 'sip_audit' else
+                  'SIP core active; carrier and prepaid remain uncommissioned' if claimed['action'] == 'sip_core' else
+                  'Carrier-blocked SIP core stopped; configurations retained' if claimed['action'] == 'sip_core_stop' else
+                  'Approved ' + claimed['action'] + ' job completed')
     except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError,
             RuntimeError, KeyError, IndexError, ValueError, urllib.error.URLError) as error:
         result = ('failed', str(error)[:900])

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { verifyCdrSignature, validateCdr } from "./cdr.js";
+import { verifyCdrSignature, validateCdr, cdrFilters } from "./cdr.js";
 
 const secret = "a".repeat(48);
 test("CDR signatures bind the timestamp and raw body and expire",() => {
@@ -13,6 +13,11 @@ test("CDR signatures bind the timestamp and raw body and expire",() => {
   assert.equal(verifyCdrSignature(secret,timestamp,body+" ",signature,now),false);
   assert.equal(verifyCdrSignature(secret,timestamp,body,signature,now+301000),false);
   assert.equal(verifyCdrSignature("",timestamp,body,signature,now),false);
+});
+test('CDR filters reject unbounded pages and invalid enums',()=>{
+  assert.equal(cdrFilters('/api/admin/cdr?page=2&direction=outbound').page,2);
+  assert.throws(()=>cdrFilters('/api/admin/cdr?page=0'),RangeError);
+  assert.throws(()=>cdrFilters('/api/admin/cdr?source=x%25'),RangeError);
 });
 test("normalized CDR rejects impossible billable durations",() => {
   const record = {tenantId:"00000000-0000-4000-8000-000000000000",source:"switch-a",

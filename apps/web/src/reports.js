@@ -5,6 +5,7 @@ export function setupReports({get}) {
   const details=document.querySelector("#report-details");
   const exportLink=document.querySelector("#report-export");
   const invoiceExport=document.querySelector("#report-invoice-export");
+  const sourceExport=document.querySelector('#report-source-export');
   const today=new Date().toISOString().slice(0,10);
   form.elements.to.value=today;
   form.elements.from.value=new Date(Date.parse(`${today}T00:00:00Z`)-29*86400000).toISOString().slice(0,10);
@@ -23,13 +24,13 @@ export function setupReports({get}) {
     try {
       const data=await get(`/api/admin/reports?${params}`);
       const {total}=data.calls;
-      summary.textContent=`${total.calls} recorded calls, ${data.calls.answerRatePercent}% answered, ${data.calls.averageDurationSeconds}s average duration, ${total.billableSeconds} billable seconds; ${data.users.new} new users (${data.users.total} total).`;
+      summary.textContent=`${total.calls} recorded calls · ${data.calls.answerRatePercent}% answered · ${data.calls.failedRatePercent}% failed · ${data.calls.averageAnsweredDurationSeconds}s answered call duration · ${total.billableSeconds} billable seconds; ${data.users.new} new users (${data.users.total} total).`;
       details.replaceChildren(
         table("Calls by UTC day",["Day","Calls","Answered","Missed","Duration (s)","Billable (s)"],
           data.calls.daily.map(d=>[d.day,d.calls,d.answered,d.missed,d.duration_seconds,d.billable_seconds])),
         table("Call disposition",["Disposition","Calls"],data.calls.dispositions.map(d=>[d.disposition,d.calls])),
         table("Call direction",["Direction","Calls"],data.calls.directions.map(d=>[d.direction,d.calls])),
-        table("CDR sources",["Source","Calls","Answered"],data.calls.sources.map(d=>[d.source,d.calls,d.answered])),
+        table("CDR sources",["Source","Calls","Answered","Failed","Answered seconds"],data.calls.sources.map(d=>[d.source,d.calls,d.answered,d.failed,d.answered_seconds])),
         table("Calls by UTC hour",["Hour","Calls"],data.calls.hours.map(d=>[`${String(d.utc_hour).padStart(2,"0")}:00`,d.calls])),
         table("Invoices by currency and status",["Currency","Status","Invoices","Recorded amount (cents)"],
           data.billing.invoices.map(i=>[i.currency,i.status,i.invoices,i.amount_cents])),
@@ -41,8 +42,9 @@ export function setupReports({get}) {
       exportLink.hidden=false;
       invoiceExport.href=`/api/admin/reports.csv?${params}&kind=invoices`;
       invoiceExport.hidden=false;
+      sourceExport.href=`/api/admin/reports.csv?${params}&kind=sources`;sourceExport.hidden=false;
       status.textContent=data.note;
-    } catch(error) {exportLink.hidden=true;invoiceExport.hidden=true;status.textContent=error.message;}
+    } catch(error) {exportLink.hidden=true;invoiceExport.hidden=true;sourceExport.hidden=true;status.textContent=error.message;}
   }
   form.addEventListener("submit",event=>{event.preventDefault();refresh();});
   return {refresh};

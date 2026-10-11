@@ -1,0 +1,49 @@
+---
+# Run locally on the Debian 12 switch. Installation and GUI deployment are
+# independent of carrier activation; the latter requires real peering evidence.
+- import_playbook: install-requirements.yml
+
+- name: Check GUI provisioning and explicit activation request
+  hosts: switch_nodes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Require local execution and explicit activation choice
+      ansible.builtin.assert:
+        that:
+          - ansible_connection | default('ssh') == 'local'
+          - not ((commission_activate_core | default(false) | bool) and (commission_activate_carrier | default(false) | bool))
+        fail_msg: Choose either the carrier-blocked core or the reviewed carrier cutover.
+
+    - name: Deploy production GUI and database migrations after backup
+      ansible.builtin.command:
+        argv: [bash, "{{ playbook_dir }}/deploy-production-gui.sh"]
+      when: commission_deploy_gui | default(false) | bool
+      register: gui_deployment
+      changed_when: gui_deployment.rc == 0
+
+    - name: Require independently reviewed carrier and prepaid inputs before activation
+      ansible.builtin.assert:
+        that:
+          - production_public_ip is defined
+          - production_kamailio_config is defined
+          - production_rtpengine_config is defined
+          - production_carrier_endpoint is defined
+          - production_carrier_profile_reviewed | default(false) | bool
+          - carrier_prepaid_cutoff_reviewed | default(false) | bool
+          - carrier_acceptance_report is defined
+          - prepaid_acceptance_report is defined
+        fail_msg: >-
+          GUI provisioning and host installation are available, but live carrier
+          and prepaid activation needs reviewed SIP/media files, carrier peering,
+          prepaid cutoff evidence and the carrier-prepaid.yml acceptance gate.
+      when: commission_activate_carrier | default(false) | bool
+
+- import_playbook: prepare-core.yml
+  when: commission_prepare_core | default(false) | bool
+
+- import_playbook: activate-core.yml
+  when: commission_activate_core | default(false) | bool
+
+- import_playbook: carrier-prepaid.yml
+  when: commission_activate_carrier | default(false) | bool

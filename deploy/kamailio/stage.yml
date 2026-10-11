@@ -1,0 +1,42 @@
+---
+- name: Stage Kamailio and RTPengine packages without changing live SIP traffic
+  hosts: switch_nodes
+  become: true
+  gather_facts: true
+  serial: 1
+  tasks:
+    - name: Require Debian 12
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version == '12'
+    - name: Install SIP proxy, HTTP/JSON adapters, TLS/WebSocket and userspace media relay
+      ansible.builtin.apt:
+        name:
+          - kamailio
+          - kamailio-extra-modules
+          - kamailio-utils-modules
+          - kamailio-json-modules
+          - kamailio-websocket-modules
+          - kamailio-tls-modules
+          - rtpengine-daemon
+        update_cache: true
+        state: present
+        policy_rc_d: 101
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+    - name: Keep staged SIP services stopped until configuration and call tests pass
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+      loop:
+        - kamailio
+        - rtpengine-daemon
+    - name: Report staged binary versions
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - /usr/sbin/kamailio -v
+        - /usr/sbin/rtpengine --version
+      changed_when: false
+      failed_when: false

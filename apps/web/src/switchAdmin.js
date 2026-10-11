@@ -7,13 +7,34 @@ async function api(path,method='GET',body){
 export function setupSwitchAdmin(){
   const root=$('#switch-admin'),status=$('#switch-status'),form=$('#switch-config');
   let canEdit=false;
+  async function readiness(){
+    const summary=root.querySelector('#kamailio-readiness-summary');
+    const blockers=root.querySelector('#kamailio-readiness-blockers');
+    const button=root.querySelector('#kamailio-readiness-refresh');
+    button.disabled=true;
+    summary.textContent='Checking tenant data…';
+    blockers.replaceChildren();
+    try{
+      const state=await api('/api/admin/switch/kamailio/readiness');
+      summary.textContent=state.activeAccounts+' active SIP accounts · '+
+        state.syncedCredentials+' digest credentials · '+
+        state.enabledCarriers+' enabled carrier mappings. Production readiness is unverified.';
+      for(const reason of state.blockers){
+        const item=document.createElement('li');
+        item.textContent=reason;
+        blockers.append(item);
+      }
+    }catch(error){summary.textContent=error.message;}
+    finally{button.disabled=false;}
+  }
   async function refresh(edit=canEdit){
     canEdit=edit;
     try{
       const [switchState,operator,accounts]=await Promise.all([
         api('/api/admin/switch'),api('/api/admin/operator'),api('/api/admin/switch/accounts')]);
       const cfg=switchState.config;
-      form.elements.domain.value=cfg?.domain||'';
+      const accountDomains=[...new Set(accounts.accounts.map(account=>account.domain).filter(Boolean))];
+      form.elements.domain.value=cfg?.domain||(accountDomains.length===1?accountDomains[0]:'');
       form.elements.enabled.checked=!!cfg?.enabled;
       const tariff=form.elements.tariffId,selected=cfg?.tariff_id;
       tariff.replaceChildren();
@@ -34,9 +55,10 @@ export function setupSwitchAdmin(){
         button.onclick=async()=>{button.disabled=true;try{await api('/api/admin/switch/activate','POST',{userId:account.user_id});await refresh();}
           catch(e){status.textContent=e.message;button.disabled=false;}};li.append(button);list.append(li);
       }
-      status.textContent=(cfg?.enabled?'Tenant switch enabled':'Tenant switch disabled')+
-        ' · '+(switchState.configured?'XML credentials configured':'XML credentials missing')+
+      status.textContent=(cfg?.enabled?'Tenant SIP lookups enabled':'Tenant SIP lookups disabled')+
+        ' · '+(switchState.configured?'Kamailio credentials configured':'Kamailio credentials missing')+
         ' · '+Number(switchState.accounts.active)+' active of '+Number(switchState.accounts.total)+' SIP accounts.';
+      await readiness();
     }catch(e){status.textContent=e.message;}
   }
   form.onsubmit=async event=>{event.preventDefault();try{
@@ -48,5 +70,6 @@ export function setupSwitchAdmin(){
       provider:f.elements.provider.value,gatewayName:f.elements.gatewayName.value,enabled:f.elements.enabled.checked});
       await refresh();}catch(e){status.textContent=e.message;}};
   root.querySelector('#switch-refresh').onclick=refresh;
+  root.querySelector('#kamailio-readiness-refresh').onclick=readiness;
   return {refresh};
 }

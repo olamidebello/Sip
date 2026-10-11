@@ -14,16 +14,18 @@ import { migrateDashboard } from './dashboard.js';
 import { migrateSupport } from './support.js';
 import { migrateLocales } from './locales.js';
 import { migrateOnboarding } from './onboarding.js';
-import { migrateSipMarketplace } from './sipMarketplace.js';
+import { migrateSipMarketplace, backfillSipAccounts } from './sipMarketplace.js';
 import { migrateSipProfiles } from './sipProfiles.js';
 import { migratePayments } from './payments.js';
 import { migrateCluster } from './cluster.js';
 import { migrateProviderWebhooks } from './providerWebhooks.js';
 import { migrateDidwwIntegration } from './didwwIntegration.js';
-import { migrateCarrierProviders } from './carrierProviders.js';
+import { migrateCarrierProviders, seedFlowrouteDrafts } from './carrierProviders.js';
+import { migrateProviderCredentials } from './providerCredentials.js';
 import { migrateAdapterRegistry } from './adapterRegistry.js';
 import { migrateOperatorControl } from './operatorControl.js';
 import { migrateSwitch } from './switch.js';
+import { migrateKamailio } from './kamailio.js';
 import { migrateServerFleet } from './serverFleet.js';
 import { migrateOperationsPolicy } from './operationsPolicy.js';
 import { migrateFleetNetwork } from './fleetNetwork.js';
@@ -36,6 +38,17 @@ import { migratePasskeyPolicy } from './passkeyPolicy.js';
 import { migrateTrunkManagement } from './trunkManagement.js';
 import { migrateMessagingWebhooks } from './messagingWebhooks.js';
 import { migrateFlowrouteRates } from './flowrouteRates.js';
+import {migrateAiConfiguration} from './aiConfiguration.js';
+import {migrateEmailConfiguration} from './emailConfiguration.js';
+import {migrateLiveCalls} from './liveCalls.js';
+import {migrateSettlements} from './settlements.js';
+import {migrateRatingEngine} from './ratingEngine.js';
+import {migrateBillingLedger} from './billingLedger.js';
+import {migratePrepaidAuthorizer} from './prepaidAuthorizer.js';
+import {migrateBillingControl} from './billingControl.js';
+import {migrateMeetingInvitations} from './meetingInvitations.js';
+import {migrateMeetingPolicy} from './meetingPolicy.js';
+import {migrateHelpPreferences} from './helpPreferences.js';
 
 const sql = filename => fs.readFile(new URL(filename, import.meta.url), 'utf8');
 
@@ -55,6 +68,9 @@ export async function migrate(pool) {
     const steps = [
       ['core', () => pool.initialize(awaitSql.core)],
       ['tenancy', () => migrateTenancy(pool)],
+      ['meeting_invitations', () => migrateMeetingInvitations(pool)],
+      ['meeting_policy', () => migrateMeetingPolicy(pool)],
+      ['help_preferences', () => migrateHelpPreferences(pool)],
       ['access', () => migrateAccess(pool)],
       ['onboarding', () => migrateOnboarding(pool)],
       ['sip_marketplace', () => migrateSipMarketplace(pool)],
@@ -65,10 +81,13 @@ export async function migrate(pool) {
       ['didww_integration', () => migrateDidwwIntegration(pool)],
       ['pbx', () => pool.initialize(awaitSql.pbx)],
       ['carrier_providers', () => migrateCarrierProviders(pool)],
+      ['provider_api_credentials', () => migrateProviderCredentials(pool)],
       ['trunk_management', () => migrateTrunkManagement(pool)],
       ['carrier_adapter_registry', () => migrateAdapterRegistry(pool)],
       ['operator_control', () => migrateOperatorControl(pool)],
       ['freeswitch_bridge', () => migrateSwitch(pool)],
+      ['kamailio_bridge', () => migrateKamailio(pool)],
+      ['flowroute_defaults', () => seedFlowrouteDrafts(pool)],
       ['server_fleet', () => migrateServerFleet(pool)],
       ['fleet_network', () => migrateFleetNetwork(pool)],
       ['fleet_firewall', () => migrateFleetFirewall(pool)],
@@ -93,12 +112,21 @@ export async function migrate(pool) {
       ['campaigns', () => migrateCampaigns(pool)],
       ['passkey_policy', () => migratePasskeyPolicy(pool)],
       ['support', () => migrateSupport(pool)],
+      ['ai_support_configuration', () => migrateAiConfiguration(pool)],
+      ['email_verification_configuration', () => migrateEmailConfiguration(pool)],
+      ['live_call_monitor', () => migrateLiveCalls(pool)],
+      ['carrier_settlements', () => migrateSettlements(pool)],
+      ['rating_engine', () => migrateRatingEngine(pool)],
+      ['billing_ledger', () => migrateBillingLedger(pool)],
+      ['prepaid_authorizer', () => migratePrepaidAuthorizer(pool)],
+      ['billing_control', () => migrateBillingControl(pool)],
       ['locales', () => migrateLocales(pool)]
     ];
     for (const [name, action] of steps) {
       await action();
       await pool.query('INSERT INTO schema_components(component) VALUES($1) ON DUPLICATE KEY UPDATE applied_at=CURRENT_TIMESTAMP(3)', [name]);
     }
+    await backfillSipAccounts(pool);
   } finally {
     if (locked) await connection.query("SELECT RELEASE_LOCK('olamide_schema_migration')").finally(() => connection.release());
     else connection.release();

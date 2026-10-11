@@ -1,10 +1,25 @@
 export function setupMeetings() {
   const root = document.querySelector("#meetings");
   const $ = (selector) => root.querySelector(selector);
-  let ws, localStream, screenStream, roomId, selfId, hostId, localTile;
-  let iceServers = [], features = {};
+  let ws, localStream, screenStream, roomId, selfId, hostId, localTile,handRaised=false;
+  let iceServers = [], features = {},policy={};
   const peers = new Map();
   const status = (value) => { $("#meeting-status").textContent = value; };
+  const meetingLink = () => {
+    const id=(roomId || $("#meeting-id").value).trim();
+    if(!/^[0-9a-f-]{36}$/i.test(id))throw new Error('Select a meeting first');
+    const url=new URL(location.origin+'/');url.searchParams.set('meeting',id);url.hash='meetings';return url.href;
+  };
+  const participantCount=()=>{$('#meeting-participants').textContent=`${roomId?peers.size+1:0} participant(s) connected (maximum 4)`;};
+  function applyPolicy(next){policy=next||{};
+    $('#meeting-copy').hidden=policy.allowLinks===false;
+    $('#meeting-native-share').hidden=policy.allowLinks===false;
+    $('#meeting-invite').hidden=selfId!==hostId||policy.allowInvites===false;
+    $('#meeting-share').hidden=!features.screen_share||policy.allowScreenShare===false;
+    $('#meeting-chat-form').hidden=policy.allowChat===false;
+    $('#meeting-hand').hidden=policy.allowHand===false;
+    $('#meeting-reaction').hidden=policy.allowReactions===false;
+  }
   const api = async (path, body) => {
     const response = await fetch(path, body === undefined ? {} : {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
@@ -27,6 +42,7 @@ export function setupMeetings() {
     peer.pc.close();
     peer.tile.remove();
     peers.delete(id);
+    participantCount();
   }
   function showPointer(tile, x, y) {
     const video = tile.querySelector("video");
@@ -93,6 +109,7 @@ export function setupMeetings() {
         y:Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) });
     });
     peers.set(id, peer);
+    participantCount();
     return peer;
   }
   function setPeerScreen(id, active) {
@@ -147,6 +164,7 @@ export function setupMeetings() {
     $("#assist-grants").replaceChildren();
     $("#meeting-live").hidden = true;
     roomId = selfId = hostId = localTile = undefined;
+    handRaised=false;$('#meeting-hand').textContent='Raise hand';$('#meeting-invite').hidden=true;participantCount();
   }
   function videoSender(pc) {
     return pc.getTransceivers().find((transceiver) =>
@@ -160,12 +178,14 @@ export function setupMeetings() {
     ]);
     iceServers = config.iceServers;
     features = config.features || {};
+    policy=config.policy||{};
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
     } catch {
       localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     }
     roomId = id;
+    $('#meeting-id').value=id;
     $("#meeting-live").hidden = false;
     $("#meeting-title").textContent = room.title;
     $("#host-controls").hidden = true;
@@ -179,13 +199,15 @@ export function setupMeetings() {
         if (data.type === "welcome") {
           selfId = data.id;
           hostId = data.hostId;
+          applyPolicy(data.policy);
           $("#host-controls").hidden = selfId !== hostId;
+          $('#meeting-invite').hidden=selfId!==hostId;
           $("#lock-room").textContent = room.locked ? "Unlock room" : "Lock room";
           for (const peer of data.peers) {
             makePeer(peer.id, peer.name).name = peer.name;
             setPeerScreen(peer.id, peer.screenActive);
           }
-          status("Joined meeting. Share this meeting ID with signed-in participants.");
+          participantCount();status('Joined meeting. Use Copy meeting link or Invite to meeting to share it.');
         } else if (data.type === "joined") {
           const peer = makePeer(data.id, data.name);
           peer.name = data.name;
@@ -195,10 +217,20 @@ export function setupMeetings() {
         } else if (data.type === "signal") await signalFrom(data);
         else if (data.type === "left") removePeer(data.id);
         else if (data.type === "chat") entry(data.name, data.text);
+        else if(data.type==='hand')entry(data.name,data.raised?'raised a hand':'lowered a hand');
+        else if(data.type==='reaction')entry(data.name,'👏');
+        else if(data.type==='policy'){applyPolicy(data.policy);status('Meeting settings were updated by an administrator.');}
         else if (data.type === "screen-state") setPeerScreen(data.from, data.active);
         else if (data.type === "screen-stop") {
           screenStream?.getTracks().forEach((track) => track.stop());
-          $("#meeting-share").hidden = true;
+          screenStream=undefined;
+          if(localTile)localTile.querySelector('video').srcObject=localStream;
+          const camera=localStream?.getVideoTracks()[0];
+          await Promise.allSettled([...peers.values()].map(async({pc})=>{
+            const sender=videoSender(pc);if(sender)await sender.replaceTrack(camera||null);}));
+          $('#assist-requests').replaceChildren();$('#assist-grants').replaceChildren();
+          $('#meeting-share').textContent='Share screen';
+          applyPolicy(policy);
           status("Screen-sharing permission was removed");
         } else if (data.type === "assist-request" && screenStream) {
           const row = document.createElement("div");
@@ -241,11 +273,34 @@ export function setupMeetings() {
       $("#meeting-id").value = id;
       status("Room created. Share the meeting ID with signed-in participants.");
       await join(id);
+      await refreshMeetings();
     } catch (error) { status(error.message); }
   });
   $("#meeting-join").onclick = () => join($("#meeting-id").value.trim())
     .catch((error) => { leave(); status(error.message); });
   $("#meeting-leave").onclick = () => { leave(); status("Left meeting"); };
+  async function refreshMeetings(){
+    const {meetings}=await api('/api/meetings');const list=$('#meeting-list');list.replaceChildren();
+    for(const room of meetings){const row=document.createElement('li'),button=document.createElement('button');
+      button.type='button';button.textContent=`Open ${room.title}${room.locked?' (locked)':''}`;
+      button.onclick=()=>join(room.id).catch(error=>status(error.message));row.append(button);
+      const copy=document.createElement('button');copy.type='button';copy.textContent='Copy link';
+      copy.onclick=async()=>{try{$('#meeting-id').value=room.id;await navigator.clipboard.writeText(meetingLink());status('Meeting link copied');}catch(error){status(error.message);}};
+      if(policy.allowLinks!==false)row.append(copy);list.append(row);}
+  }
+  $('#meeting-refresh').onclick=()=>refreshMeetings().catch(error=>status(error.message));
+  $('#meeting-copy').onclick=async()=>{try{await navigator.clipboard.writeText(meetingLink());status('Meeting link copied');}catch(error){status(error.message);}};
+  $('#meeting-native-share').onclick=async()=>{try{const url=meetingLink();
+    if(navigator.share)await navigator.share({title:'Join my meeting',url});
+    else {await navigator.clipboard.writeText(url);status('Meeting link copied');}
+  }catch(error){if(error.name!=='AbortError')status(error.message);}};
+  $('#meeting-invite').onsubmit=async event=>{event.preventDefault();try{
+    await api(`/api/meetings/${roomId}/invite`,{email:new FormData(event.currentTarget).get('email')});
+    event.currentTarget.reset();status('Invitation saved. The recipient can open it from My meetings.');
+  }catch(error){status(error.message);}};
+  $('#meeting-hand').onclick=()=>{handRaised=!handRaised;send({type:'hand',raised:handRaised});
+    $('#meeting-hand').textContent=handRaised?'Lower hand':'Raise hand';};
+  $('#meeting-reaction').onclick=()=>send({type:'reaction',reaction:'applause'});
   $("#meeting-mic").onclick = () => {
     const track = localStream?.getAudioTracks()[0];
     if (track) { track.enabled = !track.enabled; $("#meeting-mic").textContent = track.enabled ? "Mute" : "Unmute"; }
@@ -306,6 +361,8 @@ export function setupMeetings() {
       root.hidden = false;
       const invited = new URL(location.href).searchParams.get("meeting");
       if (invited) $("#meeting-id").value = invited;
+      refreshMeetings().catch(error=>status(error.message));
+      api('/api/meetings/config').then(config=>{features=config.features||{};applyPolicy(config.policy);}).catch(error=>status(error.message));
     },
     hide() { leave(); root.hidden = true; }
   };

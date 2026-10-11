@@ -10,9 +10,11 @@ import {handleCluster} from './cluster.js';
 import {handleProviderWebhook,handleProviderWebhookAdmin} from './providerWebhooks.js';
 import {handleDidwwCallback,handleDidwwAdmin} from './didwwIntegration.js';
 import { handleCarrierProviders, carrierActive } from './carrierProviders.js';
+import {handleProviderCredentials} from './providerCredentials.js';
 import { handleAdapterRegistry } from './adapterRegistry.js';
 import { handleOperatorControl } from './operatorControl.js';
 import { handleSwitchAdmin,handleSwitchXml } from './switch.js';
+import {handleKamailioRoute,handleKamailioAuth} from './kamailio.js';
 import { handleServerFleetAdmin,handleServerFleetRunner } from './serverFleet.js';
 import {handleOperationsPolicy,resolveWss} from './operationsPolicy.js';
 import {handleWorkspaceShortcuts} from './workspaceShortcuts.js';
@@ -21,12 +23,19 @@ import {handleCampaigns} from './campaigns.js';
 import {effectivePasskeyMode,passkeyGate,handlePasskeyPolicy} from './passkeyPolicy.js';
 import { handleFlowrouteRates } from './flowrouteRates.js';
 import { handleHelpAgent } from './helpAgent.js';
+import {handleAiConfiguration} from './aiConfiguration.js';
+import {handleEmailConfiguration} from './emailConfiguration.js';
 import { handleFlowrouteWebhook, handleMessagingWebhookAdmin, handleExternalSms, handleSmsNumberAdmin } from './messagingWebhooks.js';
 import { handleCharging } from './charging.js';
+import { handleSettlements } from './settlements.js';
+import {handleRating} from './ratingEngine.js';
+import {handlePrepaid} from './prepaidAuthorizer.js';
+import {handleBillingControl} from './billingControl.js';
 import { createDatabase } from "./db.js";
 import { handleMobileAdmin } from "./mobileAdmin.js";
 import { handlePbx } from "./pbx.js";
 import { handleCdrIngest, handleCdrAdmin } from "./cdr.js";
+import {handleLiveCallIngest,handleLiveCallsAdmin} from './liveCalls.js';
 import { handleInhouseDids } from "./dids.js";
 import { handleNigeria } from "./nigeria.js";
 import { handleReports } from "./reports.js";
@@ -47,6 +56,9 @@ import {handleLocales} from "./locales.js";
 import { handleTenants, isAdmin, defaultTenantId } from "./tenancy.js";
 import { availableNumbers } from "./providers.js";
 import { attachMeetingSignaling } from "./meetings.js";
+import {inviteMeeting} from './meetingInvitations.js';
+import {meetingPolicy,saveMeetingPolicy} from './meetingPolicy.js';
+import {handleHelpPreferences} from './helpPreferences.js';
 import { validateFeatures, effectiveFeatures } from "./permissions.js";
 import {
   verifyPassword, createSessionToken, tokenHash
@@ -143,20 +155,28 @@ async function handler(req, res) {
   const providerWebhook=path.startsWith("/api/webhooks/providers/");
   const didwwWebhook=path.startsWith("/api/webhooks/didww/");
   const cdrIngest = req.method === "POST" && path === "/api/integrations/cdr";
+  const liveIngest = req.method === 'POST' && path === '/api/integrations/calls/events';
   const switchXml = path === "/api/switch/xml";
+  const kamailioRoute = path === "/api/switch/kamailio/route";
+  const kamailioAuth = path === "/api/switch/kamailio/auth";
+  const prepaidSwitch = path === '/api/switch/prepaid';
   const deployRunner = path.startsWith('/api/integrations/deployment/');
-  if (req.method !== "GET" && !deployRunner && !switchXml && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
+  if (req.method !== "GET" && !deployRunner && !switchXml && !kamailioRoute && !kamailioAuth && !prepaidSwitch && !cdrIngest && !liveIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
     return send(res, 403, { error: "Invalid origin" });
-  if (req.method !== "GET" && !limit(req,switchXml ? 3000 : (deployRunner || cdrIngest || flowrouteWebhook || stripeWebhook || providerWebhook || didwwWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
+  if (req.method !== "GET" && !limit(req,(switchXml || kamailioRoute || kamailioAuth || prepaidSwitch) ? 3000 : (deployRunner || cdrIngest || liveIngest || flowrouteWebhook || stripeWebhook || providerWebhook || didwwWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
     return send(res, 429, { error: "Too many requests" });
   try {
     if (switchXml) return await handleSwitchXml({req,res,pool});
+    if (kamailioRoute) return await handleKamailioRoute({req,res,pool});
+    if (kamailioAuth) return await handleKamailioAuth({req,res,pool});
+    if (prepaidSwitch) return await handlePrepaid({req,res,pool,send,readJson});
     if (deployRunner) return await handleServerFleetRunner({req,res,path,pool,send,readJson});
     if (flowrouteWebhook) return await handleFlowrouteWebhook({req,res,path,pool,send});
     if (stripeWebhook) return await handleStripeWebhook({req,res,path,pool,send});
     if (providerWebhook) return await handleProviderWebhook({req,res,path,pool,send});
     if (didwwWebhook) return await handleDidwwCallback({req,res,path,pool,send,origin});
     if (cdrIngest) return await handleCdrIngest({req,res,pool,send,keys:cdrKeys});
+    if (liveIngest) return await handleLiveCallIngest({req,res,pool,send,keys:cdrKeys});
     if (currentToken(req) && !['/api/account/password','/api/me','/api/logout','/api/login'].includes(path)) {
       const sessionAccount=await currentUser(req);
       if(sessionAccount?.must_change_password) return send(res,403,{error:'Change your temporary password before continuing'});
@@ -233,7 +253,7 @@ async function handler(req, res) {
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
         path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") ||
         path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path.startsWith("/api/dashboard") || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
-        path === "/api/admin/cdr" || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
+        path === "/api/admin/cdr" || path.startsWith('/api/admin/live-calls') || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
       if(path==='/api/redirector'&&req.method==='GET'){
@@ -256,7 +276,9 @@ async function handler(req, res) {
         return await handleSipProfiles({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin)});
       if(path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/'))
         return await handleSipMarketplace({req,res,path,user,pool,send,readJson});
-      if(path==='/api/help/agent') return await handleHelpAgent({req,res,user,send,readJson});
+      if(path==='/api/admin/ai-support')return await handleAiConfiguration({req,res,user,pool,send,readJson});
+      if(path.startsWith('/api/admin/email-verification'))return await handleEmailConfiguration({req,res,path,user,pool,send,readJson,origin});
+      if(path==='/api/help/agent') return await handleHelpAgent({req,res,user,pool,send,readJson});
       if(path.startsWith('/api/admin/rates/flowroute') || path==='/api/rates/flowroute/search')
         return await handleFlowrouteRates({req,res,path,user,pool,send});
       if(path==='/api/admin/messaging/numbers') return await handleSmsNumberAdmin({req,res,path,user,pool,send,readJson});
@@ -266,8 +288,12 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/operator')) return await handleOperatorControl({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/switch')) return await handleSwitchAdmin({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/servers')) return await handleServerFleetAdmin({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/admin/carriers/credentials')) return await handleProviderCredentials({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/carriers')) return await handleCarrierProviders({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/charging/overview') return await handleCharging({req,res,user,pool,send});
+      if(path.startsWith('/api/admin/settlements')) return await handleSettlements({req,res,path,user,pool,send,readJson});
+      if(path==='/api/admin/rating') return await handleRating({req,res,path,user,pool,send,readJson});
+      if(path==='/api/admin/billing-control') return await handleBillingControl({req,res,user,pool,send,readJson});
       if (path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales")
         return await handleLocales({req,res,path,user,pool,send,readJson});
       if (path==="/api/search") return await handleSearch({req,res,user,pool,send});
@@ -308,6 +334,7 @@ async function handler(req, res) {
         return await handlePricing({req,res,path,user,pool,send,readJson});
       if (path === "/api/admin/cdr" && req.method === "GET")
         return await handleCdrAdmin({req,res,user,pool,send});
+      if(path.startsWith('/api/admin/live-calls'))return await handleLiveCallsAdmin({req,res,path,user,pool,send,readJson});
       if (path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/"))
         return await handleInhouseDids({req,res,path,user,pool,send,readJson});
       if (path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/"))
@@ -318,14 +345,73 @@ async function handler(req, res) {
         return await handleMobileAdmin({ req,res,path,user,pool,send,readJson });
       if (path.startsWith("/api/meetings") && !user.features.meetings)
         return send(res, 403, { error: "Meetings unavailable for your groups" });
+      if(path==='/api/admin/meeting-policy'){
+        if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
+        if(req.method==='GET')return send(res,200,{policy:await meetingPolicy(pool,user.tenant_id)});
+        if(req.method==='PUT'){
+          try{const policy=await readJson(req);await saveMeetingPolicy(pool,user.tenant_id,user.id,policy);
+            meetingSignaling.applyPolicy(user.tenant_id,policy);return send(res,200,{policy});}
+          catch(error){if(error instanceof RangeError)return send(res,400,{error:error.message});throw error;}
+        }
+        return send(res,405,{error:'GET or PUT required'});
+      }
+      if(path==='/api/help/preferences')return await handleHelpPreferences({req,res,user,pool,send,readJson});
+      if(path==='/api/admin/meeting-rooms'&&req.method==='GET'){
+        if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
+        const rows=await pool.query(`SELECT m.id,m.title,m.locked,m.created_at,m.host_id,u.display_name AS host_name
+          FROM meeting_rooms m JOIN users u ON u.id=m.host_id
+          WHERE m.tenant_id=$1 AND m.ended_at IS NULL ORDER BY m.created_at DESC LIMIT 100`,[user.tenant_id]);
+        const invitations=await pool.query(`SELECT i.room_id,i.recipient_id,u.email
+          FROM meeting_invitations i JOIN users u ON u.id=i.recipient_id WHERE i.tenant_id=$1
+          AND i.room_id IN (SELECT id FROM meeting_rooms WHERE tenant_id=$1 AND ended_at IS NULL)
+          ORDER BY i.created_at DESC LIMIT 500`,[user.tenant_id]);
+        return send(res,200,{rooms:rows.rows.map(room=>({...room,participants:meetingSignaling.participants(room.id),
+          invitations:invitations.rows.filter(invite=>invite.room_id===room.id)}))});
+      }
+      const adminMeeting=/^\/api\/admin\/meeting-rooms\/([0-9a-f-]{36})\/(lock|end|remove|invite|revoke)$/i.exec(path);
+      if(adminMeeting&&req.method==='POST'){
+        if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
+        const [_,id,action]=adminMeeting;
+        if(!uuidPattern.test(id))return send(res,400,{error:'Invalid room ID'});
+        const room=await pool.query('SELECT id,host_id FROM meeting_rooms WHERE id=$1 AND tenant_id=$2 AND ended_at IS NULL',[id,user.tenant_id]);
+        if(!room.rowCount)return send(res,404,{error:'Meeting unavailable'});
+        const body=await readJson(req);
+        if(action==='invite'){
+          if(!(await meetingPolicy(pool,user.tenant_id)).allowInvites)return send(res,403,{error:'Meeting invitations disabled'});
+          const outcome=await inviteMeeting({pool,tenant:user.tenant_id,host:room.rows[0].host_id,roomId:id,email:body.email});
+          return send(res,outcome.status,outcome.body);
+        }
+        if(action==='revoke'){
+          if(!uuidPattern.test(body.userId||''))return send(res,400,{error:'Recipient ID required'});
+          await pool.query('DELETE FROM meeting_invitations WHERE room_id=$1 AND tenant_id=$2 AND recipient_id=$3',
+            [id,user.tenant_id,body.userId]);
+          meetingSignaling.removeParticipant(id,body.userId);
+          return send(res,200,{revoked:true});
+        }
+        if(action==='lock'){
+          if(typeof body.locked!=='boolean')return send(res,400,{error:'Boolean locked required'});
+          await pool.query('UPDATE meeting_rooms SET locked=$1 WHERE id=$2 AND tenant_id=$3',[body.locked,id,user.tenant_id]);
+          return send(res,200,{locked:body.locked});
+        }
+        if(action==='end'){
+          await pool.query('UPDATE meeting_rooms SET ended_at=UTC_TIMESTAMP(3) WHERE id=$1 AND tenant_id=$2',[id,user.tenant_id]);
+          meetingSignaling.closeRoom(id);return send(res,200,{ended:true});
+        }
+        if(!uuidPattern.test(body.userId||'')||body.userId===room.rows[0].host_id)
+          return send(res,400,{error:'Choose a non-host participant'});
+        if(!meetingSignaling.participants(id).some(peer=>peer.id===body.userId))
+          return send(res,404,{error:'Participant is not connected'});
+        meetingSignaling.removeParticipant(id,body.userId);return send(res,200,{removed:true});
+      }
       if (path.startsWith("/api/messages") || path.startsWith("/api/contacts"))
         if (!user.features.messaging) return send(res, 403, { error: "Messaging unavailable for your groups" });
       if ((path.startsWith("/api/billing/") || path.startsWith("/api/numbers") ||
            path.startsWith("/api/porting")) && !user.features.billing)
         return send(res, 403, { error: "Billing unavailable for your groups" });
       if (path === "/api/meetings/config" && req.method === "GET")
-        return send(res, 200, { iceServers: [...meetingIceServers,...(turnSecret?[turnIceServer({secret:turnSecret,host:turnHost,userId:user.id})]:[])], maxParticipants: 4,
-          features:user.features });
+        {const policy=await meetingPolicy(pool,user.tenant_id);
+        return send(res, 200, { iceServers: [...meetingIceServers,...(turnSecret?[turnIceServer({secret:turnSecret,host:turnHost,userId:user.id})]:[])], maxParticipants:policy.maxParticipants,
+          features:user.features,policy });}
       if (path === "/api/meetings" && req.method === "POST") {
         const { title } = await readJson(req);
         if (typeof title !== "string" || !title.trim() || title.length > 100)
@@ -337,12 +423,14 @@ async function handler(req, res) {
       }
       if (path === "/api/meetings" && req.method === "GET") {
         const result = await pool.query(
-          "SELECT id,title,locked,created_at FROM meeting_rooms WHERE host_id=$1 AND ended_at IS NULL ORDER BY created_at DESC LIMIT 50",
-          [user.id]
+          `SELECT DISTINCT m.id,m.title,m.locked,m.created_at,m.host_id
+           FROM meeting_rooms m LEFT JOIN meeting_invitations i ON i.room_id=m.id AND i.recipient_id=$1
+           WHERE m.tenant_id=$2 AND m.ended_at IS NULL AND (m.host_id=$1 OR i.recipient_id=$1)
+           ORDER BY m.created_at DESC LIMIT 50`,[user.id,user.tenant_id]
         );
         return send(res, 200, { meetings: result.rows });
       }
-      const meetingMatch = /^\/api\/meetings\/([0-9a-f-]{36})(?:\/(lock|end))?$/i.exec(path);
+      const meetingMatch = /^\/api\/meetings\/([0-9a-f-]{36})(?:\/(lock|end|invite))?$/i.exec(path);
       if (meetingMatch && uuidPattern.test(meetingMatch[1])) {
         const id = meetingMatch[1];
         const result = await pool.query(
@@ -352,6 +440,12 @@ async function handler(req, res) {
         if (!room || room.ended_at) return send(res, 404, { error: "Meeting unavailable" });
         if (req.method === "GET" && !meetingMatch[2])
           return send(res, 200, { id, title:room.title, hostId:room.host_id, locked:room.locked });
+        if(req.method==='POST'&&room.host_id===user.id&&meetingMatch[2]==='invite'){
+          if(!(await meetingPolicy(pool,user.tenant_id)).allowInvites)return send(res,403,{error:'Meeting invitations disabled'});
+          const {email}=await readJson(req);
+          const outcome=await inviteMeeting({pool,tenant:user.tenant_id,host:user.id,roomId:id,email});
+          return send(res,outcome.status,outcome.body);
+        }
         if (req.method === "POST" && room.host_id === user.id && meetingMatch[2] === "lock") {
           const { locked } = await readJson(req);
           if (typeof locked !== "boolean") return send(res, 400, { error: "Boolean locked required" });
@@ -496,7 +590,7 @@ async function handler(req, res) {
         if(!await carrierActive(pool,user.tenant_id,provider)) return send(res,409,{error:'Carrier provider awaits administrator activation'});
         const rule=await pricingRule(pool,user.tenant_id,provider);
         try {
-          const numbers = await availableNumbers(provider);
+          const numbers = await availableNumbers(provider,{pool,tenant:user.tenant_id});
           return send(res, 200, { pricing:{mode:rule.mode,setupValue:Number(rule.setupValue),monthlyValue:Number(rule.monthlyValue)},
             numbers: numbers.map(({ monthlyCostCents,setupCostCents,...item }) => ({
               ...item, monthlyCents: sellingCents(monthlyCostCents,rule.mode,Number(rule.monthlyValue)),
@@ -515,7 +609,7 @@ async function handler(req, res) {
           return send(res,400,{error:"Choose a valid inventory number"});
         if(!await carrierActive(pool,user.tenant_id,provider)) return send(res,409,{error:'Carrier provider awaits administrator activation'});
         let inventory;
-        try {inventory=(await availableNumbers(provider)).find(item=>item.number===number && item.inventoryId===inventoryId && (item.skuId||null)===(skuId||null));}
+        try {inventory=(await availableNumbers(provider,{pool,tenant:user.tenant_id})).find(item=>item.number===number && item.inventoryId===inventoryId && (item.skuId||null)===(skuId||null));}
         catch(error) {return send(res,503,{error:error.message});}
         if (!inventory) return send(res,409,{error:"Number is no longer in the current provider listing"});
         const rule=await pricingRule(pool,user.tenant_id,provider);

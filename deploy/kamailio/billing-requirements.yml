@@ -1,0 +1,107 @@
+---
+# Host prerequisites for a future rated billing deployment. Safe to rerun.
+# No wallet mutation, invoice settlement, tariff activation or SIP cutover.
+- name: Install local billing host prerequisites
+  hosts: switch_nodes
+  become: true
+  gather_facts: true
+  vars:
+    billing_base: /opt/olamide/billing
+    billing_checkout: /opt/olamide/kamailio-staging
+    billing_deploy_application: false
+    billing_packages:
+      - ca-certificates
+      - curl
+      - jq
+      - openssl
+      - python3
+      - python3-venv
+      - mariadb-client
+  tasks:
+    - name: Require Debian 12 and local execution
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version == '12'
+          - ansible_connection | default('ssh') == 'local'
+          - billing_base == '/opt/olamide/billing'
+        fail_msg: Run with a local switch_nodes inventory on the reviewed Debian 12 host.
+
+    - name: Check checked out application source
+      ansible.builtin.stat:
+        path: "{{ billing_checkout }}/services/api/package.json"
+      register: billing_source
+
+    - name: Require staged source checkout
+      ansible.builtin.assert:
+        that:
+          - billing_source.stat.isreg | default(false)
+
+    - name: Install TLS, diagnostics, and database client prerequisites
+      ansible.builtin.apt:
+        name: "{{ billing_packages }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Create private directories for future billing artifacts
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+      loop:
+        - "{{ billing_base }}"
+        - "{{ billing_base }}/reports"
+        - "{{ billing_base }}/reconciliation"
+        - "{{ billing_base }}/backups"
+
+    - name: Check Docker Compose is available
+      ansible.builtin.command:
+        argv: [docker, compose, version]
+      changed_when: false
+
+    - name: Check production and staging environments without reading secrets
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /opt/olamide/repo/deployment/docker/.env
+        - "{{ billing_checkout }}/deployment/docker/compose.yml"
+      register: billing_inputs
+
+    - name: Require existing production and staging inputs
+      ansible.builtin.assert:
+        that:
+          - item.stat.isreg | default(false)
+        fail_msg: "Required deployment input missing: {{ item.item }}"
+      loop: "{{ billing_inputs.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Build and migrate the application with database backup and rollback
+      ansible.builtin.command:
+        argv:
+          - bash
+          - "{{ billing_checkout }}/deploy/kamailio/deploy-production-gui.sh"
+        chdir: "{{ billing_checkout }}"
+      when: billing_deploy_application | bool
+      register: billing_deploy_result
+      changed_when: billing_deploy_result.rc == 0
+
+    - name: Check the migrated private API after application deployment
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/api/health
+        status_code: 200
+        return_content: false
+        timeout: 5
+      when: billing_deploy_application | bool
+
+    - name: Report installed scope and next gate
+      ansible.builtin.debug:
+        msg: >-
+          Billing host prerequisites installed. Optional application deployment
+          backs up MySQL and runs schema migrations. No prepaid cutoff or
+          carrier settlement was activated. Run
+          billing-production.yml only after the missing engine components and
+          independent acceptance reports have been implemented.

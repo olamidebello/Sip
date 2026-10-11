@@ -12,6 +12,7 @@ export async function migrateTrunkManagement(pool){
 const readTrunk=async(db,id,tenant)=> (await db.query('SELECT id,name,host,port,transport,priority,enabled,revision,updated_at FROM pbx_trunks WHERE id=$1 AND tenant_id=$2 FOR UPDATE',[id,tenant])).rows[0];
 const event=async(db,tenant,trunk,user,action)=>db.query('INSERT INTO pbx_trunk_events(id,tenant_id,trunk_id,actor_id,action,snapshot) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),tenant,trunk.id,user.id,action,JSON.stringify(snapshot(trunk))]);
 export async function handleTrunks({req,res,path,user,pool,send,readJson}){
+  if(user.role!=='super_admin') return send(res,403,{error:'Super administrator required'});
   const tenant=user.tenant_id;
   if(path==='/api/pbx/trunks'&&req.method==='GET'){
     const rows=await pool.query(`SELECT t.id,t.name,t.host,t.port,t.transport,t.priority,t.enabled,t.revision,t.updated_at,
@@ -32,6 +33,9 @@ export async function handleTrunks({req,res,path,user,pool,send,readJson}){
     const b=await readJson(req);if(typeof b.enabled!=='boolean'||!Array.isArray(b.trunks)||b.trunks.length<1||b.trunks.length>50||new Set(b.trunks.map(t=>t?.id)).size!==b.trunks.length||b.trunks.some(t=>!uuid.test(t?.id||'')||!Number.isSafeInteger(t.revision)||t.revision<1))return send(res,400,{error:'Select 1–50 distinct trunks with current revisions'});
     const db=await pool.connect();try{await db.query('BEGIN');for(const item of [...b.trunks].sort((a,c)=>a.id.localeCompare(c.id))){
       const trunk=await readTrunk(db,item.id,tenant);if(!trunk||Number(trunk.revision)!==item.revision){await db.query('ROLLBACK');return send(res,409,{error:'Trunk changed or unavailable; refresh before retrying'});}
+      if(user.role!=='super_admin'&&(await db.query("SELECT 1 FROM carrier_provider_profiles WHERE tenant_id=$1 AND trunk_id=$2 AND provider='flowroute'",[tenant,item.id])).rowCount){
+        await db.query('ROLLBACK');return send(res,403,{error:'Super administrator required for Flowroute trunk'});
+      }
       await db.query('UPDATE pbx_trunks SET enabled=$1,revision=revision+1 WHERE id=$2 AND tenant_id=$3',[b.enabled,item.id,tenant]);await event(db,tenant,{...trunk,enabled:b.enabled,revision:item.revision+1},user,b.enabled?'preview_enabled':'preview_disabled');
     }await db.query('COMMIT');return send(res,200,{updated:b.trunks.length,enabled:b.enabled,simulationOnly:true});
     }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
@@ -39,6 +43,17 @@ export async function handleTrunks({req,res,path,user,pool,send,readJson}){
   const match=/^\/api\/pbx\/trunks\/([0-9a-f-]{36})(?:\/(status|history|export))?$/i.exec(path);
   if(!match||!uuid.test(match[1]))return send(res,404,{error:'Trunk route unavailable'});
   const id=match[1],action=match[2];
+  if(!action&&req.method==='GET'){
+    const trunk=(await pool.query('SELECT id,name,host,port,transport,priority,enabled,revision,updated_at FROM pbx_trunks WHERE id=$1 AND tenant_id=$2',
+      [id,tenant])).rows[0];
+    if(!trunk)return send(res,404,{error:'Trunk unavailable'});
+    const [rates,carriers]=await Promise.all([
+      pool.query('SELECT prefix,cost_cents_per_minute,price_cents_per_minute FROM pbx_rates WHERE trunk_id=$1 AND tenant_id=$2 ORDER BY prefix LIMIT 100',[id,tenant]),
+      pool.query('SELECT provider,status,routing_mode,max_concurrent_calls FROM carrier_provider_profiles WHERE trunk_id=$1 AND tenant_id=$2 ORDER BY provider',[id,tenant])
+    ]);
+    return send(res,200,{trunk,rates:rates.rows,carriers:carriers.rows,
+      scope:'Configuration and linked inventory only; SIP reachability and carrier activation are not verified'});
+  }
   if(action==='history'&&req.method==='GET'){
     const rows=await pool.query('SELECT action,snapshot,actor_id,created_at FROM pbx_trunk_events WHERE trunk_id=$1 AND tenant_id=$2 ORDER BY created_at DESC LIMIT 100',[id,tenant]);
     return rows.rowCount?send(res,200,{events:rows.rows}):send(res,404,{error:'Trunk history unavailable'});
@@ -51,6 +66,9 @@ export async function handleTrunks({req,res,path,user,pool,send,readJson}){
     const b=req.method==='PUT'?await readJson(req):{};
     if(req.method==='PUT'&&(!Number.isSafeInteger(b.revision)||b.revision<1||(action==='status'?typeof b.enabled!=='boolean':!valid(b))))return send(res,400,{error:'Valid trunk configuration and revision required'});
     const db=await pool.connect();try{await db.query('BEGIN');const trunk=await readTrunk(db,id,tenant);if(!trunk){await db.query('ROLLBACK');return send(res,404,{error:'Trunk unavailable'});}
+      if(user.role!=='super_admin'&&(await db.query("SELECT 1 FROM carrier_provider_profiles WHERE tenant_id=$1 AND trunk_id=$2 AND provider='flowroute'",[tenant,id])).rowCount){
+        await db.query('ROLLBACK');return send(res,403,{error:'Super administrator required for Flowroute trunk'});
+      }
       if(req.method==='PUT'&&Number(trunk.revision)!==b.revision){await db.query('ROLLBACK');return send(res,409,{error:'Trunk changed; refresh before saving'});}
       if(req.method==='DELETE'||!action){const deps=await db.query(`SELECT (SELECT COUNT(*) FROM pbx_rates WHERE trunk_id=$1 AND tenant_id=$2) AS rates,(SELECT COUNT(*) FROM carrier_provider_profiles WHERE trunk_id=$1 AND tenant_id=$2) AS carriers`,[id,tenant]);
         if(req.method==='DELETE'&&(Number(deps.rows[0].rates)||Number(deps.rows[0].carriers))){await db.query('ROLLBACK');return send(res,409,{error:'Remove linked rates and carrier profiles before deleting this trunk'});}
