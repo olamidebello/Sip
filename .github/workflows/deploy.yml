@@ -1,6 +1,7 @@
 name: Validate Olamide for server pull
 on:
   workflow_dispatch:
+  pull_request:
   push:
     branches: [main]
 jobs:

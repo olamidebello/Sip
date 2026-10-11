@@ -12,6 +12,16 @@ if ! grep -q '^PAYMENT_CONFIG_KEY=' /etc/olamide/secrets.env; then
   printf 'PAYMENT_CONFIG_KEY=%s\n' "$(openssl rand -hex 32)" >> /etc/olamide/secrets.env
 fi
 env_changed=0
+if ! grep -q '^KAMAILIO_RUNNER_TOKEN=.' /etc/olamide/secrets.env; then
+  umask 077
+  sed -i '/^KAMAILIO_RUNNER_TOKEN=$/d' /etc/olamide/secrets.env
+  printf 'KAMAILIO_RUNNER_TOKEN=%s\n' "$(openssl rand -hex 32)" >> /etc/olamide/secrets.env
+fi
+if ! grep -q '^KAMAILIO_RUNNER_TOKEN=.' "$compose_dir/.env"; then
+  sed -i '/^KAMAILIO_RUNNER_TOKEN=$/d' "$compose_dir/.env"
+  grep '^KAMAILIO_RUNNER_TOKEN=' /etc/olamide/secrets.env >> "$compose_dir/.env"
+  env_changed=1
+fi
 if ! grep -q '^PAYMENT_CONFIG_KEY=' "$compose_dir/.env"; then
   grep '^PAYMENT_CONFIG_KEY=' /etc/olamide/secrets.env >> "$compose_dir/.env"
   env_changed=1
