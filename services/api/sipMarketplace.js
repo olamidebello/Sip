@@ -73,7 +73,7 @@ export async function provisionSipAccount(pool,userId){
     }
     const updated=await pool.query("UPDATE sip_accounts SET status='active' WHERE id=$1 AND status='awaiting_switch' AND EXISTS (SELECT 1 FROM users u JOIN tenants t ON t.id=u.tenant_id WHERE u.id=sip_accounts.user_id AND u.status='active' AND t.status='active')",[account.id]);
     return updated.rowCount===1;
-  } catch(error){console.error('SIP provisioning pending',error.name);return false;}
+  } catch(error){console.error('SIP provisioning pending',error.code||(/authenticate data/.test(error.message||'')?'SIP_CREDENTIAL_KEY_MISMATCH':error.name));return false;}
 }
 
 export async function automaticSipSession(pool,user) {

@@ -8,6 +8,14 @@
         that:
           - kamailio_repo_path == '/opt/olamide/repo'
           - kamailio_maintenance_approved | default(false) | bool
+    - name: Verify stored credentials and restore a matching saved key if necessary
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/repair_sip_credential_key.py, '--repair']
+      register: sip_key_check
+      changed_when: "'Restored verified' in sip_key_check.stdout"
+    - name: Report credential key verification without secrets
+      ansible.builtin.debug:
+        var: sip_key_check.stdout_lines
     - name: Prepare token and configuration without replacing live routes
       ansible.builtin.command:
         argv: [python3, /opt/olamide/repo/tools/prepare_kamailio_http_bridge.py]
