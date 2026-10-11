@@ -663,6 +663,17 @@ root.innerHTML = `
         <label>Carrier <select name="provider" required></select></label>
         <label>Adapter name <input name="name" maxlength="80" required></label>
         <label>Private target key <select name="targetKey" required></select></label>
+        <p><a id="adapter-configure" href="#adapter-target-configuration" aria-controls="adapter-target-configuration" aria-expanded="false">Configure private targets</a></p>
+        <details id="adapter-target-configuration">
+          <summary>Private target configuration</summary>
+          <p>On the SIP server, add your deployed adapter endpoint and its authentication token to <code>CARRIER_ADAPTER_TARGETS_JSON</code> in <code>/etc/olamide/secrets.env</code> and the active Compose environment file <code>/opt/olamide/repo/deployment/docker/.env</code>. Keep both files private.</p>
+          <pre>CARRIER_ADAPTER_TARGETS_JSON={"us-east":{"url":"https://adapter.example.com/provision","token":"REPLACE_WITH_YOUR_ADAPTER_TOKEN_32_OR_MORE_CHARACTERS"}}</pre>
+          <p>Replace the example with your actual adapter URL and token. Target keys must start with a lowercase letter, contain only lowercase letters, digits or hyphens, and be 2–40 characters long. Use an HTTPS endpoint and a token of at least 32 characters. This token authenticates your adapter service; it is separate from the carrier API credentials.</p>
+          <p>Apply the environment change on the server:</p>
+          <pre>cd /opt/olamide/repo/deployment/docker
+ docker compose up -d --no-deps --force-recreate api</pre>
+          <p>Then select “Refresh adapter health and activity”, choose the new private target key, and add the adapter. Check its health before enabling it.</p>
+        </details>
         <label>Region <input name="region" maxlength="40" placeholder="US East" required></label>
         <label>Priority <input name="priority" type="number" min="1" max="1000" value="100" required></label>
         <label>Maximum concurrent calls <input name="maxConcurrentCalls" type="number" min="1" max="100000" value="100" required></label>
