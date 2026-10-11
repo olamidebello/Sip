@@ -337,10 +337,14 @@ test("registered users can create and join a room; host controls it", {
   const reference=(await cr.json()).products.find(p=>p.sku==='OL-PDF-022');
   const publication=await fetch(base+'/api/admin/store/products',{method:'PUT',headers:{Origin:origin,Cookie:hostCookie,'Content-Type':'application/json'},body:JSON.stringify({sku:reference.sku,revision:reference.revision,name:'Test catalog plan',description:'Integration plan',terms:'Test service delivery and cancellation conditions.',billing:'monthly',sellingCents:1495,resellerCents:1390,setupCents:100,status:'published',confirmAvailability:true})});
   assert.equal(publication.status,200);
+  assert.equal((await fetch(base+'/api/store/products',{headers:{Cookie:guestCookie}})).status,403);
+  assert.equal((await put(`/api/admin/groups/${group.body.id}`,{features:{messaging:true,call_center:true,billing:true}})).status,200);
   const pc=await fetch(base+'/api/store/products',{headers:{Cookie:guestCookie}});
   assert.equal(pc.status,200);
   const product=(await pc.json()).products.find(p=>p.sku===reference.sku);
   assert.equal(product.reseller_cents,undefined);
+  const isolatedCatalog=await fetch(base+'/api/store/products',{headers:{Cookie:otherCookie}});
+  assert.equal((await isolatedCatalog.json()).products.length,0);
   const input={sku:product.sku,revision:product.revision,quantity:2,acceptTerms:true,requestKey:randomUUID(),sellingCents:1};
   const order=await post('/api/store/orders',input,guestCookie);assert.equal(order.status,201);
   assert.equal((await post('/api/store/orders',input,guestCookie)).body.id,order.body.id);
