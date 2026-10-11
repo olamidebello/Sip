@@ -47,7 +47,7 @@ root.innerHTML = `
     <nav class="public-nav" aria-label="Public navigation"><a href="#experience">Explore</a><a href="#downloads">Downloads</a><a href="#help" id="public-help">Help</a>
       <details class="login-menu"><summary id="login-menu-label">Sign in</summary><div class="login-options"><div id="login-options-auth">
         <button id="signin-user" type="button">User sign in</button><button id="signin-admin" type="button">Administrator sign in</button><button id="signin-super" type="button">Super administrator sign in</button>
-        <a href="/pages/ldap-login">Directory sign in</a><a href="/pages/signup">Create an account</a><a href="/pages/signup-verify">Verify email</a></div>
+        <a href="/pages/ldap-login">Directory sign in</a><a href="/pages/signup">Create an account</a></div>
         <div id="login-options-account" hidden><button id="menu-account" type="button">Account settings</button><button id="menu-logout" type="button">Sign out</button></div>
       </div></details></nav>
   </header>
@@ -81,7 +81,7 @@ root.innerHTML = `
     <p>Find a quick answer, follow a guided tour, or contact support.</p>
     <nav class="help-links" aria-label="Help topics"><a href="#help-faq">FAQs</a><a href="#help-user">User tutorial</a><a href="#help-admin">Administrator tutorial</a><a href="#help-technical">Technical guide</a><a href="#help-agent">AI support</a><a href="#support">Support tickets</a></nav>
     <section id="help-faq"><h3>Frequently asked questions</h3>
-      <details><summary>How do I register and sign in?</summary><p>Choose Create an account in the Sign in menu, enter your details, then verify the email code. Return to Sign in with your email or assigned username.</p></details>
+      <details><summary>How do I register and sign in?</summary><p>Choose Create an account in the Sign in menu, enter your details, type the password twice, and complete the CAPTCHA. Your account is created immediately. Return to Sign in with your email or assigned username.</p></details>
       <details><summary>How do I make a call?</summary><p>Open Dialer, enter the secure SIP WebSocket server and your provisioned SIP account, connect, and dial an allowed number. Your administrator must activate the account on a real switch.</p></details>
       <details><summary>Why can I not send an external text?</summary><p>Your administrator must assign an SMS enabled Flowroute number, set a daily allowance, and configure the carrier account. Check Communications → Text messages for your sender.</p></details>
       <details><summary>How do I buy a number or plan?</summary><p>Open Plans, numbers & billing. Requests create an invoice; payment, number assignment and carrier activation need operational review.</p></details>
@@ -94,7 +94,7 @@ root.innerHTML = `
       <details><summary>How do I jump back to a workspace page?</summary><p>Press Ctrl K or Command K to search visible pages. Save up to eight quick links on Dashboard and use Continue to return to a recently visited page. Links follow your current access.</p></details>
     </section>
     <section id="help-user"><h3>User tutorial</h3><ol>
-      <li>Register, confirm your email, and sign in.</li><li>Open Account & security to set a passkey and check your SIP identity.</li>
+      <li>Register with matching passwords and CAPTCHA, then sign in.</li><li>Open Account & security to set a passkey and check your SIP identity.</li>
       <li>Open Dialer and connect only after your SIP service is activated.</li><li>Use Account messages for Olamide contacts or Text messages for assigned external SMS.</li>
       <li>Review plan and number requests under Commerce, then open Support tickets if activation needs help.</li></ol></section>
     <section id="help-admin" hidden><h3>Administrator tutorial</h3><ol>
@@ -120,9 +120,9 @@ root.innerHTML = `
   </section>
   <section id="account">
     <h2>Welcome to Olamide</h2>
-    <p>Email verification creates an account and SIP identity. Calling needs an activated switch account; no number or plan is assigned at signup.</p>
+    <p>Registration creates an active account and SIP identity immediately. Calling needs an activated switch account; no number or plan is assigned at signup.</p>
     <p id="signin-role-help">Your assigned role controls which menus appear after sign-in.</p>
-    <nav class="auth-pages" aria-label="Account pages"><a href="/pages/login">Sign in</a><a href="/pages/signup">Register</a><a href="/pages/signup-verify">Verify email</a><a href="/pages/ldap-login">Directory sign in</a></nav>
+    <nav class="auth-pages" aria-label="Account pages"><a href="/pages/login">Sign in</a><a href="/pages/signup">Register</a><a href="/pages/ldap-login">Directory sign in</a></nav>
     <form id="signup">
       <h3>Create an account</h3>
       <label>Full name <input name="name" autocomplete="name" minlength="2" maxlength="100" required></label>
@@ -135,9 +135,14 @@ root.innerHTML = `
       <label>Postal code <input name="postalCode" autocomplete="postal-code" maxlength="32" required></label>
       <label>Country (ISO two-letter code) <input name="country" autocomplete="country" maxlength="2" pattern="[A-Za-z]{2}" placeholder="NG" required></label>
       <label>Password <input name="password" type="password" autocomplete="new-password" minlength="12" required></label>
-      <button>Create account and email code</button>
+      <label>Confirm password <input name="confirmPassword" type="password" autocomplete="new-password" minlength="12" required></label>
+      <input name="captchaId" type="hidden"><img id="signup-captcha-image" alt="CAPTCHA challenge: enter the six digits shown" width="240" height="76">
+      <button id="signup-captcha-refresh" type="button">New CAPTCHA</button>
+      <label>CAPTCHA digits <input name="captchaAnswer" inputmode="numeric" autocomplete="off" pattern="[0-9]{6}" maxlength="6" required></label>
+      <p>Your account is created immediately. Email verification is not required.</p>
+      <button>Create account</button>
     </form>
-    <form id="signup-verify"><h3>Verify your email</h3>
+    <form id="signup-verify"><h3>Legacy email verification</h3>
       <p>Enter the six-digit code we sent. It expires after 10 minutes.</p>
       <label>Email <input name="email" type="email" autocomplete="email" required></label>
       <label>Verification code <input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label>
@@ -1868,17 +1873,20 @@ $("#server-config").addEventListener("submit", async (event) => {
 apiGet("/api/config").then(({ sipWssUrl }) => {
   if (sipWssUrl) $("#connect [name=server]").value = sipWssUrl;
 }).catch(() => {});
-$("#signup").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const data = new FormData(form);
-  try {
-    await accountRequest("/api/register", Object.fromEntries(data));
-    $("#signup-verify").elements.email.value=data.get('email');
-    form.reset();
-    $("#account-status").textContent = "Check your email for a verification code.";
-    pageRoutes.go('signup-verify');
-  } catch (error) { $("#account-status").textContent = error.message; }
+async function refreshSignupCaptcha(){
+  const form=$("#signup");form.elements.captchaId.value='';form.elements.captchaAnswer.value='';
+  try{const result=await apiGet('/api/register/captcha');form.elements.captchaId.value=result.captchaId;$('#signup-captcha-image').src=result.image;}
+  catch(error){$('#account-status').textContent=error.message;}
+}
+$('#signup-captcha-refresh').onclick=refreshSignupCaptcha;
+refreshSignupCaptcha();
+$("#signup").addEventListener("submit", async event=>{
+ event.preventDefault();const form=event.currentTarget,button=form.querySelector('button:last-child');
+ if(form.elements.password.value!==form.elements.confirmPassword.value){$('#account-status').textContent='Passwords must match';return;}
+ button.disabled=true;
+ try{const data=Object.fromEntries(new FormData(form));await accountRequest('/api/register',data);form.reset();$('#login').elements.email.value=data.email;$('#account-status').textContent='Account created. Sign in to continue.';pageRoutes.go('login');}
+ catch(error){$('#account-status').textContent=error.message;}
+ finally{button.disabled=false;await refreshSignupCaptcha();}
 });
 $("#signup-verify").addEventListener('submit',async event=>{
   event.preventDefault();

@@ -153,6 +153,7 @@ async function handler(req, res) {
     return send(res, 403, { error: "Invalid origin" });
   if (req.method !== "GET" && !limit(req,switchXml ? 3000 : (deployRunner || kamailioRunner || cdrIngest || flowrouteWebhook || stripeWebhook || providerWebhook || didwwWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
     return send(res, 429, { error: "Too many requests" });
+  if(path==="/api/register/captcha"&&req.method==="GET"&&!limit(req,Number(process.env.API_RATE_LIMIT||20)))return send(res,429,{error:"Too many CAPTCHA requests"});
   try {
     if (switchXml) return send(res,410,{error:'Legacy XML integration retired'});
     if(kamailioRunner) return await handleKamailioRunner({req,res,path,pool,send,readJson});

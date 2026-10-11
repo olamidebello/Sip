@@ -1,3 +1,4 @@
+import {captchaHash} from './signupCaptcha.js';
 import {publishAllTenantProducts} from './productPublish.js';
 import {renewStoreOrders} from './productStore.js';
 import test from "node:test";
@@ -47,7 +48,14 @@ test("registered users can create and join a room; host controls it", {
     await new Promise((resolve) => setTimeout(resolve, 100));
     if (i === 59) throw new Error("API did not start: " + log);
   }
+  const db = createDatabase(process.env.TEST_MYSQL_URL);
+  t.after(() => db.end());
   const post = async (path, body, cookie) => {
+    if(path==='/api/register'){
+      const captchaId=randomUUID(),captchaAnswer='234567';
+      await db.query('INSERT INTO signup_captchas(id,answer_hash,expires_at) VALUES($1,$2,DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 5 MINUTE))',[captchaId,captchaHash(captchaId,captchaAnswer)]);
+      body={...body,confirmPassword:body.password,captchaId,captchaAnswer};
+    }
     const res = await fetch(base + path, { method: "POST",
       headers: { Origin: origin, "Content-Type": "application/json",
         ...(cookie ? { Cookie: cookie } : {}) },
@@ -60,8 +68,8 @@ test("registered users can create and join a room; host controls it", {
     const email=name+unique+'@example.com';
     assert.equal((await post("/api/register",
       { name,email,password,phone:'+2348012345678',address1:'123 Main St',address2:'',city:'Lagos',region:'Lagos',postalCode:'100001',country:'NG' })).status, 201);
-    assert.equal((await post('/api/login',{email,password})).status,401);
-    assert.equal((await post('/api/register/verify',{email,code:codes.get(email)})).status,200);
+    assert.equal((await post('/api/login',{email,password})).status,200);
+    assert.equal(codes.has(email),false);
   }
   const hostLogin = await post("/api/login", { email:"host" + unique + "@example.com", password });
   const guestLogin = await post("/api/login", { email:"guest" + unique + "@example.com", password });
@@ -91,8 +99,7 @@ test("registered users can create and join a room; host controls it", {
   for (let i = 0; i < 20 && !hostMessages.some((m) => m.type === "chat"); i++)
     await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(hostMessages.find((m) => m.type === "chat")?.text, "hello");
-  const db = createDatabase(process.env.TEST_MYSQL_URL);
-  t.after(() => db.end());
+
   const sip=await db.query('SELECT status FROM sip_accounts WHERE user_id=$1',[hostLogin.body.id]);
   assert.equal(sip.rows[0].status,'awaiting_switch');
   const timezone = await db.query("SELECT @@session.time_zone AS timezone");
