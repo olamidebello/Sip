@@ -6,6 +6,8 @@ modparam("auth_db", "password_column_2", "ha1b")
 modparam("auth_db", "use_domain", 1)
 modparam("auth_db", "version_table", 0)
 modparam("auth_db", "load_credentials", "")
+modparam("nathelper", "received_avp", "$avp(olamide_received)")
+modparam("registrar", "received_avp", "$avp(olamide_received)")
 route[OLAMIDE_REGISTER] {
     if (!is_method("REGISTER")) return;
     if ($td != "{{ sip_domain }}") {
@@ -21,6 +23,8 @@ route[OLAMIDE_REGISTER] {
         exit;
     }
     consume_credentials();
+    force_rport();
+    fix_nated_register();
     if (!save("location")) sl_reply_error();
     exit;
 }
