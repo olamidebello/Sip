@@ -3,7 +3,7 @@ import {randomBytes} from 'node:crypto';
 import {registerDigest} from './sipRegisterDigest.js';
 import WebSocket from 'ws';
 import {createDatabase} from './db.js';
-import {automaticSipSession} from './sipMarketplace.js';
+import {prepareSipProbeAccount} from './sipProbeAccount.js';
 const pool=createDatabase(process.env.MYSQL_URL);
 let ws,registered=false,account,seq=0;
 const tag=randomBytes(8).toString('hex'),callId=randomBytes(16).toString('hex');
@@ -23,11 +23,7 @@ function exchange(payload){return new Promise((resolve,reject)=>{
 
 try{
  const id=process.env.SIP_CHECK_USER_ID;
- const users=await pool.query(`SELECT u.id,u.tenant_id FROM users u JOIN tenants t ON t.id=u.tenant_id
-  JOIN sip_accounts a ON a.user_id=u.id WHERE u.status='active' AND t.status='active'
-  AND a.status='active' ${id?'AND u.id=$1':''} ORDER BY a.created_at LIMIT 1`,id?[id]:[]);
- if(!users.rows[0])throw Error('No active provisioned SIP account available');
- account=await automaticSipSession(pool,users.rows[0]);if(account.status!=='active')throw Error('SIP account bootstrap pending');
+ account=await prepareSipProbeAccount(pool,id);
  ws=new WebSocket(account.wssUrl,'sip',{origin:process.env.PUBLIC_ORIGIN,handshakeTimeout:8000});
  await new Promise((resolve,reject)=>{ws.once('open',resolve);ws.once('error',()=>reject(Error('Secure WebSocket handshake failed')));});
  console.log('Secure WebSocket: PASS');
@@ -35,7 +31,7 @@ try{
  if(result.code===401||result.code===407)result=await exchange(message(60,registerDigest(account,result)));
  if(result.code!==200)throw Error('REGISTER returned SIP '+result.code);
  registered=true;console.log('Authenticated SIP REGISTER: PASS');
- let removal=await exchange(message(0));if(removal.code===401||removal.code===407)removal=await exchange(message(0,digest(removal)));
+ let removal=await exchange(message(0));if(removal.code===401||removal.code===407)removal=await exchange(message(0,registerDigest(account,removal)));
  if(removal.code!==200)throw Error('Probe contact cleanup returned SIP '+removal.code);
  registered=false;console.log('Probe contact cleanup: PASS');
  console.log('Two-way client audio: REQUIRES TEST CALL');
