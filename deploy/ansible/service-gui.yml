@@ -1,0 +1,55 @@
+---
+- name: Publish all same-host switches and services to the administration GUI
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Require canonical paths and private bridge address
+      ansible.builtin.assert:
+        that:
+          - kamailio_repo_path == '/opt/olamide/repo'
+          - sip_bridge_ip is match('^[0-9.]+$')
+    - name: Create sanitized GUI inventory directory
+      ansible.builtin.file:
+        path: /var/lib/olamide/service-inventory
+        state: directory
+        mode: '0755'
+    - name: Install readiness collection service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/olamide-service-inventory.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Olamide sanitized switch and service readiness
+          After=docker.service
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/bin/python3 /opt/olamide/repo/tools/service_inventory.py --bridge-ip {{ sip_bridge_ip }} --output /var/lib/olamide/service-inventory/status.json
+          User=root
+          UMask=0022
+          NoNewPrivileges=true
+    - name: Install recurring health collection timer
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/olamide-service-inventory.timer
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Refresh service commissioning inventory
+          [Timer]
+          OnBootSec=30s
+          OnUnitActiveSec=60s
+          [Install]
+          WantedBy=timers.target
+    - name: Collect initial inventory
+      ansible.builtin.systemd:
+        name: olamide-service-inventory.service
+        daemon_reload: true
+        state: started
+    - name: Enable inventory timer
+      ansible.builtin.systemd:
+        name: olamide-service-inventory.timer
+        enabled: true
+        state: started
+    - name: Rebuild API and GUI with inventory integration
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, up, '-d', '--build', api, web]
+        chdir: /opt/olamide/repo/deployment/docker

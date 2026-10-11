@@ -19,6 +19,9 @@ export function setupKamailioAdmin(){
       cell(fresh?(fact?.installed?'yes':'no'):'unknown');cell(state);cell(fresh?fact?.testId||'Acceptance pending':'Fresh audit required');
       const link=document.createElement('a');link.href=m.documentation;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Guide';cell('').append(link);body.append(row);
     }
+    const servers=root.querySelector('#service-inventory');servers.replaceChildren();
+    for(const service of data.serviceInventory?.services||[]){const li=document.createElement('li');li.textContent=service.name+' · '+(service.active?'process running':'process pending')+' · '+(service.transportConnected?'transport connected':'transport pending')+' · '+Object.entries(service.capabilities).map(([k,v])=>k+': '+v).join(' · ');servers.append(li);}
+    if(!servers.children.length){const li=document.createElement('li');li.textContent=data.serviceInventory?.reason||'Super administrator service inventory unavailable';servers.append(li);}
     const readiness=root.querySelector('#carrier-readiness');readiness.replaceChildren();
     for(const f of data.carrierCapabilities?.features||[]){const li=document.createElement('li');li.textContent=f.name+' · '+f.status+' · '+(f.applicationIntegration?'Application integration exists; ':'')+f.reason;readiness.append(li);}
     const history=root.querySelector('#kamailio-history');history.replaceChildren();
