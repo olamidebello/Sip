@@ -189,13 +189,209 @@
       argv:
       - docker
       - run
-      - …2300 tokens truncated…running on this controller' >&2; exit 1; }
-release=${3:-latest-validated}
-if [[ "$release" == latest-validated ]]; then
-  command -v curl >/dev/null && command -v jq >/dev/null || { echo 'curl and jq are required to select a CI-validated release' >&2; exit 1; }
-  release=$(bash "$repo_root/deployment/verified-sha.sh")
-fi
-[[ "$release" =~ ^[0-9a-f]{40}$ ]] || { echo 'An immutable 40-character release SHA is required' >&2; exit 1; }
-# A SHA argument deliberately selects that release; default selects the latest successful CI release.
-ansible-playbook -i "$1" "$repo_root/deployment/ansible/production.yml" --syntax-check -e "@$2" -e "deployment_ref=$release"
-exec ansible-playbook -i "$1" "$repo_root/deployment/ansible/production.yml" -e "@$2" -e "deployment_ref=$release"
+      - --rm
+      - --entrypoint
+      - /bin/true
+      - mysql:8.4
+    changed_when: false
+  - name: Create private production directories
+    ansible.builtin.file:
+      path: '{{ item }}'
+      state: directory
+      owner: root
+      group: root
+      mode: '0700'
+    loop:
+    - /etc/olamide
+    - /opt/olamide
+    - /opt/olamide/backups
+    - /usr/local/lib/olamide-production
+  - name: Stage production deployment helpers
+    ansible.builtin.copy:
+      src: ../production/{{ item }}
+      dest: /usr/local/lib/olamide-production/{{ item }}
+      mode: '0700'
+    loop:
+    - runtime-secrets.py
+    - release.py
+    - check-public.py
+  - name: Install importable helper module
+    ansible.builtin.copy:
+      src: ../production/runtime-secrets.py
+      dest: /usr/local/lib/olamide-production/runtime_secrets.py
+      mode: '0600'
+  - name: Stage optional private environment inputs
+    ansible.builtin.copy:
+      src: '{{ production_secrets_source }}'
+      dest: /etc/olamide/production-input.env
+      mode: '0600'
+    when: production_secrets_source is defined
+    no_log: true
+  - name: Inspect existing legacy update timer
+    ansible.builtin.command:
+      argv:
+      - systemctl
+      - cat
+      - olamide-update.timer
+    register: legacy_update_timer
+    changed_when: false
+    failed_when: false
+  - name: Stop legacy updater to prevent uncoordinated deployments
+    ansible.builtin.systemd:
+      name: olamide-update.timer
+      state: stopped
+      enabled: false
+    when: legacy_update_timer.rc == 0
+  - name: Wait for any active legacy update to finish
+    ansible.builtin.command:
+      argv:
+      - flock
+      - -w
+      - '600'
+      - /run/olamide-update.lock
+      - /bin/true
+    changed_when: false
+  - name: Invalidate prior acceptance before changing the application release
+    ansible.builtin.copy:
+      dest: /opt/olamide/production-readiness.json
+      owner: root
+      group: root
+      mode: '0600'
+      content: '{{ {''release'': deployment_ref, ''status'': ''pending_acceptance'', ''production_accepted'': false} | to_nice_json }}'
+  - name: Generate missing internal credentials and preserve existing identities
+    ansible.builtin.command:
+      argv: '{{ [ ''python3'', ''/usr/local/lib/olamide-production/runtime-secrets.py'', ''--canonical'', ''/etc/olamide/secrets.env'', ''--deployed'',
+        app_repo + ''/deployment/docker/.env'', ''--domain'', app_domain, ''--public-ip'', production_public_ip, ''--admin-email'', initial_admin_email
+        ] + ([''--supplied'', ''/etc/olamide/production-input.env''] if production_secrets_source is defined else []) }}'
+    no_log: true
+  - name: Deploy immutable release with database backup and application rollback
+    ansible.builtin.command:
+      argv:
+      - python3
+      - /usr/local/lib/olamide-production/release.py
+      - --repo
+      - '{{ app_repo }}'
+      - --ref
+      - '{{ deployment_ref }}'
+      - --backup-argv-json
+      - '{{ production_backup_argv | default([]) | to_json }}'
+    no_log: true
+  - name: Install boot unit using installed images and explicit database readiness
+    ansible.builtin.copy:
+      dest: /etc/systemd/system/olamide-compose.service
+      mode: '0644'
+      content: '[Unit]
+
+        Description=Olamide validated production containers
+
+        Requires=docker.service
+
+        After=docker.service network-online.target
+
+        Wants=network-online.target
+
+        [Service]
+
+        Type=oneshot
+
+        RemainAfterExit=yes
+
+        WorkingDirectory=/opt/olamide/repo/deployment/docker
+
+        ExecStart=/usr/bin/docker compose -f compose.yml -f /etc/olamide/production-images.json up -d --wait --wait-timeout 300 mysql turn
+
+        ExecStart=/usr/bin/docker compose -f compose.yml -f /etc/olamide/production-images.json up -d --no-deps --no-build api web
+
+        ExecStop=/usr/bin/docker compose -f compose.yml -f /etc/olamide/production-images.json stop api web turn
+
+        TimeoutStartSec=360
+
+        [Install]
+
+        WantedBy=multi-user.target
+
+        '
+  - name: Enable validated application boot service
+    ansible.builtin.systemd:
+      name: olamide-compose.service
+      enabled: true
+      daemon_reload: true
+  - name: Verify external TLS and GUI before commissioning optional profiles
+    ansible.builtin.command:
+      argv:
+      - python3
+      - /usr/local/lib/olamide-production/check-public.py
+      - --domain
+      - '{{ app_domain }}'
+    register: initial_https
+    until: initial_https.rc == 0
+    retries: 12
+    delay: 5
+    changed_when: false
+- name: Commission optional reviewed same-server Kamailio and media relay
+  ansible.builtin.import_playbook: ../../deploy/ansible/same-server.yml
+  when: commission_same_server | default(false) | bool
+- name: Commission optional authenticated SIP account provisioning
+  ansible.builtin.import_playbook: ../../deploy/ansible/sip-accounts.yml
+  when: commission_sip_accounts | default(false) | bool
+- name: Provision optional Firebase credentials
+  ansible.builtin.import_playbook: firebase-provision.yml
+  when: (enable_native_push | default(false) | bool) and (auto_provision_firebase | default(false) | bool) and not (build_native_ios | default(false)
+    | bool)
+- name: Deploy Android push and optional native build
+  ansible.builtin.import_playbook: native-push.yml
+  when: (enable_native_push | default(false) | bool) and not (build_native_ios | default(false) | bool)
+- name: Build optional Android application
+  ansible.builtin.import_playbook: native-mobile.yml
+  when: (build_native_android | default(false) | bool) and not (build_native_ios | default(false) | bool)
+- name: Deploy Apple provider and signed native system-call builds
+  ansible.builtin.import_playbook: native-system-calls.yml
+  when: build_native_ios | default(false) | bool
+- name: Verify production service and real-call acceptance
+  hosts: olamide
+  become: true
+  any_errors_fatal: true
+  tasks:
+  - name: Verify public HTTPS GUI and optional SIP WebSocket protocol
+    ansible.builtin.command:
+      argv: '{{ [''python3'', ''/usr/local/lib/olamide-production/check-public.py'', ''--domain'', app_domain, ''--release'', deployment_ref]
+        + ([''--sip''] if production_require_sip | default(true) | bool else []) }}'
+    changed_when: false
+  - name: Require local automatic SIP provisioning for the calling profile
+    ansible.builtin.command:
+      argv:
+      - docker
+      - compose
+      - exec
+      - -T
+      - api
+      - node
+      - -e
+      - if(process.env.SIP_PROVISION_MODE!=='kamailio_local'||!process.env.SIP_CREDENTIAL_KEY)process.exit(1)
+      chdir: /opt/olamide/repo/deployment/docker
+    when: production_require_sip | default(true) | bool
+    changed_when: false
+    no_log: true
+  - name: Execute reviewed authenticated-call audio and access-control acceptance
+    ansible.builtin.command:
+      argv: '{{ production_acceptance_argv }}'
+    changed_when: false
+    no_log: true
+  - name: Execute required physical native-device acceptance
+    ansible.builtin.command:
+      argv: '{{ native_device_acceptance_argv }}'
+    when: production_require_native | default(false) | bool
+    changed_when: false
+    no_log: true
+  - name: Record completed acceptance without disclosing credentials
+    ansible.builtin.copy:
+      dest: /opt/olamide/production-readiness.json
+      owner: root
+      group: root
+      mode: '0600'
+      content: '{{ {''release'': deployment_ref, ''status'': ''configured_profiles_accepted'', ''https_and_gui'': true, ''database_migration'':
+        true, ''real_call_acceptance'': true, ''sip_transport'': production_require_sip | default(true) | bool, ''native_device_acceptance'':
+        production_require_native | default(false) | bool, ''scope'': ''Configured profiles only; no claim of unimplemented WhatsApp features
+        or native iOS media support''} | to_nice_json }}
+
+        '
