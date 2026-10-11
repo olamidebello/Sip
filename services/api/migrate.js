@@ -1,3 +1,4 @@
+import {migrateProductStore} from './productStore.js';
 import {migrateKamailioAccounts} from './kamailioAccounts.js';
 import { migrateSipProvisioning } from './sipProvisioning.js';
 import fs from 'node:fs/promises';
@@ -65,6 +66,7 @@ export async function migrate(pool) {
       ['kamailio_accounts', () => migrateKamailioAccounts(pool)],
       ['sip_profiles', () => migrateSipProfiles(pool)],
       ['payments', () => migratePayments(pool)],
+      ['product_store', () => migrateProductStore(pool)],
       ['cluster', () => migrateCluster(pool)],
       ['provider_webhooks', () => migrateProviderWebhooks(pool)],
       ['didww_integration', () => migrateDidwwIntegration(pool)],

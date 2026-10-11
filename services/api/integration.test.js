@@ -1,10 +1,11 @@
+import {renewStoreOrders} from './productStore.js';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import http from 'node:http';
 import { once } from "node:events";
 import WebSocket from "ws";
-import { createHmac } from "node:crypto";
+import { createHmac,randomUUID } from "node:crypto";
 import { createDatabase } from "./db.js";
 const cdrTenant = "00000000-0000-4000-8000-000000000000";
 const cdrSecret = "integration-only-cdr-secret-" + "x".repeat(32);
@@ -331,6 +332,33 @@ test("registered users can create and join a room; host controls it", {
   assert.equal(tenantUsers.some((u) => u.id === tenantUser.body.id),true);
   assert.equal(tenantUsers.some((u) => u.id === guestLogin.body.id),false);
   assert.equal((await post(`/api/admin/tenants/${"00000000-0000-4000-8000-000000000000"}/switch`,{},hostCookie)).status,200);
+  assert.equal((await post('/api/admin/store/import-reference',{},hostCookie)).status,200);
+  const cr=await fetch(base+'/api/admin/store/products',{headers:{Cookie:hostCookie}});
+  const reference=(await cr.json()).products.find(p=>p.sku==='OL-PDF-022');
+  const publication=await fetch(base+'/api/admin/store/products',{method:'PUT',headers:{Origin:origin,Cookie:hostCookie,'Content-Type':'application/json'},body:JSON.stringify({sku:reference.sku,revision:reference.revision,name:'Test catalog plan',description:'Integration plan',terms:'Test service delivery and cancellation conditions.',billing:'monthly',sellingCents:1495,resellerCents:1390,setupCents:100,status:'published',confirmAvailability:true})});
+  assert.equal(publication.status,200);
+  assert.equal((await fetch(base+'/api/store/products',{headers:{Cookie:guestCookie}})).status,403);
+  assert.equal((await put(`/api/admin/groups/${group.body.id}`,{features:{messaging:true,call_center:true,billing:true}})).status,200);
+  const pc=await fetch(base+'/api/store/products',{headers:{Cookie:guestCookie}});
+  assert.equal(pc.status,200);
+  const product=(await pc.json()).products.find(p=>p.sku===reference.sku);
+  assert.equal(product.reseller_cents,undefined);
+  const isolatedCatalog=await fetch(base+'/api/store/products',{headers:{Cookie:otherCookie}});
+  assert.equal((await isolatedCatalog.json()).products.length,0);
+  const input={sku:product.sku,revision:product.revision,quantity:2,acceptTerms:true,requestKey:randomUUID(),sellingCents:1};
+  const order=await post('/api/store/orders',input,guestCookie);assert.equal(order.status,201);
+  assert.equal((await post('/api/store/orders',input,guestCookie)).body.id,order.body.id);
+  assert.equal((await post('/api/store/orders',{...input,requestKey:randomUUID(),revision:product.revision-1},guestCookie)).status,409);
+  assert.equal((await db.query('SELECT amount_cents FROM invoices WHERE id=$1',[order.body.invoice_id])).rows[0].amount_cents,3190);
+  assert.equal((await post(`/api/admin/store/orders/${order.body.id}/fulfill`,{note:'Verified staging provisioning receipt'},hostCookie)).status,409);
+  await db.query("UPDATE invoices SET status='paid' WHERE id=$1",[order.body.invoice_id]);
+  assert.equal((await post(`/api/admin/store/orders/${order.body.id}/fulfill`,{note:'Verified staging provisioning receipt'},hostCookie)).status,200);
+  await db.query('UPDATE store_orders SET next_bill_at=DATE_SUB(CURRENT_TIMESTAMP(3),INTERVAL 1 DAY) WHERE id=$1',[order.body.id]);
+  await renewStoreOrders(db);await renewStoreOrders(db);
+  const renewal=await db.query('SELECT i.amount_cents FROM store_renewals r JOIN invoices i ON i.id=r.invoice_id WHERE r.order_id=$1',[order.body.id]);
+  assert.equal(renewal.rows.length,1);assert.equal(renewal.rows[0].amount_cents,2990);
+  assert.equal((await post(`/api/store/orders/${order.body.id}/cancel`,{},guestCookie)).status,200);
+  assert.equal((await db.query('SELECT i.status FROM store_renewals r JOIN invoices i ON i.id=r.invoice_id WHERE r.order_id=$1',[order.body.id])).rows[0].status,'void');
   const suspend = await fetch(base + `/api/admin/tenants/${tenant.body.id}/status`,{
     method:"PUT",headers:{Origin:origin,Cookie:hostCookie,"Content-Type":"application/json"},
     body:JSON.stringify({status:"suspended"})
