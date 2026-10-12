@@ -11,12 +11,33 @@
         that:
           - messaging_repo == '/opt/olamide/repo'
           - messaging_domain is match('^[a-zA-Z0-9.-]+$')
-    - name: Apply CI validated release with existing backup and health workflow
+    - name: Reject tracked local changes
       ansible.builtin.command:
-        argv: [bash, '{{ messaging_repo }}/deployment/update.sh']
+        argv: [git, diff, HEAD, --exit-code]
         chdir: '{{ messaging_repo }}'
-      register: messaging_update
-      changed_when: "'Updated Olamide from' in messaging_update.stdout"
+      changed_when: false
+    - name: Read the checked out release
+      ansible.builtin.command:
+        argv: [git, rev-parse, HEAD]
+        chdir: '{{ messaging_repo }}'
+      register: messaging_head
+      changed_when: false
+    - name: Fetch successful deployment validations
+      ansible.builtin.uri:
+        url: 'https://api.github.com/repos/olamidebello/Sip/actions/workflows/deploy.yml/runs?branch=main&event=push&status=success&per_page=100'
+        headers:
+          Accept: application/vnd.github+json
+          User-Agent: Olamide-GUI-deployer
+        return_content: true
+        status_code: 200
+        validate_certs: true
+        timeout: 20
+      register: messaging_ci
+    - name: Require CI approval for this exact release
+      ansible.builtin.assert:
+        that:
+          - messaging_head.stdout in (messaging_ci.json.workflow_runs | selectattr('conclusion', 'equalto', 'success') | map(attribute='head_sha') | list)
+        fail_msg: 'This checked out commit has not passed deployment CI. Review GitHub Actions and rerun after success; no downgrade or unvalidated deployment was performed.'
     - name: Verify installed GUI release
       ansible.builtin.command:
         argv:

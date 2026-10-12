@@ -2,6 +2,8 @@
 set -euo pipefail
 repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 [[ "$repo_dir" == /opt/olamide/repo ]] || { echo 'Run from /opt/olamide/repo' >&2; exit 1; }
+exec 9>/run/olamide-update.lock
+flock -n 9 || { echo 'Another application update is running; retry when it completes' >&2; exit 1; }
 command -v ansible-playbook >/dev/null
 run_dir=$(mktemp -d /tmp/olamide-messaging.XXXXXXXX)
 trap 'rm -rf -- "$run_dir"' EXIT

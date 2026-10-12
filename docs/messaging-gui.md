@@ -8,14 +8,14 @@ git pull --ff-only origin main
 bash deployment/deploy-messaging-gui.sh
 ```
 
-This isolated local Ansible playbook deploys the latest main-branch release that
-passed the existing deployment CI. Wait for GitHub checks before running. The
-existing updater backs up MySQL before version changes and validates API health.
-The playbook then checks that the GUI patch exists, builds the web container, and
-checks public HTTPS and API availability. Existing Docker, Ansible, secrets and a
-commissioned application are prerequisites. Tracked local edits block updates;
-do not force reset them. An older validated release can cause a non-forward
-update rejection; retry once this release passes CI.
+This isolated local Ansible playbook verifies that the checked out commit passed
+main-branch deployment CI before building the web container. It does not invoke
+the general updater, select an older commit, or alter API/database services.
+An application update lock prevents overlapping with the general updater.
+Wait for GitHub checks before running. Failed or pending CI stops deployment
+with a specific message. Existing Docker, Ansible, secrets and a commissioned
+application are prerequisites. Tracked local edits block deployment.
+Public HTTPS and API availability are checked after restarting the web service.
 
 The Olamide-branded WhatsApp-style interface includes chat search, avatars,
 bubbles, mobile back navigation, conversation expansion, emoji insertion,
