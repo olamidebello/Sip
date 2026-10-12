@@ -58,7 +58,7 @@ const root = document.querySelector("#app");
 root.innerHTML = `
   <header class="brand" id="top">
     <a class="brand-mark" href="#top" aria-label="Olamide home"><img src="/olamide-icon.svg" alt="" width="48" height="48"><span>Olamide<span class="brand-dot">.</span></span></a>
-    <nav class="public-nav" aria-label="Public navigation"><a href="#experience">Explore</a><a href="#downloads">Downloads</a><a href="#help" id="public-help">Help</a>
+    <nav class="public-nav" aria-label="Public navigation"><a href="#experience">Explore</a><a href="#downloads">Downloads</a><a href="#help" id="public-help">Help</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a>
       <details class="login-menu"><summary id="login-menu-label">Sign in</summary><div class="login-options"><div id="login-options-auth">
         <button id="signin-user" type="button">User sign in</button><button id="signin-admin" type="button">Administrator sign in</button><button id="signin-super" type="button">Super administrator sign in</button>
         <a href="/pages/ldap-login">Directory sign in</a><a href="/pages/signup">Create an account</a></div>
@@ -139,7 +139,7 @@ root.innerHTML = `
     <section id="signed-in-profile" hidden><h3>My profile</h3><label>Name <input id="profile-name" readonly></label><label>Email <input id="profile-email" readonly></label></section>
     <nav class="auth-pages" aria-label="Account pages"><a href="/pages/login">Sign in</a><a href="/pages/signup">Register</a><a href="/pages/ldap-login">Directory sign in</a></nav>
     <form id="signup">
-      <h3>Create an account</h3>
+      <h3>Create an account</h3><p>Review our <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a> and <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> before registering.</p>
       <label>Full name <input name="name" autocomplete="name" minlength="2" maxlength="100" required></label>
       <label>Email <input name="email" type="email" autocomplete="email" required></label>
       <label>Phone (international format) <input name="phone" type="tel" autocomplete="tel" placeholder="+2348012345678" pattern="\+[1-9][0-9]{7,14}" required></label>
@@ -308,7 +308,7 @@ root.innerHTML = `
       <button id="contact-settings-refresh" type="button">Refresh contact settings</button>
       <h3>Private phone and email address book</h3><label><input id="contacts-auto-import" type="checkbox" checked>Automatically save contacts after I grant access or choose an import file</label>
       <button id="phone-contact-import" type="button">Import phone contacts</button>
-      <button id="google-contact-import" type="button" disabled>Import Google Contacts</button><p id="google-contact-status" role="status"></p><a href="https://contacts.google.com/" target="_blank" rel="noopener noreferrer">Open Google Contacts to export CSV</a>
+      <button id="google-contact-import" type="button" disabled>Import Google Contacts</button><p id="google-contact-status" role="status"></p><p>Google import reads names, emails and phone numbers and saves them in your private address book. With automatic import enabled, saving starts after your authorization. <a href="/privacy" target="_blank" rel="noopener">How we handle contacts</a>.</p><a href="https://contacts.google.com/" target="_blank" rel="noopener noreferrer">Open Google Contacts to export CSV</a>
       <form id="address-book-import"><label>Phone vCard or email contacts CSV <input name="file" type="file" accept=".vcf,.vcard,.csv,text/vcard,text/csv" required></label><button>Preview import</button></form>
       <p>Export contacts from Google Contacts, Outlook, or your phone and upload the file. Phone selection is available in supported mobile browsers.</p>
       <label><input id="address-book-select-all" type="checkbox">Select all contacts in preview</label><ul id="address-book-preview"></ul><button id="address-book-save" type="button" disabled>Import selected contacts</button>
@@ -1131,7 +1131,7 @@ root.innerHTML = `
   <audio id="remote" autoplay></audio>
   <p id="status" role="status">Disconnected</p>
   </section>
-  <footer class="site-copyright"><small>© 2026 Olamide Olatayo Bello. All rights reserved. Third-party components retain their own licenses.</small></footer>
+  <footer class="site-copyright"><p><a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a></p><small>© 2026 Olamide Olatayo Bello. All rights reserved. Third-party components retain their own licenses.</small></footer>
 `;
 
 const $ = (selector) => document.querySelector(selector);
