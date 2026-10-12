@@ -12,7 +12,7 @@ export function addressBookFromFile(text,filename){
   }else{
     const rows=parseCsv(text.replace(/^\uFEFF/,'')),headers=rows.shift()?.map(h=>h.trim().toLowerCase())||[];
     const index=names=>headers.findIndex(h=>names.includes(h));
-    const email=index(['email','email address','e-mail address','e-mail 1 - value']),phone=index(['phone','phone number','mobile phone','phone 1 - value']);
+    const email=index(['email','email address','e-mail address','e-mail 1 - value','email 1 - value','email 1 value']),phone=index(['phone','phone number','mobile phone','phone 1 - value','phone 1 value']);
     const name=index(['name','full name','display name']),first=index(['first name','given name']),last=index(['last name','family name']);
     if(email<0&&phone<0)throw Error('CSV needs an email or phone column');
     contacts=rows.map(r=>({name:(r[name]||[r[first],r[last]].filter(Boolean).join(' ')).trim(),email:(r[email]||'').trim().toLowerCase(),phone:(r[phone]||'').trim()}));

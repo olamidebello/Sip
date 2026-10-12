@@ -306,11 +306,12 @@ root.innerHTML = `
         <button>Save visibility and forwarding</button>
       </form>
       <button id="contact-settings-refresh" type="button">Refresh contact settings</button>
-      <h3>Private phone and email address book</h3>
-      <button id="phone-contact-import" type="button">Choose contacts from phone</button>
+      <h3>Private phone and email address book</h3><label><input id="contacts-auto-import" type="checkbox" checked>Automatically save contacts after I grant access or choose an import file</label>
+      <button id="phone-contact-import" type="button">Import phone contacts</button>
+      <button id="google-contact-import" type="button" disabled>Import Google Contacts</button><p id="google-contact-status" role="status"></p><a href="https://contacts.google.com/" target="_blank" rel="noopener noreferrer">Open Google Contacts to export CSV</a>
       <form id="address-book-import"><label>Phone vCard or email contacts CSV <input name="file" type="file" accept=".vcf,.vcard,.csv,text/vcard,text/csv" required></label><button>Preview import</button></form>
       <p>Export contacts from Google Contacts, Outlook, or your phone and upload the file. Phone selection is available in supported mobile browsers.</p>
-      <ul id="address-book-preview"></ul><button id="address-book-save" type="button" disabled>Import selected contacts</button>
+      <label><input id="address-book-select-all" type="checkbox">Select all contacts in preview</label><ul id="address-book-preview"></ul><button id="address-book-save" type="button" disabled>Import selected contacts</button>
       <ul id="address-book-list"></ul><p id="contact-directory-status" role="status"></p>
     </details>
     <p>Account messages are stored on this server. They are not end-to-end encrypted.</p>
@@ -2292,6 +2293,7 @@ $("#ldap-login").addEventListener("submit",async(event)=>{
 });
 $("#logout").onclick = async () => {
   try {
+    contactDirectory.clear();
     moneyWorkspace.stop();
     await nativeCalls.stop();
     await nativePush.stop();

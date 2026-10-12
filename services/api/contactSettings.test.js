@@ -18,3 +18,7 @@ test('address book saves under session owner transactionally, and rejects invali
  const r=await invoke('/api/contacts/address-book','POST',{contacts:[{name:'Friend',email:'friend@example.org',phone:''}]});assert.equal(r.status,200);assert.equal(r.queries.find(q=>q.sql.includes('INSERT INTO personal')).params[1],'owner');assert.equal(r.queries.at(-1).sql,'COMMIT');
  assert.equal((await invoke('/api/contacts/address-book','POST',{contacts:[{name:'Friend',email:'bad',phone:''}]})).status,400);
 });
+test('Google config exposes only a valid public client ID',async()=>{
+ const before=process.env.GOOGLE_CONTACTS_CLIENT_ID;
+ try{process.env.GOOGLE_CONTACTS_CLIENT_ID='invalid';const args={req:{method:'GET'},path:'/api/contacts/google/config',user:{id:'me'},send:(_,status,body)=>({status,body})};assert.deepEqual((await handleContactSettings(args)).body,{configured:false,clientId:null});process.env.GOOGLE_CONTACTS_CLIENT_ID='123-public.apps.googleusercontent.com';assert.deepEqual((await handleContactSettings(args)).body,{configured:true,clientId:'123-public.apps.googleusercontent.com'});}finally{if(before===undefined)delete process.env.GOOGLE_CONTACTS_CLIENT_ID;else process.env.GOOGLE_CONTACTS_CLIENT_ID=before;}
+});

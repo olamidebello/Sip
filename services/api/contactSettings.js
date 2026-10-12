@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 const states=['available','away','busy','invisible','dnd'];
 export async function handleContactSettings({req,res,path,user,pool,send,readJson,url}) {
+  if(path==='/api/contacts/google/config'&&req.method==='GET'){const clientId=process.env.GOOGLE_CONTACTS_CLIENT_ID||'';const configured=/^[a-zA-Z0-9_-]+\.apps\.googleusercontent\.com$/.test(clientId);return send(res,200,{configured,clientId:configured?clientId:null});}
   if(path==='/api/contacts/address-book'&&req.method==='GET')return send(res,200,{contacts:(await pool.query('SELECT id,name,email,phone FROM personal_address_book WHERE owner_id=$1 ORDER BY name LIMIT 2000',[user.id])).rows});
   if(path==='/api/contacts/address-book'&&req.method==='POST') {
     const {contacts}=await readJson(req,256000);

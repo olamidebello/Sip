@@ -389,7 +389,7 @@ async function handler(req, res) {
         }
         return send(res, 403, { error: "Host permission required" });
       }
-      if(path==='/api/account/contact-settings'||path==='/api/contacts/search'||path==='/api/contacts/address-book')return await handleContactSettings({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin)});
+      if(path==='/api/account/contact-settings'||path==='/api/contacts/search'||path==='/api/contacts/address-book'||path==='/api/contacts/google/config')return await handleContactSettings({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin)});
       if (path === "/api/contacts" && req.method === "GET") {
         const result = await pool.query(
           "SELECT u.id, u.display_name AS name, u.email, COALESCE(cp.archived,0) AS archived, COALESCE(cp.muted,0) AS muted, CASE WHEN a.status='active' THEN CONCAT('sip:',a.username,'@',a.domain) ELSE NULL END AS sip_address FROM contacts c JOIN users u ON u.id=c.contact_id LEFT JOIN sip_accounts a ON a.user_id=u.id AND a.tenant_id=u.tenant_id LEFT JOIN conversation_preferences cp ON cp.owner_id=c.owner_id AND cp.contact_id=c.contact_id WHERE c.owner_id=$1 AND u.tenant_id=$2 ORDER BY u.display_name LIMIT 1000",
