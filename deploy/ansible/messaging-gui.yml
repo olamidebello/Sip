@@ -1,0 +1,57 @@
+---
+- name: Deploy messaging and audio video call interface
+  hosts: switch_nodes
+  become: true
+  vars:
+    messaging_repo: /opt/olamide/repo
+    messaging_domain: sip.dobhrap.com
+  tasks:
+    - name: Validate destination
+      ansible.builtin.assert:
+        that:
+          - messaging_repo == '/opt/olamide/repo'
+          - messaging_domain is match('^[a-zA-Z0-9.-]+$')
+    - name: Apply CI validated release with existing backup and health workflow
+      ansible.builtin.command:
+        argv: [bash, '{{ messaging_repo }}/deployment/update.sh']
+        chdir: '{{ messaging_repo }}'
+      register: messaging_update
+      changed_when: "'Updated Olamide from' in messaging_update.stdout"
+    - name: Verify installed GUI release
+      ansible.builtin.command:
+        argv:
+          - python3
+          - '-c'
+          - |
+            from pathlib import Path
+            import sys
+            root=Path(sys.argv[1])
+            chat=(root/'apps/web/src/chatLanding.js').read_text()
+            assert 'chat-emoji-picker' in chat and 'chat-filters' in chat, 'Wait for GitHub CI validation of GUI release'
+            assert (root/'apps/web/src/callGui.js').is_file(), 'Call GUI release missing'
+          - '{{ messaging_repo }}'
+      changed_when: false
+    - name: Build web interface
+      ansible.builtin.command:
+        argv: [docker, compose, build, web]
+        chdir: '{{ messaging_repo }}/deployment/docker'
+      changed_when: true
+    - name: Start web interface
+      ansible.builtin.command:
+        argv: [docker, compose, up, '-d', '--no-deps', web]
+        chdir: '{{ messaging_repo }}/deployment/docker'
+      changed_when: true
+    - name: Verify public HTTPS routes
+      ansible.builtin.uri:
+        url: 'https://{{ messaging_domain }}{{ item }}'
+        status_code: 200
+        validate_certs: true
+        timeout: 10
+      loop: ['/', '/api/health']
+      register: messaging_health
+      until: messaging_health is succeeded
+      retries: 6
+      delay: 5
+    - name: Report deployment
+      ansible.builtin.debug:
+        msg: 'GUI deployed. Verify messages and a SIP audio call with two accounts, then a video meeting using an invite. HTTPS health does not prove media connectivity.'

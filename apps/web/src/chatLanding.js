@@ -5,11 +5,21 @@ export function setupChatLanding(document){
   const sidebar=document.createElement('aside');sidebar.className='chat-sidebar';sidebar.setAttribute('aria-label','Conversations');
   const search=document.createElement('input');search.type='search';search.placeholder='Search chats';search.setAttribute('aria-label','Search chats');
   const list=document.createElement('div');list.className='chat-conversations';
-  sidebar.append(search,list,document.getElementById('contact-directory'));
+  sidebar.append(search);
+  const filters=document.createElement('div');filters.className='chat-filters';
+  const archive=document.getElementById('show-archived-conversations');
+  if(archive){
+    for(const [label,archived] of [['Chats',false],['Archived',true]]){
+      const button=document.createElement('button');button.type='button';button.textContent=label;
+      const sync=()=>button.setAttribute('aria-pressed',String(archive.checked===archived));sync();archive.addEventListener('change',sync);
+      button.onclick=()=>{if(archive.checked!==archived){archive.checked=archived;archive.dispatchEvent(new document.defaultView.Event('change',{bubbles:true}));}};filters.append(button);
+    }
+  }
+  sidebar.append(filters,list,document.getElementById('contact-directory'));
   const thread=document.createElement('div');thread.className='chat-thread';
   for(const child of [...chat.children])if(!child.matches('h2,.messenger-subtitle'))thread.append(child);
   const header=document.createElement('div');header.className='chat-thread-header';
-  const back=document.createElement('button');back.type='button';back.innerHTML=icon('back');back.setAttribute('aria-label','Back to chats');back.onclick=()=>chat.classList.remove('thread-open');
+  const back=document.createElement('button');back.type='button';back.innerHTML=icon('back');back.setAttribute('aria-label','Back to chats');back.onclick=()=>{chat.classList.remove('thread-open','chat-overlay');};
   const title=document.createElement('strong');title.textContent=select.selectedOptions[0]?.textContent||'Select a conversation';header.append(back,title);thread.prepend(header);
   const options=document.createElement('details');options.className='chat-options';
   const summary=document.createElement('summary');summary.textContent='Conversation options';options.append(summary);
@@ -18,12 +28,30 @@ export function setupChatLanding(document){
     if(child.tagName==='LABEL'||child.classList.contains('conversation-toolbar')||child.id==='load-messages'||(child.tagName==='P'&&!child.id))options.append(child);
   }
   header.after(options);
-  const call=document.getElementById('call-contact');
+  const call=thread.querySelector('#call-contact');
   if(call){call.innerHTML=icon('calls');call.setAttribute('aria-label','Call this contact');header.append(call);}
 
+  const expand=document.createElement('button');expand.type='button';expand.textContent='⤢';expand.setAttribute('aria-label','Expand conversation');expand.setAttribute('aria-pressed','false');
+  expand.onclick=()=>{const open=chat.classList.toggle('chat-overlay');expand.setAttribute('aria-pressed',String(open));expand.setAttribute('aria-label',open?'Restore conversation':'Expand conversation');};header.append(expand);
   const menu=document.createElement('button');menu.type='button';menu.innerHTML=icon('more');menu.setAttribute('aria-label','Conversation menu');menu.onclick=()=>{options.open=!options.open;};header.append(menu);
   const create=document.createElement('button');create.type='button';create.className='chat-new';create.innerHTML=icon('plus');create.setAttribute('aria-label','New chat');
   create.onclick=()=>{chat.classList.remove('thread-open');const directory=document.getElementById('contact-directory');directory.open=true;directory.querySelector('input')?.focus();directory.scrollIntoView?.({block:'center'});};sidebar.append(create);
+  const composer=thread.querySelector('#send-message');
+  if(composer){
+    const input=composer.querySelector('textarea');
+    const send=composer.querySelector('button');
+    if(send){send.type='submit';send.innerHTML=icon('send');send.setAttribute('aria-label','Send message');}
+    const toggle=document.createElement('button');toggle.type='button';toggle.className='chat-emoji-toggle';toggle.textContent='☺';toggle.setAttribute('aria-label','Choose emoji');toggle.setAttribute('aria-expanded','false');
+    const picker=document.createElement('div');picker.className='chat-emoji-picker';picker.hidden=true;picker.setAttribute('aria-label','Emoji');
+    const close=()=>{picker.hidden=true;toggle.setAttribute('aria-expanded','false');};
+    toggle.onclick=()=>{picker.hidden=!picker.hidden;toggle.setAttribute('aria-expanded',String(!picker.hidden));};
+    for(const emoji of ['😀','😂','🥰','😍','😊','😎','🤔','😢','👍','👎','🙏','👏','❤️','🎉','✅','👋']){
+      const button=document.createElement('button');button.type='button';button.textContent=emoji;button.setAttribute('aria-label',`Insert ${emoji}`);
+      button.onclick=()=>{const start=input.selectionStart,end=input.selectionEnd;if(input.value.length-(end-start)+emoji.length>input.maxLength)return;input.setRangeText(emoji,start,end,'end');input.dispatchEvent(new document.defaultView.Event('input',{bubbles:true}));close();input.focus();};picker.append(button);
+    }
+    picker.addEventListener('keydown',event=>{if(event.key==='Escape'){close();toggle.focus();}});
+    composer.prepend(toggle);composer.before(picker);
+  }
   shell.append(sidebar,thread);chat.append(shell);
   function render(){
     list.replaceChildren();

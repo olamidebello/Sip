@@ -1,11 +1,11 @@
 export function setupConversations({get,request,isSignedIn,isVisible,callContact,preferencesChanged}) {
   const $=selector=>document.querySelector(selector),thread=()=>$('#contact-list').value;
   let contacts=[],replyTo=null,editing=null,loading=false,lastTyping=0;
-  function clearDraft(){replyTo=null;editing=null;$('#message-context').hidden=true;$('#send-message button').textContent='Send';}
+  function clearDraft(){replyTo=null;editing=null;$('#message-context').hidden=true;$('#send-message button:not([type=button])').textContent='Send';}
   async function control(input){if(!thread())return;await request('/api/messages/conversation/'+thread(),input,'PUT');if('archived' in input||'muted' in input)await preferencesChanged();else await refresh();}
   function action(label,handler){const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=()=>Promise.resolve(handler()).catch(error=>{$('#chat-status').textContent=error.message;});return button;}
   async function refresh() {
-    const contact=thread();if(!contact){$('#message-list').replaceChildren();$('#call-contact').disabled=true;$('#send-message button').disabled=true;$('#send-message [name=body]').disabled=true;$('#conversation-typing').textContent='';return;}if(loading)return;loading=true;
+    const contact=thread();if(!contact){$('#message-list').replaceChildren();$('#call-contact').disabled=true;$('#send-message button:not([type=button])').disabled=true;$('#send-message [name=body]').disabled=true;$('#conversation-typing').textContent='';return;}if(loading)return;loading=true;
     try {
       const data=await get('/api/messages?contact='+encodeURIComponent(contact));
       if(thread()!==contact||!isSignedIn())return;
@@ -23,7 +23,7 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
           const controls=document.createElement('div');controls.className='message-actions';
           controls.append(action('Reply',()=>{clearDraft();editing=null;replyTo=message.id;$('#message-context').hidden=false;$('#message-context-text').textContent='Replying to: '+message.body.slice(0,90);$('#send-message [name=body]').focus();}));
           if(own){
-            controls.append(action('Edit',()=>{clearDraft();replyTo=null;editing=message.id;$('#send-message [name=body]').value=message.body;$('#send-message button').textContent='Save edit';$('#message-context').hidden=false;$('#message-context-text').textContent='Editing your message';$('#send-message [name=body]').focus();}));
+            controls.append(action('Edit',()=>{clearDraft();replyTo=null;editing=message.id;$('#send-message [name=body]').value=message.body;$('#send-message button:not([type=button])').textContent='Save edit';$('#message-context').hidden=false;$('#message-context-text').textContent='Editing your message';$('#send-message [name=body]').focus();}));
             controls.append(action('Remove',async()=>{await request('/api/messages/'+message.id,{},'DELETE');await refresh();}));
           }
           const reaction=document.createElement('select');reaction.setAttribute('aria-label','React to message');
@@ -39,7 +39,7 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
       for(const key of ['blocked','muted','archived'])$('#conversation-'+key).checked=data.preferences[key];
       $('#conversation-typing').textContent=data.typing?'Typing…':'';
       $('#send-message [name=body]').disabled=data.preferences.blocked;
-      $('#send-message button').disabled=data.preferences.blocked;
+      $('#send-message button:not([type=button])').disabled=data.preferences.blocked;
       $('#call-contact').disabled=!contacts.find(c=>c.id===contact)?.sip_address;
       if(isVisible()&&document.visibilityState==='visible'&&data.messages.some(m=>m.recipient===data.viewer&&!m.read_at))await request('/api/messages/conversation/'+contact,{read:true},'PUT');
     }finally{loading=false;}

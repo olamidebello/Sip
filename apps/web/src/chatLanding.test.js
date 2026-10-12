@@ -16,3 +16,12 @@ test('chat sidebar searches contacts and triggers the existing conversation hand
     assert.ok(document.querySelector('.chat-thread #message-list'));
   }finally{landing.dispose();dom.window.close();}
 });
+test('emoji insertion and conversation overlay preserve composer',()=>{
+  const dom=new JSDOM('<section id="chat"><h2>Chats</h2><details id="contact-directory"></details><select id="contact-list"><option value="a">Alice</option></select><ol id="message-list"></ol><form id="send-message"><label><textarea maxlength="4000">Hi there</textarea></label><button>Send</button></form></section>');
+  const document=dom.window.document,landing=setupChatLanding(document);
+  try{
+    const input=document.querySelector('textarea');input.setSelectionRange(3,3);document.querySelector('.chat-emoji-toggle').click();document.querySelector('.chat-emoji-picker button').click();
+    assert.equal(input.value,'Hi 😀there');assert.equal(document.querySelector('.chat-emoji-picker').hidden,true);
+    const expand=document.querySelector('[aria-label="Expand conversation"]');expand.click();assert.ok(document.getElementById('chat').classList.contains('chat-overlay'));expand.click();assert.equal(document.getElementById('chat').classList.contains('chat-overlay'),false);
+  }finally{landing.dispose();dom.window.close();}
+});

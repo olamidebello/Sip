@@ -6,6 +6,8 @@ import {createNativePushClient} from './nativePushClient.js';
 import {createAutoSipRegistration} from './autoSipRegistration.js';
 import {setupDialpad,dialTarget} from './dialpad.js';
 import {setupChatLanding} from './chatLanding.js';
+import {setupCallGui} from './callGui.js';
+import {setupChatGestures} from './chatGestures.js';
 import {icon} from './messengerIcons.js';
 import {setupContactDirectory} from './contactDirectory.js';
 import {setupConversations} from './conversations.js';
@@ -1153,6 +1155,11 @@ setupFormGroups();
 // Keep contact management in its own expandable area while preserving handlers.
 $('#contact-directory').append($('#add-contact'),$('#chat .bulk-controls'));
 setupChatLanding(document);
+setupChatGestures(document);
+const callGui=setupCallGui({document,openVideo:()=>{
+  if($('#meetings').hidden){$('#chat-status').textContent='Video meetings are not enabled for this account.';return;}
+  showWorkspace('meetings');$('#meeting-create input')?.focus();
+}});
 setupDownloads();
 setupCarrierControl();
 const navigationGroups=[
@@ -2402,6 +2409,7 @@ fetch("/api/me", { credentials: "same-origin" })
 function status(message) { $("#status").textContent = message;const badge=$('#communication-status');if(badge)badge.textContent=message; }
 function callState(active) {
   onCall = active;
+  callGui.active(active);
   const nativeCall=window.Capacitor?.Plugins?.NativePush;
   if(nativeCall?.setCallActive)void nativeCall.setCallActive({active}).catch(error=>{$('#status').textContent=error.message;});
   if($("#return-to-call")) $("#return-to-call").hidden=!active;
@@ -2446,7 +2454,7 @@ async function registerSip(data,shouldContinue=()=>true) {
           return;
         }
         void nativeCalls.incoming(currentCall.sipCallId).catch(report);
-        $("#incoming").hidden = false; showWorkspace("calling-workspace"); status("Incoming call");
+        callGui.identity(currentCall.address);$("#incoming").hidden = false; showWorkspace("calling-workspace"); status("Incoming call");
       },
       onCallAnswered: () => { void nativeCalls.connected(currentCall?.sipCallId).catch(report); if (currentCall) currentCall.answered = true; showWorkspace("calling-workspace"); callState(true); status("Call connected"); },
       onCallHangup: () => { void nativeCalls.ended(currentCall?.sipCallId).catch(report); finishCall(currentCall?.answered ? "completed" : "missed or unanswered"); callState(false); status("Call ended"); },
@@ -2496,6 +2504,7 @@ dialForm.addEventListener("submit", async (event) => {
   let authorizedTarget=target;
   try {const access=await accountRequest('/api/softphone/authorize',{target});authorizedTarget=access.target||target;}catch(error){status(error.message);return;}
   currentCall = { direction: "outgoing", address: target };
+  callGui.identity(target);
   try { status("Calling…"); await phone.call(authorizedTarget); }
   catch (error) { finishCall("failed"); report(error); }
 });
