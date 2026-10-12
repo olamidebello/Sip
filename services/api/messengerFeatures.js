@@ -53,7 +53,7 @@ export async function handleMessengerFeatures({req,res,path,user,pool,send,readJ
  }
  const session=/^\/api\/account\/sessions\/([a-f0-9]{64})$/.exec(path);
  if(session&&req.method==='DELETE'){
-  await pool.query('DELETE FROM sessions WHERE user_id=$1 AND token_hash=$2',[user.id,session[1]]);closeSessions?.([session[1]]);return send(res,200,{status:'session_ended'});
+  const removed=await pool.query('DELETE FROM sessions WHERE user_id=$1 AND token_hash=$2',[user.id,session[1]]);if(removed.rowCount)closeSessions?.([session[1]]);return send(res,200,{status:'session_ended'});
  }
  if(!user.features?.messaging)return send(res,403,{error:'Messaging unavailable for this account'});
  if(path==='/api/messenger/attachments'&&req.method==='POST'){
@@ -91,7 +91,7 @@ export async function handleMessengerFeatures({req,res,path,user,pool,send,readJ
   }
   if(message[2]==='forward'&&req.method==='POST'){
    if(!uuid.test(input.recipient||''))return send(res,400,{error:'Choose a contact'});
-   try{await sendCopies(pool,user,[input.recipient],'[Forwarded]\n'+source.body,source.attachment_id);return send(res,201,{status:'forwarded'});}catch(error){return send(res,400,{error:error.message});}
+   try{await sendCopies(pool,user,[input.recipient],'[Forwarded]\n'+source.body.slice(0,3988),source.attachment_id);return send(res,201,{status:'forwarded'});}catch(error){return send(res,400,{error:error.message});}
   }
  }
  if(path==='/api/messenger/broadcast'&&req.method==='POST'){

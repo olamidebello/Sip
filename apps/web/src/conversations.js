@@ -2,17 +2,19 @@ import {appendAttachment,setupMediaComposer} from './messengerMedia.js';
 export function setupConversations({get,request,isSignedIn,isVisible,callContact,preferencesChanged}) {
   const $=selector=>document.querySelector(selector),thread=()=>$('#contact-list').value;
   const media=setupMediaComposer({document,form:$('#send-message'),request,onError:message=>$('#chat-status').textContent=message});
-  let contacts=[],replyTo=null,editing=null,loading=false,lastTyping=0;
+  let contacts=[],replyTo=null,editing=null,loading=false,lastTyping=0,lastRendered='';
   function clearDraft(){replyTo=null;editing=null;$('#message-context').hidden=true;$('#send-message button:not([type=button])').textContent='Send';}
   async function control(input){if(!thread())return;await request('/api/messages/conversation/'+thread(),input,'PUT');if('archived' in input||'muted' in input||'pinned' in input||'unread' in input)await preferencesChanged();else await refresh();}
   function action(label,handler){const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=()=>Promise.resolve(handler()).catch(error=>{$('#chat-status').textContent=error.message;});return button;}
   async function refresh() {
-    const contact=thread();if(!contact){$('#message-list').replaceChildren();$('#call-contact').disabled=true;$('#send-message button:not([type=button])').disabled=true;$('#send-message [name=body]').disabled=true;$('#conversation-typing').textContent='';return;}if(loading)return;loading=true;
+    const contact=thread();if(!contact){lastRendered='';$('#message-list').replaceChildren();$('#call-contact').disabled=true;$('#send-message button:not([type=button])').disabled=true;$('#send-message [name=body]').disabled=true;$('#conversation-typing').textContent='';return;}if(loading)return;loading=true;
     try {
       const data=await get('/api/messages?contact='+encodeURIComponent(contact));
       if(thread()!==contact||!isSignedIn())return;
-      const list=$('#message-list');list.replaceChildren();
+      const list=$('#message-list');
       const search=$('#message-search').value.toLowerCase();
+      const renderKey=JSON.stringify([contact,search,data.messages,data.reactions]);
+      if(renderKey!==lastRendered){lastRendered=renderKey;const atBottom=list.scrollHeight-list.scrollTop-list.clientHeight<80,scroll=list.scrollTop;list.replaceChildren();
       const unseen=data.messages.filter(m=>m.recipient===data.viewer&&!m.read_at);
       if(unseen.length&&!data.preferences.muted)$('#chat-status').textContent=`${unseen.length} new message${unseen.length===1?'':'s'}`;
       for(const message of data.messages) {
@@ -40,6 +42,8 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
         }
         list.append(item);
       }
+      list.scrollTop=atBottom?list.scrollHeight:scroll;
+      }
       for(const key of ['blocked','muted','archived','pinned','unread']){const input=$('#conversation-'+key);if(input)input.checked=data.preferences[key];}
       $('#conversation-typing').textContent=data.typing?'Typing…':'';
       $('#send-message [name=body]').disabled=data.preferences.blocked;
@@ -57,7 +61,7 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
   };
   const timer=setInterval(()=>{if(isSignedIn()&&isVisible()&&document.visibilityState==='visible')refresh().catch(error=>{$('#chat-status').textContent=error.message;});},5000);
   timer.unref?.();
-  return {refresh,dispose(){clearInterval(timer);media.stop();},stopMedia(){media.stop();},resumeMedia(){media.resume();},clearAttachment(){media.reset();},setContacts(value){contacts=value;clearDraft();},clearDraft,async send(body){
+  return {refresh,dispose(){clearInterval(timer);media.stop();},stopMedia(){lastRendered='';media.stop();},resumeMedia(){media.resume();},clearAttachment(){media.reset();},setContacts(value){contacts=value;clearDraft();},clearDraft,async send(body){
     if(media.busy)throw new Error('Finish recording or uploading before sending');
     body=body||media.name;
     if(editing)await request('/api/messages/'+editing,{body},'PATCH');

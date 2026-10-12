@@ -35,3 +35,9 @@ test('message search and reactions use supported controls and server mutations',
  f.document.querySelector('#message-search').value='missing';await f.api.refresh();assert.equal(f.document.querySelector('#message-list').children.length,0);
  }finally{f.close();}
 });
+test('unchanged polling preserves media elements for uninterrupted playback',async()=>{
+ const f=fixture({...base,messages:[{...base.messages[0],attachment_id:'file',attachment_mime:'audio/webm',attachment_name:'Voice note'}]});try{
+ await f.api.refresh();const audio=f.document.querySelector('#message-list audio');assert.ok(audio);await f.api.refresh();assert.equal(f.document.querySelector('#message-list audio'),audio);
+ f.document.getElementById('contact-list').value='';await f.api.refresh();f.document.getElementById('contact-list').value='peer';await f.api.refresh();assert.ok(f.document.querySelector('#message-list audio'));
+ }finally{f.close();}
+});
