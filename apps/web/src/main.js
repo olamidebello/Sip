@@ -20,6 +20,7 @@ import { setupGroupAdmin } from "./groups.js";
 import { setupSipProfiles } from "./sipProfiles.js";
 import {setupCommerceOps} from "./commerceOps.js";
 import {setupProviderWebhookAdmin} from "./providerWebhookAdmin.js";
+import {setupWalletProvidersAdmin} from './walletProvidersAdmin.js';
 import {setupProviderCredentialsAdmin} from "./providerCredentialsAdmin.js";
 import {setupConfigurationLinks} from "./configurationLinks.js";
 import {setupDidwwAdmin} from "./didwwAdmin.js";
@@ -901,7 +902,16 @@ root.innerHTML = `
     </section>
       <section id="google-oauth-admin" hidden><h3>Google Contacts OAuth</h3><p>Configure Google Contacts for the selected tenant after deployment. Enable the People API and authorize this application's origin in Google Cloud.</p><p id="google-oauth-origin"></p><form id="google-oauth-config"><label>OAuth Client ID <input name="clientId" maxlength="254" placeholder="123-example.apps.googleusercontent.com"></label><label><input name="enabled" type="checkbox">Enable Google Contacts import</label><button>Save OAuth settings</button></form><button id="google-oauth-refresh" type="button">Reload settings</button><p id="google-oauth-admin-status" role="status"></p></section>
       <section id="provider-credentials-admin" hidden>
-        <h4>Provider API credentials</h4>
+        <div id="wallet-providers-admin"><h3>Wallet providers: Dwolla and Flutterwave</h3>
+<p>Configure USD bank payments through Dwolla and NGN payments through Flutterwave. Connection checks do not enable deposits or withdrawals.</p>
+<form id="wallet-provider-form" autocomplete="off"><label>Provider <select name="provider"><option value="dwolla">Dwolla (USD)</option><option value="flutterwave">Flutterwave v3 (NGN)</option></select></label>
+<label>Environment <select name="environment"><option value="sandbox">Sandbox / test</option><option value="production">Production</option></select></label>
+<label data-wallet-field="clientId">Dwolla application key <input name="clientId" maxlength="256"></label>
+<label data-wallet-field="clientSecret">Dwolla application secret <input name="clientSecret" type="password" maxlength="256"></label>
+<label data-wallet-field="secretKey">Flutterwave v3 secret key <input name="secretKey" type="password" maxlength="256"></label>
+<label data-wallet-field="webhookSecret">Flutterwave webhook secret hash <input name="webhookSecret" type="password" maxlength="256"></label>
+<button>Save encrypted credentials</button></form><button id="wallet-provider-refresh" type="button">Refresh wallet providers</button><ul id="wallet-provider-list"></ul><p id="wallet-provider-status" role="status"></p></div>
+<h4>Carrier API credentials</h4>
         <p>Manage DIDWW credentials for the selected tenant. Secrets are encrypted and never displayed again. Saving replaces the credentials; enter the callback secret and call events token again when rotating settings. Configure matching values in DIDWW.</p>
         <form id="provider-credentials-form" autocomplete="off">
           <label>Provider <select name="provider"><option value="didww">DIDWW</option><option value="flowroute">Flowroute</option></select></label>
@@ -1333,6 +1343,7 @@ const workPlanner=setupWorkPlanner({get:apiGet,request:accountRequest});
 const campaigns=setupCampaigns();
 const passkeyPolicy=setupPasskeyPolicy();
 const providerWebhooks=setupProviderWebhookAdmin({get:apiGet,request:accountRequest});
+const walletProvidersAdmin=setupWalletProvidersAdmin({get:apiGet,request:accountRequest});
 const providerCredentialsAdmin=setupProviderCredentialsAdmin({get:apiGet,request:accountRequest,onSaved:()=>didwwAdmin.refresh()});
 configurationLinks=setupConfigurationLinks({show:showWorkspace});
 userActivity=setupUserActivity({get:apiGet,request:accountRequest});
@@ -1746,7 +1757,7 @@ function signedIn(user) {
   $("#fleet-operations-panel").hidden=user.role!=="super_admin";
   $("#flowroute-auto-form").hidden=user.role!=="super_admin";
   $("#carrier-catalog-form").hidden=user.role!=="super_admin";
-  if(user.role==="super_admin"){providerCredentialsAdmin.refresh();providerWebhooks.refresh();didwwAdmin.refresh();adapterAdmin.refresh();serverFleet.refresh();fleetNetwork.refresh();fleetGrants.refresh();fleetFirewall.refresh();operationsAdmin.refresh();}
+  if(user.role==="super_admin"){walletProvidersAdmin.refresh();providerCredentialsAdmin.refresh();providerWebhooks.refresh();didwwAdmin.refresh();adapterAdmin.refresh();serverFleet.refresh();fleetNetwork.refresh();fleetGrants.refresh();fleetFirewall.refresh();operationsAdmin.refresh();}
   if(["admin","super_admin"].includes(user.role))operatorAdmin.refresh();
   if(["admin","super_admin"].includes(user.role)){
     switchAdmin.refresh(user.role==="super_admin");

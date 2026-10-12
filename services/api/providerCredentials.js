@@ -1,7 +1,7 @@
 import {randomBytes,createCipheriv,createDecipheriv} from 'node:crypto';
 
-const fields={flowroute:['accessKey','secretKey','sipUsername','sipPassword'],didww:['apiKey','environment','callbackSecret','callEventsToken']};
-const required={flowroute:['accessKey','secretKey'],didww:['apiKey','environment','callbackSecret','callEventsToken']};
+const fields={flowroute:['accessKey','secretKey','sipUsername','sipPassword'],didww:['apiKey','environment','callbackSecret','callEventsToken'],dwolla:['clientId','clientSecret','environment'],flutterwave:['secretKey','webhookSecret','environment']};
+const required={flowroute:['accessKey','secretKey'],didww:['apiKey','environment','callbackSecret','callEventsToken'],dwolla:['clientId','clientSecret','environment'],flutterwave:['secretKey','webhookSecret','environment']};
 function masterKey(){
   const raw=process.env.PROVIDER_CREDENTIAL_KEY;
   return /^[a-f0-9]{64}$/i.test(raw||'')?Buffer.from(raw,'hex'):null;
@@ -41,13 +41,14 @@ export async function providerCredentials(pool,tenant,provider){
 }
 export async function handleProviderCredentials({req,res,path,user,pool,send,readJson}){
   if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
-  if(path==='/api/admin/carriers/credentials'&&req.method==='GET'){
+  const financial=path.startsWith('/api/admin/wallet-providers');
+  if((path==='/api/admin/carriers/credentials'||path==='/api/admin/wallet-providers')&&req.method==='GET'){
     const rows=await pool.query('SELECT provider,revision,enabled,updated_at FROM provider_api_credentials WHERE tenant_id=$1',
       [user.tenant_id]);
-    return send(res,200,{entries:rows.rows,keyReady:!!masterKey(),
+    return send(res,200,{entries:rows.rows.filter(row=>financial?['dwolla','flutterwave'].includes(row.provider):['flowroute','didww'].includes(row.provider)),keyReady:!!masterKey(),
       note:'Secrets are write-only; verification uses the provider inventory API.'});
   }
-  const match=/^\/api\/admin\/carriers\/credentials\/(flowroute|didww)$/.exec(path);
+  const match=financial?/^\/api\/admin\/wallet-providers\/(dwolla|flutterwave)$/.exec(path):/^\/api\/admin\/carriers\/credentials\/(flowroute|didww)$/.exec(path);
   if(!match)return send(res,404,{error:'Provider credentials route unavailable'});
   const provider=match[1];
   if(req.method==='PATCH'){
@@ -95,6 +96,7 @@ export async function handleProviderCredentials({req,res,path,user,pool,send,rea
       (value.sipUsername!=null&&(typeof value.sipUsername!=='string'||typeof value.sipPassword!=='string'||
       !value.sipUsername.trim()||!value.sipPassword.trim()||
       value.sipUsername.length>256||value.sipPassword.length>256))))||
+    (financial&&!['sandbox','production'].includes(value.environment))||
     (provider==='didww'&&(!['sandbox','production'].includes(value.environment)||['callbackSecret','callEventsToken'].some(name=>value[name]!=null&&(typeof value[name]!=='string'||!value[name].trim()||value[name].length>256)))))
     return send(res,400,{error:'Complete provider credentials and current revision required'});
   const credentials=Object.fromEntries(fields[provider].filter(name=>value[name]!=null).map(name=>[name,value[name].trim()]));
