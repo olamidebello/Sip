@@ -1,3 +1,4 @@
+import {tokenHash} from './security.js';
 import { WebSocketServer, WebSocket } from "ws";
 
 const roomSockets = new Map();
@@ -25,6 +26,7 @@ export function attachMeetingSignaling(server, { pool, origin, currentUser }) {
       wss.handleUpgrade(req, socket, head, (ws) => {
         ws.roomId = match[1];
         ws.userId = user.id;
+        ws.sessionHash=tokenHash((req.headers.cookie||'').match(/(?:^|;\s*)olamide_session=([^;]+)/)?.[1]||'');
         ws.tenantId = user.tenant_id;
         ws.name = user.display_name;
         ws.hostId = room.host_id;
@@ -55,6 +57,15 @@ export function attachMeetingSignaling(server, { pool, origin, currentUser }) {
     }
     if (!grants.size) assistGrants.delete(roomId);
   }
+  async function sessionActive(ws){
+    const result=await pool.query('SELECT 1 FROM sessions WHERE token_hash=$1 AND user_id=$2 AND expires_at>UTC_TIMESTAMP(3)',[ws.sessionHash,ws.userId]);
+    return result.rowCount>0;
+  }
+  let checking=false;
+  const sessionTimer=setInterval(async()=>{
+    if(checking)return;checking=true;
+    try{for(const ws of wss.clients){try{if(!await sessionActive(ws))ws.close(1008,'Session ended by newer login or policy');}catch{ws.close(1011,'Session validation unavailable');}}}finally{checking=false;}
+  },5000);sessionTimer.unref();server.on('close',()=>clearInterval(sessionTimer));
   wss.on("connection", (ws) => {
     const peers = roomSockets.get(ws.roomId) || new Map();
     roomSockets.set(ws.roomId, peers);
@@ -65,8 +76,9 @@ export function attachMeetingSignaling(server, { pool, origin, currentUser }) {
     peers.set(ws.userId, ws);
     for (const peer of peers.values()) if (peer !== ws)
       send(peer, { type: "joined", id: ws.userId, name: ws.name });
-    ws.on("message", (raw) => {
+    ws.on("message", async (raw) => {
       try {
+        if(!await sessionActive(ws))return ws.close(1008,'Session ended by newer login or policy');
         const now = Date.now();
         if (now - ws.rate.start > 10000) ws.rate = { start: now, count: 0 };
         if (++ws.rate.count > 50) return ws.close(1008, "Rate limit");
@@ -138,6 +150,10 @@ export function attachMeetingSignaling(server, { pool, origin, currentUser }) {
     });
   });
   return {
+    closeSessions(hashes){
+      const revoked=new Set(hashes);
+      for(const ws of wss.clients)if(revoked.has(ws.sessionHash))ws.close(1008,'Session ended by newer login or policy');
+    },
     closeUser(id) {
       for (const peers of roomSockets.values())
         peers.get(id)?.close(1008,"Account access changed");

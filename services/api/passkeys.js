@@ -1,3 +1,4 @@
+import {createLimitedSession} from './sessionPolicy.js';
 import { generateRegistrationOptions, verifyRegistrationResponse,
   generateAuthenticationOptions, verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { createSessionToken, tokenHash } from './security.js';
@@ -7,7 +8,7 @@ const validEmail = value => typeof value === 'string' && value.length <= 254 && 
 const validCredential = value => value && typeof value === 'object' &&
   typeof value.id === 'string' && value.id.length <= 512;
 
-export async function handlePasskeys({req,res,path,pool,send,readJson,origin,currentUser,featuresFor,sessionCookie}) {
+export async function handlePasskeys({req,res,path,pool,send,readJson,origin,currentUser,featuresFor,sessionCookie,closeSessions}) {
   if (!path.startsWith('/api/passkeys')) return false;
   const rpID=new URL(origin).hostname;
   if (path==='/api/passkeys' && req.method==='GET') {
@@ -78,7 +79,8 @@ export async function handlePasskeys({req,res,path,pool,send,readJson,origin,cur
       if(!verified.verified) throw new Error('Unverified passkey');
       await pool.query('UPDATE passkeys SET counter=$1 WHERE id=$2 AND user_id=$3',[verified.authenticationInfo.newCounter,user.passkey_id,user.id]);
       const token=createSessionToken();
-      await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at,auth_method) VALUES($1,$2,DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 7 DAY),'passkey')",[tokenHash(token),user.id]);
+      const revoked=await createLimitedSession(pool,{userId:user.id,token,authMethod:'passkey'});
+      closeSessions?.(revoked);
       return send(res,200,{id:user.id,name:user.display_name,email:user.email,role:user.role,
         authSource:'local',tenantId:user.tenant_id,mustChangePassword:!!user.must_change_password,features:await featuresFor(user)},
         {'Set-Cookie':sessionCookie(token,604800)});

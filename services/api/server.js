@@ -1,3 +1,4 @@
+import {createLimitedSession,handleSessionPolicy} from './sessionPolicy.js';
 import {handleGoogleContactsAdmin} from './googleContactsConfig.js';
 import {startKamailioHttpBridge} from './kamailioHttpBridge.js';
 import {handleNativePush,pushHookAuthorized,startNativePush} from './nativePush.js';
@@ -180,7 +181,7 @@ async function handler(req, res) {
       if(sessionAccount?.passkeyGate && !((sessionAccount.passkeyGate==='enroll') && (path==='/api/passkeys'||path.startsWith('/api/passkeys/register/')))) return send(res,403,{error:sessionAccount.passkeyGate==='enroll'?'Register a passkey, then sign in with it':'Passkey sign-in required'});
     }
     if (path.startsWith('/api/register')) return await handleOnboarding({req,res,path,pool,send,readJson,origin});
-    if (path.startsWith('/api/passkeys')) return await handlePasskeys({req,res,path,pool,send,readJson,origin,currentUser,featuresFor,sessionCookie});
+    if (path.startsWith('/api/passkeys')) return await handlePasskeys({req,res,path,pool,send,readJson,origin,currentUser,featuresFor,sessionCookie,closeSessions:hashes=>meetingSignaling?.closeSessions(hashes)});
     if (req.method === "POST" && path === "/api/login") {
       const { email, password } = await readJson(req);
       if (typeof email !== "string" || typeof password !== "string" ||
@@ -197,10 +198,8 @@ async function handler(req, res) {
       const keys=passkeyMode==='required'?await pool.query('SELECT 1 FROM passkeys WHERE user_id=$1 LIMIT 1',[user.id]):null;
       if(keys?.rowCount)return send(res,403,{error:'Use passkey sign-in for this account'});
       const token = createSessionToken();
-      await pool.query(
-        "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1,$2,DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 7 DAY))",
-        [tokenHash(token), user.id]
-      );
+      const revoked=await createLimitedSession(pool,{userId:user.id,token});
+      meetingSignaling?.closeSessions(revoked);
       return send(res, 200, { id: user.id, name: user.display_name, email: user.email,
         role: user.role, authSource:"local",mustChangePassword:!!user.must_change_password,passkeyEnrollmentRequired:passkeyMode==='required',tenantId:user.tenant_id, features:await featuresFor(user) },
         { "Set-Cookie": sessionCookie(token, 604800) });
@@ -212,8 +211,8 @@ async function handler(req, res) {
       catch(error) {console.error("LDAP sign-in failed",error.code||error.name);return send(res,401,{error:"Directory sign-in failed"});}
       if (!user) return send(res,401,{error:"Directory sign-in failed"});
       const token=createSessionToken();
-      await pool.query("INSERT INTO sessions(token_hash,user_id,expires_at) VALUES($1,$2,DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 1 HOUR))",
-        [tokenHash(token),user.id]);
+      const revoked=await createLimitedSession(pool,{userId:user.id,token,seconds:3600});
+      meetingSignaling?.closeSessions(revoked);
       return send(res,200,{id:user.id,name:user.display_name,email:user.email,role:user.role,authSource:"ldap",
         tenantId:user.tenant_id,features:await featuresFor(user)},
         {"Set-Cookie":sessionCookie(token,3600)});
@@ -253,6 +252,7 @@ async function handler(req, res) {
         path === "/api/admin/cdr" || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if(path.startsWith('/api/admin/user-sessions'))return await handleSessionPolicy({req,res,path,user,pool,send,readJson,closeSessions:hashes=>meetingSignaling?.closeSessions(hashes)});
       if(path==='/api/admin/google-contacts')return await handleGoogleContactsAdmin({req,res,user,pool,send,readJson});
       if(path==='/api/redirector'&&req.method==='GET'){
         const region=new URL(req.url,origin).searchParams.get('region')||'global';

@@ -30,7 +30,7 @@ test("registered users can create and join a room; host controls it", {
   const server = spawn(process.execPath, ["server.js"], {
     cwd: new URL(".", import.meta.url).pathname,
     env: { ...process.env, MYSQL_URL: process.env.TEST_MYSQL_URL,
-      PUBLIC_ORIGIN: origin, API_RATE_LIMIT:"100", LISTEN_ADDR: "127.0.0.1", PORT: String(port),
+      PUBLIC_ORIGIN: origin, API_RATE_LIMIT:"1000", LISTEN_ADDR: "127.0.0.1", PORT: String(port),
       CDR_INGEST_KEYS_JSON: JSON.stringify({[cdrTenant]:cdrSecret}),
       RESEND_API_KEY:'test-key',RESEND_FROM:'test@example.com',OTP_HMAC_SECRET:'test-only-secret-'.repeat(4),
       SIP_CREDENTIAL_KEY:'ab'.repeat(32),RESEND_API_URL:`http://127.0.0.1:${mail.address().port}/emails` },
@@ -411,5 +411,27 @@ test("registered users can create and join a room; host controls it", {
   assert.equal(suspend.status,200);
   const suspended = await fetch(base + "/api/me",{headers:{Cookie:otherCookie}});
   assert.equal(suspended.status,401);
+
+  // Session replacement and limits against real MySQL, including parallel logins.
+  const guestCredentials={email:'guest'+unique+'@example.com',password};
+  assert.equal((await post('/api/login',{...guestCredentials,password:'wrong-password'})).status,401);
+  assert.equal((await fetch(base+'/api/me',{headers:{Cookie:guestCookie}})).status,200);
+  const replacement=await post('/api/login',guestCredentials);
+  assert.equal(replacement.status,200,JSON.stringify(replacement.body));
+  const replacementCookie=replacement.cookie.split(";")[0];
+  assert.equal((await fetch(base+'/api/me',{headers:{Cookie:guestCookie}})).status,401);
+  assert.equal((await fetch(base+'/api/me',{headers:{Cookie:replacementCookie}})).status,200);
+  const limitUrl=base+'/api/admin/user-sessions/'+guestLogin.body.id;
+  const changeLimit=async maxSessions=>fetch(limitUrl,{method:'PUT',headers:{Origin:origin,Cookie:hostCookie,'Content-Type':'application/json'},body:JSON.stringify({maxSessions})});
+  assert.equal((await changeLimit(2)).status,200);
+  const next=await post('/api/login',guestCredentials);assert.equal(next.status,200);
+  assert.equal((await fetch(base+'/api/me',{headers:{Cookie:replacementCookie}})).status,200);
+  assert.equal((await changeLimit(1)).status,200);
+  assert.equal((await fetch(base+'/api/me',{headers:{Cookie:replacementCookie}})).status,401);
+  assert.equal((await fetch(base+'/api/me',{headers:{Cookie:next.cookie.split(";")[0]}})).status,200);
+  const parallel=await Promise.all([post('/api/login',guestCredentials),post('/api/login',guestCredentials)]);
+  assert.ok(parallel.every(r=>r.status===200),JSON.stringify(parallel));
+  const statuses=await Promise.all(parallel.map(r=>fetch(base+'/api/me',{headers:{Cookie:r.cookie.split(";")[0]}}).then(r=>r.status)));
+  assert.deepEqual(statuses.sort(),[200,401]);
 
 });

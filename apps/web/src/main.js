@@ -1,3 +1,5 @@
+import {setupSessionAdmin} from './sessionAdmin.js';
+import {createSessionWatch} from './sessionWatch.js';
 import {setupDialerContacts} from './dialerContacts.js';
 import {setupMessengerOverflow} from './messengerOverflow.js';
 import {setupMoneyWorkspace} from './moneyWorkspace.js';
@@ -960,6 +962,13 @@ root.innerHTML = `
       <h4>User overrides</h4><label>User <select id="sip-policy-user"></select></label><div id="sip-user-choices"></div><button type="button" id="sip-user-save">Save user overrides</button>
       <p id="sip-policy-status" role="status"></p>
     </section>
+    <section id="user-session-admin" hidden>
+      <h3>User session limits</h3><p>Default: one session per user. New logins replace the oldest sessions. Reducing a limit ends excess sessions immediately.</p>
+      <button id="session-policy-refresh" type="button">Refresh users and sessions</button>
+      <form id="session-policy-form"><label>User in selected tenant <select id="session-policy-user" required></select></label>
+      <label>Maximum simultaneous sessions <input name="maxSessions" type="number" min="1" max="20" value="1" required></label>
+      <button type="submit">Save session limit</button></form><p id="session-policy-count"></p><p id="session-policy-status" role="status"></p>
+    </section>
     <section id="tenant-admin">
       <h3>Tenants and administrators</h3>
       <div id="tenant-super" hidden>
@@ -1170,7 +1179,7 @@ const navigationGroups=[
   {label:"Administration",roles:["admin","super_admin"],items:[["product-store-admin","Product catalog & orders"],["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio services"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["passkey-policy-admin","Passkey requirements"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
-  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["google-oauth-admin","Google Contacts OAuth"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["wallet-providers-admin","Dwolla & Flutterwave API"],["provider-credentials-admin","Carrier credentials"],["carrier-adapter-admin","Carrier adapters"]]}
+  {label:"Super admin",roles:["super_admin"],items:[["user-session-admin","User sessions"],["tenant-admin","Tenants & roles"],["google-oauth-admin","Google Contacts OAuth"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["wallet-providers-admin","Dwolla & Flutterwave API"],["provider-credentials-admin","Carrier credentials"],["carrier-adapter-admin","Carrier adapters"]]}
 ];
 let configurationLinks;
 let localeSettings;
@@ -1359,6 +1368,13 @@ const operatorAdmin=setupOperatorControl();
 const switchAdmin=setupKamailioAdmin();
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
+const sessionAdmin=setupSessionAdmin(document);
+const sessionWatch=createSessionWatch({window,check:async()=>{const response=await fetch('/api/me',{cache:'no-store'});return response.status!==401;},onRevoked:async()=>{
+  await autoSip.stop().catch(()=>{});meetings.hide();
+  if(phone){await phone.hangup().catch(()=>{});await phone.unregister().catch(()=>{});await phone.disconnect().catch(()=>{});phone=undefined;}
+  callState(false);
+  window.location.replace('/login?reason=session-replaced');
+}});
 const pbx = setupPbx();
 const reports = setupReports({get:(path)=>apiGet(path)});
 const pricing = setupPricing();
@@ -1702,6 +1718,8 @@ const conversations=setupConversations({get:apiGet,request:accountRequest,isSign
   callContact:address=>{dialForm.elements.target.value=address;showWorkspace('calling-workspace');status('Contact selected. Connect your SIP account, then press Call.');}});
 async function loadMessages(){await conversations.refresh();}
 function signedIn(user) {
+  sessionWatch.start();
+  sessionAdmin.refresh(user).catch(error=>{$("#session-policy-status").textContent=error.message;});
   if(user.mustChangePassword){
     activeRole='pending_password_change';
     $('#account-password-group').open=true;
@@ -2321,6 +2339,8 @@ $("#ldap-login").addEventListener("submit",async(event)=>{
   } catch(error) {$("#account-status").textContent=error.message;}
 });
 $("#logout").onclick = async () => {
+  sessionWatch.stop();
+  $("#user-session-admin").hidden=true;
   try {
     dialerContacts.clear();
     contactDirectory.clear();

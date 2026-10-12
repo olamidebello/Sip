@@ -1,3 +1,4 @@
+import {migrateSessionPolicy} from './sessionPolicy.js';
 import {migrateNativePush} from './nativePush.js';
 import {migrateConversations} from './conversations.js';
 import {migrateUserActivity} from './userActivity.js';
@@ -109,6 +110,7 @@ export async function migrate(pool) {
       ['work_planner', () => migrateWorkPlanner(pool)],
       ['campaigns', () => migrateCampaigns(pool)],
       ['passkey_policy', () => migratePasskeyPolicy(pool)],
+      ['session_policy', () => migrateSessionPolicy(pool)],
       ['support', () => migrateSupport(pool)],
       ['locales', () => migrateLocales(pool)]
     ];
