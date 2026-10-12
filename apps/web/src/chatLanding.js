@@ -18,6 +18,9 @@ export function setupChatLanding(document){
     if(child.tagName==='LABEL'||child.classList.contains('conversation-toolbar')||child.id==='load-messages'||(child.tagName==='P'&&!child.id))options.append(child);
   }
   header.after(options);
+  const call=document.getElementById('call-contact');
+  if(call){call.innerHTML=icon('calls');call.setAttribute('aria-label','Call this contact');header.append(call);}
+
   const menu=document.createElement('button');menu.type='button';menu.innerHTML=icon('more');menu.setAttribute('aria-label','Conversation menu');menu.onclick=()=>{options.open=!options.open;};header.append(menu);
   const create=document.createElement('button');create.type='button';create.className='chat-new';create.innerHTML=icon('plus');create.setAttribute('aria-label','New chat');
   create.onclick=()=>{chat.classList.remove('thread-open');const directory=document.getElementById('contact-directory');directory.open=true;directory.querySelector('input')?.focus();directory.scrollIntoView?.({block:'center'});};sidebar.append(create);

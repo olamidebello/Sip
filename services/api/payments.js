@@ -140,3 +140,11 @@ export async function handleStripeWebhook({req,res,path,pool,send}){
     await db.query('COMMIT');return send(res,200,{received:true});
   }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
 }
+
+export async function paymentCapabilities(pool,tenant){
+ const row=await config(pool,tenant);
+ return {invoiceCheckoutAvailable:!!(row?.enabled&&key()),mode:row?.mode||null,
+ fundingAvailable:false,payoutAvailable:false,
+ fundingNote:'Wallet deposits require a dedicated funding integration.',
+ payoutNote:'Bank withdrawals require a payout provider and verified recipient account.'};
+}

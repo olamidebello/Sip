@@ -1,3 +1,4 @@
+import {setupMoneyWorkspace} from './moneyWorkspace.js';
 import {createNativeCallClient} from './nativeCallClient.js';
 import {createNativePushClient} from './nativePushClient.js';
 import {createAutoSipRegistration} from './autoSipRegistration.js';
@@ -374,6 +375,19 @@ root.innerHTML = `
     <button id="store-import-preview" type="button">Preview import</button><label><input id="store-import-all" type="checkbox"> Select all import rows</label><span id="store-import-count" role="status"></span>
     <ul id="store-import-rows"></ul><button id="store-import-selected" type="button" disabled>Import selected products</button>
     <div id="store-admin-products"></div><h3>Order commissioning &amp; delivery</h3><ul id="store-admin-orders"></ul>
+  </section>
+
+  <section id="money" hidden aria-label="Money workspace">
+    <div class="money-header"><button id="money-back" type="button" aria-label="Back to chats">←</button><h2>Money <span>$</span></h2><button id="money-settings" type="button" aria-label="Money profile and settings">Profile</button></div>
+    <div class="money-balance-card"><small>Available balance · USD</small><strong id="money-total">$0.00</strong><div><button id="money-funding" type="button" disabled>Add money</button><button id="money-payout" type="button" disabled>Cash out</button></div><p id="money-funding-note"></p></div>
+    <div data-money-panel="home" class="money-keypad-panel"><label class="sr-only" for="money-amount">Amount in US dollars</label><div class="money-amount-input"><span>$</span><input id="money-amount" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Amount in US dollars"></div><div class="money-keypad"><button type="button" data-money-key="1" aria-label="1">1</button><button type="button" data-money-key="2" aria-label="2">2</button><button type="button" data-money-key="3" aria-label="3">3</button><button type="button" data-money-key="4" aria-label="4">4</button><button type="button" data-money-key="5" aria-label="5">5</button><button type="button" data-money-key="6" aria-label="6">6</button><button type="button" data-money-key="7" aria-label="7">7</button><button type="button" data-money-key="8" aria-label="8">8</button><button type="button" data-money-key="9" aria-label="9">9</button><button type="button" data-money-key="." aria-label=".">.</button><button type="button" data-money-key="0" aria-label="0">0</button><button type="button" data-money-key="back" aria-label="⌫">⌫</button></div><div class="money-primary-actions"><button id="money-start-request" type="button">Request</button><button id="money-start-pay" type="button">Pay</button></div></div>
+    <div data-money-panel="pay" hidden><h3>Pay <span id="money-pay-amount">$0</span></h3><p>Send from your available internal balance.</p><form id="money-pay-form"><label>To <input id="money-recipient" type="email" required autocomplete="email" placeholder="Recipient email"></label><button type="submit">Confirm payment</button></form></div>
+    <div data-money-panel="request" hidden><h3>Request money</h3><form id="money-request-form"><label>From <input id="money-payer" type="email" required placeholder="Payer email"></label><label>Amount (USD) <input id="money-request-amount" inputmode="decimal" required></label><label>For <input id="money-request-note" maxlength="200" placeholder="Add a note"></label><button type="submit">Send request</button></form></div>
+    <div data-money-panel="activity" hidden><h3>Activity</h3><button id="money-refresh" type="button">Refresh</button><h4>Payment requests</h4><ul id="money-requests"></ul><h4>Transactions</h4><ul id="money-history"></ul></div>
+    <div data-money-panel="payments" hidden><h3>Online payments</h3><p id="money-provider-status"></p><ul id="money-invoices"></ul><button id="money-billing" type="button">Plans and billing</button></div>
+    <div data-money-panel="profile" hidden><h3 id="money-profile-name"></h3><p id="money-profile-email"></p><p>USD wallet · transfers within your workspace</p><a href="/#account">Account settings</a></div>
+    <p id="money-status" role="status" aria-live="polite"></p>
+    <nav class="money-tabs" aria-label="Money navigation"><button type="button" data-money-tab="home">$<span>Money</span></button><button type="button" data-money-tab="request">↗<span>Request</span></button><button type="button" data-money-tab="activity">◷<span>Activity</span></button><button type="button" data-money-tab="payments">▣<span>Payments</span></button><button type="button" data-money-tab="profile">○<span>Profile</span></button></nav>
   </section>
   <section id="billing" hidden>
     <h2>Plans and billing</h2>
@@ -1065,9 +1079,9 @@ root.innerHTML = `
   <section id="calling-workspace" class="calling-workspace" hidden>
   <h2>Olamide dialer</h2>
   <p id="calling-access" role="status">Internal SIP calls are available without a subscription after your SIP account is activated. External calls require an active plan.</p><a href="#billing">Manage calling plan</a>
-  <button id="connect-assigned-sip" type="button">Connect my SIP account</button>
+  <button id="connect-assigned-sip" type="button">Reconnect</button>
   <p>Connection details are assigned automatically when you sign in. Use this button to retry activation or reconnect.</p>
-  <form id="connect">
+  <form id="connect" data-can-edit="false" hidden>
     <label>SIP address <input name="aor" placeholder="Assigned SIP address" autocomplete="off" required></label>
     <label>Authorization username <input name="username" autocomplete="off" required></label>
     <label>SIP password <input name="password" type="password" autocomplete="new-password" required></label>
@@ -1129,7 +1143,7 @@ setupCarrierControl();
 const navigationGroups=[
   {label:"Workspace",items:[["dashboard","Dashboard"],["campaign-inbox-panel","Announcements"],["planner","Events & tasks"],["search-panel","Search"],["support","Support tickets"],["help","Help & tutorials"]]},
   {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
-  {label:"Commerce",items:[["product-store","Products & services"],["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
+  {label:"Commerce",items:[["money","Money"],["product-store","Products & services"],["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["account","Account & security"],["activity-monitor","Activity monitor"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
   {label:"Administration",roles:["admin","super_admin"],items:[["product-store-admin","Product catalog & orders"],["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio services"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["passkey-policy-admin","Passkey requirements"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
@@ -1160,6 +1174,8 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   const modeChanged=document.body.classList.contains('admin-mode')!==adminMode;
   document.body.classList.toggle('admin-mode',adminMode);
   document.body.classList.toggle('messenger-mode',!adminMode);
+  document.body.classList.toggle('money-mode',target==='money');
+  if(target==='money')void moneyWorkspace.refresh();
   if(modeChanged)updateNavigation();
   const requested=document.getElementById(target);
   if(!requested || requested.closest("[hidden]")) return false;
@@ -1192,7 +1208,7 @@ function resetWorkspace() {
   userActivity?.stop();
   $("#activity-monitor").hidden=true;
   $("#fleet-admin").hidden=true;
-  document.body.classList.remove("workspace-mode","messenger-mode","admin-mode");
+  document.body.classList.remove("workspace-mode","messenger-mode","admin-mode","money-mode");
   for(const section of document.querySelectorAll(".workspace-inactive")) section.classList.remove("workspace-inactive");
   $("#admin").classList.remove("admin-subview");
 }
@@ -1209,7 +1225,7 @@ function updateNavigation() {
   const returnToCall=document.createElement("a");returnToCall.id="return-to-call";returnToCall.href="#calling-workspace";returnToCall.textContent="Return to call";returnToCall.hidden=!onCall;
   nav.append(returnToCall);
   const tabs=document.createElement('div');tabs.className='messenger-tabs';
-  for(const [id,label,symbol] of [['chat','Chats','chat'],['campaign-inbox-panel','Updates','updates'],['meetings','Meetings','people'],['calling-workspace','Calls','calls']]){
+  for(const [id,label,symbol] of [['chat','Chats','chat'],['campaign-inbox-panel','Updates','updates'],['meetings','Meetings','people'],['calling-workspace','Calls','calls'],['money','Money','money']]){
     if(document.getElementById(id)?.closest('[hidden]'))continue;
     const link=document.createElement('a');link.href=`/#${id}`;link.innerHTML=icon(symbol);const caption=document.createElement('span');caption.textContent=label;link.append(caption);if(activeView===id)link.setAttribute('aria-current','page');tabs.append(link);
   }
@@ -1291,7 +1307,8 @@ const dashboard=setupDashboard({get:path=>apiGet(path),request:(path,body,method
 const support=setupSupport({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 localeSettings=setupLocaleSettings({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const groupAdmin = setupGroupAdmin();
-const sipProfiles = setupSipProfiles({get:apiGet,request:accountRequest});
+const sipProfiles = setupSipProfiles({get:apiGet,request:accountRequest,permissionsChanged:updateNavigation});
+const moneyWorkspace=setupMoneyWorkspace({document,get:apiGet,request:accountRequest,show:showWorkspace});
 const productStore=setupProductStore({get:apiGet,request:accountRequest,refreshBilling});
 const commerceOps=setupCommerceOps({get:apiGet,request:accountRequest});
 const serverFleet=setupServerFleetAdmin({get:apiGet,request:accountRequest});
@@ -1740,6 +1757,8 @@ function signedIn(user) {
   $("#product-store").hidden=!user.features?.billing;
   $("#product-store-admin").hidden=!user.features?.billing||!["admin","super_admin"].includes(user.role);
   if(user.features?.billing){productStore.refresh();if(["admin","super_admin"].includes(user.role))productStore.refreshAdmin();}
+  $("#money").hidden=!user.features?.billing;
+  if(user.features?.billing)moneyWorkspace.start(user);
   $("#billing").hidden = !user.features?.billing;
   if (user.features?.meetings) meetings.show();
   else meetings.hide();
@@ -2265,6 +2284,7 @@ $("#ldap-login").addEventListener("submit",async(event)=>{
 });
 $("#logout").onclick = async () => {
   try {
+    moneyWorkspace.stop();
     await nativeCalls.stop();
     await nativePush.stop();
     $("#signed-in-profile").hidden=true;
@@ -2274,7 +2294,7 @@ $("#logout").onclick = async () => {
       if (onCall) await phone.hangup().catch(()=>{});
       await phone.unregister().catch(()=>{});
       await phone.disconnect().catch(()=>{});
-      phone=undefined;connectForm.hidden=false;dialForm.hidden=true;$("#disconnect").hidden=true;callState(false);
+      phone=undefined;connectForm.hidden=connectForm.dataset.canEdit!=='true';dialForm.hidden=true;$("#disconnect").hidden=true;callState(false);
     }
     await accountRequest("/api/logout", {});
     softphoneLoad++;softphoneUserId=null;favorites.clear();recentCalls=[];$("#dnd").checked=false;renderSoftphoneLists();
@@ -2301,6 +2321,7 @@ $("#logout").onclick = async () => {
     $("#chat").hidden = true;
     $("#product-store").hidden=true;
     $("#product-store-admin").hidden=true;
+    $("#money").hidden=true;
     $("#billing").hidden = true;
     meetings.hide();
     $("#agent-panel").hidden = true;
@@ -2334,7 +2355,7 @@ const autoSip=createAutoSipRegistration({
     const data=new FormData();for(const [key,value] of Object.entries({aor:`sip:${account.username}@${account.domain}`,username:account.username,password:account.password,server:account.wssUrl}))data.set(key,value);
     await registerSip(data,valid);
   },
-  async disconnect(){if(phone){const current=phone;phone=undefined;sipRegistered=false;if(onCall)await current.hangup().catch(()=>{});await current.unregister().catch(()=>{});await current.disconnect().catch(()=>{});callState(false);connectForm.hidden=false;dialForm.hidden=true;$('#disconnect').hidden=true;}}
+  async disconnect(){if(phone){const current=phone;phone=undefined;sipRegistered=false;if(onCall)await current.hangup().catch(()=>{});await current.unregister().catch(()=>{});await current.disconnect().catch(()=>{});callState(false);connectForm.hidden=connectForm.dataset.canEdit!=='true';dialForm.hidden=true;$('#disconnect').hidden=true;}}
 });
 const nativeCalls=createNativeCallClient({plugin:()=>window.Capacitor?.Plugins?.NativePush,wake:()=>autoSip.wake(),currentCall:()=>({callId:currentCall?.sipCallId}),answer:()=>{if(!phone)throw new Error('SIP connection pending');return phone.answer();},end:()=>onCall?phone?.hangup():phone?.decline(),onError:report});
 window.addEventListener('online',()=>{autoSip.wake();if(softphoneUserId)void nativePush.start();});
@@ -2483,7 +2504,7 @@ $("#disconnect").onclick = async () => {
     await phone.disconnect();
     phone = undefined;
     connectForm.reset();
-    connectForm.hidden = false;
+    connectForm.hidden = connectForm.dataset.canEdit!=='true';
     dialForm.hidden = true;
     $("#disconnect").hidden = true;
     callState(false);

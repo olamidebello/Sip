@@ -30,10 +30,10 @@ test('configuration links open credentials and group links reveal their containi
 test('form routes preserve the selected form and returning to the same panel restores all forms',async()=>{
   const app=await appFixture();try{await app.signIn();
     app.window.audit.pageRoutes.go('group-create');
-    assert.equal(app.window.location.pathname,'/pages/group-create');
+    assert.equal(app.window.location.pathname,'/admin/pages/group-create');
     assert.equal(app.document.getElementById('group-create').closest('.page-route-hidden,.workspace-inactive'),null);
-    app.document.querySelector('#app-nav a[href="#group-admin"]').click();
-    assert.equal(app.window.location.pathname,'/');
+    app.document.querySelector('#app-nav a[href$="#group-admin"]').click();
+    assert.equal(app.window.location.pathname,'/admin');
     assert.equal(app.document.querySelector('#group-admin .page-route-hidden'),null);
   }finally{app.close();}
 });

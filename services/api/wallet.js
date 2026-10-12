@@ -1,3 +1,5 @@
+import {migrateMoneyRequests,handleMoneyRequests} from './moneyRequests.js';
+import {paymentCapabilities} from './payments.js';
 import {randomUUID} from "node:crypto";
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -20,6 +22,7 @@ export async function migrateWallet(pool) {
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     FOREIGN KEY(transfer_id) REFERENCES wallet_transfers(id),FOREIGN KEY(user_id) REFERENCES users(id),
     UNIQUE KEY wallet_transfer_user(transfer_id,user_id),INDEX wallet_entries_user(user_id,created_at)) ENGINE=InnoDB`);
+  await migrateMoneyRequests(pool);
 }
 export function validateTransfer(input) {
   const email=String(input?.recipientEmail??"").trim().toLowerCase();
@@ -30,6 +33,8 @@ export function validateTransfer(input) {
 }
 export async function handleWallet({req,res,path,user,pool,send,readJson}) {
   if (!user.features.billing) return send(res,403,{error:"Billing access unavailable"});
+  if(path.startsWith('/api/wallet/requests'))return handleMoneyRequests({req,res,path,user,pool,send,readJson});
+  if(path==='/api/wallet/capabilities'&&req.method==='GET')return send(res,200,await paymentCapabilities(pool,user.tenant_id));
   if (path==="/api/wallet" && req.method==="GET") {
     const account=await pool.query("SELECT balance_cents,currency FROM wallet_accounts WHERE user_id=$1 AND tenant_id=$2",[user.id,user.tenant_id]);
     const entries=await pool.query("SELECT e.id,e.delta_cents,e.balance_after_cents,e.created_at,t.sender_id,t.recipient_id FROM wallet_entries e JOIN wallet_transfers t ON t.id=e.transfer_id WHERE e.user_id=$1 AND e.tenant_id=$2 ORDER BY e.created_at DESC,e.id DESC LIMIT 50",[user.id,user.tenant_id]);
@@ -37,8 +42,8 @@ export async function handleWallet({req,res,path,user,pool,send,readJson}) {
       fundingAvailable:false,payoutAvailable:false,note:"No payment provider or funding path is connected."});
   }
   if (path==="/api/wallet/transfers" && req.method==="POST") {
-    let transfer;
-    try {transfer=validateTransfer(await readJson(req));}
+    let transfer,body;
+    try {body=await readJson(req);transfer=validateTransfer(body);if(body.requestId&&!uuid.test(body.requestId))throw new Error("Valid payment request ID required");}
     catch(error) {return send(res,400,{error:error.message});}
     const recipient=await pool.query("SELECT id FROM users WHERE email=$1 AND tenant_id=$2 AND status='active'",[transfer.email,user.tenant_id]);
     if (!recipient.rowCount || recipient.rows[0].id===user.id) return send(res,404,{error:"Recipient unavailable"});
@@ -59,6 +64,10 @@ export async function handleWallet({req,res,path,user,pool,send,readJson}) {
           return send(res,409,{error:"Request ID already used for another transfer"});
         return send(res,200,{id:existing.rows[0].id,status:"completed",duplicate:true});
       }
+      if(body.requestId){
+        const requested=(await db.query("SELECT requester_id,payer_id,amount_cents,status FROM wallet_requests WHERE id=$1 AND tenant_id=$2 FOR UPDATE",[body.requestId,user.tenant_id])).rows[0];
+        if(!requested||requested.status!=='pending'||requested.payer_id!==user.id||requested.requester_id!==recipientId||Number(requested.amount_cents)!==transfer.amountCents){await db.query('ROLLBACK');return send(res,409,{error:'Payment request unavailable or mismatched'});}
+      }
       const sender=accounts.find(account=>account.id===user.id),receiver=accounts.find(account=>account.id===recipientId);
       if (sender.balance<transfer.amountCents) {await db.query("ROLLBACK");return send(res,409,{error:"Insufficient available balance"});}
       if (!Number.isSafeInteger(sender.balance) || !Number.isSafeInteger(receiver.balance) || receiver.balance>Number.MAX_SAFE_INTEGER-transfer.amountCents)
@@ -71,6 +80,7 @@ export async function handleWallet({req,res,path,user,pool,send,readJson}) {
       for(const [accountId,delta,balance] of [[user.id,-transfer.amountCents,senderAfter],[recipientId,transfer.amountCents,receiverAfter]])
         await db.query("INSERT INTO wallet_entries(id,transfer_id,user_id,tenant_id,delta_cents,balance_after_cents) VALUES($1,$2,$3,$4,$5,$6)",
           [randomUUID(),id,accountId,user.tenant_id,delta,balance]);
+      if(body.requestId)await db.query("UPDATE wallet_requests SET status='paid',transfer_id=$1 WHERE id=$2 AND tenant_id=$3 AND status='pending'",[id,body.requestId,user.tenant_id]);
       await db.query("COMMIT");
       return send(res,201,{id,status:"completed",balanceCents:senderAfter});
     } catch(error) {await db.query("ROLLBACK");throw error;} finally {db.release();}

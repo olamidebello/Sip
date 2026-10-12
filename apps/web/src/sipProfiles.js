@@ -17,7 +17,7 @@ function choices(root,mode){
 }
 function fill(root,policy){for(const input of root.querySelectorAll('select')) input.value=policy[input.name]===undefined?'':String(policy[input.name]);}
 function values(root){return Object.fromEntries([...root.querySelectorAll('select')].filter(input=>input.value!=='').map(input=>[input.name,input.value==='true']));}
-export function setupSipProfiles({get,request}){
+export function setupSipProfiles({get,request,permissionsChanged=()=>{}}){
   const form=document.querySelector('#sip-profile-create');
   const list=document.querySelector('#sip-profile-list');
   const status=document.querySelector('#sip-profile-status');
@@ -27,7 +27,7 @@ export function setupSipProfiles({get,request}){
     const row=document.createElement('li');
     const title=document.createElement('span');title.textContent=`${profile.label}: ${profile.username}@${profile.domain} · ${profile.wssUrl} `;row.append(title);
     if(permissions.edit){const use=document.createElement('button');use.type='button';use.textContent='Use in dialer';use.onclick=()=>{
-      const dialer=document.querySelector('#connect');dialer.elements.aor.value=`sip:${profile.username}@${profile.domain}`;
+      const dialer=document.querySelector('#connect');dialer.hidden=false;dialer.elements.aor.value=`sip:${profile.username}@${profile.domain}`;
       dialer.elements.username.value=profile.username;dialer.elements.server.value=profile.wssUrl;
       document.querySelector('a[href="#calling-workspace"]')?.click();dialer.elements.password.focus();
     };row.append(use);}
@@ -49,14 +49,16 @@ export function setupSipProfiles({get,request}){
       const dialer=document.querySelector('#connect');
       for(const input of dialer.querySelectorAll('input')) input.readOnly=!result.permissions.edit;
       dialer.dataset.canEdit=String(result.permissions.edit);
+      if(!result.permissions.edit)dialer.hidden=true;
       dialer.querySelector('button').type=result.permissions.edit?'submit':'button';
       dialer.querySelector('button').textContent=result.permissions.edit?'Connect':'Connect my SIP account';
       profiles=result.profiles;list.replaceChildren(...profiles.map(profile=>entry(profile,result.permissions)));
       form.hidden=!result.permissions.add&&!result.permissions.edit;
       if(!profiles.length) status.textContent='No saved connection profiles. SIP password is entered only when connecting.';
+      permissionsChanged();
     }catch(error){list.replaceChildren();form.hidden=true;
-      const dialer=document.querySelector('#connect');for(const input of dialer.querySelectorAll('input'))input.readOnly=true;dialer.dataset.canEdit='false';dialer.querySelector('button').type='button';
-      status.textContent=error.message;}
+      const dialer=document.querySelector('#connect');for(const input of dialer.querySelectorAll('input'))input.readOnly=true;dialer.dataset.canEdit='false';dialer.hidden=true;dialer.querySelector('button').type='button';
+      status.textContent=error.message;permissionsChanged();}
   }
   form.onsubmit=async event=>{
     event.preventDefault();const data=Object.fromEntries(new FormData(form));

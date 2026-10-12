@@ -100,6 +100,16 @@ test("registered users can create and join a room; host controls it", {
     await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal(hostMessages.find((m) => m.type === "chat")?.text, "hello");
 
+  const tenantId=(await db.query('SELECT tenant_id FROM users WHERE id=$1',[hostLogin.body.id])).rows[0].tenant_id;
+  await db.query('INSERT INTO wallet_accounts(user_id,tenant_id,balance_cents) VALUES($1,$2,1000)',[guestLogin.body.id,tenantId]);
+  const moneyRequest=await post('/api/wallet/requests',{payerEmail:'guest'+unique+'@example.com',amountCents:250,note:'Integration payment',idempotencyKey:randomUUID()},hostCookie);
+  assert.equal(moneyRequest.status,201,JSON.stringify(moneyRequest.body));
+  const payRequest={recipientEmail:'host'+unique+'@example.com',amountCents:250,requestId:moneyRequest.body.id,idempotencyKey:moneyRequest.body.id};
+  const paidRequests=await Promise.all([post('/api/wallet/transfers',payRequest,guestCookie),post('/api/wallet/transfers',payRequest,guestCookie)]);
+  assert.deepEqual(paidRequests.map(r=>r.status).sort(),[200,201]);
+  assert.equal(Number((await db.query('SELECT balance_cents FROM wallet_accounts WHERE user_id=$1 AND tenant_id=$2',[guestLogin.body.id,tenantId])).rows[0].balance_cents),750);
+  assert.equal((await db.query('SELECT status FROM wallet_requests WHERE id=$1',[moneyRequest.body.id])).rows[0].status,'paid');
+
   const sip=await db.query('SELECT status FROM sip_accounts WHERE user_id=$1',[hostLogin.body.id]);
   assert.equal(sip.rows[0].status,'awaiting_switch');
   const timezone = await db.query("SELECT @@session.time_zone AS timezone");
