@@ -1,3 +1,4 @@
+import {migrateMessengerFeatures} from './messengerFeatures.js';
 import {migrateSessionPolicy} from './sessionPolicy.js';
 import {migrateNativePush} from './nativePush.js';
 import {migrateConversations} from './conversations.js';
@@ -111,6 +112,7 @@ export async function migrate(pool) {
       ['campaigns', () => migrateCampaigns(pool)],
       ['passkey_policy', () => migratePasskeyPolicy(pool)],
       ['session_policy', () => migrateSessionPolicy(pool)],
+      ['messenger_features', () => migrateMessengerFeatures(pool)],
       ['support', () => migrateSupport(pool)],
       ['locales', () => migrateLocales(pool)]
     ];

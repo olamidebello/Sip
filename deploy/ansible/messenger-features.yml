@@ -1,0 +1,90 @@
+---
+- name: Deploy complete messenger application workflows
+  hosts: switch_nodes
+  become: true
+  vars:
+    messaging_repo: /opt/olamide/repo
+    messaging_domain: sip.dobhrap.com
+  tasks:
+    - name: Validate destination
+      ansible.builtin.assert:
+        that:
+          - messaging_repo == '/opt/olamide/repo'
+          - messaging_domain is match('^[a-zA-Z0-9.-]+$')
+    - name: Reject tracked local changes
+      ansible.builtin.command:
+        argv: [git, diff, HEAD, --exit-code]
+        chdir: '{{ messaging_repo }}'
+      changed_when: false
+    - name: Read the checked out release
+      ansible.builtin.command:
+        argv: [git, rev-parse, HEAD]
+        chdir: '{{ messaging_repo }}'
+      register: messaging_head
+      changed_when: false
+    - name: Fetch successful deployment validations
+      ansible.builtin.uri:
+        url: 'https://api.github.com/repos/olamidebello/Sip/actions/workflows/deploy.yml/runs?branch=main&event=push&status=success&per_page=100'
+        headers:
+          Accept: application/vnd.github+json
+          User-Agent: Olamide-GUI-deployer
+        return_content: true
+        status_code: 200
+        validate_certs: true
+        timeout: 20
+      register: messaging_ci
+    - name: Require CI approval for this exact release
+      ansible.builtin.assert:
+        that:
+          - messaging_head.stdout in (messaging_ci.json.workflow_runs | selectattr('conclusion', 'equalto', 'success') | map(attribute='head_sha') | list)
+        fail_msg: 'This checked out commit has not passed deployment CI. Review GitHub Actions and rerun after success; no downgrade or unvalidated deployment was performed.'
+    - name: Verify messenger release
+      ansible.builtin.stat:
+        path: '{{ messaging_repo }}/services/api/messengerFeatures.js'
+      register: messenger_source
+    - name: Require messenger source
+      ansible.builtin.assert:
+        that: messenger_source.stat.exists
+    - name: Back up MySQL before additive migration
+      ansible.builtin.shell: |
+        set -euo pipefail
+        install -d -m 0700 /opt/olamide/backups
+        umask 077
+        backup=/opt/olamide/backups/session-policy-$(date -u +%Y%m%dT%H%M%S%N).sql.gz
+        docker compose exec -T mysql sh -c 'exec mysqldump --single-transaction --hex-blob -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' | gzip > "$backup"
+        test -s "$backup"
+      args:
+        executable: /bin/bash
+        chdir: '{{ messaging_repo }}/deployment/docker'
+      no_log: true
+      changed_when: true
+    - name: Build application
+      ansible.builtin.command:
+        argv: [docker, compose, build, api, web]
+        chdir: '{{ messaging_repo }}/deployment/docker'
+      changed_when: true
+    - name: Apply additive schema migration
+      ansible.builtin.command:
+        argv: [docker, compose, run, '--rm', migrate]
+        chdir: '{{ messaging_repo }}/deployment/docker'
+      changed_when: true
+      no_log: true
+    - name: Restart application with session enforcement
+      ansible.builtin.command:
+        argv: [docker, compose, up, '-d', '--no-deps', api, web]
+        chdir: '{{ messaging_repo }}/deployment/docker'
+      changed_when: true
+    - name: Verify public HTTPS routes
+      ansible.builtin.uri:
+        url: 'https://{{ messaging_domain }}{{ item }}'
+        status_code: 200
+        validate_certs: true
+        timeout: 10
+      loop: ['/', '/api/health']
+      register: messaging_health
+      until: messaging_health is succeeded
+      retries: 6
+      delay: 5
+    - name: Report deployment
+      ansible.builtin.debug:
+        msg: 'Messenger workflows deployed. Verify two-user messages, group membership, voice notes, attachment access, status privacy and SIP/video media using real devices.'

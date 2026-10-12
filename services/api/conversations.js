@@ -42,23 +42,23 @@ export async function handleConversations({req,res,path,user,pool,send,readJson,
     const contact=url.searchParams.get('contact');
     if(!await conversationContact(pool,user,contact))return send(res,403,{error:'Add an active workspace contact first'});
     const messages=await pool.query(`SELECT m.id,m.sender_id AS sender,m.recipient_id AS recipient,
-      CASE WHEN m.deleted_at IS NULL THEN m.body ELSE '' END AS body,m.created_at,m.reply_to,m.read_at,m.edited_at,m.deleted_at,
+      CASE WHEN m.deleted_at IS NULL THEN m.body ELSE '' END AS body,m.created_at,m.reply_to,m.read_at,m.edited_at,m.deleted_at,m.attachment_id,a.name AS attachment_name,a.mime AS attachment_mime,EXISTS(SELECT 1 FROM message_stars stars WHERE stars.user_id=$1 AND stars.message_id=m.id) AS starred,
       CASE WHEN r.deleted_at IS NULL THEN r.body ELSE '' END AS reply_body
-      FROM messages m LEFT JOIN messages r ON r.id=m.reply_to AND ((r.sender_id=m.sender_id AND r.recipient_id=m.recipient_id) OR (r.sender_id=m.recipient_id AND r.recipient_id=m.sender_id))
+      FROM messages m LEFT JOIN messenger_attachments a ON a.id=m.attachment_id LEFT JOIN messages r ON r.id=m.reply_to AND ((r.sender_id=m.sender_id AND r.recipient_id=m.recipient_id) OR (r.sender_id=m.recipient_id AND r.recipient_id=m.sender_id))
       WHERE (m.sender_id=$1 AND m.recipient_id=$2) OR (m.sender_id=$2 AND m.recipient_id=$1)
       ORDER BY m.created_at DESC,m.id DESC LIMIT 100`,[user.id,contact]);
-    const prefs=(await pool.query(`SELECT owner_id,blocked,muted,archived,typing_until>NOW(3) AS typing
+    const prefs=(await pool.query(`SELECT owner_id,blocked,muted,archived,pinned,unread,typing_until>NOW(3) AS typing
       FROM conversation_preferences WHERE (owner_id=$1 AND contact_id=$2) OR (owner_id=$2 AND contact_id=$1)`,[user.id,contact])).rows;
     const reactionRows=(await pool.query(`SELECT r.message_id,r.user_id,r.reaction FROM message_reactions r JOIN messages m ON m.id=r.message_id
       WHERE ((m.sender_id=$1 AND m.recipient_id=$2) OR (m.sender_id=$2 AND m.recipient_id=$1)) AND m.deleted_at IS NULL
       ORDER BY m.created_at DESC LIMIT 200`,[user.id,contact])).rows;
     const own=prefs.find(p=>p.owner_id===user.id),other=prefs.find(p=>p.owner_id===contact);
     return send(res,200,{viewer:user.id,messages:messages.rows.reverse(),reactions:reactionRows,
-      preferences:{blocked:!!own?.blocked,muted:!!own?.muted,archived:!!own?.archived},typing:!own?.blocked&&!other?.blocked&&!!other?.typing});
+      preferences:{blocked:!!own?.blocked,muted:!!own?.muted,archived:!!own?.archived,pinned:!!own?.pinned,unread:!!own?.unread},typing:!own?.blocked&&!other?.blocked&&!!other?.typing});
   }
   if(path==='/api/messages' && req.method==='POST') {
-    const {recipient,body,replyTo=null}=await readJson(req);
-    if(typeof body!=='string'||!body.trim()||body.length>4000||(replyTo!==null&&!uuid.test(replyTo)))return send(res,400,{error:'Message required (up to 4000 characters)'});
+    const {recipient,body,replyTo=null,attachmentId=null}=await readJson(req);
+    if(typeof body!=='string'||!body.trim()||body.length>4000||(attachmentId!==null&&!uuid.test(attachmentId))||(replyTo!==null&&!uuid.test(replyTo)))return send(res,400,{error:'Message required (up to 4000 characters)'});
     if(!await conversationContact(pool,user,recipient))return send(res,403,{error:'Add an active workspace contact first'});
     const db=await pool.connect();
     try {
@@ -73,8 +73,10 @@ export async function handleConversations({req,res,path,user,pool,send,readJson,
         ((sender_id=$1 AND recipient_id=$2) OR (sender_id=$2 AND recipient_id=$1))`,[user.id,recipient,replyTo])).rowCount){
         await db.query('ROLLBACK');return send(res,400,{error:'Reply message unavailable'});
       }
+      if(attachmentId && !(await db.query('SELECT 1 FROM messenger_attachments WHERE id=$1 AND owner_id=$2 AND tenant_id=$3',[attachmentId,user.id,user.tenant_id])).rowCount){await db.query('ROLLBACK');return send(res,400,{error:'Attachment unavailable'});}
       const id=randomUUID();
       await db.query('INSERT INTO messages(id,sender_id,recipient_id,body,reply_to) VALUES($1,$2,$3,$4,$5)',[id,user.id,recipient,body.trim(),replyTo]);
+      if(attachmentId)await db.query('UPDATE messages SET attachment_id=$2 WHERE id=$1',[id,attachmentId]);
       const forwarding=(await db.query('SELECT message_forward FROM user_presence WHERE user_id=$1',[recipient])).rows[0]?.message_forward;
       if(forwarding && forwarding!==user.id && forwarding!==recipient) {
         const destination=await db.query(`SELECT u.id FROM users u JOIN user_presence p ON p.user_id=u.id
@@ -94,14 +96,15 @@ export async function handleConversations({req,res,path,user,pool,send,readJson,
   if(thread&&req.method==='PUT') {
     const contact=thread[1],input=await readJson(req);
     if(!await conversationContact(pool,user,contact))return send(res,403,{error:'Conversation unavailable'});
-    if(Object.keys(input).some(key=>!['blocked','muted','archived','typing','read'].includes(key))||Object.values(input).some(value=>typeof value!=='boolean'))return send(res,400,{error:'Boolean conversation controls required'});
+    if(Object.keys(input).some(key=>!['blocked','muted','archived','pinned','unread','typing','read'].includes(key))||Object.values(input).some(value=>typeof value!=='boolean'))return send(res,400,{error:'Boolean conversation controls required'});
     const db=await pool.connect();
     try{
       await db.query('BEGIN');
       for(const id of [user.id,contact].sort())await db.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[id]);
       await db.query('INSERT IGNORE INTO conversation_preferences(owner_id,contact_id) VALUES($1,$2)',[user.id,contact]);
-      for(const key of ['blocked','muted','archived'])if(key in input)await db.query(`UPDATE conversation_preferences SET ${key}=$3 WHERE owner_id=$1 AND contact_id=$2`,[user.id,contact,input[key]]);
+      for(const key of ['blocked','muted','archived','pinned','unread'])if(key in input)await db.query(`UPDATE conversation_preferences SET ${key}=$3 WHERE owner_id=$1 AND contact_id=$2`,[user.id,contact,input[key]]);
       if('typing' in input)await db.query(`UPDATE conversation_preferences SET typing_until=${input.typing?'DATE_ADD(NOW(3),INTERVAL 8 SECOND)':'NULL'} WHERE owner_id=$1 AND contact_id=$2`,[user.id,contact]);
+      if(input.read)await db.query('UPDATE conversation_preferences SET unread=FALSE WHERE owner_id=$1 AND contact_id=$2',[user.id,contact]);
       if(input.read)await db.query('UPDATE messages SET read_at=COALESCE(read_at,NOW(3)) WHERE sender_id=$1 AND recipient_id=$2',[contact,user.id]);
       await db.query('COMMIT');return send(res,200,{status:'saved'});
     }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}

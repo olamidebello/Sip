@@ -23,14 +23,14 @@ test('chat renders text safely, sends replies and edits to the right backend rou
 });
 test('blocked conversations disable sending and read receipts acknowledge only displayed incoming messages',async()=>{
  const f=fixture({...base,preferences:{...base.preferences,blocked:true},messages:[{...base.messages[0],sender:'peer',recipient:'me'}]});try{
- await f.api.refresh();assert.equal(f.document.querySelector('#send-message button').disabled,true);
+ await f.api.refresh();assert.equal(f.document.querySelector('#send-message button:not([type=button])').disabled,true);
  assert.ok(f.calls.some(c=>c.path==='/api/messages/conversation/peer'&&c.method==='PUT'&&c.body.read===true));
  }finally{f.close();}
 });
 test('message search and reactions use supported controls and server mutations',async()=>{
  const f=fixture({...base,reactions:[{message_id:'msg',user_id:'peer',reaction:'👍'}]});try{
  await f.api.refresh();assert.equal(f.document.querySelector('.reaction-counts').textContent,'👍 1');
- const select=f.document.querySelector('.message-actions select');select.value='❤️';await select.onchange();
+ const select=f.document.querySelector('.message-actions select[aria-label="React to message"]');select.value='❤️';await select.onchange();
  assert.ok(f.calls.some(c=>c.path==='/api/messages/msg'&&c.method==='PUT'&&c.body.reaction==='❤️'));
  f.document.querySelector('#message-search').value='missing';await f.api.refresh();assert.equal(f.document.querySelector('#message-list').children.length,0);
  }finally{f.close();}

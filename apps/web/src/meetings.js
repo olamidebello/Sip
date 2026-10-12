@@ -1,7 +1,7 @@
 import {meetingInviteUrl,meetingInviteId,invitedMeeting} from './meetingInvite.js';
 export function setupMeetings() {
   const root = document.querySelector("#meetings");
-  const $ = (selector) => root.querySelector(selector);
+  const $ = (selector) => root.querySelector(selector)||document.querySelector(selector);
   const invited=invitedMeeting(location.href);
   function displayInvite(id){$('#meeting-invite-link').value=meetingInviteUrl(id,location.origin);$('#meeting-invite').hidden=false;}
   let ws, localStream, screenStream, roomId, selfId, hostId, localTile;

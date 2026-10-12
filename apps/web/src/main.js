@@ -1,3 +1,4 @@
+import {messengerPanels,setupMessengerHub} from './messengerHub.js';
 import {setupSessionAdmin} from './sessionAdmin.js';
 import {createSessionWatch} from './sessionWatch.js';
 import {setupDialerContacts} from './dialerContacts.js';
@@ -339,6 +340,8 @@ root.innerHTML = `
       <label><input id="conversation-blocked" type="checkbox"> Block messages</label>
       <label><input id="conversation-muted" type="checkbox"> Mute conversation</label>
       <label><input id="conversation-archived" type="checkbox"> Archive conversation</label>
+      <label><input id="conversation-pinned" type="checkbox"> Pin chat</label>
+      <label><input id="conversation-unread" type="checkbox"> Mark unread</label>
     </div>
     <p id="conversation-typing" role="status" aria-live="polite"></p>
     <label>Search this conversation <input id="message-search" type="search" placeholder="Find a message"></label>
@@ -1156,6 +1159,7 @@ root.innerHTML = `
   <footer class="site-copyright"><p><a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a></p><small>© 2026 Olamide Olatayo Bello. All rights reserved. Third-party components retain their own licenses.</small></footer>
 `;
 
+root.insertAdjacentHTML('beforeend',messengerPanels());
 const $ = (selector) => document.querySelector(selector);
 root.append($('#fleet-admin'));
 root.append($('#activity-monitor'));
@@ -1165,6 +1169,7 @@ setupFormGroups();
 $('#contact-directory').append($('#add-contact'),$('#chat .bulk-controls'));
 setupChatLanding(document);
 setupChatGestures(document);
+const messengerHub=setupMessengerHub({document,request:(...args)=>accountRequest(...args),get:(...args)=>apiGet(...args),show:showWorkspace,isSignedIn:()=>!!activeRole,openContact:id=>{showWorkspace('chat');const select=$('#contact-list');select.value=id;select.dispatchEvent(new window.Event('change',{bubbles:true}));$('#chat').classList.add('thread-open');}});
 const callGui=setupCallGui({document,openVideo:()=>{
   if($('#meetings').hidden){$('#chat-status').textContent='Video meetings are not enabled for this account.';return;}
   showWorkspace('meetings');$('#meeting-create input')?.focus();
@@ -1173,9 +1178,9 @@ setupDownloads();
 setupCarrierControl();
 const navigationGroups=[
   {label:"Workspace",items:[["dashboard","Dashboard"],["campaign-inbox-panel","Announcements"],["planner","Events & tasks"],["search-panel","Search"],["support","Support tickets"],["help","Help & tutorials"]]},
-  {label:"Communications",items:[["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
+  {label:"Communications",items:[["messenger-groups","Groups & communities"],["messenger-updates","Status updates"],["messenger-broadcast","Broadcast"],["messenger-starred","Starred messages"],["messenger-sessions","Linked sessions"],["messenger-storage","Storage & data"],["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["money","Money"],["product-store","Products & services"],["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
-  {label:"My settings",items:[["account","Account & security"],["activity-monitor","Activity monitor"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
+  {label:"My settings",items:[["messenger-settings","Messenger settings"],["account","Account & security"],["activity-monitor","Activity monitor"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
   {label:"Administration",roles:["admin","super_admin"],items:[["product-store-admin","Product catalog & orders"],["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio services"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["passkey-policy-admin","Passkey requirements"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
@@ -1234,6 +1239,7 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   workspaceQuick.record(requested.closest("section[id]")?.id||target);
   if(requested.tagName==="DETAILS")requested.open=true;
   if(!preserveForm){const heading=requested.querySelector("h2,h3,h4,summary");if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});}requested.scrollIntoView({block:"start",behavior:"auto"});}
+  document.dispatchEvent(new document.defaultView.CustomEvent('messenger:navigate',{detail:target}));
   return true;
 }
 function resetWorkspace() {
@@ -1259,7 +1265,7 @@ function updateNavigation() {
   const returnToCall=document.createElement("a");returnToCall.id="return-to-call";returnToCall.href="#calling-workspace";returnToCall.textContent="Return to call";returnToCall.hidden=!onCall;
   nav.append(returnToCall);
   const tabs=document.createElement('div');tabs.className='messenger-tabs';
-  for(const [id,label,symbol] of [['chat','Chats','chat'],['campaign-inbox-panel','Updates','updates'],['meetings','Meetings','people'],['calling-workspace','Calls','calls'],['money','Money','money']]){
+  for(const [id,label,symbol] of [['chat','Chats','chat'],['messenger-updates','Updates','updates'],['messenger-groups','Groups','people'],['calling-workspace','Calls','calls'],['money','Money','money']]){
     if(document.getElementById(id)?.closest('[hidden]'))continue;
     const link=document.createElement('a');link.href=`/#${id}`;link.innerHTML=icon(symbol);const caption=document.createElement('span');caption.textContent=label;link.append(caption);if(activeView===id)link.setAttribute('aria-current','page');tabs.append(link);
   }
@@ -1274,7 +1280,7 @@ function updateNavigation() {
     const logoutButton=document.createElement('button');logoutButton.type='button';logoutButton.className='messenger-logout';logoutButton.textContent='Logout';logoutButton.setAttribute('aria-label','Logout');logoutButton.onclick=()=>$('#logout').click();actions.append(logoutButton);
     const more=document.createElement('button');more.type='button';more.innerHTML=icon('more');more.setAttribute('aria-label','Open menu');more.setAttribute('aria-expanded','false');
     actions.append(more);nav.append(actions);
-    overflowMenu=setupMessengerOverflow({document,nav,trigger:more,show:showWorkspace,newChat:()=>{showWorkspace('chat');$('#chat .chat-new').click();},readAll:async()=>{try{await accountRequest('/api/messages/read-all',{});await loadContacts();$('#chat-status').textContent='All incoming messages marked as read.';}catch(error){$('#chat-status').textContent=error.message;}},isAdmin:['admin','super_admin'].includes(activeRole)});
+    overflowMenu=setupMessengerOverflow({document,nav,trigger:more,show:showWorkspace,newChat:()=>{showWorkspace('chat');$('#chat .chat-new').click();},openHub:kind=>messengerHub.open(kind),readAll:async()=>{try{await accountRequest('/api/messages/read-all',{});await loadContacts();$('#chat-status').textContent='All incoming messages marked as read.';}catch(error){$('#chat-status').textContent=error.message;}},isAdmin:['admin','super_admin'].includes(activeRole)});
     const settings=document.createElement('a');settings.href='/#account';settings.textContent='Settings';settings.className='messenger-settings-entry';nav.append(settings);
   }
   const search=document.createElement("input");search.type="search";search.className="menu-search";search.placeholder="Find a menu…";search.setAttribute("aria-label","Find a menu");nav.append(search);
@@ -1370,7 +1376,7 @@ const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
 const sessionAdmin=setupSessionAdmin(document);
 const sessionWatch=createSessionWatch({window,check:async()=>{const response=await fetch('/api/me',{cache:'no-store'});return response.status!==401;},onRevoked:async()=>{
-  await autoSip.stop().catch(()=>{});meetings.hide();
+  messengerHub.stop();conversations.stopMedia();await autoSip.stop().catch(()=>{});meetings.hide();
   if(phone){await phone.hangup().catch(()=>{});await phone.unregister().catch(()=>{});await phone.disconnect().catch(()=>{});phone=undefined;}
   callState(false);
   window.location.replace('/login?reason=session-replaced');
@@ -1692,10 +1698,11 @@ async function refreshGoogleOAuth(){try{const data=await apiGet('/api/admin/goog
 $('#google-oauth-refresh').onclick=refreshGoogleOAuth;
 $('#google-oauth-config').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget,button=form.querySelector('button');button.disabled=true;try{await accountRequest('/api/admin/google-contacts',{clientId:form.elements.clientId.value,enabled:form.elements.enabled.checked},'PUT');await refreshGoogleOAuth();await contactDirectory.reconfigureGoogle();$('#google-oauth-admin-status').textContent+=' · Saved. Users can reload contact settings to apply.';}catch(e){$('#google-oauth-admin-status').textContent=e.message;}finally{button.disabled=false;}};
 const contactDirectory=setupContactDirectory({get:apiGet,request:accountRequest,contactsChanged:()=>loadContacts()});
-async function loadContacts() {
-  await contactDirectory.refresh();
+async function loadContacts(refreshDirectory=true) {
+  if(refreshDirectory)await contactDirectory.refresh();
   const { contacts } = await apiGet("/api/contacts");
   conversations.setContacts(contacts);
+  messengerHub.setContacts(contacts);
   void dialerContacts.refresh();
   const list = $("#contact-list");
   const selected = list.value;
@@ -1704,7 +1711,7 @@ async function loadContacts() {
     if(contact.archived&&!$("#show-archived-conversations").checked)continue;
     const option = document.createElement("option");
     option.value = contact.id;
-    option.dataset.name=contact.name;option.dataset.preview=contact.email;
+    option.dataset.name=contact.name;option.dataset.preview=contact.email;option.dataset.pinned=String(!!contact.pinned);option.dataset.unread=String(!!contact.unread);
     option.textContent = `${contact.name} (${contact.email})${contact.archived?" · archived":""}${contact.muted?" · muted":""}`;
     list.append(option);
   }
@@ -1719,6 +1726,7 @@ const conversations=setupConversations({get:apiGet,request:accountRequest,isSign
 async function loadMessages(){await conversations.refresh();}
 function signedIn(user) {
   sessionWatch.start();
+  void messengerHub.refresh(user);conversations.resumeMedia();
   sessionAdmin.refresh(user).catch(error=>{$("#session-policy-status").textContent=error.message;});
   if(user.mustChangePassword){
     activeRole='pending_password_change';
@@ -2097,7 +2105,7 @@ $("#contacts-export").onclick=async()=>{
     $("#chat-status").textContent=`Exported ${contacts.length} contacts.`;
   } catch(error) {$("#chat-status").textContent=error.message;}
 };
-$("#contact-list").onchange = () => {conversations.clearDraft();return loadMessages().catch((error) => {
+$("#contact-list").onchange = () => {conversations.clearDraft();conversations.clearAttachment();return loadMessages().catch((error) => {
   $("#chat-status").textContent = error.message;
 });};
 $("#load-messages").onclick = () => loadMessages().catch((error) => {
@@ -2339,7 +2347,7 @@ $("#ldap-login").addEventListener("submit",async(event)=>{
   } catch(error) {$("#account-status").textContent=error.message;}
 });
 $("#logout").onclick = async () => {
-  sessionWatch.stop();
+  sessionWatch.stop();messengerHub.stop();conversations.stopMedia();
   $("#user-session-admin").hidden=true;
   try {
     dialerContacts.clear();

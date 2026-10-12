@@ -1,8 +1,10 @@
+import {appendAttachment,setupMediaComposer} from './messengerMedia.js';
 export function setupConversations({get,request,isSignedIn,isVisible,callContact,preferencesChanged}) {
   const $=selector=>document.querySelector(selector),thread=()=>$('#contact-list').value;
+  const media=setupMediaComposer({document,form:$('#send-message'),request,onError:message=>$('#chat-status').textContent=message});
   let contacts=[],replyTo=null,editing=null,loading=false,lastTyping=0;
   function clearDraft(){replyTo=null;editing=null;$('#message-context').hidden=true;$('#send-message button:not([type=button])').textContent='Send';}
-  async function control(input){if(!thread())return;await request('/api/messages/conversation/'+thread(),input,'PUT');if('archived' in input||'muted' in input)await preferencesChanged();else await refresh();}
+  async function control(input){if(!thread())return;await request('/api/messages/conversation/'+thread(),input,'PUT');if('archived' in input||'muted' in input||'pinned' in input||'unread' in input)await preferencesChanged();else await refresh();}
   function action(label,handler){const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=()=>Promise.resolve(handler()).catch(error=>{$('#chat-status').textContent=error.message;});return button;}
   async function refresh() {
     const contact=thread();if(!contact){$('#message-list').replaceChildren();$('#call-contact').disabled=true;$('#send-message button:not([type=button])').disabled=true;$('#send-message [name=body]').disabled=true;$('#conversation-typing').textContent='';return;}if(loading)return;loading=true;
@@ -17,10 +19,12 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
         if(search&&!message.body.toLowerCase().includes(search))continue;
         const own=message.sender===data.viewer,item=document.createElement('li');item.className=own?'message-bubble sent':'message-bubble received';
         if(message.reply_to){const quote=document.createElement('blockquote');quote.textContent=message.reply_body||'Original message removed';item.append(quote);}
-        const body=document.createElement('p');body.textContent=message.deleted_at?'Message removed':message.body;item.append(body);
+        const body=document.createElement('p');body.textContent=message.deleted_at?'Message removed':message.body;item.append(body);appendAttachment(document,item,message);
         const stamp=document.createElement('small');stamp.textContent=new Date(message.created_at).toLocaleString()+(message.edited_at?' · edited':'')+(own?' · '+(message.read_at?'Read':'Sent'):'');item.append(stamp);
         if(!message.deleted_at){
           const controls=document.createElement('div');controls.className='message-actions';
+          controls.append(action(message.starred?'Unstar':'Star',async()=>{await request('/api/messenger/messages/'+message.id+'/star',{starred:!message.starred},'PUT');await refresh();}));
+          const forward=document.createElement('select');forward.setAttribute('aria-label','Forward message to contact');const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Forward to…';forward.append(placeholder);for(const contact of contacts){const option=document.createElement('option');option.value=contact.id;option.textContent=contact.name;forward.append(option);}forward.onchange=async()=>{if(!forward.value)return;try{await request('/api/messenger/messages/'+message.id+'/forward',{recipient:forward.value});$('#chat-status').textContent='Message forwarded.';}catch(error){$('#chat-status').textContent=error.message;}finally{forward.value='';}};controls.append(forward);
           controls.append(action('Reply',()=>{clearDraft();editing=null;replyTo=message.id;$('#message-context').hidden=false;$('#message-context-text').textContent='Replying to: '+message.body.slice(0,90);$('#send-message [name=body]').focus();}));
           if(own){
             controls.append(action('Edit',()=>{clearDraft();replyTo=null;editing=message.id;$('#send-message [name=body]').value=message.body;$('#send-message button:not([type=button])').textContent='Save edit';$('#message-context').hidden=false;$('#message-context-text').textContent='Editing your message';$('#send-message [name=body]').focus();}));
@@ -36,7 +40,7 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
         }
         list.append(item);
       }
-      for(const key of ['blocked','muted','archived'])$('#conversation-'+key).checked=data.preferences[key];
+      for(const key of ['blocked','muted','archived','pinned','unread']){const input=$('#conversation-'+key);if(input)input.checked=data.preferences[key];}
       $('#conversation-typing').textContent=data.typing?'Typing…':'';
       $('#send-message [name=body]').disabled=data.preferences.blocked;
       $('#send-message button:not([type=button])').disabled=data.preferences.blocked;
@@ -44,7 +48,7 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
       if(isVisible()&&document.visibilityState==='visible'&&data.messages.some(m=>m.recipient===data.viewer&&!m.read_at))await request('/api/messages/conversation/'+contact,{read:true},'PUT');
     }finally{loading=false;}
   }
-  for(const key of ['blocked','muted','archived'])$('#conversation-'+key).onchange=()=>control({[key]:$('#conversation-'+key).checked}).catch(error=>{$('#chat-status').textContent=error.message;});
+  for(const key of ['blocked','muted','archived','pinned','unread'])if($('#conversation-'+key))$('#conversation-'+key).onchange=()=>control({[key]:$('#conversation-'+key).checked}).catch(error=>{$('#chat-status').textContent=error.message;});
   $('#message-context-cancel').onclick=clearDraft;
   $('#message-search').oninput=()=>refresh().catch(error=>{$('#chat-status').textContent=error.message;});
   $('#call-contact').onclick=()=>{const contact=contacts.find(c=>c.id===thread());if(contact?.sip_address)callContact(contact.sip_address);};
@@ -53,9 +57,12 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
   };
   const timer=setInterval(()=>{if(isSignedIn()&&isVisible()&&document.visibilityState==='visible')refresh().catch(error=>{$('#chat-status').textContent=error.message;});},5000);
   timer.unref?.();
-  return {refresh,dispose(){clearInterval(timer);},setContacts(value){contacts=value;clearDraft();},clearDraft,async send(body){
+  return {refresh,dispose(){clearInterval(timer);media.stop();},stopMedia(){media.stop();},resumeMedia(){media.resume();},clearAttachment(){media.reset();},setContacts(value){contacts=value;clearDraft();},clearDraft,async send(body){
+    if(media.busy)throw new Error('Finish recording or uploading before sending');
+    body=body||media.name;
     if(editing)await request('/api/messages/'+editing,{body},'PATCH');
-    else await request('/api/messages',{recipient:thread(),body,replyTo});
+    else await request('/api/messages',{recipient:thread(),body,replyTo,...(media.id?{attachmentId:media.id}:{})});
+    media.reset();
     clearDraft();await request('/api/messages/conversation/'+thread(),{typing:false},'PUT').catch(()=>{});
   }};
 }

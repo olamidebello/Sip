@@ -1,3 +1,4 @@
+import {handleMessengerFeatures} from './messengerFeatures.js';
 import {createLimitedSession,handleSessionPolicy} from './sessionPolicy.js';
 import {handleGoogleContactsAdmin} from './googleContactsConfig.js';
 import {startKamailioHttpBridge} from './kamailioHttpBridge.js';
@@ -242,7 +243,7 @@ async function handler(req, res) {
       );
       return send(res, 200, { plans: result.rows });
     }
-    if (path==="/api/activity/events" || path.startsWith("/api/store/") || path==="/api/help/agent" || path.startsWith("/api/rates/flowroute/") || path.startsWith("/api/external-sms/") || path.startsWith("/api/contacts") || path.startsWith("/api/messages") ||
+    if (path==="/api/activity/events" || path.startsWith("/api/store/") || path==="/api/help/agent" || path.startsWith("/api/rates/flowroute/") || path.startsWith("/api/external-sms/") || path.startsWith("/api/contacts") || path.startsWith("/api/messenger/") || path.startsWith("/api/messages") ||
         path.startsWith("/api/admin/") || path==='/api/redirector' || path.startsWith('/api/workspace/shortcuts') || path.startsWith('/api/work/items') || path.startsWith('/api/campaigns/') || path.startsWith("/api/account/") || path==="/api/background" || path==="/api/catalog-policy" || path.startsWith("/api/billing/") ||
         path.startsWith("/api/numbers") || path.startsWith("/api/porting") ||
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
@@ -252,6 +253,7 @@ async function handler(req, res) {
         path === "/api/admin/cdr" || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if(path.startsWith('/api/messenger/')||path.startsWith('/api/account/sessions'))return await handleMessengerFeatures({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin),sessionHash:tokenHash(currentToken(req)),closeSessions:hashes=>meetingSignaling?.closeSessions(hashes)});
       if(path.startsWith('/api/admin/user-sessions'))return await handleSessionPolicy({req,res,path,user,pool,send,readJson,closeSessions:hashes=>meetingSignaling?.closeSessions(hashes)});
       if(path==='/api/admin/google-contacts')return await handleGoogleContactsAdmin({req,res,user,pool,send,readJson});
       if(path==='/api/redirector'&&req.method==='GET'){
@@ -396,7 +398,7 @@ async function handler(req, res) {
       if(path==='/api/account/contact-settings'||path==='/api/contacts/search'||path==='/api/contacts/address-book'||path==='/api/contacts/google/config')return await handleContactSettings({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin)});
       if (path === "/api/contacts" && req.method === "GET") {
         const result = await pool.query(
-          "SELECT u.id, u.display_name AS name, u.email, COALESCE(cp.archived,0) AS archived, COALESCE(cp.muted,0) AS muted, CASE WHEN a.status='active' THEN CONCAT('sip:',a.username,'@',a.domain) ELSE NULL END AS sip_address FROM contacts c JOIN users u ON u.id=c.contact_id LEFT JOIN sip_accounts a ON a.user_id=u.id AND a.tenant_id=u.tenant_id LEFT JOIN conversation_preferences cp ON cp.owner_id=c.owner_id AND cp.contact_id=c.contact_id WHERE c.owner_id=$1 AND u.tenant_id=$2 ORDER BY u.display_name LIMIT 1000",
+          "SELECT u.id, u.display_name AS name, u.email, COALESCE(cp.archived,0) AS archived, COALESCE(cp.muted,0) AS muted,COALESCE(cp.pinned,0) AS pinned, (COALESCE(cp.unread,0) OR EXISTS(SELECT 1 FROM messages unread WHERE unread.sender_id=u.id AND unread.recipient_id=c.owner_id AND unread.read_at IS NULL AND unread.deleted_at IS NULL)) AS unread, CASE WHEN a.status='active' THEN CONCAT('sip:',a.username,'@',a.domain) ELSE NULL END AS sip_address FROM contacts c JOIN users u ON u.id=c.contact_id LEFT JOIN sip_accounts a ON a.user_id=u.id AND a.tenant_id=u.tenant_id LEFT JOIN conversation_preferences cp ON cp.owner_id=c.owner_id AND cp.contact_id=c.contact_id WHERE c.owner_id=$1 AND u.tenant_id=$2 ORDER BY COALESCE(cp.pinned,0) DESC,u.display_name LIMIT 1000",
           [user.id,user.tenant_id]
         );
         return send(res, 200, { contacts: result.rows });

@@ -19,6 +19,7 @@ export function setupCallGui({document,openVideo}) {
     minimize.onclick=()=>{const small=panel.classList.toggle('call-minimized');minimize.textContent=small?'Expand call':'Minimize';minimize.setAttribute('aria-expanded',String(!small));};panel.append(minimize);
   }
   incoming.querySelector('strong')?.remove();
+  document.body.append(incoming,active);
   const duration=document.createElement('p');duration.className='call-duration';duration.setAttribute('aria-label','Call duration');active.querySelector('.call-hero').append(duration);
   for(const id of ['answer','reject','hangup']) {
     const button=document.getElementById(id);const label=button.textContent;
@@ -29,6 +30,7 @@ export function setupCallGui({document,openVideo}) {
   const live=document.getElementById('meeting-live');
   if(live){
     live.classList.add('video-call-overlay');
+    document.body.append(live);
     const minimize=document.createElement('button');minimize.type='button';minimize.className='video-minimize';minimize.textContent='Minimize video';minimize.setAttribute('aria-expanded','true');
     minimize.onclick=()=>{const small=live.classList.toggle('video-minimized');minimize.textContent=small?'Expand video':'Minimize video';minimize.setAttribute('aria-expanded',String(!small));};live.prepend(minimize);
   }

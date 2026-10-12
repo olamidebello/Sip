@@ -404,6 +404,31 @@ test("registered users can create and join a room; host controls it", {
   assert.equal(publishedAll.tenants,2);assert.ok(publishedAll.results.every(r=>r.referenceCount===177));
   assert.equal((await publishAllTenantProducts(db,{terms:'Orders require verified service commissioning and delivery before activation.',check:true})).changed,false);
   assert.equal((await db.query("SELECT COUNT(*) AS total FROM store_products WHERE tenant_id=$1 AND status='published'",[tenant.body.id])).rows[0].total,177);
+  // Full messenger workflows and access boundaries on MySQL.
+  const media=await post('/api/messenger/attachments',{name:'pixel.png',mime:'image/png',data:Buffer.from('89504e470d0a1a0a0000','hex').toString('base64')},hostCookie);
+  assert.equal(media.status,201,JSON.stringify(media.body)+log);
+  const mediaUrl=base+'/api/messenger/attachments/'+media.body.id;
+  assert.equal((await fetch(mediaUrl,{headers:{Cookie:guestCookie}})).status,404);
+  const withFile=await post('/api/messages',{recipient:guestLogin.body.id,body:'Photo',attachmentId:media.body.id},hostCookie);assert.equal(withFile.status,201);
+  assert.equal((await fetch(mediaUrl,{headers:{Cookie:guestCookie}})).status,200);
+  assert.equal((await fetch(mediaUrl,{headers:{Cookie:otherCookie}})).status,404);
+  assert.equal((await mutate('/api/messenger/messages/'+withFile.body.id+'/star','PUT',{starred:true},guestCookie)).status,200);
+  const starred=await fetch(base+'/api/messenger/starred',{headers:{Cookie:guestCookie}});assert.ok((await starred.json()).messages.some(m=>m.id===withFile.body.id));
+  const groupRoom=await post('/api/messenger/groups',{name:'Test group',members:[guestLogin.body.id]},hostCookie);assert.equal(groupRoom.status,201,JSON.stringify(groupRoom.body)+log);
+  const groupPath='/api/messenger/groups/'+groupRoom.body.id;
+  assert.equal((await fetch(base+groupPath,{headers:{Cookie:guestCookie}})).status,200);
+  assert.equal((await fetch(base+groupPath,{headers:{Cookie:otherCookie}})).status,404);
+  assert.equal((await post(groupPath+'/messages',{body:'Member message'},guestCookie)).status,200);
+  const community=await post('/api/messenger/groups',{name:'Announcements',kind:'community',members:[guestLogin.body.id]},hostCookie);assert.equal(community.status,201);
+  assert.equal((await post('/api/messenger/groups/'+community.body.id+'/messages',{body:'Denied member announcement'},guestCookie)).status,403);
+  assert.equal((await post('/api/messenger/groups/'+community.body.id+'/messages',{body:'Owner announcement'},hostCookie)).status,200);
+  assert.equal((await post('/api/messenger/broadcast',{recipients:[guestLogin.body.id],body:'Broadcast'},hostCookie)).status,201);
+  const update=await post('/api/messenger/status',{body:'Private status',audience:'private'},hostCookie);assert.equal(update.status,201);
+  const updateFeed=await fetch(base+'/api/messenger/status',{headers:{Cookie:guestCookie}});assert.equal((await updateFeed.json()).statuses.some(s=>s.id===update.body.id),false);
+  assert.equal((await mutate(groupPath+'/members','PUT',{operation:'remove',memberId:guestLogin.body.id},hostCookie)).status,200);
+  assert.equal((await fetch(base+groupPath,{headers:{Cookie:guestCookie}})).status,404);
+  assert.equal((await post(groupPath+'/messages',{body:'Removed member denied'},guestCookie)).status,404);
+
   const suspend = await fetch(base + `/api/admin/tenants/${tenant.body.id}/status`,{
     method:"PUT",headers:{Origin:origin,Cookie:hostCookie,"Content-Type":"application/json"},
     body:JSON.stringify({status:"suspended"})
