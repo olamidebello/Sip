@@ -27,3 +27,17 @@ test("unfunded transfer rolls back without inserting a transfer",async()=>{
   assert.equal(statements.at(-1).sql,"ROLLBACK");
   assert.equal(statements.filter(({sql})=>sql.startsWith("SELECT balance_cents")).length,2);
 });
+test('deadlocked duplicate transfer retries and returns original payment without debiting',async()=>{
+  let begins=0,released=0;const statements=[];
+  const db={query:async(sql)=>{
+    statements.push(sql);
+    if(sql==='BEGIN')begins++;
+    if(sql.startsWith('INSERT IGNORE')&&begins===1)throw Object.assign(new Error('deadlock'),{code:'ER_LOCK_DEADLOCK'});
+    if(sql.startsWith('SELECT balance_cents'))return {rows:[{balance_cents:750}],rowCount:1};
+    if(sql.startsWith('SELECT id,recipient_id'))return {rows:[{id:key,recipient_id:recipient,amount_cents:250}],rowCount:1};
+    return {rows:[],rowCount:0};
+  },release(){released++;}};
+  const result=await handleWallet({req:{method:'POST'},res:{},path:'/api/wallet/transfers',user:{id:sender,tenant_id:'tenant-a',features:{billing:true}},pool:{query:async()=>({rows:[{id:recipient}],rowCount:1}),connect:async()=>db},readJson:async()=>({recipientEmail:'b@example.com',amountCents:250,idempotencyKey:key}),send:(_res,status,body)=>({status,body})});
+  assert.equal(result.status,200);assert.equal(result.body.duplicate,true);assert.equal(begins,2);assert.equal(released,1);
+  assert.equal(statements.some(sql=>sql.startsWith('UPDATE wallet_accounts')),false);
+});

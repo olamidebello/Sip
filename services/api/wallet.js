@@ -49,6 +49,8 @@ export async function handleWallet({req,res,path,user,pool,send,readJson}) {
     if (!recipient.rowCount || recipient.rows[0].id===user.id) return send(res,404,{error:"Recipient unavailable"});
     const recipientId=recipient.rows[0].id,db=await pool.connect();
     try {
+      for(let attempt=0;attempt<3;attempt++){
+      try {
       await db.query("BEGIN");
       for(const id of [user.id,recipientId].sort())
         await db.query("INSERT IGNORE INTO wallet_accounts(user_id,tenant_id,balance_cents) VALUES($1,$2,0)",[id,user.tenant_id]);
@@ -57,7 +59,7 @@ export async function handleWallet({req,res,path,user,pool,send,readJson}) {
         const found=await db.query("SELECT balance_cents FROM wallet_accounts WHERE user_id=$1 AND tenant_id=$2 FOR UPDATE",[id,user.tenant_id]);
         accounts.push({id,balance:Number(found.rows[0].balance_cents)});
       }
-      const existing=await db.query("SELECT id,recipient_id,amount_cents FROM wallet_transfers WHERE sender_id=$1 AND idempotency_key=$2",[user.id,transfer.idempotencyKey]);
+      const existing=await db.query("SELECT id,recipient_id,amount_cents FROM wallet_transfers WHERE sender_id=$1 AND idempotency_key=$2 FOR UPDATE",[user.id,transfer.idempotencyKey]);
       if (existing.rowCount) {
         await db.query("ROLLBACK");
         if (existing.rows[0].recipient_id!==recipientId || Number(existing.rows[0].amount_cents)!==transfer.amountCents)
@@ -83,7 +85,13 @@ export async function handleWallet({req,res,path,user,pool,send,readJson}) {
       if(body.requestId)await db.query("UPDATE wallet_requests SET status='paid',transfer_id=$1 WHERE id=$2 AND tenant_id=$3 AND status='pending'",[id,body.requestId,user.tenant_id]);
       await db.query("COMMIT");
       return send(res,201,{id,status:"completed",balanceCents:senderAfter});
-    } catch(error) {await db.query("ROLLBACK");throw error;} finally {db.release();}
+      } catch(error) {
+        await db.query("ROLLBACK");
+        if(attempt<2 && ['ER_LOCK_DEADLOCK','ER_LOCK_WAIT_TIMEOUT'].includes(error.code)) continue;
+        throw error;
+      }
+      }
+    } finally {db.release();}
   }
   return send(res,404,{error:"Wallet route unavailable"});
 }

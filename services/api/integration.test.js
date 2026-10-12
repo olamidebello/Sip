@@ -106,7 +106,7 @@ test("registered users can create and join a room; host controls it", {
   assert.equal(moneyRequest.status,201,JSON.stringify(moneyRequest.body));
   const payRequest={recipientEmail:'host'+unique+'@example.com',amountCents:250,requestId:moneyRequest.body.id,idempotencyKey:moneyRequest.body.id};
   const paidRequests=await Promise.all([post('/api/wallet/transfers',payRequest,guestCookie),post('/api/wallet/transfers',payRequest,guestCookie)]);
-  assert.deepEqual(paidRequests.map(r=>r.status).sort(),[200,201]);
+  assert.deepEqual(paidRequests.map(r=>r.status).sort(),[200,201],JSON.stringify(paidRequests)+" API log: "+log);
   assert.equal(Number((await db.query('SELECT balance_cents FROM wallet_accounts WHERE user_id=$1 AND tenant_id=$2',[guestLogin.body.id,tenantId])).rows[0].balance_cents),750);
   assert.equal((await db.query('SELECT status FROM wallet_requests WHERE id=$1',[moneyRequest.body.id])).rows[0].status,'paid');
 
