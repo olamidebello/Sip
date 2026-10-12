@@ -21,7 +21,7 @@ export function setupContactDirectory({get,request,contactsChanged}){
   async function save(){
     if(importing)return;const current=generation,button=$('#address-book-save');importing=true;render();button.disabled=true;const chosen=pending.filter((_,i)=>selected.has(i));
     try{const result=await saveContactBatches(chosen,request,{valid:()=>current===generation,onBatch:batch=>{if(current!==generation)return;const done=new Set(batch);pending=pending.filter(c=>!done.has(c));selected=new Set(pending.map((_,i)=>i));render();button.disabled=true;}});
-      if(current!==generation)return;preview([]);await refresh();status.textContent=`Imported ${result.processed} contacts into your private address book.`;
+      if(current!==generation)return;preview([]);await refresh();await contactsChanged();status.textContent=`Imported ${result.processed} contacts into your private address book.`;
     }catch(e){if(current===generation){status.textContent=e.message+' Completed batches are saved; retry the remaining preview.';throw e;}}
     finally{importing=false;if(current===generation)render();}
   }

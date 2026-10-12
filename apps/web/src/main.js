@@ -1,3 +1,4 @@
+import {setupDialerContacts} from './dialerContacts.js';
 import {setupMessengerOverflow} from './messengerOverflow.js';
 import {setupMoneyWorkspace} from './moneyWorkspace.js';
 import {createNativeCallClient} from './nativeCallClient.js';
@@ -1092,6 +1093,7 @@ root.innerHTML = `
     <label>Secure WebSocket URL <input name="server" type="url" placeholder="Assigned secure SIP server" autocomplete="off" required></label>
     <button>Connect</button>
   </form>
+  <details id="dialer-contacts" open><summary>Call a contact</summary><label>Search contacts <input id="dialer-contact-search" type="search" placeholder="Name, email, phone or SIP address" autocomplete="off"></label><button id="dialer-contact-refresh" type="button">Refresh contacts</button><ul id="dialer-contact-results"></ul><p id="dialer-contact-status" role="status"></p></details>
   <form id="dial" hidden>
     <label>Number, extension or SIP address <input name="target" placeholder="Extension, +15551234567 or sip:user@domain" autocomplete="off" required></label>
     <div id="dialpad" class="dialpad" role="group" aria-label="Telephone dialpad"></div>
@@ -1311,6 +1313,7 @@ $('#menu-account').onclick=()=>showWorkspace('account');
 $('#menu-logout').onclick=()=>$('#logout').click();
 const connectForm = $("#connect");
 const dialForm = $("#dial");
+const dialerContacts=setupDialerContacts({document,get:apiGet,input:dialForm.elements.target,inCall:()=>onCall,onStatus:message=>status(message)});
 const meetings = setupMeetings();
 const dashboard=setupDashboard({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const support=setupSupport({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
@@ -1660,6 +1663,7 @@ async function loadContacts() {
   await contactDirectory.refresh();
   const { contacts } = await apiGet("/api/contacts");
   conversations.setContacts(contacts);
+  void dialerContacts.refresh();
   const list = $("#contact-list");
   const selected = list.value;
   list.replaceChildren();
@@ -1724,6 +1728,7 @@ function signedIn(user) {
   $("#sip-account-panel").hidden=false;
   refreshSipAccount();
   autoSip.start(user.id);
+  void dialerContacts.refresh();
   void nativePush.start();
   apiGet('/api/softphone/access').then(access=>{$('#calling-access').textContent=access.externalCalls?'Your active plan permits external calling, subject to carrier and billing limits.':'Free account: call active SIP users in your workspace. An active plan is required for external calls and texts.';}).catch(error=>{$('#calling-access').textContent=error.message;});
   sipProfiles.refresh();
@@ -2299,6 +2304,7 @@ $("#ldap-login").addEventListener("submit",async(event)=>{
 });
 $("#logout").onclick = async () => {
   try {
+    dialerContacts.clear();
     contactDirectory.clear();
     moneyWorkspace.stop();
     await nativeCalls.stop();
