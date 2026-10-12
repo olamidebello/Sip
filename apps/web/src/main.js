@@ -1,3 +1,4 @@
+import {setupMessengerOverflow} from './messengerOverflow.js';
 import {setupMoneyWorkspace} from './moneyWorkspace.js';
 import {createNativeCallClient} from './nativeCallClient.js';
 import {createNativePushClient} from './nativePushClient.js';
@@ -1212,7 +1213,9 @@ function resetWorkspace() {
   for(const section of document.querySelectorAll(".workspace-inactive")) section.classList.remove("workspace-inactive");
   $("#admin").classList.remove("admin-subview");
 }
+let overflowMenu;
 function updateNavigation() {
+  overflowMenu?.dispose();
   configurationLinks?.refresh();
   const nav=$("#app-nav");nav.replaceChildren();
   nav.hidden=!activeRole;
@@ -1238,7 +1241,8 @@ function updateNavigation() {
     const actions=document.createElement('div');actions.className='messenger-app-actions';
     const searchChat=document.createElement('button');searchChat.type='button';searchChat.innerHTML=icon('search');searchChat.setAttribute('aria-label','Search chats');searchChat.onclick=()=>{showWorkspace('chat');$('#chat').classList.remove('thread-open');$('#chat .chat-sidebar>input').focus();};actions.append(searchChat);
     const more=document.createElement('button');more.type='button';more.innerHTML=icon('more');more.setAttribute('aria-label','Open menu');more.setAttribute('aria-expanded','false');
-    more.addEventListener('click',()=>{const open=nav.classList.toggle('show-user-tools');more.setAttribute('aria-expanded',String(open));});actions.append(more);nav.append(actions);
+    actions.append(more);nav.append(actions);
+    overflowMenu=setupMessengerOverflow({document,nav,trigger:more,show:showWorkspace,newChat:()=>{showWorkspace('chat');$('#chat .chat-new').click();},readAll:async()=>{try{await accountRequest('/api/messages/read-all',{});await loadContacts();$('#chat-status').textContent='All incoming messages marked as read.';}catch(error){$('#chat-status').textContent=error.message;}},isAdmin:['admin','super_admin'].includes(activeRole)});
     const settings=document.createElement('a');settings.href='/#account';settings.textContent='Settings';settings.className='messenger-settings-entry';nav.append(settings);
   }
   const search=document.createElement("input");search.type="search";search.className="menu-search";search.placeholder="Find a menu…";search.setAttribute("aria-label","Find a menu");nav.append(search);
@@ -1655,6 +1659,7 @@ async function loadContacts() {
     if(contact.archived&&!$("#show-archived-conversations").checked)continue;
     const option = document.createElement("option");
     option.value = contact.id;
+    option.dataset.name=contact.name;option.dataset.preview=contact.email;
     option.textContent = `${contact.name} (${contact.email})${contact.archived?" · archived":""}${contact.muted?" · muted":""}`;
     list.append(option);
   }

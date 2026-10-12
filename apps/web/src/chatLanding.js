@@ -32,7 +32,9 @@ export function setupChatLanding(document){
       if(!option.value||!option.textContent.toLocaleLowerCase().includes(query))continue;
       const button=document.createElement('button');button.type='button';button.className='chat-contact';
       const avatar=document.createElement('span');avatar.className='chat-avatar';avatar.textContent=option.textContent.trim().slice(0,2).toUpperCase();avatar.setAttribute('aria-hidden','true');
-      const name=document.createElement('span');name.className='chat-name';name.textContent=option.textContent;button.append(avatar,name);
+      const copy=document.createElement('span');copy.className='chat-row-copy';
+      const name=document.createElement('span');name.className='chat-name';name.textContent=option.dataset.name||option.textContent;
+      const preview=document.createElement('small');preview.className='chat-preview';preview.textContent=option.dataset.preview||'Open conversation';copy.append(name,preview);button.append(avatar,copy);
       button.setAttribute('aria-pressed',String(option.value===select.value));
       button.addEventListener('click',()=>{select.value=option.value;title.textContent=option.textContent;chat.classList.add('thread-open');select.dispatchEvent(new document.defaultView.Event('change',{bubbles:true}));render();});list.append(button);
     }

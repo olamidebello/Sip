@@ -33,6 +33,11 @@ export async function conversationContact(pool,user,contact) {
 }
 export async function handleConversations({req,res,path,user,pool,send,readJson,url}) {
   if(!user.features?.messaging)return send(res,403,{error:'Messaging unavailable for your groups'});
+  if(path==='/api/messages/read-all'&&req.method==='POST'){
+    const result=await pool.query(`UPDATE messages m JOIN users sender ON sender.id=m.sender_id JOIN contacts c ON c.owner_id=m.recipient_id AND c.contact_id=m.sender_id SET m.read_at=UTC_TIMESTAMP(3) WHERE m.recipient_id=$1 AND sender.tenant_id=$2 AND m.read_at IS NULL AND m.deleted_at IS NULL`,[user.id,user.tenant_id]);
+    return send(res,200,{updated:result.rowCount});
+  }
+
   if(path==='/api/messages' && req.method==='GET') {
     const contact=url.searchParams.get('contact');
     if(!await conversationContact(pool,user,contact))return send(res,403,{error:'Add an active workspace contact first'});
