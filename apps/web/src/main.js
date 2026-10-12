@@ -386,7 +386,7 @@ root.innerHTML = `
     <div data-money-panel="request" hidden><h3>Request money</h3><form id="money-request-form"><label>From <input id="money-payer" type="email" required placeholder="Payer email"></label><label>Amount (USD) <input id="money-request-amount" inputmode="decimal" required></label><label>For <input id="money-request-note" maxlength="200" placeholder="Add a note"></label><button type="submit">Send request</button></form></div>
     <div data-money-panel="activity" hidden><h3>Activity</h3><button id="money-refresh" type="button">Refresh</button><h4>Payment requests</h4><ul id="money-requests"></ul><h4>Transactions</h4><ul id="money-history"></ul></div>
     <div data-money-panel="payments" hidden><h3>Online payments</h3><p id="money-provider-status"></p><ul id="money-invoices"></ul><button id="money-billing" type="button">Plans and billing</button></div>
-    <div data-money-panel="profile" hidden><h3 id="money-profile-name"></h3><p id="money-profile-email"></p><p>USD wallet · transfers within your workspace</p><a href="/#account">Account settings</a></div>
+    <div data-money-panel="profile" hidden><h3 id="money-profile-name"></h3><p id="money-profile-email"></p><p>USD wallet · transfers within your workspace</p><a href="/#account">Account settings</a><button id="money-logout" type="button">Logout</button></div>
     <p id="money-status" role="status" aria-live="polite"></p>
     <nav class="money-tabs" aria-label="Money navigation"><button type="button" data-money-tab="home">$<span>Money</span></button><button type="button" data-money-tab="request">↗<span>Request</span></button><button type="button" data-money-tab="activity">◷<span>Activity</span></button><button type="button" data-money-tab="payments">▣<span>Payments</span></button><button type="button" data-money-tab="profile">○<span>Profile</span></button></nav>
   </section>
@@ -449,7 +449,8 @@ root.innerHTML = `
       <label>Meeting title <input name="title" maxlength="100" required></label>
       <button>Create meeting</button>
     </form>
-    <label>Meeting ID <input id="meeting-id" placeholder="Paste a meeting ID"></label>
+    <div id="meeting-invite" hidden><label>Meeting invite link <input id="meeting-invite-link" type="url" readonly></label><button id="meeting-copy-invite" type="button">Copy invite link</button><button id="meeting-share-invite" type="button">Share invitation</button><p>Participants sign in and press Join meeting. Meeting permissions and room limits apply.</p></div>
+    <label>Meeting ID or invite link <input id="meeting-id" placeholder="Paste an ID or full invite URL"></label>
     <button id="meeting-join" type="button">Join meeting</button>
     <div id="meeting-live" hidden>
       <h3 id="meeting-title"></h3>
@@ -1164,7 +1165,7 @@ const adminTargets=new Set(navigationGroups.filter(group=>group.roles||group.lab
 adminTargets.add('help-admin');
 for(const id of adminTargets)document.getElementById(id)?.setAttribute('data-admin-panel','true');
 function adminTarget(target){return !!document.getElementById(target)?.closest('[data-admin-panel]');}
-function userHome(){return !$('#chat').hidden?'chat':'calling-workspace';}
+function userHome(){if(meetings.invitationId()&&!$('#meetings').hidden)return 'meetings';return !$('#chat').hidden?'chat':'calling-workspace';}
 let activeView="dashboard";
 function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   if(target==="top")target=userHome();
@@ -1187,8 +1188,9 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   for(const link of $('#app-nav').querySelectorAll('.messenger-tabs a')){if(link.hash===`#${target}`)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
   userActivity?.track("navigate",target);
   if(!preserveForm&&historyMode!=="none") {
-    const url=`${adminMode?'/admin':'/'}#${target}`;
-    if(location.pathname+location.hash!==url){history[historyMode==='replace'?'replaceState':'pushState'](null,'',url);}
+    const inviteQuery=target==='meetings'&&meetings.invitationId()?'?meeting='+encodeURIComponent(meetings.invitationId()):'';
+    const url=`${adminMode?'/admin':'/'}${inviteQuery}#${target}`;
+    if(location.pathname+location.search+location.hash!==url){history[historyMode==='replace'?'replaceState':'pushState'](null,'',url);}
     pageRoutes?.render();
   }
   for(const id of workspaceViews) document.getElementById(id)?.classList.toggle("workspace-inactive",id!==rootView);
@@ -1240,6 +1242,7 @@ function updateNavigation() {
   if(!document.body.classList.contains('admin-mode')){
     const actions=document.createElement('div');actions.className='messenger-app-actions';
     const searchChat=document.createElement('button');searchChat.type='button';searchChat.innerHTML=icon('search');searchChat.setAttribute('aria-label','Search chats');searchChat.onclick=()=>{showWorkspace('chat');$('#chat').classList.remove('thread-open');$('#chat .chat-sidebar>input').focus();};actions.append(searchChat);
+    const logoutButton=document.createElement('button');logoutButton.type='button';logoutButton.className='messenger-logout';logoutButton.textContent='Logout';logoutButton.setAttribute('aria-label','Logout');logoutButton.onclick=()=>$('#logout').click();actions.append(logoutButton);
     const more=document.createElement('button');more.type='button';more.innerHTML=icon('more');more.setAttribute('aria-label','Open menu');more.setAttribute('aria-expanded','false');
     actions.append(more);nav.append(actions);
     overflowMenu=setupMessengerOverflow({document,nav,trigger:more,show:showWorkspace,newChat:()=>{showWorkspace('chat');$('#chat .chat-new').click();},readAll:async()=>{try{await accountRequest('/api/messages/read-all',{});await loadContacts();$('#chat-status').textContent='All incoming messages marked as read.';}catch(error){$('#chat-status').textContent=error.message;}},isAdmin:['admin','super_admin'].includes(activeRole)});

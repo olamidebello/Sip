@@ -1,0 +1,4 @@
+const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function meetingInviteUrl(id,origin){if(!uuid.test(id))throw new Error('Enter a valid meeting ID');const url=new URL('/',origin);url.searchParams.set('meeting',id);url.hash='meetings';return url.href;}
+export function meetingInviteId(value,origin){const text=String(value||'').trim();if(uuid.test(text))return text;let url;try{url=new URL(text);}catch{throw new Error('Enter a meeting ID or full invite link');}if(url.origin!==new URL(origin).origin)throw new Error('Use a meeting link from this server');const id=url.searchParams.get('meeting');if(!uuid.test(id||''))throw new Error('Meeting link has no valid meeting ID');return id;}
+export function invitedMeeting(url){try{const parsed=new URL(url);return meetingInviteId(parsed.href,parsed.origin);}catch{return null;}}

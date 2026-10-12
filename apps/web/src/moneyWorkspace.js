@@ -9,6 +9,7 @@ export function setupMoneyWorkspace({document,get,request,show,redirect=url=>loc
  const status=message=>{if($('money-status'))$('money-status').textContent=message;};
  function view(name){tab=name;for(const panel of document.querySelectorAll('[data-money-panel]'))panel.hidden=panel.dataset.moneyPanel!==name;for(const button of document.querySelectorAll('[data-money-tab]'))button.setAttribute('aria-current',button.dataset.moneyTab===name?'page':'false');}
  for(const b of document.querySelectorAll('[data-money-tab]'))b.onclick=()=>view(b.dataset.moneyTab);
+ $('money-logout').onclick=()=>document.getElementById('logout').click();
  $('money-back').onclick=()=>show('chat');$('money-settings').onclick=()=>show('account');
  $('money-funding').onclick=()=>status('Wallet deposits are not configured.');$('money-payout').onclick=()=>status('Bank withdrawals are not configured.');
  $('money-billing').onclick=()=>show('billing');$('money-refresh').onclick=()=>refresh();

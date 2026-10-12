@@ -1,6 +1,9 @@
+import {meetingInviteUrl,meetingInviteId,invitedMeeting} from './meetingInvite.js';
 export function setupMeetings() {
   const root = document.querySelector("#meetings");
   const $ = (selector) => root.querySelector(selector);
+  const invited=invitedMeeting(location.href);
+  function displayInvite(id){$('#meeting-invite-link').value=meetingInviteUrl(id,location.origin);$('#meeting-invite').hidden=false;}
   let ws, localStream, screenStream, roomId, selfId, hostId, localTile;
   let iceServers = [], features = {};
   const peers = new Map();
@@ -154,10 +157,12 @@ export function setupMeetings() {
   }
   async function join(id) {
     if (roomId) leave();
-    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error("Enter a valid meeting ID");
+    id=meetingInviteId(id,location.origin);
+    $('#meeting-id').value=id;
     const [room, config] = await Promise.all([
       api("/api/meetings/" + id), api("/api/meetings/config")
     ]);
+    displayInvite(id);
     iceServers = config.iceServers;
     features = config.features || {};
     try {
@@ -239,10 +244,22 @@ export function setupMeetings() {
       const { id } = await api("/api/meetings",
         { title: new FormData(event.currentTarget).get("title") });
       $("#meeting-id").value = id;
-      status("Room created. Share the meeting ID with signed-in participants.");
+      displayInvite(id);
+      status('Meeting created. Copy or share the invite link with participants.');
       await join(id);
     } catch (error) { status(error.message); }
   });
+  async function copyInvite(){
+    const input=$('#meeting-invite-link');
+    try{if(!navigator.clipboard?.writeText)throw new Error('Clipboard unavailable');await navigator.clipboard.writeText(input.value);status('Meeting invite copied.');}
+    catch{input.focus();input.select();status('Select and copy the invite link above.');}
+  }
+  $('#meeting-copy-invite').onclick=copyInvite;
+  $('#meeting-share-invite').onclick=async()=>{
+    if(!navigator.share){await copyInvite();return;}
+    try{await navigator.share({title:$('#meeting-title').textContent||'Olamide meeting',text:'Join my Olamide meeting',url:$('#meeting-invite-link').value});status('Invite shared.');}
+    catch(error){if(error.name!=='AbortError')await copyInvite();}
+  };
   $("#meeting-join").onclick = () => join($("#meeting-id").value.trim())
     .catch((error) => { leave(); status(error.message); });
   $("#meeting-leave").onclick = () => { leave(); status("Left meeting"); };
@@ -304,9 +321,9 @@ export function setupMeetings() {
   return {
     show() {
       root.hidden = false;
-      const invited = new URL(location.href).searchParams.get("meeting");
-      if (invited) $("#meeting-id").value = invited;
+      if (invited){$('#meeting-id').value=invited;displayInvite(invited);status('Meeting invitation ready. Press Join meeting to enter.');}
     },
-    hide() { leave(); root.hidden = true; }
+    invitationId:()=>invited,
+    hide() { leave(); root.hidden = true;$('#meeting-invite').hidden=true;$('#meeting-invite-link').value=''; }
   };
 }
