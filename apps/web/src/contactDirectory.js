@@ -6,16 +6,24 @@ export function setupContactDirectory({get,request,contactsChanged}){
   let pending=[],selected=new Set(),generation=0,importing=false,phoneAutoSynced=false;
   const fail=e=>{status.textContent=e.message;};
   function preview(rows){$('#address-book-select-all').checked=rows.length>0;pending=rows;selected=new Set(rows.map((_,i)=>i));render();}
-  function render(){const list=$('#address-book-preview');list.replaceChildren();pending.forEach((c,i)=>{const li=document.createElement('li'),label=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.checked=selected.has(i);check.onchange=()=>{check.checked?selected.add(i):selected.delete(i);$('#address-book-save').disabled=!selected.size;};label.append(check,document.createTextNode(`${c.name||'Contact'} · ${c.email} · ${c.phone}`));li.append(label);list.append(li);});$('#address-book-save').disabled=!selected.size;}
+  function selectionState(){
+    const all=$('#address-book-select-all');all.checked=pending.length>0&&selected.size===pending.length;all.indeterminate=selected.size>0&&selected.size<pending.length;all.disabled=!pending.length||importing;
+    $('#address-book-select-all-button').disabled=!pending.length||importing;$('#address-book-clear-selection').disabled=!selected.size||importing;
+    $('#address-book-selection-count').textContent=`${selected.size} of ${pending.length} contacts selected`;
+    $('#address-book-save').disabled=!selected.size||importing;
+  }
+  function render(){const list=$('#address-book-preview');list.replaceChildren();pending.forEach((c,i)=>{const li=document.createElement('li'),label=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.checked=selected.has(i);check.disabled=importing;check.onchange=()=>{check.checked?selected.add(i):selected.delete(i);selectionState();};label.append(check,document.createTextNode(`${c.name||'Contact'} · ${c.email} · ${c.phone}`));li.append(label);list.append(li);});selectionState();}
+  $('#address-book-select-all-button').onclick=()=>{selected=new Set(pending.map((_,i)=>i));render();};
+  $('#address-book-clear-selection').onclick=()=>{selected.clear();render();};
   const googleImport=setupGoogleContactsImport({document,get,preview:receiveContacts,onStatus:message=>{status.textContent=message;}});
   $('#address-book-select-all').onchange=event=>{selected=event.currentTarget.checked?new Set(pending.map((_,i)=>i)):new Set();render();};
   async function receiveContacts(rows){if(importing)throw Error('A contact import is already in progress');preview(rows);if($('#contacts-auto-import').checked){await save();return {imported:true};}status.textContent='Review contacts before importing.';return {imported:false};}
   async function save(){
-    if(importing)return;const current=generation,button=$('#address-book-save');importing=true;button.disabled=true;const chosen=pending.filter((_,i)=>selected.has(i));
+    if(importing)return;const current=generation,button=$('#address-book-save');importing=true;render();button.disabled=true;const chosen=pending.filter((_,i)=>selected.has(i));
     try{const result=await saveContactBatches(chosen,request,{valid:()=>current===generation,onBatch:batch=>{if(current!==generation)return;const done=new Set(batch);pending=pending.filter(c=>!done.has(c));selected=new Set(pending.map((_,i)=>i));render();button.disabled=true;}});
       if(current!==generation)return;preview([]);await refresh();status.textContent=`Imported ${result.processed} contacts into your private address book.`;
     }catch(e){if(current===generation){status.textContent=e.message+' Completed batches are saved; retry the remaining preview.';throw e;}}
-    finally{importing=false;if(current===generation)button.disabled=!selected.size;}
+    finally{importing=false;if(current===generation)render();}
   }
   async function refresh(){
     const current=generation;
