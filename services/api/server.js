@@ -17,6 +17,7 @@ import { handleSipProfiles } from './sipProfiles.js';
 import {handlePaymentAdmin,handlePaymentCheckout,handleStripeWebhook} from './payments.js';
 import {handleCluster} from './cluster.js';
 import {handleProviderWebhook,handleProviderWebhookAdmin} from './providerWebhooks.js';
+import {handleWalletProviderAdmin} from './walletProviders.js';
 import {handleProviderCredentials} from './providerCredentials.js';
 import {handleDidwwCallback,handleDidwwAdmin} from './didwwIntegration.js';
 import { handleCarrierProviders, carrierActive } from './carrierProviders.js';
@@ -266,6 +267,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/campaigns/')||path.startsWith('/api/admin/campaigns'))return await handleCampaigns({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/passkey-policy'))return await handlePasskeyPolicy({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/operations'))return await handleOperationsPolicy({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/admin/wallet-providers')) return await handleWalletProviderAdmin({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/payments/')) return await handlePaymentAdmin({req,res,path,user,pool,send,readJson});
       if(path==='/api/payments/checkout'&&req.method==='POST') return await handlePaymentCheckout({req,res,user,pool,send,readJson,origin});
       if(path.startsWith('/api/admin/provider-webhooks')) return await handleProviderWebhookAdmin({req,res,path,user,pool,send,readJson,origin});
