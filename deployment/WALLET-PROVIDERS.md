@@ -1,7 +1,7 @@
 # Dwolla and Flutterwave provider setup
 
 Super administrators can save tenant-specific wallet provider credentials in
-/admin, under Provider API credentials → Wallet providers. Secrets are write-only
+/admin, under Super admin → Dwolla & Flutterwave API. Secrets are write-only
 and encrypted with the existing PROVIDER_CREDENTIAL_KEY (64 hexadecimal characters).
 Back up that key securely; do not rotate it without migrating encrypted credentials.
 
