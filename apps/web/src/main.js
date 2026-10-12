@@ -898,6 +898,7 @@ root.innerHTML = `
       <ul id="provider-webhook-list"></ul><h4>Recent verified callback receipts</h4><ul id="provider-webhook-events"></ul>
       <p id="provider-webhook-status" role="status"></p>
     </section>
+      <section id="google-oauth-admin" hidden><h3>Google Contacts OAuth</h3><p>Configure Google Contacts for the selected tenant after deployment. Enable the People API and authorize this application's origin in Google Cloud.</p><p id="google-oauth-origin"></p><form id="google-oauth-config"><label>OAuth Client ID <input name="clientId" maxlength="254" placeholder="123-example.apps.googleusercontent.com"></label><label><input name="enabled" type="checkbox">Enable Google Contacts import</label><button>Save OAuth settings</button></form><button id="google-oauth-refresh" type="button">Reload settings</button><p id="google-oauth-admin-status" role="status"></p></section>
       <section id="provider-credentials-admin" hidden>
         <h4>Provider API credentials</h4>
         <p>Manage DIDWW credentials for the selected tenant. Secrets are encrypted and never displayed again. Saving replaces the credentials; enter the callback secret and call events token again when rotating settings. Configure matching values in DIDWW.</p>
@@ -1151,7 +1152,7 @@ const navigationGroups=[
   {label:"Administration",roles:["admin","super_admin"],items:[["product-store-admin","Product catalog & orders"],["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio services"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["passkey-policy-admin","Passkey requirements"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
-  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["provider-credentials-admin","Provider credentials"],["carrier-adapter-admin","Carrier adapters"]]}
+  {label:"Super admin",roles:["super_admin"],items:[["tenant-admin","Tenants & roles"],["google-oauth-admin","Google Contacts OAuth"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["provider-credentials-admin","Provider credentials"],["carrier-adapter-admin","Carrier adapters"]]}
 ];
 let configurationLinks;
 let localeSettings;
@@ -1651,6 +1652,9 @@ $("#inhouse-price").onsubmit=async(event)=>{
   } catch(error) {$("#inhouse-status").textContent=error.message;}
 };
 $("#refresh-cdr").onclick = () => refreshCdr().catch((error) => { $("#cdr-status").textContent = error.message; });
+async function refreshGoogleOAuth(){try{const data=await apiGet('/api/admin/google-contacts'),form=$('#google-oauth-config');form.elements.clientId.value=data.clientId||'';form.elements.enabled.checked=data.enabled;$('#google-oauth-origin').textContent='Authorized JavaScript origin: '+location.origin;$('#google-oauth-admin-status').textContent=`Tenant ${data.tenantId} · ${data.source} · ${data.configured?'Enabled':'Disabled'}`;}catch(e){$('#google-oauth-admin-status').textContent=e.message;}}
+$('#google-oauth-refresh').onclick=refreshGoogleOAuth;
+$('#google-oauth-config').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget,button=form.querySelector('button');button.disabled=true;try{await accountRequest('/api/admin/google-contacts',{clientId:form.elements.clientId.value,enabled:form.elements.enabled.checked},'PUT');await refreshGoogleOAuth();await contactDirectory.reconfigureGoogle();$('#google-oauth-admin-status').textContent+=' · Saved. Users can reload contact settings to apply.';}catch(e){$('#google-oauth-admin-status').textContent=e.message;}finally{button.disabled=false;}};
 const contactDirectory=setupContactDirectory({get:apiGet,request:accountRequest,contactsChanged:()=>loadContacts()});
 async function loadContacts() {
   await contactDirectory.refresh();
@@ -1725,6 +1729,8 @@ function signedIn(user) {
   sipProfiles.refresh();
   $("#sip-profile-admin").hidden=user.role!=="super_admin";
   $("#provider-webhook-admin").hidden=user.role!=="super_admin";
+  $("#google-oauth-admin").hidden=user.role!=="super_admin";
+  if(user.role==="super_admin")void refreshGoogleOAuth();
   $("#provider-credentials-admin").hidden=user.role!=="super_admin";
   $("#activity-monitor").hidden=false;
   userActivity.start(user.role);

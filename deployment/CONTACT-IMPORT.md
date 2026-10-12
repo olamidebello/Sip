@@ -46,3 +46,16 @@ git pull --ff-only origin main && bash deployment/deploy-user-login.sh
 Existing personal_address_book schema and owner-scoped transaction route are used;
 no new contact database table is necessary. Rebuilding the server cannot grant OS
 permission or enable native access in an already-installed old app binary.
+
+## Configure after deployment in the GUI
+
+Sign in as super admin, select the tenant, and open
+`/admin#google-oauth-admin` (Super admin → Google Contacts OAuth). Enter the
+OAuth Client ID, enable Google Contacts import, and Save OAuth settings.
+The setting persists in tenant_settings and takes effect without a rebuild
+or restart. Database settings override the environment fallback. Disabling
+the saved setting disables import even when an environment client ID exists.
+Tenant admins and ordinary users cannot read or write the admin setting.
+The Client ID is a public OAuth identifier; do not paste a client secret here.
+Google Cloud People API, consent screen, and authorized-origin setup are still
+required. Reload contact settings or sign in again to refresh the user's client.

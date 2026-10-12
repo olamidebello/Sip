@@ -35,5 +35,5 @@ export function setupContactDirectory({get,request,contactsChanged}){
   $('#address-book-import').elements.file.onchange=()=>{if($('#contacts-auto-import').checked)$('#address-book-import').requestSubmit();};
   $('#phone-contact-import').onclick=async()=>{const current=generation,button=$('#phone-contact-import');button.disabled=true;try{const rows=await choosePhoneContacts(window);if(current===generation&&rows.length)await receiveContacts(rows);}catch(e){if(current===generation&&e.name!=='AbortError')fail(e);}finally{button.disabled=false;}};
   $('#address-book-save').onclick=()=>save().catch(()=>{});
-  return {refresh,clear(){generation++;phoneAutoSynced=false;googleImport.clear();preview([]);$('#address-book-list').replaceChildren();$('#user-directory-results').replaceChildren();status.textContent='';}};
+  return {refresh,reconfigureGoogle(){googleImport.clear();return googleImport.prepare();},clear(){generation++;phoneAutoSynced=false;googleImport.clear();preview([]);$('#address-book-list').replaceChildren();$('#user-directory-results').replaceChildren();status.textContent='';}};
 }

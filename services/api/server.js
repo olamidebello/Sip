@@ -1,3 +1,4 @@
+import {handleGoogleContactsAdmin} from './googleContactsConfig.js';
 import {startKamailioHttpBridge} from './kamailioHttpBridge.js';
 import {handleNativePush,pushHookAuthorized,startNativePush} from './nativePush.js';
 import {handleContactSettings} from './contactSettings.js';
@@ -247,10 +248,11 @@ async function handler(req, res) {
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
         path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") || path.startsWith("/api/native-push/") ||
-        path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path.startsWith("/api/dashboard") || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
+        path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path==="/api/admin/google-contacts" || path.startsWith("/api/dashboard") || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
         path === "/api/admin/cdr" || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if(path==='/api/admin/google-contacts')return await handleGoogleContactsAdmin({req,res,user,pool,send,readJson});
       if(path==='/api/redirector'&&req.method==='GET'){
         const region=new URL(req.url,origin).searchParams.get('region')||'global';
         if(!/^[a-zA-Z0-9 ._-]{1,40}$/.test(region))return send(res,400,{error:'Valid region required'});
