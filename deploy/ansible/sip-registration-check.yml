@@ -1,0 +1,40 @@
+---
+- name: Deploy validated registration diagnostics
+  ansible.builtin.import_playbook: messenger-features.yml
+- name: Check SIP registration and repair known authentication failures
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Test secure WebSocket and authenticated SIP registration
+      ansible.builtin.command:
+        argv: [docker, compose, --env-file, /etc/olamide/secrets.env, exec, '-T', api, node, sipLiveCheck.js]
+        chdir: /opt/olamide/repo/deployment/docker
+      register: sip_initial
+      changed_when: false
+      failed_when: false
+    - name: Report initial registration check
+      ansible.builtin.debug:
+        msg: '{{ sip_initial.stdout_lines + sip_initial.stderr_lines }}'
+    - name: Reject failures outside the supported authentication repair
+      ansible.builtin.assert:
+        that:
+          - sip_initial.rc == 0 or (sip_initial.stderr is search('REGISTER returned SIP (401|403)(\s|$)'))
+        fail_msg: 'Registration check failed outside the supported 401/403 repair. Inspect the diagnostic above and switch/API logs. No automatic authentication repair, ACL change or account activation was performed.'
+    - name: Back up and repair generated local subscriber realm and authentication
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/repair_local_sip_domain.py, --from-domain, us-east-va.sip.flowroute.com, --to-domain, sip.dobhrap.com, --refresh-local-auth, --apply]
+      when: sip_initial.rc != 0
+      register: sip_repair
+    - name: Report repair and live verification
+      ansible.builtin.debug:
+        var: sip_repair.stdout_lines
+      when: sip_initial.rc != 0
+    - name: Verify registration again after supported repair
+      ansible.builtin.command:
+        argv: [docker, compose, --env-file, /etc/olamide/secrets.env, exec, '-T', api, node, sipLiveCheck.js]
+        chdir: /opt/olamide/repo/deployment/docker
+      changed_when: false
+      register: sip_final
+    - name: Report verified registration result
+      ansible.builtin.debug:
+        msg: '{{ sip_final.stdout_lines + ["Live registration passed for the probe account. Sign out/in on affected clients and test a two-user call; this does not prove every account or media path."] }}'
