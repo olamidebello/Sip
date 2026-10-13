@@ -21,8 +21,9 @@ export function setupDialpad({root,input,inCall,sendTone,onError}){
     });grid.append(button);
   }
   root.append(grid);
+  input.inputMode="none";
   for(const [label,action] of [['Delete last digit',()=>{input.value=input.value.slice(0,-1);}],['Clear number',()=>{input.value='';}]]){
-    const button=root.ownerDocument.createElement('button');button.type='button';button.textContent=label;
-    button.addEventListener('click',()=>{if(!inCall()){action();input.focus();}});root.append(button);
+    const button=root.ownerDocument.createElement('button');button.type='button';button.textContent=label;button.className=label==='Delete last digit'?'dialpad-backspace':'dialpad-clear';button.setAttribute('aria-label',label);
+    button.addEventListener('click',()=>{if(!inCall()){action();input.focus();input.dispatchEvent(new input.ownerDocument.defaultView.Event("input",{bubbles:true}));}});root.append(button);
   }
 }

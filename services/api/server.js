@@ -1,3 +1,4 @@
+import {handleContactCards} from './contactCards.js';
 import {handleLanguageTools} from './languageTools.js';
 import {handleSocial} from './social.js';
 import {handleContactDiscovery} from './contactDiscovery.js';
@@ -414,6 +415,7 @@ async function handler(req, res) {
         }
         return send(res, 403, { error: "Host permission required" });
       }
+      if(path==='/api/contacts/card')return await handleContactCards({req,res,user,pool,send,readJson});
       if(path==='/api/account/contact-settings'||path==='/api/contacts/search'||path==='/api/contacts/address-book'||path==='/api/contacts/google/config')return await handleContactSettings({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin)});
       if (path === "/api/contacts" && req.method === "GET") {
         const result = await pool.query(

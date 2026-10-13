@@ -1,3 +1,4 @@
+import {setupContactCard} from './contactCard.js';
 import {setupSocialPublishing} from './socialPublishing.js';
 import {setupLanguageTools} from './languageTools.js';
 import {setupContactManagerLayout} from './contactManagerLayout.js';
@@ -1148,7 +1149,7 @@ root.innerHTML = `
     <label>Number, extension or SIP address <input name="target" placeholder="Extension, +15551234567 or sip:user@domain" autocomplete="off" required></label>
     <div id="dialpad" class="dialpad" role="group" aria-label="Telephone dialpad"></div>
     <p class="dialpad-hint">During a connected call, tap the keypad to send menu tones.</p>
-    <button class="dialpad-call">Call</button>
+    <div class="dialpad-actions"><button type="button" id="dialpad-video" aria-label="Create video invitation">Video</button><button class="dialpad-call" aria-label="Place voice call">Call</button></div>
   </form>
   <section id="softphone-tools">
     <h2>Calling tools</h2>
@@ -1384,7 +1385,10 @@ $('#menu-account').onclick=()=>showWorkspace('account');
 $('#menu-logout').onclick=()=>$('#logout').click();
 const connectForm = $("#connect");
 const dialForm = $("#dial");
-const dialerContacts=setupDialerContacts({document,get:apiGet,input:dialForm.elements.target,inCall:()=>onCall,onStatus:message=>status(message)});
+const contactCard=setupContactCard({document,get:apiGet,request:accountRequest,call:c=>{callsScreen.stop();dialForm.elements.target.value=c.target;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));callsScreen.open('keypad');},message:async c=>{callsScreen.stop();if(c.contactId){await loadContacts();$('#contact-list').value=c.contactId;$('#contact-list').dispatchEvent(new Event('change',{bubbles:true}));showWorkspace('chat');$('#chat').classList.add('thread-open');}else{if(!showWorkspace('external-sms'))throw Error('SMS is not enabled for your account');$('#sms-send').elements.to.value=c.target;$('#sms-send').elements.body.focus();}},video:c=>{callsScreen.stop();if(!showWorkspace('meetings'))throw Error('Video meetings are not enabled');$('#meeting-create input').value='Video call with '+c.name;$('#meeting-create input').focus();}});
+const dialerContacts=setupDialerContacts({document,get:apiGet,input:dialForm.elements.target,openContact:c=>void contactCard.open(c),inCall:()=>onCall,onStatus:message=>status(message)});
+$('#dialpad-video').innerHTML=icon('video');$('#dial .dialpad-call').innerHTML=icon('calls');
+$('#dialpad-video').onclick=()=>{callsScreen.stop();if(!showWorkspace('meetings')){status('Video meetings are not enabled for this account');return;}$('#meeting-create input').value='Video call with '+(dialForm.elements.target.value||'contact');$('#meeting-create input').focus();};
 const meetings = setupMeetings();
 const dashboard=setupDashboard({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const support=setupSupport({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
@@ -2411,6 +2415,7 @@ $("#logout").onclick = async () => {
     dialerContacts.clear();
     contactDirectory.clear();
     languageTools.stop();
+    contactCard.stop();
     socialPublishing.clear();
     socialLinks.clear();
     socialWorkspace.stop();
@@ -2585,7 +2590,7 @@ $('#connect-assigned-sip').addEventListener('click',()=>{
 connectForm.querySelector('button').addEventListener('click',()=>{if(connectForm.dataset.canEdit!=='true')autoSip.wake();});
 connectForm.addEventListener("submit",async event=>{event.preventDefault();if(connectForm.dataset.canEdit!=='true'){autoSip.wake();return;}try{await registerSip(new FormData(connectForm));}catch(error){report(error);}});
 
-setupDialpad({root:$('#dialpad'),input:dialForm.elements.target,inCall:()=>onCall,
+setupDialpad({root:$('#dialpad'),input:dialForm.elements.target,openContact:c=>void contactCard.open(c),inCall:()=>onCall,
   sendTone:digit=>phone.sendDTMF(digit),onError:report});
 dialForm.addEventListener("submit", async (event) => {
   event.preventDefault();
