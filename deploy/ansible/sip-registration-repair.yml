@@ -1,0 +1,22 @@
+---
+- name: Deploy validated SIP repair implementation
+  ansible.builtin.import_playbook: messenger-features.yml
+- name: Repair local subscriber registration and verify actual REGISTER
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Back up and repair local realm and subscriber authentication
+      ansible.builtin.command:
+        argv:
+          - python3
+          - /opt/olamide/repo/tools/repair_local_sip_domain.py
+          - --from-domain
+          - us-east-va.sip.flowroute.com
+          - --to-domain
+          - sip.dobhrap.com
+          - --refresh-local-auth
+          - --apply
+      register: registration_repair
+    - name: Report registration probe
+      ansible.builtin.debug:
+        var: registration_repair.stdout_lines

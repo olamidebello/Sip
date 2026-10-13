@@ -33,7 +33,7 @@ def repair_command(compose,source,target,apply=False):
     return compose+['run','--rm','--no-deps','-T','-e','SIP_PROVISION_MODE=kamailio_local','-e','SIP_REPAIR_FROM='+source,'-e','SIP_ACCOUNT_DOMAIN='+target,'api','node','repairSipDomain.js']+(['--apply'] if apply else [])
 
 def main():
-    args=argparse.ArgumentParser();args.add_argument('--from-domain',required=True);args.add_argument('--to-domain',required=True);args.add_argument('--apply',action='store_true');a=args.parse_args()
+    args=argparse.ArgumentParser();args.add_argument('--from-domain',required=True);args.add_argument('--to-domain',required=True);args.add_argument('--apply',action='store_true');args.add_argument('--refresh-local-auth',action='store_true');a=args.parse_args()
     if os.geteuid()!=0:raise SystemExit('Root required')
     for domain in (a.from_domain,a.to_domain):
         if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9.-]{0,251}[a-zA-Z0-9]',domain):raise SystemExit('Valid DNS domains required')
@@ -47,7 +47,10 @@ def main():
     compose=['docker','compose','--env-file',str(canonical)]
     def probe(apply=False):
         subprocess.run(repair_command(compose,a.from_domain,a.to_domain,apply),cwd=cwd,check=True)
+    def refresh(apply=False):
+        subprocess.run(compose+['run','--rm','--no-deps','-T','-e','SIP_PROVISION_MODE=kamailio_local','-e','SIP_ACCOUNT_DOMAIN='+a.to_domain,'api','node','refreshSipAuth.js']+(['--apply'] if apply else []),cwd=cwd,check=True)
     probe()
+    if a.refresh_local_auth:refresh()
     if not a.apply:return
     stamp=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ');backup=pathlib.Path('/opt/olamide/backups/sip-domain-'+stamp);backup.mkdir(mode=0o700,parents=True)
     for index,(path,_)in enumerate(updates):shutil.copy2(path,backup/('config-'+str(index)+'.env'));(backup/('config-'+str(index)+'.env')).chmod(0o600)
@@ -59,6 +62,7 @@ def main():
     subprocess.run(compose+['stop','api'],cwd=cwd,check=True)
     try:
         probe(True)
+        if a.refresh_local_auth:refresh(True)
         for path,content in updates:
             tmp=path.with_name(path.name+'.sip-domain.tmp');tmp.write_text(content);tmp.chmod(0o600);tmp.replace(path)
     finally:
