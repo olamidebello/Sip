@@ -1,6 +1,7 @@
 import {handleSocial} from './social.js';
 import {handleContactDiscovery} from './contactDiscovery.js';
 import {handleSubscriberSettings,deliverSubscriberSms,startSubscriberEmail} from './subscriberDelivery.js';
+import {handleSubscriberRouting,startSubscriberDelivery} from './subscriberRouting.js';
 import {handleViewOnce,startMessageExpiry} from './messagePrivacy.js';
 import {handleMessengerPreferences} from './messengerPreferences.js';
 import {handleScheduledCalls} from './scheduledCalls.js';
@@ -300,6 +301,7 @@ async function handler(req, res) {
       if(path==='/api/external-sms/send'&&req.method==='POST'){const input=await readJson(req);try{const local=await deliverSubscriberSms({user,pool,input});if(local)return send(res,202,local);}catch(e){if(e.status)return send(res,e.status,{error:e.message});throw e;}if(!await activeSubscription(pool,user))return send(res,403,{error:'An active subscription is required for external texts',configurationUrl:'/#billing'});return await handleExternalSms({req,res,path,user,pool,send,readJson:async()=>input});}
 
       if(path.startsWith('/api/social/')) return await handleSocial({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/account/subscriber-routing')) return await handleSubscriberRouting({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/external-sms/')) return await handleExternalSms({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/messaging/webhooks') return await handleMessagingWebhookAdmin({req,res,user,pool,send,origin});
       if(path.startsWith('/api/admin/carrier-adapters')) return await handleAdapterRegistry({req,res,path,user,pool,send,readJson});
@@ -789,16 +791,18 @@ const kamailioHttpBridge=startKamailioHttpBridge(pool);
 const stopSipProvisioning=startSipProvisioning(pool,origin);
 const stopMessageExpiry=startMessageExpiry(pool);
 const stopSubscriberEmail=startSubscriberEmail(pool);
+const stopSubscriberDelivery=startSubscriberDelivery(pool);
 const stopNativePush=startNativePush(pool);
 const stopRateSync=startFlowrouteRateSync(pool);
 const stopStoreRenewals=startStoreRenewals(pool);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
-server.on("close",stopSipProvisioning);
 server.on("close",stopSubscriberEmail);
+server.on("close",stopSipProvisioning);
 server.on("close",()=>kamailioHttpBridge?.close());
 server.on("close",stopNativePush);
+server.on("close",stopSubscriberDelivery);
 server.on("close",stopRateSync);
 server.on("close",stopStoreRenewals);
 meetingSignaling = attachMeetingSignaling(server, { pool, origin, currentUser });
