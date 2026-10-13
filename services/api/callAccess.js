@@ -1,4 +1,4 @@
-import {routeSubscriberNumber} from './subscriberDelivery.js';
+import {onlineNumberTarget} from './subscriberRouting.js';
 export async function activeSubscription(pool,user) {
   const result=await pool.query(`SELECT 1 FROM subscriptions s JOIN plans p ON p.id=s.plan_id
     WHERE s.user_id=$1 AND s.status='active' AND p.tenant_id=$2 AND p.active=true`,[user.id,user.tenant_id]);
@@ -11,7 +11,8 @@ export function parseSipTarget(value) {
 export async function callAccess(pool,user,target) {
   const address=parseSipTarget(target);
   if(!address)return {allowed:false,error:'Enter a valid SIP address'};
-  if(/^\+?[1-9][0-9]{7,14}$/.test(address.username)){const routed=await routeSubscriberNumber(pool,user,'+'+address.username.replace(/^\+/,''));if(routed)return {...await callAccess(pool,user,routed),subscriberNumber:true};}
+  const routed=await onlineNumberTarget(pool,user,address.username);
+  if(routed)return {allowed:true,scope:'internal',target:routed,forwarded:true,route:'online_subscriber'};
   const internal=await pool.query(`SELECT a.user_id,a.tenant_id FROM sip_accounts a
     JOIN users u ON u.id=a.user_id AND u.tenant_id=a.tenant_id JOIN tenants t ON t.id=a.tenant_id
     WHERE a.username=$1 AND a.domain=$2 AND a.status='active' AND u.status='active' AND t.status='active'`,[address.username,address.domain]);

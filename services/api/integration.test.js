@@ -19,6 +19,9 @@ test("registered users can create and join a room; host controls it", {
   const port = 18080 + Math.floor(Math.random() * 1000);
   const origin = "http://127.0.0.1:5173";
   const base = `http://127.0.0.1:${port}`;
+  let registrarOnline=true;
+  const registrar=http.createServer((req,res)=>{res.writeHead(200,{"Content-Type":"application/json"});res.end(JSON.stringify({jsonrpc:"2.0",id:1,result:registrarOnline?{Contacts:[{Address:"sip:subscriber@127.0.0.1",Expires:60}]}:{}}));});
+  registrar.listen(0,"127.0.0.1");await once(registrar,"listening");t.after(()=>registrar.close());
   const codes=new Map();
   const mail=http.createServer(async(req,res)=>{
     let body='';for await(const chunk of req) body+=chunk;
@@ -30,6 +33,7 @@ test("registered users can create and join a room; host controls it", {
   const server = spawn(process.execPath, ["server.js"], {
     cwd: new URL(".", import.meta.url).pathname,
     env: { ...process.env, MYSQL_URL: process.env.TEST_MYSQL_URL,
+      NODE_ENV:"test",SUBSCRIBER_ROUTING_ENABLED:"true",KAMAILIO_LOCATION_RPC_URL:`http://127.0.0.1:${registrar.address().port}/rpc`,
       PUBLIC_ORIGIN: origin, API_RATE_LIMIT:"1000", LISTEN_ADDR: "127.0.0.1", PORT: String(port),
       CDR_INGEST_KEYS_JSON: JSON.stringify({[cdrTenant]:cdrSecret}),
       RESEND_API_KEY:'test-key',RESEND_FROM:'test@example.com',OTP_HMAC_SECRET:'test-only-secret-'.repeat(4),
@@ -450,11 +454,16 @@ test("registered users can create and join a room; host controls it", {
   assert.equal((await mutate('/api/account/subscriber-delivery','PUT',{sms_chat:true,sms_email:false,number_calls:true},guestCookie)).status,200);
   assert.equal((await post('/api/account/subscriber-registration',{registered:true},guestCookie)).status,200);
   const route=await post('/api/softphone/authorize',{target:'sip:'+subscriberNumber+'@carrier.example'},hostCookie);assert.equal(route.status,200,JSON.stringify(route.body));assert.equal(route.body.target,'sip:'+guestAccount.username+'@'+guestAccount.domain);
+  assert.equal((await mutate('/api/account/subscriber-delivery','PUT',{sms_chat:true,sms_email:true,number_calls:true},guestCookie)).status,400);
+  assert.equal((await post('/api/account/subscriber-routing/email-code',{},guestCookie)).status,200);
+  assert.equal((await post('/api/account/subscriber-routing/verify-email',{code:codes.get('guest'+unique+'@example.com')},guestCookie)).status,200);
+  assert.equal((await mutate('/api/account/subscriber-delivery','PUT',{sms_chat:true,sms_email:true,number_calls:true},guestCookie)).status,200);
   const smsInput={to:subscriberNumber,body:'Subscriber text',idempotencyKey:randomUUID()};
   const localSms=await post('/api/external-sms/send',smsInput,hostCookie);assert.equal(localSms.status,202,JSON.stringify(localSms.body));assert.equal(localSms.body.chatDelivered,true);
   assert.equal((await post('/api/external-sms/send',smsInput,hostCookie)).body.duplicate,true);
   assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM messages WHERE id=$1',[localSms.body.id])).rows[0].n),1);
   assert.equal((await post('/api/external-sms/send',{...smsInput,body:'Changed'},hostCookie)).status,409);
+  registrarOnline=false;
   await post('/api/account/subscriber-registration',{registered:false},guestCookie);
   assert.equal((await post('/api/softphone/authorize',{target:'sip:'+subscriberNumber+'@carrier.example'},hostCookie)).status,403);
   assert.equal((await mutate('/api/account/subscriber-delivery','PUT',{sms_chat:false,sms_email:false,number_calls:false},guestCookie)).status,200);

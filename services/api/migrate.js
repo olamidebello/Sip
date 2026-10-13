@@ -1,5 +1,6 @@
 import {migrateContactDiscovery} from './contactDiscovery.js';
 import {migrateSubscriberDelivery} from './subscriberDelivery.js';
+import {migrateSubscriberRouting} from './subscriberRouting.js';
 import {migrateMessagePrivacy} from './messagePrivacy.js';
 import {migrateMessengerPreferences} from './messengerPreferences.js';
 import {migrateScheduledCalls} from './scheduledCalls.js';
@@ -124,8 +125,9 @@ export async function migrate(pool) {
       ['scheduled_calls', () => migrateScheduledCalls(pool)],
       ['messenger_preferences', () => migrateMessengerPreferences(pool)],
       ['support', () => migrateSupport(pool)],
-      ['locales', () => migrateLocales(pool)],
       ['subscriber_delivery', () => migrateSubscriberDelivery(pool)],
+      ['subscriber_routing', () => migrateSubscriberRouting(pool)],
+      ['locales', () => migrateLocales(pool)],
       ['contact_discovery', () => migrateContactDiscovery(pool)]
     ];
     for (const [name, action] of steps) {

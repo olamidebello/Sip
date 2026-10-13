@@ -1,0 +1,23 @@
+---
+# Review .env configuration and the private registrar endpoint before running.
+- name: Configure optional subscriber routing
+  hosts: switch_nodes
+  become: true
+  vars:
+    subscriber_routing_enabled: false
+    subscriber_routing_repo: /opt/olamide/repo
+  tasks:
+    - name: Require an explicit boolean policy
+      ansible.builtin.assert:
+        that:
+          - subscriber_routing_enabled is boolean
+          - subscriber_routing_repo == '/opt/olamide/repo'
+    - name: Set service feature gate
+      ansible.builtin.lineinfile:
+        path: '{{ subscriber_routing_repo }}/deployment/docker/.env'
+        regexp: '^SUBSCRIBER_ROUTING_ENABLED='
+        line: 'SUBSCRIBER_ROUTING_ENABLED={{ subscriber_routing_enabled | ternary("true", "false") }}'
+        create: false
+        mode: '0600'
+      no_log: true
+- import_playbook: messenger-features.yml

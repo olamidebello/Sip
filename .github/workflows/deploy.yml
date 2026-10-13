@@ -40,6 +40,7 @@ jobs:
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/sip-registration-repair.yml
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/subscriber-delivery.yml
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/contact-discovery.yml
+          ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/subscriber-routing.yml
           python3 tools/test_local_sip_domain_repair.py
           ansible-playbook --syntax-check -i deployment/production/inventory.example.ini deployment/ansible/production.yml
           ansible-playbook --syntax-check -i deployment/native-push/inventory.example.ini deployment/ansible/native-system-calls.yml

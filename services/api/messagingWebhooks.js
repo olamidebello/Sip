@@ -1,3 +1,4 @@
+import {queueSubscriberSms} from './subscriberRouting.js';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { isAdmin, defaultTenantId } from './tenancy.js';
 
@@ -99,6 +100,7 @@ export async function handleFlowrouteWebhook({req,res,path,pool,send}) {
     if (match[2].endsWith('-dlr') && result.rowCount)
       await pool.query("UPDATE flowroute_sms_outbound SET status=$1 WHERE tenant_id=$2 AND provider_event_id=$3",
         [event.status || 'receipt',tenant(),event.id]);
+    if(match[2]==='sms') await queueSubscriberSms(pool,{tenantId:tenant(),number:'+'+event.recipient.replace(/^\+/,''),senderNumber:'+'+event.sender.replace(/^\+/,''),body:event.body,eventKey:`flowroute/${event.id}`});
     return send(res,200,{received:true,duplicate:result.rowCount === 0});
   } catch (error) {
     if (error instanceof SyntaxError || error.message.startsWith('Invalid '))
@@ -161,7 +163,9 @@ export async function handleExternalSms({req,res,path,user,pool,send,readJson}) 
       const result=await response.json();
       const providerId=result?.data?.id;
       if(typeof providerId!=='string'||!/^mdr2-[\w-]+$/.test(providerId)) throw new Error('Invalid carrier acknowledgement');
-      await pool.query("UPDATE flowroute_sms_outbound SET status='accepted',provider_event_id=$1 WHERE id=$2",[providerId,id]);
+      await pool.query("UPDATE flowroute_sms_outbound SET status='accepted',forwarding_pending=TRUE,provider_event_id=$1 WHERE id=$2",[providerId,id]);
+      // Forwarding failures cannot change the carrier acceptance result; the worker reconciles accepted rows.
+      try{await queueSubscriberSms(pool,{tenantId:user.tenant_id,number:to,senderNumber:from,body:body.trim(),eventKey:`flowroute/${providerId}`,senderId:user.id});await pool.query("UPDATE flowroute_sms_outbound SET forwarding_pending=FALSE WHERE id=$1",[id]);}catch{console.warn('Subscriber forwarding pending reconciliation');}
       return send(res,202,{id,providerId,status:'accepted'});
     } catch(error) {
       await pool.query("UPDATE flowroute_sms_outbound SET status='unknown' WHERE id=$1 AND status='pending'",[id]);
