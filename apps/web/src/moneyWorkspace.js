@@ -4,7 +4,7 @@ export function dollarsToCents(value){
  if(!Number.isSafeInteger(amount)||amount<1||amount>100000000)throw new Error('Amount must be between $0.01 and $1,000,000');return amount;
 }
 export function setupMoneyWorkspace({document,get,request,show,redirect=url=>location.assign(url),newId=()=>crypto.randomUUID()}){
- const $=id=>document.getElementById(id);let owner=null,version=0,tab='home',pendingTransfer,pendingRequest,loading=false;
+ const $=id=>document.getElementById(id);let owner=null,version=0,tab='home',pendingTransfer,pendingRequest,reviewedRequest=null,loading=false;
  const money=cents=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(cents)/100);
  const status=message=>{if($('money-status'))$('money-status').textContent=message;};
  function view(name){tab=name;for(const panel of document.querySelectorAll('[data-money-panel]'))panel.hidden=panel.dataset.moneyPanel!==name;for(const button of document.querySelectorAll('[data-money-tab]'))button.setAttribute('aria-current',button.dataset.moneyTab===name?'page':'false');}
@@ -35,7 +35,7 @@ export function setupMoneyWorkspace({document,get,request,show,redirect=url=>loc
    const list=$('money-requests');list.replaceChildren();
    for(const row of requests.requests){const li=document.createElement('li');const incoming=row.payer_id===owner;li.textContent=`${incoming?'From '+row.requester_email:'To '+row.payer_email} · ${money(row.amount_cents)} · ${row.status}${row.note?' · '+row.note:''}`;
     if(row.status==='pending'){
-     if(incoming)li.append(action('Pay request',async()=>{await request('/api/wallet/transfers',{recipientEmail:row.requester_email,amountCents:Number(row.amount_cents),requestId:row.id,idempotencyKey:row.id});await refresh();status('Payment request paid.');}));
+     if(incoming)li.append(action('Review payment',async()=>{reviewedRequest={id:row.id,email:row.requester_email,amountCents:Number(row.amount_cents)};$('money-recipient').value=row.requester_email;$('money-amount').value=(Number(row.amount_cents)/100).toFixed(2);$('money-pay-amount').textContent=money(row.amount_cents);view('pay');status('Review the recipient and amount, then confirm payment.');}));
      li.append(action(incoming?'Decline':'Cancel',async()=>{await request('/api/wallet/requests/'+row.id,{action:incoming?'decline':'cancel'},'PUT');await refresh();}));
     }list.append(li);
    }if(!list.children.length)list.textContent='No payment requests yet.';
@@ -46,9 +46,9 @@ export function setupMoneyWorkspace({document,get,request,show,redirect=url=>loc
  async function submit(form,kind){const current=version;const button=form.querySelector('button[type=submit]');button.disabled=true;try{
   const amountCents=dollarsToCents(kind==='pay'?$('money-amount').value:$('money-request-amount').value);
   if(kind==='pay'){
-   const payload={recipientEmail:$('money-recipient').value.trim().toLowerCase(),amountCents};const signature=JSON.stringify(payload);
+   const payload={recipientEmail:$('money-recipient').value.trim().toLowerCase(),amountCents};if(reviewedRequest){if(payload.recipientEmail!==reviewedRequest.email||amountCents!==reviewedRequest.amountCents)throw new Error('Requested recipient and amount changed. Reopen the request to review it.');payload.requestId=reviewedRequest.id;}const signature=JSON.stringify(payload);
    if(!pendingTransfer||pendingTransfer.signature!==signature)pendingTransfer={signature,id:newId()};
-   await request('/api/wallet/transfers',{...payload,idempotencyKey:pendingTransfer.id});if(current!==version)return;pendingTransfer=null;status('Transfer completed.');
+   await request('/api/wallet/transfers',{...payload,idempotencyKey:pendingTransfer.id});if(current!==version)return;pendingTransfer=null;reviewedRequest=null;status('Transfer completed.');
   }else{
    const payload={payerEmail:$('money-payer').value.trim().toLowerCase(),amountCents,note:$('money-request-note').value};const signature=JSON.stringify(payload);
    if(!pendingRequest||pendingRequest.signature!==signature)pendingRequest={signature,id:newId()};
@@ -57,5 +57,5 @@ export function setupMoneyWorkspace({document,get,request,show,redirect=url=>loc
  }catch(e){if(current===version)status(e.message);}finally{button.disabled=false;}}
  $('money-pay-form').onsubmit=e=>{e.preventDefault();return submit(e.currentTarget,'pay');};
  $('money-request-form').onsubmit=e=>{e.preventDefault();return submit(e.currentTarget,'request');};
- return {refresh,payContact(email){if(!owner||typeof email!=='string'||!email.includes('@')||!show('money'))return false;pendingTransfer=null;$('money-recipient').value=email;$('money-amount').value='';view('home');status('Payment to '+email+'. Enter an amount, then tap Pay.');$('money-amount').focus();return true;},start(user){owner=user.id;version++;$('money-profile-name').textContent=user.name||'';$('money-profile-email').textContent=user.email||'';view('home');void refresh();},stop(){owner=null;version++;pendingTransfer=pendingRequest=null;for(const id of ['money-profile-name','money-profile-email','money-history','money-requests','money-invoices','money-status'])$(id).textContent='';$('money-total').textContent='$0.00';$('money-pay-form').reset();$('money-request-form').reset();$('money-amount').value='';}};
+ return {refresh,payContact(email){if(!owner||typeof email!=='string'||!email.includes('@')||!show('money'))return false;pendingTransfer=null;reviewedRequest=null;$('money-recipient').value=email;$('money-payer').value=email;$('money-amount').value='';view('home');status('Send or request money with '+email+'. Enter an amount, then choose Pay or Request.');$('money-amount').focus();return true;},start(user){owner=user.id;version++;$('money-profile-name').textContent=user.name||'';$('money-profile-email').textContent=user.email||'';view('home');void refresh();},stop(){owner=null;version++;pendingTransfer=pendingRequest=reviewedRequest=null;for(const id of ['money-profile-name','money-profile-email','money-history','money-requests','money-invoices','money-status'])$(id).textContent='';$('money-total').textContent='$0.00';$('money-pay-form').reset();$('money-request-form').reset();$('money-amount').value='';}};
 }

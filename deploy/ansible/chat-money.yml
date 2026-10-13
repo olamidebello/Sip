@@ -1,0 +1,29 @@
+---
+- name: Require chat money implementation
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Verify wallet and payment source
+      ansible.builtin.stat:
+        path: '/opt/olamide/repo/{{ item }}'
+      loop:
+        - services/api/wallet.js
+        - services/api/moneyRequests.js
+        - services/api/walletProviders.js
+        - apps/web/src/moneyWorkspace.js
+        - apps/web/src/chatComposerShortcuts.js
+      register: money_sources
+    - name: Require complete source before deploying
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+      loop: '{{ money_sources.results }}'
+- name: Deploy CI approved wallet schema and chat money interface
+  ansible.builtin.import_playbook: chat-experience.yml
+- name: Report money deployment scope
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Report acceptance checks and provider limitations
+      ansible.builtin.debug:
+        msg: 'Chat money deployed: selected-contact Pay and Request, confirmation before transfers, request accept/decline/cancel, internal balance and activity. Existing MySQL wallet accounts, transfers, entries and requests are migrated. Super admin Money navigation grants still apply. Verify using two accounts. External deposits and withdrawals remain unavailable until provider transaction integrations are implemented and activated. This does not install Cash App cards, banking, investments, loans or taxes.'
