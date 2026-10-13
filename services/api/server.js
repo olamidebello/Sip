@@ -1,3 +1,4 @@
+import {createProxyClientResolver,createRequestLimiter,requestLimitRule} from './requestLimits.js';
 import {handleMessengerFeatures} from './messengerFeatures.js';
 import {createLimitedSession,handleSessionPolicy} from './sessionPolicy.js';
 import {handleGoogleContactsAdmin} from './googleContactsConfig.js';
@@ -72,7 +73,8 @@ if (!local && !origin.startsWith("https://"))
   throw new Error("PUBLIC_ORIGIN must use HTTPS outside local development");
 const pool = createDatabase(process.env.MYSQL_URL);
 const maxBodyBytes = 8192;
-const attempts = new Map();
+const requestLimiter=createRequestLimiter();
+const proxyClient=createProxyClientResolver();
 const uuidPattern = /^[0-9a-f-]{36}$/i;
 const meetingIceServers = JSON.parse(process.env.MEETING_ICE_SERVERS_JSON || "[]");
 if (!Array.isArray(meetingIceServers)) throw new Error("MEETING_ICE_SERVERS_JSON must be an array");
@@ -96,16 +98,6 @@ function send(res, status, body, headers = {}) {
     ...headers
   });
   res.end(JSON.stringify(body));
-}
-function limit(req, maximum = Number(process.env.API_RATE_LIMIT || 20)) {
-  const key = req.socket.remoteAddress || "unknown";
-  const now = Date.now();
-  const record = attempts.get(key);
-  const entry = !record || now - record.start > 60000
-    ? { start: now, count: 0 } : record;
-  entry.count++;
-  attempts.set(key, entry);
-  return entry.count <= maximum;
 }
 async function readJson(req, limit=maxBodyBytes) {
   if (!req.headers["content-type"]?.startsWith("application/json"))
@@ -163,10 +155,17 @@ async function handler(req, res) {
   const kamailioRunner=path.startsWith('/api/integrations/kamailio/');
   if (req.method !== "GET" && !nativePushHook && !deployRunner && !kamailioRunner && !switchXml && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
     return send(res, 403, { error: "Invalid origin" });
-  if (req.method !== "GET" && !limit(req,switchXml ? 3000 : (nativePushHook || deployRunner || kamailioRunner || cdrIngest || flowrouteWebhook || stripeWebhook || providerWebhook || didwwWebhook) ? 120 : Number(process.env.API_RATE_LIMIT || 20)))
-    return send(res, 429, { error: "Too many requests" });
-  if(path==="/api/register/captcha"&&req.method==="GET"&&!limit(req,Number(process.env.API_RATE_LIMIT||20)))return send(res,429,{error:"Too many CAPTCHA requests"});
   try {
+    if(req.method!=='GET'||path==='/api/register/captcha'){
+      const external=!!(nativePushHook||deployRunner||kamailioRunner||switchXml||cdrIngest||flowrouteWebhook||stripeWebhook||providerWebhook||didwwWebhook);
+      const client=await proxyClient(req);
+      const edge=requestLimiter.check('edge:'+client,600);
+      if(!edge.allowed)return send(res,429,{error:'Too many requests',retryAfter:edge.retryAfter},{'Retry-After':String(edge.retryAfter)});
+      const rateUser=!external&&currentToken(req)?await currentUser(req):null;
+      const rule=requestLimitRule({path,userId:rateUser?.id,client,external,actions:Number(process.env.API_RATE_LIMIT||120),auth:Number(process.env.AUTH_RATE_LIMIT||20)});
+      const limited=requestLimiter.check(rule.key,rule.maximum);
+      if(!limited.allowed)return send(res,429,{error:'Too many requests',retryAfter:limited.retryAfter},{'Retry-After':String(limited.retryAfter)});
+    }
     if(path==='/api/native-push/wake')return await handleNativePush({req,res,path,pool,send,readJson});
     if (switchXml) return send(res,410,{error:'Legacy XML integration retired'});
     if(kamailioRunner) return await handleKamailioRunner({req,res,path,pool,send,readJson});

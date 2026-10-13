@@ -1545,7 +1545,7 @@ async function accountRequest(path, body, method="POST") {
     body: JSON.stringify(body)
   });
   const data = await response.json();
-  if (!response.ok) {const error=new Error(data.error || "Account request failed");error.status=response.status;throw error;}
+  if (!response.ok) {const error=new Error(data.error || "Account request failed");error.status=response.status;const retry=Number(response.headers.get('Retry-After')||data.retryAfter);if(Number.isFinite(retry)&&retry>0)error.retryAfter=retry;throw error;}
   return data;
 }
 async function apiGet(path) {

@@ -14,3 +14,6 @@ test('revoked application sessions disconnect SIP and stop retries',async()=>{
 test('logout invalidates an in-flight credential response',async()=>{
  let resolve;const f=fixture(()=>new Promise(r=>resolve=r));f.auto.start('user');const run=f.run();await f.auto.stop();resolve({status:'active',username:'stale'});await run;assert.deepEqual(f.calls,['disconnect']);
 });
+test('HTTP 429 pauses reconnect and repeated wake events cannot bypass Retry-After',async()=>{
+ let requests=0;const f=fixture(async()=>{requests++;throw Object.assign(Error('Too many requests'),{status:429,retryAfter:90});});f.auto.start('user');await f.run();assert.equal(f.delay(),90000);f.auto.wake();await f.run();assert.equal(requests,1);assert.ok(f.delay()>89000);assert.match(f.statuses.at(-1),/paused by rate limit/);await f.auto.stop();
+});
