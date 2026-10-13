@@ -1,3 +1,4 @@
+import {setupSocialLinks} from './socialLinks.js';
 import {setupSocialWorkspace} from './socialWorkspace.js';
 import {setupSignupCaptcha} from './signupCaptcha.js';
 import {setupContactDiscovery} from './contactDiscovery.js';
@@ -399,6 +400,7 @@ root.innerHTML = `
   </section>
 
   <section id="social" hidden aria-label="Social platform">
+    <details id="social-links"><summary>Link your social profiles</summary><p>Add links to your existing profiles. This does not connect sign-in, import posts, or verify ownership.</p><form><label>Platform <select name="platform"><option value="x">X / Twitter</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="linkedin">LinkedIn</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="threads">Threads</option><option value="bluesky">Bluesky</option></select></label><label>Profile URL <input name="url" type="url" required maxlength="500" placeholder="https://x.com/yourname"></label><label><input name="visible" type="checkbox" checked>Show to users in my workspace</label><button>Save profile link</button></form><ul></ul><p role="status"></p></details>
     <h2>Olamide Social</h2><p>Connect and share with your workspace.</p>
     <nav aria-label="Social feed"><button type="button" data-social-mode="all">For you</button><button type="button" data-social-mode="following">Following</button><button type="button" data-social-mode="bookmarks">Bookmarks</button></nav>
     <form><label>What is happening? <textarea name="body" required maxlength="560" rows="3" placeholder="Share a post (280 characters)"></textarea></label><p data-social-reply></p><button>Post</button><button type="button" data-social-cancel>Cancel reply</button></form>
@@ -1240,7 +1242,7 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   document.body.classList.toggle('admin-mode',adminMode);
   document.body.classList.toggle('messenger-mode',!adminMode);
   document.body.classList.toggle('money-mode',target==='money');
-  if(target==='social')void socialWorkspace.refresh();
+  if(target==='social'){void socialWorkspace.refresh();void socialLinks.refresh();}
   if(target==='money')void moneyWorkspace.refresh();
   if(modeChanged)updateNavigation();
   const requested=document.getElementById(target);
@@ -1384,6 +1386,7 @@ const support=setupSupport({get:path=>apiGet(path),request:(path,body,method)=>a
 localeSettings=setupLocaleSettings({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const groupAdmin = setupGroupAdmin();
 const sipProfiles = setupSipProfiles({get:apiGet,request:accountRequest,permissionsChanged:updateNavigation});
+const socialLinks=setupSocialLinks({document,get:apiGet,request:accountRequest});
 const socialWorkspace=setupSocialWorkspace({document,get:apiGet,request:accountRequest});
 const moneyWorkspace=setupMoneyWorkspace({document,get:apiGet,request:accountRequest,show:showWorkspace});
 const productStore=setupProductStore({get:apiGet,request:accountRequest,refreshBilling});
@@ -2399,6 +2402,7 @@ $("#logout").onclick = async () => {
   try {
     dialerContacts.clear();
     contactDirectory.clear();
+    socialLinks.clear();
     socialWorkspace.stop();
     moneyWorkspace.stop();
     await nativeCalls.stop();
