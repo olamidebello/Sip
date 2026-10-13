@@ -21,7 +21,7 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
       if(unseen.length&&!data.preferences.muted)$('#chat-status').textContent=`${unseen.length} new message${unseen.length===1?'':'s'}`;
       for(const message of data.messages) {
         if(search&&!message.body.toLowerCase().includes(search))continue;
-        const own=message.sender===data.viewer,item=document.createElement('li');item.className=own?'message-bubble sent':'message-bubble received';
+        const own=message.sender===data.viewer,item=document.createElement('li');item.className=own?'message-bubble sent':'message-bubble received';item.dataset.messageId=message.id;if(!message.deleted_at){item.tabIndex=0;item.setAttribute('aria-expanded','false');item.setAttribute('aria-label','Message. Long press or press Enter for actions.');}
         if(message.reply_to){const quote=document.createElement('blockquote');quote.textContent=message.reply_body||'Original message removed';item.append(quote);}
         const body=document.createElement('p');body.textContent=message.deleted_at?'Message removed':message.body;item.append(body);appendAttachment(document,item,message);
         const stamp=document.createElement('small');stamp.textContent=new Date(message.created_at).toLocaleString()+(message.edited_at?' · edited':'')+(own?' · '+(message.read_at?'Read':'Sent'):'');item.append(stamp);
