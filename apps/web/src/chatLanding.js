@@ -43,7 +43,7 @@ export function setupChatLanding(document){
     const input=composer.querySelector('textarea');
     const send=composer.querySelector('button');
     if(send){send.type='submit';send.innerHTML=icon('send');send.setAttribute('aria-label','Send message');}
-    const toggle=document.createElement('button');toggle.type='button';toggle.className='chat-emoji-toggle';toggle.textContent='☺';toggle.setAttribute('aria-label','Choose emoji');toggle.setAttribute('aria-expanded','false');
+    const toggle=document.createElement('button');toggle.type='button';toggle.className='chat-emoji-toggle';toggle.innerHTML=icon('emoji');toggle.setAttribute('aria-label','Choose emoji');toggle.setAttribute('aria-expanded','false');
     const picker=document.createElement('div');picker.className='chat-emoji-picker';picker.hidden=true;picker.setAttribute('aria-label','Emoji');
     const close=()=>{picker.hidden=true;toggle.setAttribute('aria-expanded','false');};
     toggle.onclick=()=>{picker.hidden=!picker.hidden;toggle.setAttribute('aria-expanded',String(!picker.hidden));};

@@ -1,9 +1,11 @@
+import {icon} from './messengerIcons.js';
 import {appendAttachment,setupMediaComposer} from './messengerMedia.js';
 export function setupConversations({get,request,isSignedIn,isVisible,callContact,preferencesChanged}) {
   const $=selector=>document.querySelector(selector),thread=()=>$('#contact-list').value;
   const media=setupMediaComposer({document,form:$('#send-message'),request,onError:message=>$('#chat-status').textContent=message});
   let contacts=[],replyTo=null,editing=null,loading=false,lastTyping=0,lastRendered='';
-  function clearDraft(){replyTo=null;editing=null;$('#message-context').hidden=true;$('#send-message button:not([type=button])').textContent='Send';}
+  function setSendLabel(label){const button=$('#send-message button:not([type=button])');button.innerHTML=icon('send');button.setAttribute('aria-label',label);button.title=label;}
+  function clearDraft(){replyTo=null;editing=null;$('#message-context').hidden=true;setSendLabel('Send message');}
   async function control(input){if(!thread())return;await request('/api/messages/conversation/'+thread(),input,'PUT');if('archived' in input||'muted' in input||'pinned' in input||'unread' in input)await preferencesChanged();else await refresh();}
   function action(label,handler){const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=()=>Promise.resolve(handler()).catch(error=>{$('#chat-status').textContent=error.message;});return button;}
   async function refresh() {
@@ -29,7 +31,7 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
           const forward=document.createElement('select');forward.setAttribute('aria-label','Forward message to contact');const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Forward to…';forward.append(placeholder);for(const contact of contacts){const option=document.createElement('option');option.value=contact.id;option.textContent=contact.name;forward.append(option);}forward.onchange=async()=>{if(!forward.value)return;try{await request('/api/messenger/messages/'+message.id+'/forward',{recipient:forward.value});$('#chat-status').textContent='Message forwarded.';}catch(error){$('#chat-status').textContent=error.message;}finally{forward.value='';}};controls.append(forward);
           controls.append(action('Reply',()=>{clearDraft();editing=null;replyTo=message.id;$('#message-context').hidden=false;$('#message-context-text').textContent='Replying to: '+message.body.slice(0,90);$('#send-message [name=body]').focus();}));
           if(own){
-            controls.append(action('Edit',()=>{clearDraft();replyTo=null;editing=message.id;$('#send-message [name=body]').value=message.body;$('#send-message button:not([type=button])').textContent='Save edit';$('#message-context').hidden=false;$('#message-context-text').textContent='Editing your message';$('#send-message [name=body]').focus();}));
+            controls.append(action('Edit',()=>{clearDraft();replyTo=null;editing=message.id;$('#send-message [name=body]').value=message.body;setSendLabel('Save edit');$('#message-context').hidden=false;$('#message-context-text').textContent='Editing your message';$('#send-message [name=body]').focus();}));
             controls.append(action('Remove',async()=>{await request('/api/messages/'+message.id,{},'DELETE');await refresh();}));
           }
           const reaction=document.createElement('select');reaction.setAttribute('aria-label','React to message');

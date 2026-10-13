@@ -1,3 +1,4 @@
+import {setupChatComposerShortcuts} from './chatComposerShortcuts.js';
 import {setupMessengerPreferences} from './messengerPreferences.js';
 import {styleMessengerSettings} from './messengerSettings.js';
 import {setupCallsScreen} from './callsScreen.js';
@@ -1195,6 +1196,7 @@ const navigationGroups=[
   {label:"Super admin",roles:["super_admin"],items:[["navigation-policy-admin","End-user navigation"],["user-session-admin","User sessions"],["tenant-admin","Tenants & roles"],["google-oauth-admin","Google Contacts OAuth"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["wallet-providers-admin","Dwolla & Flutterwave API"],["provider-credentials-admin","Carrier credentials"],["carrier-adapter-admin","Carrier adapters"]]}
 ];
 let videoWorkflow=false;
+let chatComposer;
 let navigationPolicy;
 let configurationLinks;
 let localeSettings;
@@ -1391,7 +1393,7 @@ const tenantAdmin = setupTenants();
 const callsScreen=setupCallsScreen({document,get:apiGet,request:accountRequest,show:showWorkspace,dial:address=>{dialForm.elements.target.value=address;dialForm.requestSubmit();}});
 const messengerPreferences=setupMessengerPreferences({document,get:apiGet,request:accountRequest});
 const sessionAdmin=setupSessionAdmin(document);
-navigationPolicy=setupNavigationPolicy({document,get:apiGet,request:accountRequest,changed:()=>{updateNavigation();if(activeRole&&!adminTarget(activeView)&&!navigationAllowed(activeView))showWorkspace(userHome(),{historyMode:'replace'});}});
+navigationPolicy=setupNavigationPolicy({document,get:apiGet,request:accountRequest,changed:()=>{updateNavigation();chatComposer?.refresh();if(activeRole&&!adminTarget(activeView)&&!navigationAllowed(activeView))showWorkspace(userHome(),{historyMode:'replace'});}});
 const sessionWatch=createSessionWatch({window,check:async()=>{const response=await fetch('/api/me',{cache:'no-store'});return response.status!==401;},onRevoked:async()=>{
   messengerHub.stop();conversations.stopMedia();await autoSip.stop().catch(()=>{});meetings.hide();
   if(phone){await phone.hangup().catch(()=>{});await phone.unregister().catch(()=>{});await phone.disconnect().catch(()=>{});phone=undefined;}
@@ -1731,7 +1733,7 @@ async function loadContacts(refreshDirectory=true) {
     if(contact.archived&&!$("#show-archived-conversations").checked)continue;
     const option = document.createElement("option");
     option.value = contact.id;
-    option.dataset.name=contact.name;option.dataset.preview=contact.email;option.dataset.pinned=String(!!contact.pinned);option.dataset.unread=String(!!contact.unread);
+    option.dataset.email=contact.email||'';option.dataset.name=contact.name;option.dataset.preview=contact.email;option.dataset.pinned=String(!!contact.pinned);option.dataset.unread=String(!!contact.unread);
     option.textContent = `${contact.name} (${contact.email})${contact.archived?" · archived":""}${contact.muted?" · muted":""}`;
     list.append(option);
   }
@@ -1743,6 +1745,7 @@ const conversations=setupConversations({get:apiGet,request:accountRequest,isSign
   preferencesChanged:()=>loadContacts(),
   isVisible:()=>!$('#chat').hidden&&!$('#chat').classList.contains('workspace-inactive')&&(!window.matchMedia('(max-width:900px)').matches||$('#chat').classList.contains('thread-open')),
   callContact:address=>{dialForm.elements.target.value=address;showWorkspace('calling-workspace');status('Contact selected. Connect your SIP account, then press Call.');}});
+chatComposer=setupChatComposerShortcuts({document,moneyAllowed:()=>navigationAllowed('money')&&!$('#money').hidden,payContact:email=>moneyWorkspace.payContact(email)});
 async function loadMessages(){await conversations.refresh();}
 function signedIn(user) {
   sessionWatch.start();

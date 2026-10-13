@@ -1,3 +1,4 @@
+import {icon} from './messengerIcons.js';
 export function appendAttachment(document,item,message){
  if(!message.attachment_id||!message.attachment_mime)return;
  const url='/api/messenger/attachments/'+encodeURIComponent(message.attachment_id),mime=message.attachment_mime;
@@ -9,6 +10,7 @@ export function appendAttachment(document,item,message){
  const download=document.createElement('a');download.href=url;download.textContent=message.attachment_name||'Download attachment';download.download=message.attachment_name||'attachment';download.className='messenger-download';item.append(download);
 }
 export function setupMediaComposer({document,form,request,onError,voice=true}){
+ const compact=form.id==='send-message';
  const toolbar=document.createElement('div');toolbar.className='messenger-media-tools';
  const input=document.createElement('input');input.type='file';input.accept='image/png,image/jpeg,image/gif,image/webp,audio/webm,audio/ogg,audio/mp4,video/webm,video/mp4,application/pdf';input.setAttribute('aria-label','Attach a file (up to 2 MB)');
  const preview=document.createElement('span');preview.setAttribute('role','status');
@@ -28,11 +30,12 @@ export function setupMediaComposer({document,form,request,onError,voice=true}){
  }
  input.onchange=()=>{if(input.files[0])void upload(input.files[0]);};
  remove.onclick=async()=>{try{if(attachment)await request('/api/messenger/attachments/'+attachment.id,{},'DELETE');reset();}catch(error){onError(error.message);}};
- toolbar.append(input,preview,remove);form.prepend(toolbar);
+ if(compact){input.hidden=true;const attach=document.createElement('button');attach.type='button';attach.className='chat-attach';attach.innerHTML=icon('attach');attach.setAttribute('aria-label','Attach file');attach.title='Attach file (up to 2 MB)';attach.onclick=()=>input.click();remove.innerHTML=icon('close');remove.setAttribute('aria-label','Remove attachment');remove.title='Remove attachment';preview.className='chat-attachment-preview';toolbar.append(input,attach,preview,remove);}else toolbar.append(input,preview,remove);form.prepend(toolbar);
  let record;
+ function setRecordLabel(label){if(compact)record.innerHTML=icon(label==='Stop recording'?'stop':'mic');else record.textContent=label;record.setAttribute('aria-label',label);}
  function stopTracks(){clearTimeout(timeout);stream?.getTracks().forEach(track=>track.stop());stream=null;}
  if(voice){
-  record=document.createElement('button');record.type='button';record.textContent='Record voice note';record.setAttribute('aria-pressed','false');toolbar.append(record);
+  record=document.createElement('button');record.type='button';setRecordLabel('Record voice note');record.className='chat-record';record.setAttribute('aria-pressed','false');toolbar.append(record);
   record.onclick=async event=>{
    if(event&&Date.now()<suppressClick)return;
    if(recorder?.state==='recording'){recorder.stop();return;}
@@ -45,9 +48,9 @@ export function setupMediaComposer({document,form,request,onError,voice=true}){
     if(!mime){stopTracks();onError('This browser has no supported recording format');return;}
     recorder=new MediaRecorder(stream,{mimeType:mime});let chunks=[],bytes=0;
     recorder.ondataavailable=event=>{if(event.data.size){chunks.push(event.data);bytes+=event.data.size;if(bytes>2*1024*1024&&recorder.state==='recording')recorder.stop();}};
-    recorder.onstop=()=>{stopTracks();record.textContent='Record voice note';record.setAttribute('aria-pressed','false');if(!disposed&&!cancelRecording)void upload(new File(chunks,'voice-note.'+(mime==='audio/ogg'?'ogg':mime==='audio/mp4'?'m4a':'webm'),{type:mime}));gesture=null;cancelRecording=false;};
-    recorder.onerror=()=>{stopTracks();record.textContent='Record voice note';onError('Voice recording failed');};
-    recorder.start(1000);record.textContent='Stop recording';record.setAttribute('aria-pressed','true');timeout=setTimeout(()=>{if(recorder?.state==='recording')recorder.stop();},60000);
+    recorder.onstop=()=>{stopTracks();setRecordLabel('Record voice note');record.setAttribute('aria-pressed','false');if(!disposed&&!cancelRecording)void upload(new File(chunks,'voice-note.'+(mime==='audio/ogg'?'ogg':mime==='audio/mp4'?'m4a':'webm'),{type:mime}));gesture=null;cancelRecording=false;};
+    recorder.onerror=()=>{stopTracks();setRecordLabel('Record voice note');onError('Voice recording failed');};
+    recorder.start(1000);setRecordLabel('Stop recording');record.setAttribute('aria-pressed','true');timeout=setTimeout(()=>{if(recorder?.state==='recording')recorder.stop();},60000);
    }catch(error){stopTracks();onError(error.message);}
   };
   record.addEventListener('pointerdown',event=>{
