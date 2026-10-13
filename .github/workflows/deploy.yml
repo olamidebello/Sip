@@ -45,12 +45,13 @@ jobs:
           docker compose --profile turn --env-file deployment/secrets.env.example -f deployment/docker/compose.yml config -q
           docker build -f deployment/docker/turn.Dockerfile -t olamide-turn-ci .
       - name: API checks
+        timeout-minutes: 5
         working-directory: services/api
         run: |
           npm install --no-audit --no-fund
-          MYSQL_URL="$TEST_MYSQL_URL" node migrate.js
-          MYSQL_URL="$TEST_MYSQL_URL" node migrate.js
-          npm test
+          MYSQL_URL="$TEST_MYSQL_URL" timeout 90s node migrate.js
+          MYSQL_URL="$TEST_MYSQL_URL" timeout 90s node migrate.js
+          timeout 120s npm test
       - name: Browser checks and build
         working-directory: apps/web
         run: npm install --no-audit --no-fund && npm test && npm run build
