@@ -1,4 +1,21 @@
 services:
+  language-translate:
+    image: libretranslate/libretranslate:v1.6.5
+    profiles: [language]
+    restart: unless-stopped
+    environment:
+      LT_LOAD_ONLY: en,es,fr,de
+    volumes: [translation_models:/home/libretranslate/.local]
+    networks: [private]
+    mem_limit: 4g
+  language-speech:
+    profiles: [language]
+    build:
+      context: ../../services/language
+    restart: unless-stopped
+    volumes: [speech_models:/models]
+    networks: [private]
+    mem_limit: 2g
   mysql:
     image: mysql:8.4
     restart: unless-stopped
@@ -30,6 +47,7 @@ services:
       PUBLIC_ORIGIN: https://${DOMAIN:?set domain}
       LISTEN_ADDR: 0.0.0.0
       PORT: "8080"
+      LANGUAGE_TOOLS_ENABLED: ${LANGUAGE_TOOLS_ENABLED:-false}
       NODE_ENV: production
       APP_RELEASE: ${APP_RELEASE:-}
       MEETING_ICE_SERVERS_JSON: ${MEETING_ICE_SERVERS_JSON:-[]}
@@ -133,6 +151,8 @@ services:
 networks:
   private:
 volumes:
+  translation_models:
+  speech_models:
   mysql_data:
   caddy_data:
   caddy_config:

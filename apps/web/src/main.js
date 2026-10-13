@@ -1,3 +1,4 @@
+import {setupLanguageTools} from './languageTools.js';
 import {setupContactManagerLayout} from './contactManagerLayout.js';
 import {setupSocialLinks} from './socialLinks.js';
 import {setupSocialWorkspace} from './socialWorkspace.js';
@@ -1764,6 +1765,7 @@ async function loadContacts(refreshDirectory=true) {
   await loadMessages();
 }
 $("#show-archived-conversations").onchange=()=>loadContacts().catch(error=>{$("#chat-status").textContent=error.message;});
+const languageTools=setupLanguageTools({document,get:apiGet,request:accountRequest});
 const conversations=setupConversations({get:apiGet,request:accountRequest,isSignedIn:()=>!!activeRole,
   preferencesChanged:()=>loadContacts(),
   isVisible:()=>!$('#chat').hidden&&!$('#chat').classList.contains('workspace-inactive')&&(!window.matchMedia('(max-width:900px)').matches||$('#chat').classList.contains('thread-open')),
@@ -2405,6 +2407,7 @@ $("#logout").onclick = async () => {
   try {
     dialerContacts.clear();
     contactDirectory.clear();
+    languageTools.stop();
     socialLinks.clear();
     socialWorkspace.stop();
     moneyWorkspace.stop();

@@ -1,0 +1,6 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {handleLanguageTools} from './languageTools.js';
+const args={req:{method:'POST'},res:{},user:{id:'u',features:{messaging:true}},send:(_,status,body)=>({status,body})};
+test('language services fail closed when disabled or messaging is unavailable',async()=>{const old=process.env.LANGUAGE_TOOLS_ENABLED;delete process.env.LANGUAGE_TOOLS_ENABLED;assert.equal((await handleLanguageTools(args)).status,503);assert.equal((await handleLanguageTools({...args,user:{features:{}}})).status,403);if(old!==undefined)process.env.LANGUAGE_TOOLS_ENABLED=old;});
+test('translation sends only explicit text to private service and returns translated text',async()=>{process.env.LANGUAGE_TOOLS_ENABLED='true';try{const r=await handleLanguageTools({...args,path:'/api/language/translate',readJson:async()=>({text:'Hello',target:'es'}),fetchImpl:async(url,options)=>{assert.equal(url,'http://language-translate:5000/translate');assert.equal(JSON.parse(options.body).q,'Hello');return {ok:true,json:async()=>({translatedText:'Hola'})};}});assert.deepEqual(r.body,{text:'Hola'});assert.equal((await handleLanguageTools({...args,path:'/api/language/speak',readJson:async()=>({text:'Hello',language:'fr'})})).status,400);}finally{delete process.env.LANGUAGE_TOOLS_ENABLED;}});

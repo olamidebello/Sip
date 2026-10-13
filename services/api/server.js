@@ -1,3 +1,4 @@
+import {handleLanguageTools} from './languageTools.js';
 import {handleSocial} from './social.js';
 import {handleContactDiscovery} from './contactDiscovery.js';
 import {handleSubscriberSettings,deliverSubscriberSms,startSubscriberEmail} from './subscriberDelivery.js';
@@ -250,7 +251,7 @@ async function handler(req, res) {
       );
       return send(res, 200, { plans: result.rows });
     }
-    if (path==="/api/activity/events" || path.startsWith("/api/social/") || path==="/api/navigation" || path.startsWith("/api/store/") || path==="/api/help/agent" || path.startsWith("/api/rates/flowroute/") || path.startsWith("/api/external-sms/") || path.startsWith("/api/contacts") || path.startsWith("/api/messenger/") || path.startsWith("/api/messages") ||
+    if (path==="/api/activity/events" || path.startsWith("/api/language/") || path.startsWith("/api/social/") || path==="/api/navigation" || path.startsWith("/api/store/") || path==="/api/help/agent" || path.startsWith("/api/rates/flowroute/") || path.startsWith("/api/external-sms/") || path.startsWith("/api/contacts") || path.startsWith("/api/messenger/") || path.startsWith("/api/messages") ||
         path.startsWith("/api/admin/") || path==='/api/redirector' || path.startsWith('/api/workspace/shortcuts') || path.startsWith('/api/work/items') || path.startsWith('/api/campaigns/') || path.startsWith("/api/account/") || path==="/api/background" || path==="/api/catalog-policy" || path.startsWith("/api/billing/") ||
         path.startsWith("/api/numbers") || path.startsWith("/api/porting") ||
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
@@ -300,6 +301,7 @@ async function handler(req, res) {
       if(path==='/api/admin/messaging/numbers') return await handleSmsNumberAdmin({req,res,path,user,pool,send,readJson});
       if(path==='/api/external-sms/send'&&req.method==='POST'){const input=await readJson(req);try{const local=await deliverSubscriberSms({user,pool,input});if(local)return send(res,202,local);}catch(e){if(e.status)return send(res,e.status,{error:e.message});throw e;}if(!await activeSubscription(pool,user))return send(res,403,{error:'An active subscription is required for external texts',configurationUrl:'/#billing'});return await handleExternalSms({req,res,path,user,pool,send,readJson:async()=>input});}
 
+      if(path.startsWith('/api/language/'))return await handleLanguageTools({req,res,path,user,send,readJson});
       if(path.startsWith('/api/social/')) return await handleSocial({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/account/subscriber-routing')) return await handleSubscriberRouting({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/external-sms/')) return await handleExternalSms({req,res,path,user,pool,send,readJson});

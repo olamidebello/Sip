@@ -1,0 +1,52 @@
+---
+- name: Deploy validated application language controls
+  ansible.builtin.import_playbook: messenger-features.yml
+- name: Install private self-hosted translation and speech
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Require memory for speech and translation alongside the application
+      ansible.builtin.assert:
+        that: ansible_memtotal_mb >= 8192
+        fail_msg: 'At least 8 GB RAM required for this co-located installation; use a separate language host otherwise.'
+    - name: Build local speech service
+      ansible.builtin.command:
+        argv: [docker, compose, --env-file, /etc/olamide/secrets.env, --profile, language, build, language-speech]
+        chdir: /opt/olamide/repo/deployment/docker
+    - name: Download English speech voice
+      ansible.builtin.command:
+        argv: [docker, compose, --env-file, /etc/olamide/secrets.env, --profile, language, run, --rm, --no-deps, --workdir, /models, language-speech, python, '-m', piper.download_voices, en_US-lessac-medium]
+        chdir: /opt/olamide/repo/deployment/docker
+    - name: Download CPU transcription model
+      ansible.builtin.command:
+        argv: [docker, compose, --env-file, /etc/olamide/secrets.env, --profile, language, run, --rm, --no-deps, language-speech, python, '-c', "from faster_whisper import WhisperModel; WhisperModel('tiny',device='cpu',compute_type='int8',download_root='/models/whisper')"]
+        chdir: /opt/olamide/repo/deployment/docker
+    - name: Start private model services without public ports
+      ansible.builtin.command:
+        argv: [docker, compose, --env-file, /etc/olamide/secrets.env, --profile, language, up, '-d', language-translate, language-speech]
+        chdir: /opt/olamide/repo/deployment/docker
+    - name: Verify translation and speech synthesis before activation
+      ansible.builtin.command:
+        argv: [docker, compose, --env-file, /etc/olamide/secrets.env, exec, '-T', api, node, '-e', "(async()=>{for(const [url,body] of [['http://language-translate:5000/translate',{q:'Hello',source:'en',target:'es',format:'text'}],['http://language-speech:8000/speak',{text:'Hello',language:'en'}]]){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:AbortSignal.timeout(20000)});const data=await r.json();if(!r.ok||!(data.translatedText||data.audio))throw Error('Model check failed');}console.log('Translation and speech synthesis passed');})().catch(()=>process.exit(1))"]
+        chdir: /opt/olamide/repo/deployment/docker
+      register: language_check
+      until: language_check.rc == 0
+      retries: 30
+      delay: 10
+      changed_when: false
+    - name: Enable services in canonical and saved Compose configuration
+      ansible.builtin.lineinfile:
+        path: '{{ item }}'
+        regexp: '^LANGUAGE_TOOLS_ENABLED='
+        line: 'LANGUAGE_TOOLS_ENABLED=true'
+        backup: true
+        mode: '0600'
+      loop: [/etc/olamide/secrets.env, /opt/olamide/repo/deployment/docker/.env]
+      no_log: true
+    - name: Recreate API with language tools enabled
+      ansible.builtin.command:
+        argv: [docker, compose, --env-file, /etc/olamide/secrets.env, up, '-d', --no-deps, api]
+        chdir: /opt/olamide/repo/deployment/docker
+    - name: Report installed scope
+      ansible.builtin.debug:
+        msg: 'Installed message translation (en/es/fr/de), recorded dictation and English text-to-speech. Test dictation on a real device. Real-time call translation and full Twitter parity are not supplied.'
