@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Backed-up local subscriber repair. No carrier configuration or passwords printed."""
-import argparse,datetime,os,pathlib,re,subprocess,shutil,gzip,time,urllib.request,urllib.error
+import argparse,datetime,os,pathlib,re,subprocess,shutil,gzip,time,urllib.request,urllib.error,shlex,urllib.parse
 
 def replace_domain(text,old,new):
     values=re.findall(r'^SIP_ACCOUNT_DOMAIN=(.*)$',text,re.M)
@@ -8,6 +8,18 @@ def replace_domain(text,old,new):
         raise ValueError('Unexpected configured domain; no configuration changed')
     if values:return re.sub(r'^SIP_ACCOUNT_DOMAIN=.*$', 'SIP_ACCOUNT_DOMAIN='+new,text,flags=re.M)
     return text.rstrip()+'\nSIP_ACCOUNT_DOMAIN='+new+'\n'
+
+def configured_application_host(text):
+    # compose.yml sets PUBLIC_ORIGIN to https://${DOMAIN}; it does not read
+    # PUBLIC_ORIGIN from the host environment file.
+    values=re.findall(r'^\s*DOMAIN\s*=(.*)$',text,re.M)
+    if len(values)!=1:raise ValueError('Exactly one Compose DOMAIN setting required')
+    tokens=shlex.split(values[0],comments=True,posix=True)
+    if len(tokens)!=1:raise ValueError('Valid Compose DOMAIN setting required')
+    value=tokens[0]
+    if not re.fullmatch(r'[a-zA-Z0-9.-]+(?::443)?',value):raise ValueError('Literal HTTPS application domain required')
+    origin=urllib.parse.urlsplit('https://'+value)
+    return origin.hostname
 
 def main():
     args=argparse.ArgumentParser();args.add_argument('--from-domain',required=True);args.add_argument('--to-domain',required=True);args.add_argument('--apply',action='store_true');a=args.parse_args()
@@ -17,8 +29,8 @@ def main():
     canonical=pathlib.Path('/etc/olamide/secrets.env');saved=pathlib.Path('/opt/olamide/repo/deployment/docker/.env');cwd='/opt/olamide/repo/deployment/docker'
     text=canonical.read_text()
     if not re.search(r'^SIP_PROVISION_MODE=kamailio_local$',text,re.M):raise SystemExit('Existing local provisioning mode required; no mode was changed')
-    origin=re.findall(r'^PUBLIC_ORIGIN=https://([^/\s]+)',text,re.M)
-    if origin!=[a.to_domain]:raise SystemExit('Target must match the configured public application host')
+    origin=configured_application_host(text)
+    if origin!=a.to_domain.lower():raise SystemExit('Target must match Compose DOMAIN host: '+origin)
     paths=[canonical]+([saved] if saved.exists() and saved.resolve()!=canonical.resolve() else [])
     updates=[(path,replace_domain(path.read_text(),a.from_domain,a.to_domain))for path in paths]
     compose=['docker','compose','--env-file',str(canonical)]
