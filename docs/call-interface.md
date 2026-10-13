@@ -5,3 +5,5 @@ Calls use an Olamide-branded purple call screen inspired by the requested TextNo
 Deploy the CI-approved release using `deployment/deploy-messaging-gui.sh`. Test outgoing answer, rejection, hang-up, hold, mute and DTMF with two real endpoints. Browser tests verify wiring but cannot prove RTP/media or carrier DTMF delivery. This does not install every TextNow product feature, native speaker/earpiece routing, emergency calling or live voice translation. Billing, subscriptions and external-number authorization are unchanged.
 
 Deployment validation queries are scoped to the checked-out commit and include a fresh request parameter plus no-cache header. This avoids reusing a cached list of successful runs. The installer still requires a successful deployment workflow for the exact commit; it never bypasses CI approval.
+
+The visual theme now uses a light TextFree-inspired layout: centered identity, circular controls, green answer and a separate red hang-up control. This is an approximation pending a reference screenshot for the user's specific app version. Existing SIP wiring remains unchanged.
