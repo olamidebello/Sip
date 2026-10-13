@@ -11,11 +11,12 @@
       changed_when: false
     - name: Fetch successful exact release validations
       ansible.builtin.uri:
-        url: 'https://api.github.com/repos/olamidebello/Sip/actions/workflows/deploy.yml/runs?branch=main&event=push&status=success&per_page=100'
+        url: 'https://api.github.com/repos/olamidebello/Sip/actions/workflows/deploy.yml/runs?branch=main&event=push&status=success&per_page=100&head_sha={{ discovery_head.stdout }}&check={{ ansible_date_time.epoch }}'
         return_content: true
         headers:
           Accept: application/vnd.github+json
           User-Agent: Olamide-discovery-deployer
+          Cache-Control: no-cache
       register: discovery_ci
     - name: Require validated release before enabling forwarding
       ansible.builtin.assert:

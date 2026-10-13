@@ -24,10 +24,11 @@
       changed_when: false
     - name: Fetch successful deployment validations
       ansible.builtin.uri:
-        url: 'https://api.github.com/repos/olamidebello/Sip/actions/workflows/deploy.yml/runs?branch=main&event=push&status=success&per_page=100'
+        url: 'https://api.github.com/repos/olamidebello/Sip/actions/workflows/deploy.yml/runs?branch=main&event=push&status=success&per_page=100&head_sha={{ messaging_head.stdout }}&check={{ ansible_date_time.epoch }}'
         headers:
           Accept: application/vnd.github+json
           User-Agent: Olamide-GUI-deployer
+          Cache-Control: no-cache
         return_content: true
         status_code: 200
         validate_certs: true
