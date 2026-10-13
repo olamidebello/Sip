@@ -38,7 +38,7 @@ export function setupChatLanding(document){
   expand.onclick=()=>{const open=chat.classList.toggle('chat-overlay');expand.setAttribute('aria-pressed',String(open));expand.setAttribute('aria-label',open?'Restore conversation':'Expand conversation');};header.append(expand);
   const menu=document.createElement('button');menu.type='button';menu.innerHTML=icon('more');menu.setAttribute('aria-label','Conversation menu');menu.onclick=()=>{options.open=!options.open;};header.append(menu);
   const create=document.createElement('button');create.type='button';create.className='chat-new';create.innerHTML=icon('plus');create.setAttribute('aria-label','New chat');
-  create.onclick=()=>{chat.classList.remove('thread-open');const directory=document.getElementById('contact-directory');directory.open=true;directory.querySelector('input')?.focus();directory.scrollIntoView?.({block:'center'});};sidebar.append(create);
+  create.onclick=()=>{chat.classList.remove('thread-open');const directory=document.getElementById('contact-directory');directory.open=true;for(const group of directory.querySelectorAll('[data-contact-group]'))group.open=group.dataset.contactGroup==='find';directory.querySelector('#user-directory-search input')?.focus();directory.scrollIntoView?.({block:'center'});};sidebar.append(create);
   const composer=thread.querySelector('#send-message');
   if(composer){
     const input=composer.querySelector('textarea');

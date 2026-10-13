@@ -1,3 +1,4 @@
+import {setupContactManagerLayout} from './contactManagerLayout.js';
 import {setupSocialLinks} from './socialLinks.js';
 import {setupSocialWorkspace} from './socialWorkspace.js';
 import {setupSignupCaptcha} from './signupCaptcha.js';
@@ -1191,7 +1192,8 @@ root.append($('#activity-monitor'));
 $("#activity-monitor").hidden=true;
 setupFormGroups();
 // Keep contact management in its own expandable area while preserving handlers.
-$('#contact-directory').append($('#add-contact'),$('#chat .bulk-controls'));
+$('#contact-directory').append($('#add-contact'),$('#contacts-file').closest('.bulk-controls'));
+setupContactManagerLayout(document);
 setupChatLanding(document);
 setupChatGestures(document);
 const messengerHub=setupMessengerHub({document,request:(...args)=>accountRequest(...args),get:(...args)=>apiGet(...args),show:showWorkspace,isSignedIn:()=>!!activeRole,openContact:id=>{showWorkspace('chat');const select=$('#contact-list');select.value=id;select.dispatchEvent(new window.Event('change',{bubbles:true}));$('#chat').classList.add('thread-open');}});
@@ -1740,7 +1742,7 @@ $("#refresh-cdr").onclick = () => refreshCdr().catch((error) => { $("#cdr-status
 async function refreshGoogleOAuth(){try{const data=await apiGet('/api/admin/google-contacts'),form=$('#google-oauth-config');form.elements.clientId.value=data.clientId||'';form.elements.enabled.checked=data.enabled;$('#google-oauth-origin').textContent='Authorized JavaScript origin: '+location.origin;$('#google-oauth-admin-status').textContent=`Tenant ${data.tenantId} · ${data.source} · ${data.configured?'Enabled':'Disabled'}`;}catch(e){$('#google-oauth-admin-status').textContent=e.message;}}
 $('#google-oauth-refresh').onclick=refreshGoogleOAuth;
 $('#google-oauth-config').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget,button=form.querySelector('button');button.disabled=true;try{await accountRequest('/api/admin/google-contacts',{clientId:form.elements.clientId.value,enabled:form.elements.enabled.checked},'PUT');await refreshGoogleOAuth();await contactDirectory.reconfigureGoogle();$('#google-oauth-admin-status').textContent+=' · Saved. Users can reload contact settings to apply.';}catch(e){$('#google-oauth-admin-status').textContent=e.message;}finally{button.disabled=false;}};
-const contactDirectory=setupContactDirectory({get:apiGet,request:accountRequest,contactsChanged:()=>loadContacts()});
+const contactDirectory=setupContactDirectory({get:apiGet,request:accountRequest,contactsChanged:async email=>{await loadContacts();if(email){const select=$("#contact-list");const option=[...select.options].find(o=>o.dataset.email===email);if(option){select.value=option.value;select.dispatchEvent(new Event("change",{bubbles:true}));$("#chat").classList.add("thread-open");}}}});
 async function loadContacts(refreshDirectory=true) {
   if(refreshDirectory)await contactDirectory.refresh();
   const { contacts } = await apiGet("/api/contacts");
@@ -2119,7 +2121,8 @@ $("#add-contact").addEventListener("submit", async (event) => {
     event.currentTarget.reset();
     await loadContacts();
     $("#chat-status").textContent = "Contact added";
-  } catch (error) { $("#chat-status").textContent = error.message; }
+    $("#contact-directory-status").textContent = "Contact added. Select the contact in your chats to start messaging.";
+  } catch (error) { $("#chat-status").textContent = error.message; $("#contact-directory-status").textContent=error.message; }
 });
 let contactImportRows=[],contactImportSelection=new Set();
 function updateContactImport(){
