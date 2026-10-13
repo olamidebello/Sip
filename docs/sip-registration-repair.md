@@ -27,3 +27,7 @@ bash deployment/deploy-sip-registration-check.sh
 This installer first deploys the exact CI-approved release (including the normal database backup, migration and application restart), then checks WSS, authenticated REGISTER and temporary-contact cleanup. If registration passes, the realm/digest repair is skipped. Only a REGISTER 401 or 403 triggers the existing backed-up local subscriber repair. Its existing local-mode, public-host, generated-account and decryptability guards remain mandatory. A final live check must pass; an unsuccessful repair fails the playbook.
 
 Transport, timeout, rate-limit, unavailable-account/probe-selection and other failures stop with diagnostic output. They do not trigger speculative switch restarts, disable policy or reset passwords. This is an operator-run check, not a recurring unattended service. Use a maintenance window because the initial deployment and conditional repair restart the API. The probe exercises one eligible account; a passing probe cannot fix a revoked browser session or establish two-way audio. No card, carrier or firewall configuration is changed.
+
+## Switch retry delays and navigation
+
+The browser preserves SIP 503 Retry-After as structured metadata and applies the same bounded cooldown used for HTTP throttling. Repeated reconnect/wake actions cannot bypass the cooldown. This is a retry correction, not proof an account policy or credential failure has been repaired. Primary navigation icons share a non-wrapping row with reduced mobile spacing, including Social after Money.

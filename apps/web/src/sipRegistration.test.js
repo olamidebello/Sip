@@ -11,3 +11,5 @@ test('no final response times out and transport errors reject',async()=>{
  let expire;const failed=waitForSipRegistration({register:async()=>{}},{setTimer:cb=>{expire=cb;return 1;},clearTimer(){}});expire();await assert.rejects(failed,/timed out/);
  await assert.rejects(waitForSipRegistration({register:async()=>{throw Error('WebSocket closed');}}),/WebSocket closed/);
 });
+
+test('switch retry delay is preserved without exposing other SIP headers',async()=>{const failed=waitForSipRegistration({register:async o=>o.requestDelegate.onReject({message:{statusCode:503,getHeader:name=>name==='Retry-After'?'90;duration=10':undefined}})});await assert.rejects(failed,e=>e.sipCode===503&&e.retryAfter===90);});

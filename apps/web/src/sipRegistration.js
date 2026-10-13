@@ -4,7 +4,7 @@ export function waitForSipRegistration(phone,{timeoutMs=20000,setTimer=setTimeou
   let settled=false;
   const finish=error=>{if(settled)return;settled=true;clearTimer(timer);error?reject(error):resolve();};
   const timer=setTimer(()=>finish(new Error('SIP registration timed out: the switch did not accept REGISTER')),timeoutMs);
-  const refused=response=>{const code=Number(response?.message?.statusCode)||0;const labels={401:'credentials or SIP realm not accepted',403:'account denied by switch policy',404:'SIP account or domain not found',423:'registration interval rejected',500:'switch internal error',503:'switch temporarily unavailable'};finish(new Error(`SIP registration rejected (${code||'unknown'}): ${labels[code]||'switch refused REGISTER'}`));};
+  const refused=response=>{const code=Number(response?.message?.statusCode)||0;const labels={401:'credentials or SIP realm not accepted',403:'account denied by switch policy',404:'SIP account or domain not found',423:'registration interval rejected',500:'switch internal error',503:'switch temporarily unavailable'};const error=new Error(`SIP registration rejected (${code||'unknown'}): ${labels[code]||'switch refused REGISTER'}`);error.sipCode=code;const raw=response?.message?.getHeader?.('Retry-After');const seconds=Number(String(raw||'').split(';')[0].trim());if(Number.isFinite(seconds)&&seconds>0)error.retryAfter=seconds;finish(error);};
   try{Promise.resolve(phone.register({requestDelegate:{onAccept:()=>finish(),onReject:refused,onRedirect:refused}})).catch(finish);}catch(error){finish(error);}
  });
 }

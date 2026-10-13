@@ -17,3 +17,5 @@ test('logout invalidates an in-flight credential response',async()=>{
 test('HTTP 429 pauses reconnect and repeated wake events cannot bypass Retry-After',async()=>{
  let requests=0;const f=fixture(async()=>{requests++;throw Object.assign(Error('Too many requests'),{status:429,retryAfter:90});});f.auto.start('user');await f.run();assert.equal(f.delay(),90000);f.auto.wake();await f.run();assert.equal(requests,1);assert.ok(f.delay()>89000);assert.match(f.statuses.at(-1),/paused by rate limit/);await f.auto.stop();
 });
+
+test('switch 503 retry delay prevents repeated wake attempts',async()=>{let requests=0;const f=fixture(async()=>{requests++;throw Object.assign(Error('Switch unavailable'),{sipCode:503,retryAfter:120});});f.auto.start('u');await f.run();assert.equal(f.delay(),120000);f.auto.wake();await f.run();assert.equal(requests,1);await f.auto.stop();});

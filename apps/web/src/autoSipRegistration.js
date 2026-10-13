@@ -19,7 +19,7 @@ export function createAutoSipRegistration({session,connect,disconnect,connected,
     }catch(error){
       if(current!==generation)return;
       if(error.status===401||error.status===403){owner=null;generation++;clearTimer(timer);await disconnect();onStatus('SIP disconnected: '+error.message);return;}
-      if(error.status===429){const delay=Math.max(60000,Math.min(300000,Number(error.retryAfter||60)*1000));notBefore=Date.now()+delay;onStatus('SIP reconnect paused by rate limit. Retrying in '+Math.ceil(delay/1000)+' seconds.');schedule(delay);return;}
+      if(error.status===429||(error.sipCode===503&&error.retryAfter>0)){const delay=Math.max(60000,Math.min(300000,Number(error.retryAfter||60)*1000));notBefore=Date.now()+delay;onStatus((error.sipCode===503?'SIP switch temporarily unavailable. Retrying in ':'SIP reconnect paused by rate limit. Retrying in ')+Math.ceil(delay/1000)+' seconds.');schedule(delay);return;}
       onStatus('SIP reconnect pending: '+error.message);schedule(Math.min(60000,3000*2**Math.min(attempt++,5)));
     }finally{busy=false;if(current!==generation&&owner)schedule(0);}
   }
