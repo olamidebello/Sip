@@ -40,10 +40,24 @@ export function verifyStripeSignature(raw,header,secret,now=Date.now()){
 
 async function config(pool,tenant){return (await pool.query('SELECT enabled,mode,secret_key_cipher,webhook_secret_cipher FROM payment_gateways WHERE tenant_id=$1',[tenant])).rows[0];}
 function publicConfig(row){return {configured:!!row,enabled:!!row?.enabled,mode:row?.mode||null,secretKeySet:!!row?.secret_key_cipher,webhookSecretSet:!!row?.webhook_secret_cipher};}
-export async function handlePaymentAdmin({req,res,path,user,pool,send,readJson}){
+export async function verifyStripeConnection(secret,fetchImpl=fetch){
+  const response=await fetchImpl('https://api.stripe.com/v1/balance',{headers:{Authorization:'Bearer '+secret},signal:AbortSignal.timeout(10000)});
+  const result=await response.json();
+  if(!response.ok||result.object!=='balance'||typeof result.livemode!=='boolean'||result.livemode!==secret.startsWith('sk_live_'))throw Error('Stripe verification failed');
+  return {connected:true,mode:result.livemode?'live':'test',cardIssuingAvailable:false,walletFundingAvailable:false,withdrawalsAvailable:false};
+}
+export async function handlePaymentAdmin({req,res,path,user,pool,send,readJson,fetchImpl=fetch}){
   if(!['admin','super_admin'].includes(user.role))return send(res,403,{error:'Administrator required'});
+  if(req.method!=='GET'&&user.role!=='super_admin')return send(res,403,{error:'Super administrator required for Stripe changes'});
+  if(path==='/api/admin/payments/gateway/verify'){
+    if(req.method!=='POST')return send(res,405,{error:'POST required'});
+    const row=await config(pool,user.tenant_id);
+    if(!row||!key())return send(res,409,{error:'Configure encrypted Stripe credentials first'});
+    try{return send(res,200,await verifyStripeConnection(decrypt(row.secret_key_cipher),fetchImpl));}
+    catch{return send(res,502,{error:'Stripe verification failed. Check API key, account permissions and network access.'});}
+  }
   if(path==='/api/admin/payments/gateway'){
-    if(req.method==='GET')return send(res,200,{gateway:publicConfig(await config(pool,user.tenant_id)),encryptionReady:!!key(),webhookUrl:`${process.env.PUBLIC_ORIGIN}/api/webhooks/stripe/${user.tenant_id}`});
+    if(req.method==='GET')return send(res,200,{gateway:publicConfig(await config(pool,user.tenant_id)),editable:user.role==='super_admin',encryptionReady:!!key(),webhookUrl:`${process.env.PUBLIC_ORIGIN}/api/webhooks/stripe/${user.tenant_id}`});
     if(req.method==='PUT'){
       const body=await readJson(req),current=await config(pool,user.tenant_id);
       if(typeof body.enabled!=='boolean'||!key()||
@@ -59,6 +73,7 @@ export async function handlePaymentAdmin({req,res,path,user,pool,send,readJson})
         VALUES($1,$2,$3,$4,$5,$6) ON DUPLICATE KEY UPDATE enabled=VALUES(enabled),secret_key_cipher=VALUES(secret_key_cipher),
         webhook_secret_cipher=VALUES(webhook_secret_cipher),mode=VALUES(mode),updated_by=VALUES(updated_by)`,
         [user.tenant_id,body.enabled,secret,webhook,mode,user.id]);
+      await pool.query('INSERT INTO security_events(id,tenant_id,actor_id,action) VALUES($1,$2,$3,$4)',[randomUUID(),user.tenant_id,user.id,'stripe_gateway_updated']);
       return send(res,200,{gateway:publicConfig({enabled:body.enabled,mode,secret_key_cipher:secret,webhook_secret_cipher:webhook})});
     }
   }

@@ -833,13 +833,16 @@ root.innerHTML = `
       <p id="group-status" role="status"></p>
     </section>
     <section id="payment-admin">
-      <h3>Stripe payment gateway</h3><p>Tenant scoped Stripe Checkout for existing USD invoices. Enter a secret API key and webhook signing secret. Stored credentials are encrypted; existing values are never shown again.</p>
+      <h3>Stripe management</h3><p>Tenant scoped Stripe Checkout for existing USD invoices. Enter a secret API key and webhook signing secret. Stored credentials are encrypted; existing values are never shown again.</p>
       <p>Webhook URL: <code id="stripe-webhook-url"></code></p>
-      <form id="stripe-settings"><label>Stripe secret key <input name="secretKey" type="password" autocomplete="off" placeholder="Leave blank to keep existing"></label>
+      <form id="stripe-settings" hidden><label>Stripe secret key <input name="secretKey" type="password" autocomplete="off" placeholder="Leave blank to keep existing"></label>
         <label>Webhook signing secret <input name="webhookSecret" type="password" autocomplete="off" placeholder="Leave blank to keep existing"></label>
         <label><input name="enabled" type="checkbox"> Accept Stripe payments for this tenant</label>
         <label><input name="confirmLive" type="checkbox"> Confirm live Stripe payments and reconciliation responsibility</label>
         <button>Save Stripe settings</button></form>
+      <button id="stripe-verify" type="button" hidden>Verify Stripe connection</button>
+      <p>Super administrators control credentials and payment availability. Card issuance, wallet funding and withdrawals are not enabled by these settings.</p>
+      <p><a href="https://dashboard.stripe.com/" target="_blank" rel="noopener noreferrer">Open Stripe Dashboard</a> · <a href="https://docs.stripe.com/issuing" target="_blank" rel="noopener noreferrer">Card issuing setup</a></p>
       <button id="stripe-refresh" type="button">Refresh gateway and payment attempts</button>
       <p id="stripe-status" role="status"></p><h4>Recent payment attempts</h4><ul id="stripe-attempts"></ul>
     </section>
@@ -1196,7 +1199,7 @@ const navigationGroups=[
   {label:"Administration",roles:["admin","super_admin"],items:[["product-store-admin","Product catalog & orders"],["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio services"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["passkey-policy-admin","Passkey requirements"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
-  {label:"Super admin",roles:["super_admin"],items:[["navigation-policy-admin","End-user navigation"],["user-session-admin","User sessions"],["tenant-admin","Tenants & roles"],["google-oauth-admin","Google Contacts OAuth"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["wallet-providers-admin","Dwolla & Flutterwave API"],["provider-credentials-admin","Carrier credentials"],["carrier-adapter-admin","Carrier adapters"]]}
+  {label:"Super admin",roles:["super_admin"],items:[["payment-admin","Stripe management"],["navigation-policy-admin","End-user navigation"],["user-session-admin","User sessions"],["tenant-admin","Tenants & roles"],["google-oauth-admin","Google Contacts OAuth"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["wallet-providers-admin","Dwolla & Flutterwave API"],["provider-credentials-admin","Carrier credentials"],["carrier-adapter-admin","Carrier adapters"]]}
 ];
 let videoWorkflow=false;
 let chatComposer;

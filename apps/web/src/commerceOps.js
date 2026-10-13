@@ -6,6 +6,8 @@ export function setupCommerceOps({get,request}){
   async function refreshPayment(){
     try{
       const [config,history]=await Promise.all([get('/api/admin/payments/gateway'),get('/api/admin/payments/attempts')]);
+      gatewayForm.hidden=!config.editable;
+      payment.querySelector('#stripe-verify').hidden=!config.editable;
       gatewayForm.elements.enabled.checked=config.gateway.enabled;
       payment.querySelector('#stripe-webhook-url').textContent=config.webhookUrl;
       gatewayStatus.textContent=`Stripe ${config.gateway.configured?config.gateway.mode+' configured':'not configured'}; ${config.gateway.enabled?'enabled':'disabled'}. ${config.encryptionReady?'':'Server payment encryption key required.'}`;
@@ -21,6 +23,11 @@ export function setupCommerceOps({get,request}){
     catch(error){gatewayStatus.textContent=error.message;}
   };
   payment.querySelector('#stripe-refresh').onclick=refreshPayment;
+  payment.querySelector('#stripe-verify').onclick=async event=>{
+    const button=event.currentTarget;button.disabled=true;
+    try{const result=await request('/api/admin/payments/gateway/verify',{});gatewayStatus.textContent=`Stripe ${result.mode} connection verified. This does not verify the webhook, issuer approval or wallet funding/withdrawals.`;}
+    catch(error){gatewayStatus.textContent=error.message;}finally{button.disabled=false;}
+  };
   const clusterStatus=cluster.querySelector('#cluster-status');
   async function refreshCluster(){try{
     const response=await get('/api/admin/cluster'),state=response.state;
