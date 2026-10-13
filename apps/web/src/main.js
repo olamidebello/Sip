@@ -1,3 +1,5 @@
+import {setupSignupCaptcha} from './signupCaptcha.js';
+import {setupContactDiscovery} from './contactDiscovery.js';
 import {setupSubscriberDelivery} from './subscriberDelivery.js';
 import {setupChatComposerShortcuts} from './chatComposerShortcuts.js';
 import {setupMessengerPreferences} from './messengerPreferences.js';
@@ -306,10 +308,10 @@ root.innerHTML = `
   <section id="chat" hidden>
     <h2>Chats</h2><p class="messenger-subtitle">Your conversations, close at hand.</p>
     <details id="contact-directory"><summary>Contacts, visibility and forwarding</summary>
-      <form id="user-directory-search"><label>Search workspace users <input name="q" minlength="2" maxlength="100" required></label><button>Search users</button></form>
+      <form id="user-directory-search"><label>Search by name, email or international phone <input name="q" minlength="2" maxlength="100" required></label><button>Search users</button></form>
       <ul id="user-directory-results"></ul>
       <form id="contact-presence-settings">
-        <label><input name="searchable" type="checkbox"> Allow workspace users to find me</label>
+        <label><input name="searchable" type="checkbox"> Allow workspace users to find me by name, email or phone</label>
         <label>Presence <select name="presence"><option value="available">Available</option><option value="away">Away</option><option value="busy">Busy</option><option value="invisible">Invisible</option><option value="dnd">Do not disturb</option></select></label>
         <label>Status <input name="status_text" maxlength="160"></label>
         <label><input name="share_presence" type="checkbox"> Share presence and status in search</label>
@@ -1261,6 +1263,7 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
 }
 function resetWorkspace() {
   subscriberDelivery.stop();
+  contactDiscovery.stop();
   userActivity?.stop();
   $("#activity-monitor").hidden=true;
   $("#fleet-admin").hidden=true;
@@ -1747,6 +1750,7 @@ const conversations=setupConversations({get:apiGet,request:accountRequest,isSign
   preferencesChanged:()=>loadContacts(),
   isVisible:()=>!$('#chat').hidden&&!$('#chat').classList.contains('workspace-inactive')&&(!window.matchMedia('(max-width:900px)').matches||$('#chat').classList.contains('thread-open')),
   callContact:address=>{dialForm.elements.target.value=address;showWorkspace('calling-workspace');status('Contact selected. Connect your SIP account, then press Call.');}});
+const contactDiscovery=setupContactDiscovery({document,get:apiGet,request:accountRequest});
 const subscriberDelivery=setupSubscriberDelivery({document,get:apiGet,request:accountRequest,isRegistered:()=>sipRegistered&&!!phone?.isConnected()});
 chatComposer=setupChatComposerShortcuts({document,moneyAllowed:()=>navigationAllowed('money')&&!$('#money').hidden,payContact:email=>moneyWorkspace.payContact(email)});
 async function loadMessages(){await conversations.refresh();}
@@ -1800,6 +1804,7 @@ function signedIn(user) {
   refreshSipAccount();
   autoSip.start(user.id);
   void subscriberDelivery.start();
+  contactDiscovery.start();
   void dialerContacts.refresh();
   void nativePush.start();
   apiGet('/api/softphone/access').then(access=>{$('#calling-access').textContent=access.externalCalls?'Your active plan permits external calling, subject to carrier and billing limits.':'Free account: call active SIP users in your workspace. An active plan is required for external calls and texts.';}).catch(error=>{$('#calling-access').textContent=error.message;});
@@ -2163,20 +2168,17 @@ $("#server-config").addEventListener("submit", async (event) => {
 apiGet("/api/config").then(({ sipWssUrl }) => {
   if (sipWssUrl) $("#connect [name=server]").value = sipWssUrl;
 }).catch(() => {});
-async function refreshSignupCaptcha(){
-  const form=$("#signup");form.elements.captchaId.value='';form.elements.captchaAnswer.value='';
-  try{const result=await apiGet('/api/register/captcha');form.elements.captchaId.value=result.captchaId;$('#signup-captcha-image').src=result.image;}
-  catch(error){$('#account-status').textContent=error.message;}
-}
-$('#signup-captcha-refresh').onclick=refreshSignupCaptcha;
+const signupCaptcha=setupSignupCaptcha({document,get:apiGet});
+const refreshSignupCaptcha=signupCaptcha.refresh;
 refreshSignupCaptcha();
 $("#signup").addEventListener("submit", async event=>{
  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button:last-child');
+ if(!signupCaptcha.ready()){await refreshSignupCaptcha();$('#account-status').textContent=signupCaptcha.ready()?'CAPTCHA refreshed. Enter the new six digits, then submit again.':'CAPTCHA unavailable. Tap New CAPTCHA to retry.';return;}
  if(form.elements.password.value!==form.elements.confirmPassword.value){$('#account-status').textContent='Passwords must match';return;}
- button.disabled=true;
- try{const data=Object.fromEntries(new FormData(form));await accountRequest('/api/register',data);form.reset();$('#login').elements.email.value=data.email;$('#account-status').textContent='Account created. Sign in to continue.';pageRoutes.go('login');}
- catch(error){$('#account-status').textContent=error.message;}
- finally{button.disabled=false;await refreshSignupCaptcha();}
+ button.disabled=true;let created=false,failureMessage;
+ try{const data=Object.fromEntries(new FormData(form));await accountRequest('/api/register',data);created=true;form.reset();$('#login').elements.email.value=data.email;$('#account-status').textContent='Account created. Sign in to continue.';pageRoutes.go('login');}
+ catch(error){failureMessage=error.message;}
+ finally{button.disabled=false;if(!created){await refreshSignupCaptcha();$('#account-status').textContent=failureMessage+' '+(signupCaptcha.ready()?'Enter the new CAPTCHA and try again.':'CAPTCHA unavailable. Tap New CAPTCHA to retry.');}}
 });
 $("#signup-verify").addEventListener('submit',async event=>{
   event.preventDefault();

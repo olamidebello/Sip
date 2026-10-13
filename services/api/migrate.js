@@ -1,3 +1,4 @@
+import {migrateContactDiscovery} from './contactDiscovery.js';
 import {migrateSubscriberDelivery} from './subscriberDelivery.js';
 import {migrateMessagePrivacy} from './messagePrivacy.js';
 import {migrateMessengerPreferences} from './messengerPreferences.js';
@@ -124,7 +125,8 @@ export async function migrate(pool) {
       ['messenger_preferences', () => migrateMessengerPreferences(pool)],
       ['support', () => migrateSupport(pool)],
       ['locales', () => migrateLocales(pool)],
-      ['subscriber_delivery', () => migrateSubscriberDelivery(pool)]
+      ['subscriber_delivery', () => migrateSubscriberDelivery(pool)],
+      ['contact_discovery', () => migrateContactDiscovery(pool)]
     ];
     for (const [name, action] of steps) {
       await action();

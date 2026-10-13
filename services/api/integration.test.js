@@ -460,6 +460,14 @@ test("registered users can create and join a room; host controls it", {
   assert.equal((await mutate('/api/account/subscriber-delivery','PUT',{sms_chat:false,sms_email:false,number_calls:false},guestCookie)).status,200);
   assert.equal((await post('/api/external-sms/send',{...smsInput,idempotencyKey:randomUUID()},hostCookie)).status,403);
 
+  // Discovery respects tenant/visibility and alerts once for an imported contact.
+  await db.query('UPDATE user_presence SET searchable=TRUE WHERE user_id=$1',[guestLogin.body.id]);
+  await db.query('INSERT IGNORE INTO personal_address_book(id,owner_id,name,email,phone) VALUES($1,$2,$3,$4,$5)',[randomUUID(),hostLogin.body.id,'Guest','guest'+unique+'@example.com','']);
+  const alerts=await fetch(base+'/api/contacts/registration-alerts',{headers:{Cookie:hostCookie}});const discovered=await alerts.json();assert.ok(discovered.alerts.some(a=>a.contact_id===guestLogin.body.id));
+  assert.equal((await mutate('/api/contacts/registration-alerts','PUT',{contactId:guestLogin.body.id},hostCookie)).status,200);
+  const again=await fetch(base+'/api/contacts/registration-alerts',{headers:{Cookie:hostCookie}});assert.ok(!(await again.json()).alerts.some(a=>a.contact_id===guestLogin.body.id));
+  const byPhone=await fetch(base+'/api/contacts/search?q='+encodeURIComponent('+2348012345678'),{headers:{Cookie:hostCookie}});assert.ok((await byPhone.json()).users.some(u=>u.id===guestLogin.body.id));
+
   // Full messenger workflows and access boundaries on MySQL.
   const media=await post('/api/messenger/attachments',{name:'pixel.png',mime:'image/png',data:Buffer.from('89504e470d0a1a0a0000','hex').toString('base64')},hostCookie);
   assert.equal(media.status,201,JSON.stringify(media.body)+log);

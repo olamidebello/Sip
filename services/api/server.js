@@ -1,3 +1,4 @@
+import {handleContactDiscovery} from './contactDiscovery.js';
 import {handleSubscriberSettings,deliverSubscriberSms,startSubscriberEmail} from './subscriberDelivery.js';
 import {handleViewOnce,startMessageExpiry} from './messagePrivacy.js';
 import {handleMessengerPreferences} from './messengerPreferences.js';
@@ -259,6 +260,7 @@ async function handler(req, res) {
       if (!user) return send(res, 401, { error: "Sign in required" });
       if(path.startsWith('/api/softphone/scheduled'))return await handleScheduledCalls({req,res,path,user,pool,send,readJson});
       if(path==='/api/navigation'||path.startsWith('/api/admin/navigation'))return await handleNavigationPolicy({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/contacts/registration-alerts'))return await handleContactDiscovery({req,res,path,user,pool,send,readJson});
       if(path==='/api/account/subscriber-delivery'||path==='/api/account/subscriber-registration')return await handleSubscriberSettings({req,res,path,user,pool,send,readJson,sessionHash:tokenHash(currentToken(req))});
       if(path==='/api/messenger/privacy/capabilities'&&req.method==='GET')return send(res,200,{directDisappearing:!!user.features?.messaging,directViewOnce:!!user.features?.messaging,endToEndEncryption:false,nativeBackupSync:false});
       if(/^\/api\/messenger\/messages\/[0-9a-f-]{36}\/open$/.test(path))return await handleViewOnce({req,res,path,user,pool,send});

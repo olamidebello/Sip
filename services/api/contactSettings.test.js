@@ -4,7 +4,7 @@ import {handleContactSettings} from './contactSettings.js';
 const user={id:'owner',tenant_id:'workspace'};
 async function invoke(path,method='GET',body={},rows=[]){const queries=[];const db={query:async(sql,params)=>{queries.push({sql,params});return {rows,rowCount:rows.length};},release(){}};let response;await handleContactSettings({path:new URL('https://app.test'+path).pathname,req:{method},user,pool:{...db,connect:async()=>db},readJson:async()=>body,url:new URL('https://app.test'+path),send:(_,status,body)=>{response={status,body};}});return {...response,queries};}
 test('directory enforces opt-in, tenant isolation and hides invisible presence',async()=>{
- const r=await invoke('/api/contacts/search?q=Bello');assert.equal(r.status,200);assert.match(r.queries[0].sql,/p.searchable=true/);assert.match(r.queries[0].sql,/p.presence<>'invisible'/);assert.deepEqual(r.queries[0].params,['workspace','owner','bello']);
+ const r=await invoke('/api/contacts/search?q=Bello');assert.equal(r.status,200);assert.match(r.queries[0].sql,/p.searchable=true/);assert.match(r.queries[0].sql,/p.presence<>'invisible'/);assert.deepEqual(r.queries[0].params,['workspace','owner','bello','']);
  assert.equal((await invoke('/api/contacts/search?q=x')).status,400);
 });
 test('visibility defaults to private and status rejects invalid values',async()=>{

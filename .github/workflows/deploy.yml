@@ -27,7 +27,7 @@ jobs:
       - name: Deployment configuration checks
         run: |
           bash -n deployment/bootstrap.sh deployment/install-all.sh deployment/install.sh deployment/install-ansible.sh deployment/update.sh deployment/verified-sha.sh deployment/docker/turn-entrypoint.sh
-          bash -n deployment/deploy-production.sh deployment/deploy-chat-experience.sh deployment/deploy-message-privacy.sh deployment/deploy-chat-money.sh deployment/deploy-sip-registration-repair.sh deployment/deploy-subscriber-delivery.sh
+          bash -n deployment/deploy-production.sh deployment/deploy-chat-experience.sh deployment/deploy-message-privacy.sh deployment/deploy-chat-money.sh deployment/deploy-sip-registration-repair.sh deployment/deploy-subscriber-delivery.sh deployment/deploy-contact-discovery.sh
           python3 tools/test_production_deployment.py
           python3 tools/test_native_push_install.py
           python3 -m py_compile deployment/production/runtime-secrets.py deployment/production/release.py deployment/production/check-public.py
@@ -39,6 +39,7 @@ jobs:
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/chat-money.yml
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/sip-registration-repair.yml
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/subscriber-delivery.yml
+          ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/contact-discovery.yml
           python3 tools/test_local_sip_domain_repair.py
           ansible-playbook --syntax-check -i deployment/production/inventory.example.ini deployment/ansible/production.yml
           ansible-playbook --syntax-check -i deployment/native-push/inventory.example.ini deployment/ansible/native-system-calls.yml

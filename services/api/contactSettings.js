@@ -19,10 +19,10 @@ export async function handleContactSettings({req,res,path,user,pool,send,readJso
     const rows=await pool.query(`SELECT u.id,u.display_name AS name,u.email,
       CASE WHEN p.share_presence=true AND p.presence<>'invisible' THEN p.presence ELSE 'hidden' END AS presence,
       CASE WHEN p.share_presence=true AND p.presence<>'invisible' THEN p.status_text ELSE '' END AS status_text
-      FROM users u JOIN user_presence p ON p.user_id=u.id
+      FROM users u JOIN user_presence p ON p.user_id=u.id LEFT JOIN user_profiles profile ON profile.user_id=u.id
       WHERE u.tenant_id=$1 AND u.id<>$2 AND u.status='active' AND p.searchable=true
-      AND (LOCATE($3,LOWER(u.display_name))>0 OR LOCATE($3,LOWER(u.email))>0)
-      ORDER BY u.display_name,u.id LIMIT 50`,[user.tenant_id,user.id,q.toLowerCase()]);
+      AND (LOCATE($3,LOWER(u.display_name))>0 OR LOCATE($3,LOWER(u.email))>0 OR ($4<>'' AND profile.phone_e164=$4))
+      ORDER BY u.display_name,u.id LIMIT 50`,[user.tenant_id,user.id,q.toLowerCase(),/^\+[1-9][0-9]{7,14}$/.test(q.replace(/[ ()-]/g,''))?q.replace(/[ ()-]/g,''):'']);
     return send(res,200,{users:rows.rows});
   }
   if(path!=='/api/account/contact-settings')return send(res,404,{error:'Route unavailable'});
