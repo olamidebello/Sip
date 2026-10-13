@@ -22,8 +22,8 @@ def main():
     paths=[canonical]+([saved] if saved.exists() and saved.resolve()!=canonical.resolve() else [])
     updates=[(path,replace_domain(path.read_text(),a.from_domain,a.to_domain))for path in paths]
     compose=['docker','compose','--env-file',str(canonical)]
-    def probe(apply=False):
-        subprocess.run(compose+['exec','-T','-e','SIP_REPAIR_FROM='+a.from_domain,'-e','SIP_ACCOUNT_DOMAIN='+a.to_domain,'api','node','repairSipDomain.js']+(['--apply'] if apply else []),cwd=cwd,check=True)
+    def probe(apply=False,oneoff=False):
+        subprocess.run(compose+(['run','--rm','--no-deps','-T'] if oneoff else ['exec','-T'])+['-e','SIP_REPAIR_FROM='+a.from_domain,'-e','SIP_ACCOUNT_DOMAIN='+a.to_domain,'api','node','repairSipDomain.js']+(['--apply'] if apply else []),cwd=cwd,check=True)
     probe()
     if not a.apply:return
     stamp=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ');backup=pathlib.Path('/opt/olamide/backups/sip-domain-'+stamp);backup.mkdir(mode=0o700,parents=True)
@@ -33,10 +33,13 @@ def main():
         shutil.copyfileobj(dump.stdout,output)
         if dump.wait()!=0:raise SystemExit('Database backup failed; repair not applied')
     # Repair commits atomically; account statuses and encrypted passwords remain unchanged.
-    probe(True)
-    for path,content in updates:
-        tmp=path.with_name(path.name+'.sip-domain.tmp');tmp.write_text(content);tmp.chmod(0o600);tmp.replace(path)
-    subprocess.run(compose+['up','-d','--no-deps','api'],cwd=cwd,check=True)
+    subprocess.run(compose+['stop','api'],cwd=cwd,check=True)
+    try:
+        probe(True,oneoff=True)
+        for path,content in updates:
+            tmp=path.with_name(path.name+'.sip-domain.tmp');tmp.write_text(content);tmp.chmod(0o600);tmp.replace(path)
+    finally:
+        subprocess.run(compose+['up','-d','--no-deps','api'],cwd=cwd,check=True)
     subprocess.run(compose+['exec','-T','api','node','sipLiveCheck.js'],cwd=cwd,check=True)
     print('Domain repair and authenticated REGISTER passed. Sign out and sign in again on clients.')
 if __name__=='__main__':main()
