@@ -2522,9 +2522,9 @@ async function registerSip(data,shouldContinue=()=>true) {
       },
       onCallAnswered: () => { void nativeCalls.connected(currentCall?.sipCallId).catch(report); if (currentCall) currentCall.answered = true; showWorkspace("calling-workspace"); callState(true); status("Call connected"); },
       onCallHangup: () => { void nativeCalls.ended(currentCall?.sipCallId).catch(report); finishCall(currentCall?.answered ? "completed" : "missed or unanswered"); callState(false); status("Call ended"); },
-      onServerDisconnect: () => {if(!current())return;sipRegistered=false;status("Connection lost. Reconnecting…");autoSip.dropped();},
-      onRegistered: () => {if(current()){sipRegistered=true;status("Registered");}},
-      onUnregistered: () => {if(!current())return;sipRegistered=false;status("SIP registration lost. Reconnecting…");autoSip.dropped();}
+      onServerDisconnect: () => {if(!current())return;sipRegistered=false;void subscriberDelivery.wake();status("Connection lost. Reconnecting…");autoSip.dropped();},
+      onRegistered: () => {if(current()){sipRegistered=true;void subscriberDelivery.wake();status("Registered");}},
+      onUnregistered: () => {if(!current())return;sipRegistered=false;void subscriberDelivery.wake();status("SIP registration lost. Reconnecting…");autoSip.dropped();}
     }
   });
   try {
