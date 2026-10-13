@@ -470,7 +470,7 @@ test("registered users can create and join a room; host controls it", {
   assert.equal((await post('/api/external-sms/send',{...smsInput,idempotencyKey:randomUUID()},hostCookie)).status,403);
 
   // Discovery respects tenant/visibility and alerts once for an imported contact.
-  await db.query('UPDATE user_presence SET searchable=TRUE WHERE user_id=$1',[guestLogin.body.id]);
+  await db.query('INSERT INTO user_presence(user_id,searchable) VALUES($1,TRUE) ON DUPLICATE KEY UPDATE searchable=TRUE',[guestLogin.body.id]);
   await db.query('INSERT IGNORE INTO personal_address_book(id,owner_id,name,email,phone) VALUES($1,$2,$3,$4,$5)',[randomUUID(),hostLogin.body.id,'Guest','guest'+unique+'@example.com','']);
   const alerts=await fetch(base+'/api/contacts/registration-alerts',{headers:{Cookie:hostCookie}});const discovered=await alerts.json();assert.ok(discovered.alerts.some(a=>a.contact_id===guestLogin.body.id));
   assert.equal((await mutate('/api/contacts/registration-alerts','PUT',{contactId:guestLogin.body.id},hostCookie)).status,200);
