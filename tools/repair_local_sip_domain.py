@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""Backed-up local subscriber repair. No carrier configuration or passwords printed."""
+import argparse,datetime,os,pathlib,re,subprocess,shutil,gzip
+
+def replace_domain(text,old,new):
+    values=re.findall(r'^SIP_ACCOUNT_DOMAIN=(.*)$',text,re.M)
+    if len(values)>1 or (values and values[0] not in ('',old,new)):
+        raise ValueError('Unexpected configured domain; no configuration changed')
+    if values:return re.sub(r'^SIP_ACCOUNT_DOMAIN=.*$', 'SIP_ACCOUNT_DOMAIN='+new,text,flags=re.M)
+    return text.rstrip()+'\nSIP_ACCOUNT_DOMAIN='+new+'\n'
+
+def main():
+    args=argparse.ArgumentParser();args.add_argument('--from-domain',required=True);args.add_argument('--to-domain',required=True);args.add_argument('--apply',action='store_true');a=args.parse_args()
+    if os.geteuid()!=0:raise SystemExit('Root required')
+    for domain in (a.from_domain,a.to_domain):
+        if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9.-]{0,251}[a-zA-Z0-9]',domain):raise SystemExit('Valid DNS domains required')
+    canonical=pathlib.Path('/etc/olamide/secrets.env');saved=pathlib.Path('/opt/olamide/repo/deployment/docker/.env');cwd='/opt/olamide/repo/deployment/docker'
+    text=canonical.read_text()
+    if not re.search(r'^SIP_PROVISION_MODE=kamailio_local$',text,re.M):raise SystemExit('Existing local provisioning mode required; no mode was changed')
+    origin=re.findall(r'^PUBLIC_ORIGIN=https://([^/\s]+)',text,re.M)
+    if origin!=[a.to_domain]:raise SystemExit('Target must match the configured public application host')
+    paths=[canonical]+([saved] if saved.exists() and saved.resolve()!=canonical.resolve() else [])
+    updates=[(path,replace_domain(path.read_text(),a.from_domain,a.to_domain))for path in paths]
+    compose=['docker','compose','--env-file',str(canonical)]
+    def probe(apply=False):
+        subprocess.run(compose+['exec','-T','-e','SIP_REPAIR_FROM='+a.from_domain,'-e','SIP_ACCOUNT_DOMAIN='+a.to_domain,'api','node','repairSipDomain.js']+(['--apply'] if apply else []),cwd=cwd,check=True)
+    probe()
+    if not a.apply:return
+    stamp=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ');backup=pathlib.Path('/opt/olamide/backups/sip-domain-'+stamp);backup.mkdir(mode=0o700,parents=True)
+    for index,(path,_)in enumerate(updates):shutil.copy2(path,backup/('config-'+str(index)+'.env'));(backup/('config-'+str(index)+'.env')).chmod(0o600)
+    with gzip.open(backup/'database.sql.gz','wb')as output:
+        dump=subprocess.Popen(compose+['exec','-T','mysql','sh','-c','MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump --single-transaction --hex-blob -u root "$MYSQL_DATABASE"'],cwd=cwd,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+        shutil.copyfileobj(dump.stdout,output)
+        if dump.wait()!=0:raise SystemExit('Database backup failed; repair not applied')
+    # Repair commits atomically; account statuses and encrypted passwords remain unchanged.
+    probe(True)
+    for path,content in updates:
+        tmp=path.with_name(path.name+'.sip-domain.tmp');tmp.write_text(content);tmp.chmod(0o600);tmp.replace(path)
+    subprocess.run(compose+['up','-d','--no-deps','api'],cwd=cwd,check=True)
+    subprocess.run(compose+['exec','-T','api','node','sipLiveCheck.js'],cwd=cwd,check=True)
+    print('Domain repair and authenticated REGISTER passed. Sign out and sign in again on clients.')
+if __name__=='__main__':main()
