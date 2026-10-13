@@ -1,3 +1,4 @@
+import {waitForSipRegistration} from './sipRegistration.js';
 import {messengerPanels,setupMessengerHub} from './messengerHub.js';
 import {setupSessionAdmin} from './sessionAdmin.js';
 import {createSessionWatch} from './sessionWatch.js';
@@ -1392,6 +1393,7 @@ setupInstall();
 let phone;
 let sipRegistered=false;
 let onCall = false;
+let sipConnectionGeneration=0;
 let onHold = false;
 let muted = false;
 let currentCall = null;
@@ -2423,7 +2425,7 @@ const autoSip=createAutoSipRegistration({
     const data=new FormData();for(const [key,value] of Object.entries({aor:`sip:${account.username}@${account.domain}`,username:account.username,password:account.password,server:account.wssUrl}))data.set(key,value);
     await registerSip(data,valid);
   },
-  async disconnect(){if(phone){const current=phone;phone=undefined;sipRegistered=false;if(onCall)await current.hangup().catch(()=>{});await current.unregister().catch(()=>{});await current.disconnect().catch(()=>{});callState(false);connectForm.hidden=connectForm.dataset.canEdit!=='true';dialForm.hidden=true;$('#disconnect').hidden=true;}}
+  async disconnect(){sipConnectionGeneration++;if(phone){const current=phone;phone=undefined;sipRegistered=false;if(onCall)await current.hangup().catch(()=>{});await current.unregister().catch(()=>{});await current.disconnect().catch(()=>{});callState(false);connectForm.hidden=connectForm.dataset.canEdit!=='true';dialForm.hidden=true;$('#disconnect').hidden=true;}}
 });
 const nativeCalls=createNativeCallClient({plugin:()=>window.Capacitor?.Plugins?.NativePush,wake:()=>autoSip.wake(),currentCall:()=>({callId:currentCall?.sipCallId}),answer:()=>{if(!phone)throw new Error('SIP connection pending');return phone.answer();},end:()=>onCall?phone?.hangup():phone?.decline(),onError:report});
 window.addEventListener('online',()=>{autoSip.wake();if(softphoneUserId)void nativePush.start();});
@@ -2456,7 +2458,11 @@ function report(error) {
 
 async function registerSip(data,shouldContinue=()=>true) {
   if (!softphoneUserId) {status("Sign in to Olamide before connecting a SIP account.");return;}
-  if(phone){if(onCall)throw new Error("End the current call before changing registration.");await phone.unregister();await phone.disconnect();phone=null;}
+  if(onCall)throw new Error("End the current call before changing registration.");
+  const connectionGeneration=++sipConnectionGeneration;
+  const current=()=>shouldContinue()&&connectionGeneration===sipConnectionGeneration;
+  sipRegistered=false;
+  if(phone){const previous=phone;phone=undefined;await previous.unregister().catch(()=>{});await previous.disconnect().catch(()=>{});}
   const aor = String(data.get("aor")).trim();
   const server = String(data.get("server")).trim();
   if (!/^sip:[^\s@]+@[^\s@]+$/i.test(aor) || !server.startsWith("wss://")) {
@@ -2474,6 +2480,7 @@ async function registerSip(data,shouldContinue=()=>true) {
     },
     delegate: {
       onCallReceived: async () => {
+        if(!current()){await candidate.decline().catch(()=>{});return;}
         // SIP.js 0.21.2 SimpleUser keeps the Invitation internally; require its exact Call-ID.
         currentCall = { direction: "incoming", address: "Unknown caller", sipCallId:candidate.session?.request?.callId };
         if ($("#dnd").checked) {
@@ -2486,24 +2493,25 @@ async function registerSip(data,shouldContinue=()=>true) {
       },
       onCallAnswered: () => { void nativeCalls.connected(currentCall?.sipCallId).catch(report); if (currentCall) currentCall.answered = true; showWorkspace("calling-workspace"); callState(true); status("Call connected"); },
       onCallHangup: () => { void nativeCalls.ended(currentCall?.sipCallId).catch(report); finishCall(currentCall?.answered ? "completed" : "missed or unanswered"); callState(false); status("Call ended"); },
-      onServerDisconnect: () => {sipRegistered=false;status("Connection lost. Reconnecting…");autoSip.dropped();},
-      onRegistered: () => {if(shouldContinue()){sipRegistered=true;status("Registered");}},
-      onUnregistered: () => {sipRegistered=false;status("Unregistered");autoSip.dropped();}
+      onServerDisconnect: () => {if(!current())return;sipRegistered=false;status("Connection lost. Reconnecting…");autoSip.dropped();},
+      onRegistered: () => {if(current()){sipRegistered=true;status("Registered");}},
+      onUnregistered: () => {if(!current())return;sipRegistered=false;status("SIP registration lost. Reconnecting…");autoSip.dropped();}
     }
   });
   try {
     status("Connecting…");
     await candidate.connect();
-    await candidate.register();
-    if(!shouldContinue()){await candidate.unregister().catch(()=>{});await candidate.disconnect();return;}
-    phone = candidate;
+    await waitForSipRegistration(candidate);
+    if(!current()){await candidate.unregister().catch(()=>{});await candidate.disconnect();return;}
+    sipRegistered=true;phone = candidate;
     connectForm.hidden = true;
     dialForm.hidden = false;
     $("#disconnect").hidden = false;
     status(sipRegistered?"Registered":"Waiting for SIP registration…");
     refreshAudioOutputs();
   } catch (error) {
-    report(error);
+    if(current())report(error);
+    if(connectionGeneration===sipConnectionGeneration)sipConnectionGeneration++;
     await candidate.disconnect().catch(() => {});
     throw error;
   }
