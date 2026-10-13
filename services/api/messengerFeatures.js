@@ -29,9 +29,9 @@ export function validateAttachment(input){
  if(!matches[mime])throw new Error('Supported files: PNG, JPEG, GIF, WebP, WebM, Ogg, MP4 or PDF with matching file content');
  return {name,mime,data,size:data.length};
 }
-async function allowedAttachment(pool,user,id){return id===null||uuid.test(id)&&!!(await pool.query('SELECT 1 FROM messenger_attachments WHERE id=$1 AND owner_id=$2 AND tenant_id=$3',[id,user.id,user.tenant_id])).rowCount;}
+async function allowedAttachment(pool,user,id){return id===null||uuid.test(id)&&!!(await pool.query('SELECT 1 FROM messenger_attachments WHERE id=$1 AND owner_id=$2 AND tenant_id=$3 AND restricted=FALSE',[id,user.id,user.tenant_id])).rowCount;}
 async function groupAccess(pool,user,id,lock=false){return (await pool.query(`SELECT g.* FROM messenger_groups g JOIN messenger_members m ON m.group_id=g.id WHERE g.id=$1 AND m.user_id=$2 AND g.tenant_id=$3 AND g.closed=FALSE${lock?' FOR UPDATE':''}`,[id,user.id,user.tenant_id])).rows[0];}
-async function sourceMessage(pool,user,id){return (await pool.query(`SELECT m.*,CASE WHEN m.sender_id=$2 THEN m.recipient_id ELSE m.sender_id END AS contact_id FROM messages m JOIN users s ON s.id=m.sender_id JOIN users r ON r.id=m.recipient_id WHERE m.id=$1 AND (m.sender_id=$2 OR m.recipient_id=$2) AND s.tenant_id=$3 AND r.tenant_id=$3 AND m.deleted_at IS NULL`,[id,user.id,user.tenant_id])).rows[0];}
+async function sourceMessage(pool,user,id){return (await pool.query(`SELECT m.*,CASE WHEN m.sender_id=$2 THEN m.recipient_id ELSE m.sender_id END AS contact_id FROM messages m JOIN users s ON s.id=m.sender_id JOIN users r ON r.id=m.recipient_id WHERE m.id=$1 AND (m.sender_id=$2 OR m.recipient_id=$2) AND s.tenant_id=$3 AND r.tenant_id=$3 AND m.deleted_at IS NULL AND m.view_once=FALSE AND (m.expires_at IS NULL OR m.expires_at>UTC_TIMESTAMP(3))`,[id,user.id,user.tenant_id])).rows[0];}
 async function sendCopies(pool,user,recipients,body,attachmentId=null){
  const db=await pool.connect();try{
   await db.query('BEGIN');for(const id of [...new Set([user.id,...recipients])].sort())await db.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[id]);
@@ -69,17 +69,17 @@ export async function handleMessengerFeatures({req,res,path,user,pool,send,readJ
   const used=await pool.query('SELECT COALESCE(SUM(size),0) AS total FROM messenger_attachments WHERE owner_id=$1',[user.id]);return send(res,200,{files:files.rows,usedBytes:Number(used.rows[0]?.total||0),limitBytes:20*1024*1024});
  }
  const attachment=/^\/api\/messenger\/attachments\/([0-9a-f-]{36})$/.exec(path);
- if(attachment&&uuid.test(attachment[1])&&req.method==='DELETE'){await pool.query('DELETE FROM messenger_attachments WHERE id=$1 AND owner_id=$2 AND tenant_id=$3',[attachment[1],user.id,user.tenant_id]);return send(res,200,{status:'removed'});}
+ if(attachment&&uuid.test(attachment[1])&&req.method==='DELETE'){await pool.query('DELETE FROM messenger_attachments WHERE id=$1 AND owner_id=$2 AND tenant_id=$3 AND restricted=FALSE',[attachment[1],user.id,user.tenant_id]);return send(res,200,{status:'removed'});}
  if(attachment&&uuid.test(attachment[1])&&req.method==='GET'){
-  const row=(await pool.query(`SELECT a.* FROM messenger_attachments a WHERE a.id=$1 AND a.tenant_id=$3 AND (a.owner_id=$2 OR
-    EXISTS(SELECT 1 FROM messages m WHERE m.attachment_id=a.id AND m.deleted_at IS NULL AND (m.sender_id=$2 OR m.recipient_id=$2)) OR
+  const row=(await pool.query(`SELECT a.* FROM messenger_attachments a WHERE a.id=$1 AND a.tenant_id=$3 AND a.restricted=FALSE AND ((a.owner_id=$2 AND NOT EXISTS(SELECT 1 FROM messages expired WHERE expired.attachment_id=a.id AND expired.expires_at<=UTC_TIMESTAMP(3))) OR
+    EXISTS(SELECT 1 FROM messages m WHERE m.attachment_id=a.id AND m.deleted_at IS NULL AND m.view_once=FALSE AND (m.expires_at IS NULL OR m.expires_at>UTC_TIMESTAMP(3)) AND (m.sender_id=$2 OR m.recipient_id=$2)) OR
     EXISTS(SELECT 1 FROM messenger_group_messages gm JOIN messenger_members mm ON mm.group_id=gm.group_id JOIN messenger_groups g ON g.id=gm.group_id WHERE gm.attachment_id=a.id AND gm.deleted_at IS NULL AND mm.user_id=$2 AND g.tenant_id=$3 AND g.closed=FALSE) OR
     EXISTS(SELECT 1 FROM messenger_status st JOIN contacts c ON c.owner_id=st.owner_id AND c.contact_id=$2 JOIN contacts back ON back.owner_id=$2 AND back.contact_id=st.owner_id WHERE st.attachment_id=a.id AND st.audience='contacts' AND st.expires_at>UTC_TIMESTAMP(3)))`,[attachment[1],user.id,user.tenant_id])).rows[0];
   if(!row)return send(res,404,{error:'Attachment unavailable'});
   res.writeHead(200,{'Content-Type':row.mime,'Content-Length':row.size,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Disposition':(row.mime==='application/pdf'?'attachment':'inline')+`; filename="attachment"; filename*=UTF-8''${encodeURIComponent(row.name)}`});res.end(row.data);return;
  }
  if(path==='/api/messenger/starred'&&req.method==='GET'){
-  const result=await pool.query(`SELECT m.id,m.body,m.created_at,CASE WHEN m.sender_id=$1 THEN m.recipient_id ELSE m.sender_id END AS contact_id FROM message_stars star JOIN messages m ON m.id=star.message_id JOIN users s ON s.id=m.sender_id JOIN users r ON r.id=m.recipient_id WHERE star.user_id=$1 AND (m.sender_id=$1 OR m.recipient_id=$1) AND s.tenant_id=$2 AND r.tenant_id=$2 AND m.deleted_at IS NULL ORDER BY m.created_at DESC LIMIT 200`,[user.id,user.tenant_id]);return send(res,200,{messages:result.rows});
+  const result=await pool.query(`SELECT m.id,m.body,m.created_at,CASE WHEN m.sender_id=$1 THEN m.recipient_id ELSE m.sender_id END AS contact_id FROM message_stars star JOIN messages m ON m.id=star.message_id JOIN users s ON s.id=m.sender_id JOIN users r ON r.id=m.recipient_id WHERE star.user_id=$1 AND (m.sender_id=$1 OR m.recipient_id=$1) AND s.tenant_id=$2 AND r.tenant_id=$2 AND m.deleted_at IS NULL AND m.view_once=FALSE AND (m.expires_at IS NULL OR m.expires_at>UTC_TIMESTAMP(3)) ORDER BY m.created_at DESC LIMIT 200`,[user.id,user.tenant_id]);return send(res,200,{messages:result.rows});
  }
  const message=/^\/api\/messenger\/messages\/([0-9a-f-]{36})\/(star|forward)$/.exec(path);
  if(message&&uuid.test(message[1])){
@@ -156,6 +156,6 @@ export async function handleMessengerFeatures({req,res,path,user,pool,send,readJ
   const id=randomUUID();await pool.query('INSERT INTO messenger_status(id,owner_id,tenant_id,body,attachment_id,audience,expires_at) VALUES($1,$2,$3,$4,$5,$6,DATE_ADD(UTC_TIMESTAMP(3),INTERVAL 24 HOUR))',[id,user.id,user.tenant_id,body.trim(),attachmentId,audience]);return send(res,201,{id});
  }
  const status=/^\/api\/messenger\/status\/([0-9a-f-]{36})$/.exec(path);
- if(status&&uuid.test(status[1])&&req.method==='DELETE'){await pool.query('DELETE FROM messenger_status WHERE id=$1 AND owner_id=$2 AND tenant_id=$3',[status[1],user.id,user.tenant_id]);return send(res,200,{status:'removed'});}
+ if(status&&uuid.test(status[1])&&req.method==='DELETE'){await pool.query('DELETE FROM messenger_status WHERE id=$1 AND owner_id=$2 AND tenant_id=$3 AND restricted=FALSE',[status[1],user.id,user.tenant_id]);return send(res,200,{status:'removed'});}
  return send(res,404,{error:'Messenger route unavailable'});
 }

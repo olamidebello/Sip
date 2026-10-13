@@ -1,0 +1,26 @@
+---
+- name: Require implemented direct-message privacy release
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Verify privacy implementation files
+      ansible.builtin.stat:
+        path: '/opt/olamide/repo/{{ item }}'
+      loop:
+        - services/api/messagePrivacy.js
+        - apps/web/src/messagePrivacy.js
+      register: privacy_sources
+    - name: Require complete privacy source
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+      loop: '{{ privacy_sources.results }}'
+- name: Deploy validated full chat release and additive schema
+  ansible.builtin.import_playbook: chat-experience.yml
+- name: Report implemented privacy stage
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Report scope and required real-device checks
+      ansible.builtin.debug:
+        msg: 'Stage 1 installed: per-message direct-chat expiry and view-once image/audio/video. Verify expiry and a concurrent double-open test with real accounts. E2E encryption and encrypted native backup/device sync are NOT installed. View once cannot prevent screenshots, recording, or a modified client retaining received bytes. Backups and external copies are not erased by message expiry.'

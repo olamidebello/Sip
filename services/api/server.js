@@ -1,3 +1,4 @@
+import {handleViewOnce,startMessageExpiry} from './messagePrivacy.js';
 import {handleMessengerPreferences} from './messengerPreferences.js';
 import {handleScheduledCalls} from './scheduledCalls.js';
 import {handleNavigationPolicy} from './navigationPolicy.js';
@@ -257,6 +258,8 @@ async function handler(req, res) {
       if (!user) return send(res, 401, { error: "Sign in required" });
       if(path.startsWith('/api/softphone/scheduled'))return await handleScheduledCalls({req,res,path,user,pool,send,readJson});
       if(path==='/api/navigation'||path.startsWith('/api/admin/navigation'))return await handleNavigationPolicy({req,res,path,user,pool,send,readJson});
+      if(path==='/api/messenger/privacy/capabilities'&&req.method==='GET')return send(res,200,{directDisappearing:!!user.features?.messaging,directViewOnce:!!user.features?.messaging,endToEndEncryption:false,nativeBackupSync:false});
+      if(/^\/api\/messenger\/messages\/[0-9a-f-]{36}\/open$/.test(path))return await handleViewOnce({req,res,path,user,pool,send});
       if(path==='/api/messenger/preferences')return await handleMessengerPreferences({req,res,user,pool,send,readJson});
       if(path.startsWith('/api/messenger/')||path.startsWith('/api/account/sessions'))return await handleMessengerFeatures({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin),sessionHash:tokenHash(currentToken(req)),closeSessions:hashes=>meetingSignaling?.closeSessions(hashes)});
       if(path.startsWith('/api/admin/user-sessions'))return await handleSessionPolicy({req,res,path,user,pool,send,readJson,closeSessions:hashes=>meetingSignaling?.closeSessions(hashes)});
@@ -403,7 +406,7 @@ async function handler(req, res) {
       if(path==='/api/account/contact-settings'||path==='/api/contacts/search'||path==='/api/contacts/address-book'||path==='/api/contacts/google/config')return await handleContactSettings({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin)});
       if (path === "/api/contacts" && req.method === "GET") {
         const result = await pool.query(
-          "SELECT u.id, u.display_name AS name, u.email, COALESCE(cp.archived,0) AS archived, COALESCE(cp.muted,0) AS muted,COALESCE(cp.pinned,0) AS pinned, (COALESCE(cp.unread,0) OR EXISTS(SELECT 1 FROM messages unread WHERE unread.sender_id=u.id AND unread.recipient_id=c.owner_id AND unread.read_at IS NULL AND unread.deleted_at IS NULL)) AS unread, CASE WHEN a.status='active' THEN CONCAT('sip:',a.username,'@',a.domain) ELSE NULL END AS sip_address FROM contacts c JOIN users u ON u.id=c.contact_id LEFT JOIN sip_accounts a ON a.user_id=u.id AND a.tenant_id=u.tenant_id LEFT JOIN conversation_preferences cp ON cp.owner_id=c.owner_id AND cp.contact_id=c.contact_id WHERE c.owner_id=$1 AND u.tenant_id=$2 ORDER BY COALESCE(cp.pinned,0) DESC,u.display_name LIMIT 1000",
+          "SELECT u.id, u.display_name AS name, u.email, COALESCE(cp.archived,0) AS archived, COALESCE(cp.muted,0) AS muted,COALESCE(cp.pinned,0) AS pinned, (COALESCE(cp.unread,0) OR EXISTS(SELECT 1 FROM messages unread WHERE unread.sender_id=u.id AND unread.recipient_id=c.owner_id AND unread.read_at IS NULL AND unread.deleted_at IS NULL AND (unread.expires_at IS NULL OR unread.expires_at>UTC_TIMESTAMP(3)))) AS unread, CASE WHEN a.status='active' THEN CONCAT('sip:',a.username,'@',a.domain) ELSE NULL END AS sip_address FROM contacts c JOIN users u ON u.id=c.contact_id LEFT JOIN sip_accounts a ON a.user_id=u.id AND a.tenant_id=u.tenant_id LEFT JOIN conversation_preferences cp ON cp.owner_id=c.owner_id AND cp.contact_id=c.contact_id WHERE c.owner_id=$1 AND u.tenant_id=$2 ORDER BY COALESCE(cp.pinned,0) DESC,u.display_name LIMIT 1000",
           [user.id,user.tenant_id]
         );
         return send(res, 200, { contacts: result.rows });
@@ -777,6 +780,7 @@ async function handler(req, res) {
 await migrate(pool);
 const kamailioHttpBridge=startKamailioHttpBridge(pool);
 const stopSipProvisioning=startSipProvisioning(pool,origin);
+const stopMessageExpiry=startMessageExpiry(pool);
 const stopNativePush=startNativePush(pool);
 const stopRateSync=startFlowrouteRateSync(pool);
 const stopStoreRenewals=startStoreRenewals(pool);

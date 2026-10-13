@@ -1,3 +1,4 @@
+import {validateMessagePrivacy} from './messagePrivacy.js';
 import {randomUUID} from 'node:crypto';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const reactions=['👍','❤️','😂','😮','😢','🙏'];
@@ -42,22 +43,22 @@ export async function handleConversations({req,res,path,user,pool,send,readJson,
     const contact=url.searchParams.get('contact');
     if(!await conversationContact(pool,user,contact))return send(res,403,{error:'Add an active workspace contact first'});
     const messages=await pool.query(`SELECT m.id,m.sender_id AS sender,m.recipient_id AS recipient,
-      CASE WHEN m.deleted_at IS NULL THEN m.body ELSE '' END AS body,m.created_at,m.reply_to,m.read_at,m.edited_at,m.deleted_at,m.attachment_id,a.name AS attachment_name,a.mime AS attachment_mime,EXISTS(SELECT 1 FROM message_stars stars WHERE stars.user_id=$1 AND stars.message_id=m.id) AS starred,
-      CASE WHEN r.deleted_at IS NULL THEN r.body ELSE '' END AS reply_body
+      CASE WHEN m.deleted_at IS NULL THEN m.body ELSE '' END AS body,m.created_at,m.expires_at,m.view_once,m.opened_at,m.reply_to,m.read_at,m.edited_at,m.deleted_at,m.attachment_id,a.name AS attachment_name,a.mime AS attachment_mime,EXISTS(SELECT 1 FROM message_stars stars WHERE stars.user_id=$1 AND stars.message_id=m.id) AS starred,
+      CASE WHEN r.deleted_at IS NULL AND r.view_once=FALSE AND (r.expires_at IS NULL OR r.expires_at>UTC_TIMESTAMP(3)) THEN r.body ELSE '' END AS reply_body
       FROM messages m LEFT JOIN messenger_attachments a ON a.id=m.attachment_id LEFT JOIN messages r ON r.id=m.reply_to AND ((r.sender_id=m.sender_id AND r.recipient_id=m.recipient_id) OR (r.sender_id=m.recipient_id AND r.recipient_id=m.sender_id))
-      WHERE (m.sender_id=$1 AND m.recipient_id=$2) OR (m.sender_id=$2 AND m.recipient_id=$1)
+      WHERE ((m.sender_id=$1 AND m.recipient_id=$2) OR (m.sender_id=$2 AND m.recipient_id=$1)) AND (m.expires_at IS NULL OR m.expires_at>UTC_TIMESTAMP(3))
       ORDER BY m.created_at DESC,m.id DESC LIMIT 100`,[user.id,contact]);
     const prefs=(await pool.query(`SELECT owner_id,blocked,muted,archived,pinned,unread,typing_until>NOW(3) AS typing
       FROM conversation_preferences WHERE (owner_id=$1 AND contact_id=$2) OR (owner_id=$2 AND contact_id=$1)`,[user.id,contact])).rows;
     const reactionRows=(await pool.query(`SELECT r.message_id,r.user_id,r.reaction FROM message_reactions r JOIN messages m ON m.id=r.message_id
-      WHERE ((m.sender_id=$1 AND m.recipient_id=$2) OR (m.sender_id=$2 AND m.recipient_id=$1)) AND m.deleted_at IS NULL
+      WHERE ((m.sender_id=$1 AND m.recipient_id=$2) OR (m.sender_id=$2 AND m.recipient_id=$1)) AND m.deleted_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>UTC_TIMESTAMP(3))
       ORDER BY m.created_at DESC LIMIT 200`,[user.id,contact])).rows;
     const own=prefs.find(p=>p.owner_id===user.id),other=prefs.find(p=>p.owner_id===contact);
     return send(res,200,{viewer:user.id,messages:messages.rows.reverse(),reactions:reactionRows,
       preferences:{blocked:!!own?.blocked,muted:!!own?.muted,archived:!!own?.archived,pinned:!!own?.pinned,unread:!!own?.unread},typing:!own?.blocked&&!other?.blocked&&!!other?.typing});
   }
   if(path==='/api/messages' && req.method==='POST') {
-    const {recipient,body,replyTo=null,attachmentId=null}=await readJson(req);
+    const input=await readJson(req);const {recipient,body,replyTo=null,attachmentId=null}=input;let privacy;try{privacy=validateMessagePrivacy(input);}catch(error){return send(res,400,{error:error.message});}if(privacy.viewOnce&&!attachmentId)return send(res,400,{error:'Attach fresh image, video or audio for view once'});
     if(typeof body!=='string'||!body.trim()||body.length>4000||(attachmentId!==null&&!uuid.test(attachmentId))||(replyTo!==null&&!uuid.test(replyTo)))return send(res,400,{error:'Message required (up to 4000 characters)'});
     if(!await conversationContact(pool,user,recipient))return send(res,403,{error:'Add an active workspace contact first'});
     const db=await pool.connect();
@@ -69,16 +70,18 @@ export async function handleConversations({req,res,path,user,pool,send,readJson,
       const blocked=await db.query(`SELECT 1 FROM conversation_preferences WHERE blocked=true AND
         ((owner_id=$1 AND contact_id=$2) OR (owner_id=$2 AND contact_id=$1))`,[user.id,recipient]);
       if(blocked.rowCount){await db.query('ROLLBACK');return send(res,403,{error:'Messaging is unavailable for this conversation'});}
-      if(replyTo && !(await db.query(`SELECT 1 FROM messages WHERE id=$3 AND deleted_at IS NULL AND
+      if(replyTo && !(await db.query(`SELECT 1 FROM messages WHERE id=$3 AND deleted_at IS NULL AND view_once=FALSE AND (expires_at IS NULL OR expires_at>UTC_TIMESTAMP(3)) AND
         ((sender_id=$1 AND recipient_id=$2) OR (sender_id=$2 AND recipient_id=$1))`,[user.id,recipient,replyTo])).rowCount){
         await db.query('ROLLBACK');return send(res,400,{error:'Reply message unavailable'});
       }
-      if(attachmentId && !(await db.query('SELECT 1 FROM messenger_attachments WHERE id=$1 AND owner_id=$2 AND tenant_id=$3',[attachmentId,user.id,user.tenant_id])).rowCount){await db.query('ROLLBACK');return send(res,400,{error:'Attachment unavailable'});}
+      if(attachmentId && !(await db.query('SELECT 1 FROM messenger_attachments WHERE id=$1 AND owner_id=$2 AND tenant_id=$3 AND restricted=FALSE',[attachmentId,user.id,user.tenant_id])).rowCount){await db.query('ROLLBACK');return send(res,400,{error:'Attachment unavailable'});}
+      if(privacy.viewOnce){const fresh=await db.query(`SELECT id FROM messenger_attachments a WHERE a.id=$1 AND a.owner_id=$2 AND a.tenant_id=$3 AND a.restricted=FALSE AND (a.mime LIKE 'image/%' OR a.mime LIKE 'video/%' OR a.mime LIKE 'audio/%') AND NOT EXISTS(SELECT 1 FROM messages WHERE attachment_id=a.id) AND NOT EXISTS(SELECT 1 FROM messenger_group_messages WHERE attachment_id=a.id) AND NOT EXISTS(SELECT 1 FROM messenger_status WHERE attachment_id=a.id) FOR UPDATE`,[attachmentId,user.id,user.tenant_id]);if(!fresh.rowCount){await db.query('ROLLBACK');return send(res,400,{error:'View once requires a fresh unshared media upload'});}await db.query('UPDATE messenger_attachments SET restricted=TRUE WHERE id=$1',[attachmentId]);}
       const id=randomUUID();
       await db.query('INSERT INTO messages(id,sender_id,recipient_id,body,reply_to) VALUES($1,$2,$3,$4,$5)',[id,user.id,recipient,body.trim(),replyTo]);
+      await db.query('UPDATE messages SET view_once=$2,expires_at=IF($3=0,NULL,TIMESTAMPADD(SECOND,$3,UTC_TIMESTAMP(3))) WHERE id=$1',[id,privacy.viewOnce,privacy.expiresIn]);
       if(attachmentId)await db.query('UPDATE messages SET attachment_id=$2 WHERE id=$1',[id,attachmentId]);
       const forwarding=(await db.query('SELECT message_forward FROM user_presence WHERE user_id=$1',[recipient])).rows[0]?.message_forward;
-      if(forwarding && forwarding!==user.id && forwarding!==recipient) {
+      if(!privacy.viewOnce && !privacy.expiresIn && forwarding && forwarding!==user.id && forwarding!==recipient) {
         const destination=await db.query(`SELECT u.id FROM users u JOIN user_presence p ON p.user_id=u.id
           JOIN contacts c ON c.contact_id=u.id AND c.owner_id=$1
           WHERE u.id=$2 AND u.tenant_id=$3 AND u.status='active' AND p.accept_forwarded=true`,[recipient,forwarding,user.tenant_id]);
@@ -111,10 +114,10 @@ export async function handleConversations({req,res,path,user,pool,send,readJson,
   }
   const message=/^\/api\/messages\/([0-9a-f-]{36})$/.exec(path);
   if(message&&['PATCH','DELETE','PUT'].includes(req.method)) {
-    const row=(await pool.query(`SELECT m.sender_id,m.recipient_id,m.deleted_at FROM messages m
+    const row=(await pool.query(`SELECT m.sender_id,m.recipient_id,m.deleted_at,m.view_once FROM messages m
       JOIN users s ON s.id=m.sender_id JOIN users r ON r.id=m.recipient_id
-      WHERE m.id=$1 AND s.tenant_id=$3 AND r.tenant_id=$3 AND (m.sender_id=$2 OR m.recipient_id=$2)`,[message[1],user.id,user.tenant_id])).rows[0];
-    if(!row||row.deleted_at)return send(res,404,{error:'Message unavailable'});
+      WHERE m.id=$1 AND s.tenant_id=$3 AND r.tenant_id=$3 AND (m.sender_id=$2 OR m.recipient_id=$2) AND (m.expires_at IS NULL OR m.expires_at>UTC_TIMESTAMP(3))`,[message[1],user.id,user.tenant_id])).rows[0];
+    if(!row||row.deleted_at||row.view_once)return send(res,404,{error:'Message unavailable'});
     if(req.method==='PUT') {
       const {reaction}=await readJson(req);
       if(!reactions.includes(reaction)&&reaction!==null)return send(res,400,{error:'Choose a supported reaction'});

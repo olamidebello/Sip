@@ -63,4 +63,4 @@
           - "'chat-message-dialog' in chat_bundle.content"
     - name: Report supported features and acceptance requirements
       ansible.builtin.debug:
-        msg: 'Chat release installed: text/media/voice, emoji, reply/swipe/long-press, copy/info, stars/forward/reactions, sender editing/removal, preferences, dates/read indicators, groups/status, SIP audio, video invitations and confirmed wallet actions. Test with two accounts on real devices. Messages are not end-to-end encrypted. View-once, disappearing messages, native backup/sync and a full WhatsApp sticker/GIF catalog are not supplied by this installer.'
+        msg: 'Chat release installed: text/media/voice, emoji, reply/swipe/long-press, copy/info, stars/forward/reactions, sender editing/removal, preferences, dates/read indicators, groups/status, SIP audio, video invitations and confirmed wallet actions. Test with two accounts on real devices. Messages are not end-to-end encrypted. Direct-message expiry and view-once support are reported separately by the message-privacy capability endpoint. Native backup/sync and a full WhatsApp sticker/GIF catalog are not supplied by this installer.'

@@ -1,5 +1,7 @@
+import {appendViewOnce} from './messagePrivacy.js';
 import {icon} from './messengerIcons.js';
 export function appendAttachment(document,item,message){
+ if(message.view_once){appendViewOnce(document,item,message);return;}
  if(!message.attachment_id||!message.attachment_mime)return;
  const url='/api/messenger/attachments/'+encodeURIComponent(message.attachment_id),mime=message.attachment_mime;
  let media;
@@ -68,5 +70,5 @@ export function setupMediaComposer({document,form,request,onError,voice=true}){
   record.title='Tap to record; on touch, hold to record, slide left to cancel or up to lock';
  }
  function reset(){generation++;if(recorder?.state==='recording'){cancelRecording=true;recorder.stop();}stopTracks();attachment=null;preview.textContent='';remove.hidden=true;input.value='';}
- return {get id(){return attachment?.id||null;},get name(){return attachment?.name||'';},get busy(){return uploading||recorder?.state==='recording';},reset,stop(){disposed=true;if(recorder?.state==='recording')recorder.stop();stopTracks();reset();},resume(){disposed=false;}};
+ return {get id(){return attachment?.id||null;},get name(){return attachment?.name||'';},get mime(){return attachment?.mime||'';},get busy(){return uploading||recorder?.state==='recording';},reset,stop(){disposed=true;if(recorder?.state==='recording')recorder.stop();stopTracks();reset();},resume(){disposed=false;}};
 }

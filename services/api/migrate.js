@@ -1,3 +1,4 @@
+import {migrateMessagePrivacy} from './messagePrivacy.js';
 import {migrateMessengerPreferences} from './messengerPreferences.js';
 import {migrateScheduledCalls} from './scheduledCalls.js';
 import {migrateNavigationPolicy} from './navigationPolicy.js';
@@ -116,6 +117,7 @@ export async function migrate(pool) {
       ['passkey_policy', () => migratePasskeyPolicy(pool)],
       ['session_policy', () => migrateSessionPolicy(pool)],
       ['messenger_features', () => migrateMessengerFeatures(pool)],
+      ['message_privacy', () => migrateMessagePrivacy(pool)],
       ['navigation_policy', () => migrateNavigationPolicy(pool)],
       ['scheduled_calls', () => migrateScheduledCalls(pool)],
       ['messenger_preferences', () => migrateMessengerPreferences(pool)],

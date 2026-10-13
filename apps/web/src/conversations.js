@@ -1,3 +1,4 @@
+import {setupMessagePrivacy,closeViewOnce} from './messagePrivacy.js';
 import {chatDayLabel,messageReceipt,setupMessageDetails} from './chatPresentation.js';
 import {icon} from './messengerIcons.js';
 import {appendAttachment,setupMediaComposer} from './messengerMedia.js';
@@ -5,6 +6,7 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
   const $=selector=>document.querySelector(selector),thread=()=>$('#contact-list').value;
   const media=setupMediaComposer({document,form:$('#send-message'),request,onError:message=>$('#chat-status').textContent=message});
   const details=setupMessageDetails(document);
+  const privacy=setupMessagePrivacy({document,form:$('#send-message'),media,get});
   let contacts=[],replyTo=null,editing=null,loading=false,lastTyping=0,lastRendered='';
   function setSendLabel(label){const button=$('#send-message button:not([type=button])');button.innerHTML=icon('send');button.setAttribute('aria-label',label);button.title=label;}
   function clearDraft(){replyTo=null;editing=null;$('#message-context').hidden=true;setSendLabel('Send message');}
@@ -25,11 +27,11 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
       for(const message of data.messages) {
         if(search&&!message.body.toLowerCase().includes(search))continue;
         const day=chatDayLabel(message.created_at);if(day&&day!==lastDay){const divider=document.createElement('li');divider.className='chat-date-divider';divider.textContent=day;list.append(divider);lastDay=day;}
-        const own=message.sender===data.viewer,item=document.createElement('li');item.className=own?'message-bubble sent':'message-bubble received';item.dataset.messageId=message.id;if(!message.deleted_at){item.tabIndex=0;item.setAttribute('aria-expanded','false');item.setAttribute('aria-label','Message. Long press or press Enter for actions.');}
+        const own=message.sender===data.viewer,item=document.createElement('li');item.className=own?'message-bubble sent':'message-bubble received';item.dataset.messageId=message.id;if(!message.deleted_at&&!message.view_once){item.tabIndex=0;item.setAttribute('aria-expanded','false');item.setAttribute('aria-label','Message. Long press or press Enter for actions.');}
         if(message.reply_to){const quote=document.createElement('blockquote'),jump=document.createElement('button');jump.type='button';jump.className='chat-reply-quote';jump.textContent=message.reply_body||'Original message removed';jump.setAttribute('aria-label','Go to replied message');jump.onclick=()=>{const original=[...list.querySelectorAll('[data-message-id]')].find(node=>node.dataset.messageId===message.reply_to);if(original){original.scrollIntoView?.({block:'center',behavior:'smooth'});original.classList.add('message-flash');setTimeout(()=>original.classList.remove('message-flash'),1200);}else $('#chat-status').textContent='Original message is outside the loaded history.';};quote.append(jump);item.append(quote);}
         const body=document.createElement('p');body.textContent=message.deleted_at?'Message removed':message.body;item.append(body);appendAttachment(document,item,message);
         const stamp=document.createElement('small');stamp.className='message-timestamp';stamp.textContent=new Date(message.created_at).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})+(message.edited_at?' · edited':'');if(own){const state=messageReceipt(message),receipt=document.createElement('span');receipt.className='message-receipt'+(state.read?' read':'');receipt.textContent=state.symbol;receipt.setAttribute('aria-label',state.label);stamp.append(' ',receipt);}item.append(stamp);
-        if(!message.deleted_at){
+        if(!message.deleted_at&&!message.view_once){
           const controls=document.createElement('div');controls.className='message-actions';
           controls.append(action('Copy',async()=>{if(await details.copy(message))$('#chat-status').textContent='Message copied.';}));controls.append(action('Info',()=>details.info(message)));
           controls.append(action(message.starred?'Unstar':'Star',async()=>{await request('/api/messenger/messages/'+message.id+'/star',{starred:!message.starred},'PUT');await refresh();}));
@@ -68,12 +70,12 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
   };
   const timer=setInterval(()=>{if(isSignedIn()&&isVisible()&&document.visibilityState==='visible')refresh().catch(error=>{$('#chat-status').textContent=error.message;});},5000);
   timer.unref?.();
-  return {refresh,dispose(){clearInterval(timer);media.stop();details.dispose();},stopMedia(){lastRendered='';media.stop();details.close();},resumeMedia(){media.resume();},clearAttachment(){media.reset();},setContacts(value){contacts=value;clearDraft();},clearDraft,async send(body){
+  return {refresh,dispose(){clearInterval(timer);media.stop();privacy.dispose();details.dispose();},stopMedia(){lastRendered='';media.stop();privacy.stop();closeViewOnce(document);details.close();},resumeMedia(){media.resume();void privacy.resume();},clearAttachment(){media.reset();},setContacts(value){contacts=value;clearDraft();},clearDraft,async send(body){
     if(media.busy)throw new Error('Finish recording or uploading before sending');
     body=body||media.name;
     if(editing)await request('/api/messages/'+editing,{body},'PATCH');
-    else await request('/api/messages',{recipient:thread(),body,replyTo,...(media.id?{attachmentId:media.id}:{})});
-    media.reset();
+    else await request('/api/messages',{recipient:thread(),body,replyTo,...privacy.payload,...(media.id?{attachmentId:media.id}:{})});
+    media.reset();privacy.reset();
     clearDraft();await request('/api/messages/conversation/'+thread(),{typing:false},'PUT').catch(()=>{});
   }};
 }
