@@ -1,3 +1,4 @@
+import {setupSocialPublishing} from './socialPublishing.js';
 import {setupLanguageTools} from './languageTools.js';
 import {setupContactManagerLayout} from './contactManagerLayout.js';
 import {setupSocialLinks} from './socialLinks.js';
@@ -403,9 +404,10 @@ root.innerHTML = `
 
   <section id="social" hidden aria-label="Social platform">
     <details id="social-links"><summary>Link your social profiles</summary><p>Add links to your existing profiles. This does not connect sign-in, import posts, or verify ownership.</p><form><label>Platform <select name="platform"><option value="x">X / Twitter</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="linkedin">LinkedIn</option><option value="tiktok">TikTok</option><option value="youtube">YouTube</option><option value="threads">Threads</option><option value="bluesky">Bluesky</option></select></label><label>Profile URL <input name="url" type="url" required maxlength="500" placeholder="https://x.com/yourname"></label><label><input name="visible" type="checkbox" checked>Show to users in my workspace</label><button>Save profile link</button></form><ul></ul><p role="status"></p></details>
+    <details id="social-publishing"><summary>Post to Facebook Pages and X</summary><p>Connect an authorized Facebook Page token or X user token. Tokens are encrypted and never displayed again. This is manual token setup, not OAuth sign-in. Personal Facebook timeline posting is not supported.</p><form data-publish-connect><label>Platform <select name="provider"><option value="facebook">Facebook Page</option><option value="x">X</option></select></label><label>Authorized access token <input name="token" type="password" required maxlength="4000" autocomplete="off"></label><button>Verify and connect account</button></form><ul></ul><form data-publish-form><label>Destination <select name="provider"><option value="facebook">My connected Facebook Page</option><option value="x">My connected X account</option></select></label><label>Post text <textarea name="text" required maxlength="4000"></textarea></label><label><input name="confirm" type="checkbox" required>I confirm publishing this text to the selected external account</label><button>Publish externally</button></form><button type="button" data-publish-refresh>Refresh connections and delivery</button><p role="status"></p><ol data-publish-history></ol></details>
     <h2>Olamide Social</h2><p>Connect and share with your workspace.</p>
     <nav aria-label="Social feed"><button type="button" data-social-mode="all">For you</button><button type="button" data-social-mode="following">Following</button><button type="button" data-social-mode="bookmarks">Bookmarks</button></nav>
-    <form><label>What is happening? <textarea name="body" required maxlength="560" rows="3" placeholder="Share a post (280 characters)"></textarea></label><p data-social-reply></p><button>Post</button><button type="button" data-social-cancel>Cancel reply</button></form>
+    <form data-social-compose><label>What is happening? <textarea name="body" required maxlength="560" rows="3" placeholder="Share a post (280 characters)"></textarea></label><p data-social-reply></p><button>Post</button><button type="button" data-social-cancel>Cancel reply</button></form>
     <label>Search posts or people <input data-social-search maxlength="80" type="search"></label><button type="button" data-social-refresh>Search / refresh feed</button><button type="button" data-social-people>Find people</button><ul data-social-profiles></ul>
     <p role="status"></p><div data-social-feed></div>
   </section>
@@ -1245,7 +1247,7 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   document.body.classList.toggle('admin-mode',adminMode);
   document.body.classList.toggle('messenger-mode',!adminMode);
   document.body.classList.toggle('money-mode',target==='money');
-  if(target==='social'){void socialWorkspace.refresh();void socialLinks.refresh();}
+  if(target==='social'){void socialWorkspace.refresh();void socialLinks.refresh();void socialPublishing.refresh();}
   if(target==='money')void moneyWorkspace.refresh();
   if(modeChanged)updateNavigation();
   const requested=document.getElementById(target);
@@ -1389,6 +1391,7 @@ const support=setupSupport({get:path=>apiGet(path),request:(path,body,method)=>a
 localeSettings=setupLocaleSettings({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const groupAdmin = setupGroupAdmin();
 const sipProfiles = setupSipProfiles({get:apiGet,request:accountRequest,permissionsChanged:updateNavigation});
+const socialPublishing=setupSocialPublishing({document,get:apiGet,request:accountRequest});
 const socialLinks=setupSocialLinks({document,get:apiGet,request:accountRequest});
 const socialWorkspace=setupSocialWorkspace({document,get:apiGet,request:accountRequest});
 const moneyWorkspace=setupMoneyWorkspace({document,get:apiGet,request:accountRequest,show:showWorkspace});
@@ -2408,6 +2411,7 @@ $("#logout").onclick = async () => {
     dialerContacts.clear();
     contactDirectory.clear();
     languageTools.stop();
+    socialPublishing.clear();
     socialLinks.clear();
     socialWorkspace.stop();
     moneyWorkspace.stop();

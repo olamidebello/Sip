@@ -1,5 +1,5 @@
 export function setupSocialWorkspace({document,get,request}){
- const root=document.getElementById('social'),feed=root.querySelector('[data-social-feed]'),status=root.querySelector('[role=status]:not(#social-links [role=status])'),form=root.querySelector('form:not(#social-links form)'),reply=root.querySelector('[data-social-reply]');let mode='all',author='',parentId=null,quoteId=null,thread='',cursor=null,generation=0;
+ const root=document.getElementById('social'),feed=root.querySelector('[data-social-feed]'),status=root.querySelector('[role=status]:not(#social-links [role=status]):not(#social-publishing [role=status])'),form=root.querySelector('[data-social-compose]')||root.querySelector('form:not(#social-links form):not(#social-publishing form)'),reply=root.querySelector('[data-social-reply]');let mode='all',author='',parentId=null,quoteId=null,thread='',cursor=null,generation=0;
  function button(text,action){const b=document.createElement('button');b.type='button';b.textContent=text;b.onclick=async()=>{b.disabled=true;try{await action();}catch(e){status.textContent=e.message;}finally{b.disabled=false;}};return b;}
  const more=button('Load older posts',()=>refresh(true));more.hidden=true;feed.after(more);
  async function refresh(append=false){const current=++generation;try{

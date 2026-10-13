@@ -83,6 +83,7 @@ test("registered users can create and join a room; host controls it", {
   const guestCookie = guestLogin.cookie.split(";")[0];
   const savedLink=await fetch(base+'/api/social/links/x',{method:'PUT',headers:{Origin:origin,Cookie:guestCookie,'Content-Type':'application/json'},body:JSON.stringify({url:'https://x.com/integration',visible:true})});assert.equal(savedLink.status,200);
   const profileLinks=await fetch(base+'/api/social/profiles/'+guestLogin.body.id+'/links',{headers:{Cookie:guestCookie}}).then(r=>r.json());assert.equal(profileLinks.links[0].url,'https://x.com/integration');
+  const publishing=await fetch(base+'/api/social/publishing',{headers:{Cookie:guestCookie}});assert.equal(publishing.status,200);assert.deepEqual((await publishing.json()).accounts,[]);
   const socialPost=await post('/api/social/posts',{body:'Social integration post'},guestCookie);assert.equal(socialPost.status,201,JSON.stringify(socialPost.body));
   const quotePost=await post('/api/social/posts',{body:'My quoted comment',quoteId:socialPost.body.id},guestCookie);assert.equal(quotePost.status,201);
   const replyPost=await post('/api/social/posts',{body:'Thread reply',parentId:socialPost.body.id},guestCookie);assert.equal(replyPost.status,201);

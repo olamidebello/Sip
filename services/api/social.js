@@ -1,9 +1,11 @@
+import {migrateSocialPublishing,handleSocialPublishing} from './socialPublishing.js';
 import {migrateSocialLinks,handleSocialLinks} from './socialLinks.js';
 import {randomUUID} from 'node:crypto';
 import {navigationFor} from './navigationPolicy.js';
 export function validSocialBody(value){return typeof value==='string'&&value.trim().length>0&&Array.from(value.trim()).length<=280;}
 export async function migrateSocial(pool){
  await migrateSocialLinks(pool);
+ await migrateSocialPublishing(pool);
  await pool.query(`CREATE TABLE IF NOT EXISTS social_posts(id CHAR(36) PRIMARY KEY,tenant_id CHAR(36) NOT NULL,user_id CHAR(36) NOT NULL,body VARCHAR(1120) NOT NULL,parent_id CHAR(36) NULL,created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),FOREIGN KEY(user_id) REFERENCES users(id),FOREIGN KEY(tenant_id) REFERENCES tenants(id),FOREIGN KEY(parent_id) REFERENCES social_posts(id),INDEX(tenant_id,created_at)) ENGINE=InnoDB`);
  const quote=await pool.query("SHOW COLUMNS FROM social_posts LIKE 'quote_id'");if(!quote.rowCount)await pool.query('ALTER TABLE social_posts ADD COLUMN quote_id CHAR(36) NULL');
  for(const kind of ['likes','reposts','bookmarks'])await pool.query(`CREATE TABLE IF NOT EXISTS social_${kind}(user_id CHAR(36) NOT NULL,post_id CHAR(36) NOT NULL,PRIMARY KEY(user_id,post_id),FOREIGN KEY(user_id) REFERENCES users(id),FOREIGN KEY(post_id) REFERENCES social_posts(id) ON DELETE CASCADE) ENGINE=InnoDB`);
@@ -11,6 +13,7 @@ export async function migrateSocial(pool){
 }
 export async function handleSocial({req,res,path,user,pool,send,readJson}){
  if(!(await navigationFor(pool,user)).social)return send(res,403,{error:'Social unavailable'});
+ if(path.startsWith('/api/social/publishing'))return handleSocialPublishing({req,res,path,user,pool,send,readJson});
  if(path.startsWith('/api/social/links')||/^\/api\/social\/profiles\/[^/]+\/links$/.test(path))return handleSocialLinks({req,res,path,user,pool,send,readJson});
  const url=new URL(req.url,'http://localhost');
  if(path==='/api/social/profiles'&&req.method==='GET'){

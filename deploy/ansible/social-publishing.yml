@@ -1,0 +1,10 @@
+---
+- name: Install CI-approved social publishing implementation and database
+  ansible.builtin.import_playbook: messenger-features.yml
+- name: Report external publishing setup requirements
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Report supported account authorization
+      ansible.builtin.debug:
+        msg: 'Installed Facebook Page and X text publishing. Existing PROVIDER_CREDENTIAL_KEY is required. Users must connect authorized Page/user tokens in Social. Provider access, permissions and account approval cannot be created by Ansible. OAuth, other platforms and media uploads are not included. No posts are published by the installer.'
