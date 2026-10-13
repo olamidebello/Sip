@@ -7,8 +7,8 @@ test('directory enforces opt-in, tenant isolation and hides invisible presence',
  const r=await invoke('/api/contacts/search?q=Bello');assert.equal(r.status,200);assert.match(r.queries[0].sql,/p.searchable=true/);assert.match(r.queries[0].sql,/p.presence<>'invisible'/);assert.deepEqual(r.queries[0].params,['workspace','owner','bello','']);
  assert.equal((await invoke('/api/contacts/search?q=x')).status,400);
 });
-test('visibility defaults to private and status rejects invalid values',async()=>{
- assert.equal((await invoke('/api/account/contact-settings')).body.searchable,false);
+test('visibility defaults to available and shared, and status rejects invalid values',async()=>{
+ const settings=(await invoke('/api/account/contact-settings')).body;assert.equal(settings.searchable,true);assert.equal(settings.presence,'available');assert.equal(settings.share_presence,true);
  assert.equal((await invoke('/api/account/contact-settings','PUT',{presence:'bogus'})).status,400);
 });
 test('forwarding refuses unconsenting destinations',async()=>{

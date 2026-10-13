@@ -1,3 +1,4 @@
+import {defaultPresence,ensureDefaultPresence} from './defaultPresence.js';
 import {googleContactsConfig} from './googleContactsConfig.js';
 import {randomUUID} from 'node:crypto';
 const states=['available','away','busy','invisible','dnd'];
@@ -27,8 +28,9 @@ export async function handleContactSettings({req,res,path,user,pool,send,readJso
   }
   if(path!=='/api/account/contact-settings')return send(res,404,{error:'Route unavailable'});
   if(req.method==='GET') {
+    await ensureDefaultPresence(pool,user.id);
     const row=(await pool.query('SELECT * FROM user_presence WHERE user_id=$1',[user.id])).rows[0];
-    return send(res,200,row||{searchable:false,presence:'available',status_text:'',share_presence:false,accept_forwarded:false,call_forward:null,message_forward:null});
+    return send(res,200,row||defaultPresence);
   }
   if(req.method==='PUT') {
     const i=await readJson(req);

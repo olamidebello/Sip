@@ -8,9 +8,9 @@ export async function migrateConversations(pool) {
     phone VARCHAR(64) NOT NULL DEFAULT '', FOREIGN KEY(owner_id) REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE KEY owner_contact(owner_id,email,phone)) ENGINE=InnoDB`);
   await pool.query(`CREATE TABLE IF NOT EXISTS user_presence (
-    user_id CHAR(36) PRIMARY KEY, searchable BOOLEAN NOT NULL DEFAULT FALSE,
+    user_id CHAR(36) PRIMARY KEY, searchable BOOLEAN NOT NULL DEFAULT TRUE,
     presence VARCHAR(16) NOT NULL DEFAULT 'available', status_text VARCHAR(160) NOT NULL DEFAULT '',
-    share_presence BOOLEAN NOT NULL DEFAULT FALSE, accept_forwarded BOOLEAN NOT NULL DEFAULT FALSE,
+    share_presence BOOLEAN NOT NULL DEFAULT TRUE, accept_forwarded BOOLEAN NOT NULL DEFAULT FALSE,
     call_forward CHAR(36) NULL, message_forward CHAR(36) NULL,
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB`);
   for(const [name,definition] of [['reply_to','CHAR(36) NULL'],['read_at','DATETIME(3) NULL'],['edited_at','DATETIME(3) NULL'],['deleted_at','DATETIME(3) NULL']]) {

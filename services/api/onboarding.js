@@ -1,3 +1,4 @@
+import {ensureDefaultPresence} from './defaultPresence.js';
 import {issueCaptcha,consumeCaptcha} from './signupCaptcha.js';
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
 import { validateRegistration, hashPassword } from './security.js';
@@ -76,6 +77,7 @@ export async function handleOnboarding({req,res,path,pool,send,readJson,origin})
       await db.query('INSERT INTO user_profiles(user_id,phone_e164,address_line1,address_line2,city,region,postal_code,country) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
         [id,data.phone,data.address1,data.address2,data.city,data.region,data.postalCode,data.country]);
       await db.query("INSERT INTO user_group_members(user_id,group_id) VALUES($1,'00000000-0000-4000-8000-000000000001')",[id]);
+      await ensureDefaultPresence(db,id);
       await createSipAccount(db,id,new URL(origin).hostname);
       await db.query('COMMIT');
     } catch(error) {

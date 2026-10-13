@@ -1,0 +1,3 @@
+export const defaultPresence=Object.freeze({searchable:true,presence:'available',status_text:'',share_presence:true,accept_forwarded:false,call_forward:null,message_forward:null});
+export async function ensureDefaultPresence(pool,userId){await pool.query("INSERT IGNORE INTO user_presence(user_id,searchable,presence,share_presence) VALUES($1,TRUE,'available',TRUE)",[userId]);}
+export async function migrateDefaultPresence(pool){await pool.query('ALTER TABLE user_presence ALTER COLUMN searchable SET DEFAULT TRUE');await pool.query('ALTER TABLE user_presence ALTER COLUMN share_presence SET DEFAULT TRUE');await pool.query("INSERT IGNORE INTO user_presence(user_id,searchable,presence,share_presence) SELECT id,TRUE,'available',TRUE FROM users");}

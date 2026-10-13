@@ -1,3 +1,4 @@
+import {migrateDefaultPresence} from './defaultPresence.js';
 import {migrateContactDiscovery} from './contactDiscovery.js';
 import {migrateSubscriberDelivery} from './subscriberDelivery.js';
 import {migrateSubscriberRouting} from './subscriberRouting.js';
@@ -101,6 +102,7 @@ export async function migrate(pool) {
       ['dids', () => pool.initialize(awaitSql.dids)],
       ['nigeria', () => pool.initialize(awaitSql.nigeria)],
       ['conversations', () => migrateConversations(pool)],
+      ['default_presence', () => migrateDefaultPresence(pool)],
       ['native_push', () => migrateNativePush(pool)],
       ['user_activity', () => migrateUserActivity(pool)],
       ['provider_credentials', () => migrateProviderCredentials(pool)],

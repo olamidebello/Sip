@@ -75,6 +75,7 @@ test("registered users can create and join a room; host controls it", {
     assert.equal((await post('/api/login',{email,password})).status,200);
     assert.equal(codes.has(email),false);
   }
+  const registeredPresence=await db.query('SELECT searchable,presence,share_presence FROM user_presence p JOIN users u ON u.id=p.user_id WHERE u.email=$1',['guest'+unique+'@example.com']);assert.equal(registeredPresence.rows[0].presence,'available');assert.equal(Number(registeredPresence.rows[0].searchable),1);assert.equal(Number(registeredPresence.rows[0].share_presence),1);
   const hostLogin = await post("/api/login", { email:"host" + unique + "@example.com", password });
   const guestLogin = await post("/api/login", { email:"guest" + unique + "@example.com", password });
   assert.equal(hostLogin.status, 200);
