@@ -18,3 +18,5 @@ Before writes it creates private environment and MySQL backups under `/opt/olami
 The probe creates a temporary contact, removes it on success and otherwise expires it after 60 seconds. Run while the selected probe user is not on a call. After success clients must sign out and sign in again to obtain the corrected SIP identity. Existing contact records are not rewritten or forcibly evicted; allow old registrations to expire. If the final probe still fails, collect its result and inspect the switch's actual domain and private bridge lookup policy before changing routing.
 
 The host guard reads `DOMAIN`, including quoted values and the default HTTPS port. A standalone PUBLIC_ORIGIN entry in the secrets file is neither required nor used by this Compose deployment.
+
+Preflight and apply both use fresh one-off API containers with the canonical environment; they do not inherit a stale running API container mode. After canonical local-mode validation, the saved Compose environment is also synchronized to local mode so later deployments do not reintroduce remote mode.

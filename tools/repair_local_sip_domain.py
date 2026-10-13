@@ -21,6 +21,17 @@ def configured_application_host(text):
     origin=urllib.parse.urlsplit('https://'+value)
     return origin.hostname
 
+def local_mode_environment(text):
+    values=re.findall(r'^SIP_PROVISION_MODE=(.*)$',text,re.M)
+    if len(values)>1:raise ValueError('Duplicate SIP provisioning mode; no configuration changed')
+    if values:return re.sub(r'^SIP_PROVISION_MODE=.*$', 'SIP_PROVISION_MODE=kamailio_local',text,flags=re.M)
+    return text.rstrip()+'\nSIP_PROVISION_MODE=kamailio_local\n'
+
+def repair_command(compose,source,target,apply=False):
+    # A new one-off container reads the canonical Compose configuration.
+    # docker compose exec would retain the running container's stale environment.
+    return compose+['run','--rm','--no-deps','-T','-e','SIP_PROVISION_MODE=kamailio_local','-e','SIP_REPAIR_FROM='+source,'-e','SIP_ACCOUNT_DOMAIN='+target,'api','node','repairSipDomain.js']+(['--apply'] if apply else [])
+
 def main():
     args=argparse.ArgumentParser();args.add_argument('--from-domain',required=True);args.add_argument('--to-domain',required=True);args.add_argument('--apply',action='store_true');a=args.parse_args()
     if os.geteuid()!=0:raise SystemExit('Root required')
@@ -32,10 +43,10 @@ def main():
     origin=configured_application_host(text)
     if origin!=a.to_domain.lower():raise SystemExit('Target must match Compose DOMAIN host: '+origin)
     paths=[canonical]+([saved] if saved.exists() and saved.resolve()!=canonical.resolve() else [])
-    updates=[(path,replace_domain(path.read_text(),a.from_domain,a.to_domain))for path in paths]
+    updates=[(path,local_mode_environment(replace_domain(path.read_text(),a.from_domain,a.to_domain)))for path in paths]
     compose=['docker','compose','--env-file',str(canonical)]
-    def probe(apply=False,oneoff=False):
-        subprocess.run(compose+(['run','--rm','--no-deps','-T'] if oneoff else ['exec','-T'])+['-e','SIP_REPAIR_FROM='+a.from_domain,'-e','SIP_ACCOUNT_DOMAIN='+a.to_domain,'api','node','repairSipDomain.js']+(['--apply'] if apply else []),cwd=cwd,check=True)
+    def probe(apply=False):
+        subprocess.run(repair_command(compose,a.from_domain,a.to_domain,apply),cwd=cwd,check=True)
     probe()
     if not a.apply:return
     stamp=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ');backup=pathlib.Path('/opt/olamide/backups/sip-domain-'+stamp);backup.mkdir(mode=0o700,parents=True)
@@ -47,7 +58,7 @@ def main():
     # Repair commits atomically; account statuses and encrypted passwords remain unchanged.
     subprocess.run(compose+['stop','api'],cwd=cwd,check=True)
     try:
-        probe(True,oneoff=True)
+        probe(True)
         for path,content in updates:
             tmp=path.with_name(path.name+'.sip-domain.tmp');tmp.write_text(content);tmp.chmod(0o600);tmp.replace(path)
     finally:

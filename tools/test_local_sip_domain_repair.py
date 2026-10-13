@@ -20,4 +20,15 @@ class DomainConfiguration(unittest.TestCase):
  def test_missing_duplicate_and_nonliteral_domains_fail_closed(self):
   for text in ['', 'DOMAIN=a.example\nDOMAIN=b.example', 'DOMAIN=user@site.example','DOMAIN=${APP_HOST}','DOMAIN=http://site.example','DOMAIN=site.example:80']:
    with self.assertRaises(ValueError):host(text)
+ def test_preflight_uses_fresh_canonical_container_not_stale_exec_environment(self):
+  command=module['repair_command'](['docker','compose','--env-file','canonical.env'],'old.example','local.example')
+  self.assertEqual(command[4:8],['run','--rm','--no-deps','-T'])
+  self.assertNotIn('exec',command);self.assertNotIn('--apply',command)
+  self.assertIn('SIP_PROVISION_MODE=kamailio_local',command)
+  self.assertIn('--apply',module['repair_command']([], 'old.example','local.example',True))
+ def test_saved_environment_mode_is_synced_only_after_canonical_validation(self):
+  value=module['local_mode_environment']('SIP_PROVISION_MODE=remote\nFLOWROUTE_ACCESS_KEY=private\n')
+  self.assertIn('SIP_PROVISION_MODE=kamailio_local',value);self.assertIn('FLOWROUTE_ACCESS_KEY=private',value)
+  self.assertEqual(module['local_mode_environment'](value),value)
+  with self.assertRaises(ValueError):module['local_mode_environment']('SIP_PROVISION_MODE=remote\nSIP_PROVISION_MODE=kamailio_local')
 if __name__=='__main__':unittest.main()
