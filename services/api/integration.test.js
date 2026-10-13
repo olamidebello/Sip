@@ -84,6 +84,10 @@ test("registered users can create and join a room; host controls it", {
   const savedLink=await fetch(base+'/api/social/links/x',{method:'PUT',headers:{Origin:origin,Cookie:guestCookie,'Content-Type':'application/json'},body:JSON.stringify({url:'https://x.com/integration',visible:true})});assert.equal(savedLink.status,200);
   const profileLinks=await fetch(base+'/api/social/profiles/'+guestLogin.body.id+'/links',{headers:{Cookie:guestCookie}}).then(r=>r.json());assert.equal(profileLinks.links[0].url,'https://x.com/integration');
   const socialPost=await post('/api/social/posts',{body:'Social integration post'},guestCookie);assert.equal(socialPost.status,201,JSON.stringify(socialPost.body));
+  const quotePost=await post('/api/social/posts',{body:'My quoted comment',quoteId:socialPost.body.id},guestCookie);assert.equal(quotePost.status,201);
+  const replyPost=await post('/api/social/posts',{body:'Thread reply',parentId:socialPost.body.id},guestCookie);assert.equal(replyPost.status,201);
+  const threadPosts=await fetch(base+'/api/social/posts?thread='+socialPost.body.id,{headers:{Cookie:guestCookie}}).then(r=>r.json());assert.equal(threadPosts.posts.length,2);
+  const quoteFeed=await fetch(base+'/api/social/posts',{headers:{Cookie:guestCookie}}).then(r=>r.json());assert.equal(quoteFeed.posts.find(p=>p.id===quotePost.body.id).quote_body,'Social integration post');
   const socialLike=await fetch(base+'/api/social/posts/'+socialPost.body.id+'/likes',{method:'PUT',headers:{Origin:origin,Cookie:guestCookie,'Content-Type':'application/json'},body:'{}'});assert.equal(socialLike.status,200);
   const socialFeed=await fetch(base+'/api/social/posts',{headers:{Cookie:guestCookie}}).then(r=>r.json());assert.equal(socialFeed.posts.find(p=>p.id===socialPost.body.id).likes,1);
 

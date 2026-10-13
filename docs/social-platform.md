@@ -17,3 +17,7 @@ This is an initial social platform, not full Twitter/X parity. Media posts, publ
 ## Existing social profile links
 
 Users can save, edit, hide and unlink HTTPS profile links for X/Twitter, Instagram, Facebook, LinkedIn, TikTok, YouTube, Threads and Bluesky under Social → Link your social profiles. One link per platform is stored in MySQL. Find people → Social profiles displays links explicitly made visible in the same tenant. Hidden links are returned only to their owner. Profile URLs are unverified; no provider account ownership, OAuth, cross-posting or synchronization is established. Only approved platform hosts are accepted; credentials, non-HTTPS, lookalike domains and tracking parameters are rejected or stripped. Use the same social deployment script to apply the additive table.
+
+## Quote posts, threads and older posts
+
+Quote creates a new draft linked to the original post. User must write commentary and press Post. Quotes retain a reference, not a duplicate copy of the original body; removal is reflected in the quote preview. View thread shows the selected root plus its direct replies. Reply entries can open their immediate parent thread. Load older posts uses a timestamp-and-ID cursor to preserve posts with matching timestamps. Refresh/Search returns from a thread to the selected feed. These remain tenant-scoped. Nested reply trees, full media/social parity and algorithmic timelines remain pending.
