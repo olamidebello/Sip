@@ -33,6 +33,7 @@ export function validateTransfer(input) {
 }
 export async function handleWallet({req,res,path,user,pool,send,readJson}) {
   if (!user.features.billing) return send(res,403,{error:"Billing access unavailable"});
+  if(path==='/api/wallet/payment-card'&&req.method==='GET')return send(res,200,{type:'olamide-payment-profile',name:user.display_name||user.name||'Olamide user',email:user.email,currency:'USD'});
   if(path.startsWith('/api/wallet/requests'))return handleMoneyRequests({req,res,path,user,pool,send,readJson});
   if(path==='/api/wallet/capabilities'&&req.method==='GET')return send(res,200,await paymentCapabilities(pool,user.tenant_id));
   if (path==="/api/wallet" && req.method==="GET") {

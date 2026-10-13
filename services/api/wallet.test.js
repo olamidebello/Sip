@@ -41,3 +41,4 @@ test('deadlocked duplicate transfer retries and returns original payment without
   assert.equal(result.status,200);assert.equal(result.body.duplicate,true);assert.equal(begins,2);assert.equal(released,1);
   assert.equal(statements.some(sql=>sql.startsWith('UPDATE wallet_accounts')),false);
 });
+test('payment profile card exposes only the signed-in profile, never a debit number or CVV',async()=>{const result=await handleWallet({req:{method:'GET'},res:{},path:'/api/wallet/payment-card',user:{id:sender,email:'own@example.com',display_name:'Owner',features:{billing:true}},send:(_,status,body)=>({status,body})});assert.equal(result.status,200);assert.equal(result.body.email,'own@example.com');assert.equal(result.body.type,'olamide-payment-profile');assert.equal(result.body.cardNumber,undefined);assert.equal(result.body.cvv,undefined);});

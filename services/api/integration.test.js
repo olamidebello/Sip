@@ -411,7 +411,7 @@ test("registered users can create and join a room; host controls it", {
   assert.equal((await db.query("SELECT COUNT(*) AS total FROM store_products WHERE tenant_id=$1 AND status='published'",[tenant.body.id])).rows[0].total,177);
   // Navigation grants are scoped to the selected tenant, revision checked, and role protected.
   const navGet=async(cookie)=>{const response=await fetch(base+'/api/navigation',{headers:{Cookie:cookie}});return response.json();};
-  assert.equal((await navGet(guestCookie)).extras.money,false);
+  assert.equal((await navGet(guestCookie)).extras.money,true);
   const navPolicy='/api/admin/navigation/users/'+guestLogin.body.id;
   assert.equal((await mutate(navPolicy,'PUT',{revision:0,policy:{money:true}},guestCookie)).status,403);
   assert.equal((await mutate(navPolicy,'PUT',{revision:0,policy:{money:true}},hostCookie)).status,200);

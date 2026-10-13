@@ -271,3 +271,5 @@ body.messenger-mode .chat-options:not([open]){display:none}body.messenger-mode .
 body.messenger-mode #send-message.chat-icon-composer .chat-view-once{order:5;color:#21c46b}body.messenger-mode #send-message.chat-icon-composer .chat-view-once[aria-pressed=true]{background:#21c46b;color:#082519}.view-once-dialog{max-width:90vw;background:#0b1014;color:#e9edef;border:0;border-radius:16px;padding:16px}.view-once-dialog img,.view-once-dialog video{max-width:80vw;max-height:75dvh}.view-once-dialog::backdrop{background:#000c}.message-expiry-setting{display:block;margin:12px 0}.view-once-open{background:#202c33;color:#aebac1;border-radius:10px;padding:12px}
 
 .chat-menu-money{display:flex;align-items:center;gap:12px;width:100%;margin:12px 0}.chat-menu-money svg{width:22px;height:22px}.chat-compose-money{color:#00c244!important}
+
+.chat-money-choices{position:absolute;bottom:70px;right:12px;z-index:15;background:#202c33;border-radius:16px;padding:8px;box-shadow:0 6px 22px #0008}.chat-money-choices button{display:block;width:100%;text-align:left;background:transparent;color:#e9edef;border:0;padding:14px 18px}.chat-money-choices[hidden]{display:none}

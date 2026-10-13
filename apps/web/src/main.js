@@ -1752,7 +1752,7 @@ const conversations=setupConversations({get:apiGet,request:accountRequest,isSign
   callContact:address=>{dialForm.elements.target.value=address;showWorkspace('calling-workspace');status('Contact selected. Connect your SIP account, then press Call.');}});
 const contactDiscovery=setupContactDiscovery({document,get:apiGet,request:accountRequest});
 const subscriberDelivery=setupSubscriberDelivery({document,get:apiGet,request:accountRequest,isRegistered:()=>sipRegistered&&!!phone?.isConnected()});
-chatComposer=setupChatComposerShortcuts({document,moneyAllowed:()=>navigationAllowed('money')&&!$('#money').hidden,payContact:email=>moneyWorkspace.payContact(email)});
+chatComposer=setupChatComposerShortcuts({document,moneyAllowed:()=>navigationAllowed('money')&&!$('#money').hidden,getCurrency:()=>localeSettings.currency(),payContact:(email,mode)=>moneyWorkspace.payContact(email,mode),shareCard:async()=>{const owner=softphoneUserId,recipient=$('#contact-list').value;const card=await apiGet('/api/wallet/payment-card');if(owner!==softphoneUserId||recipient!==$('#contact-list').value||!navigationAllowed('money'))return;const body=$('#send-message [name=body]');const cardText='Olamide payment card\n'+card.name+'\nPay or request by email: '+card.email+'\nWallet currency: '+card.currency;body.value=[body.value.trim(),cardText].filter(Boolean).join('\n\n');body.dispatchEvent(new Event('input'));body.focus();}});
 async function loadMessages(){await conversations.refresh();}
 function signedIn(user) {
   sessionWatch.start();
