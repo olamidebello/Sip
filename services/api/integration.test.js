@@ -404,6 +404,30 @@ test("registered users can create and join a room; host controls it", {
   assert.equal(publishedAll.tenants,2);assert.ok(publishedAll.results.every(r=>r.referenceCount===177));
   assert.equal((await publishAllTenantProducts(db,{terms:'Orders require verified service commissioning and delivery before activation.',check:true})).changed,false);
   assert.equal((await db.query("SELECT COUNT(*) AS total FROM store_products WHERE tenant_id=$1 AND status='published'",[tenant.body.id])).rows[0].total,177);
+  // Navigation grants are scoped to the selected tenant, revision checked, and role protected.
+  const navGet=async(cookie)=>{const response=await fetch(base+'/api/navigation',{headers:{Cookie:cookie}});return response.json();};
+  assert.equal((await navGet(guestCookie)).extras.money,false);
+  const navPolicy='/api/admin/navigation/users/'+guestLogin.body.id;
+  assert.equal((await mutate(navPolicy,'PUT',{revision:0,policy:{money:true}},guestCookie)).status,403);
+  assert.equal((await mutate(navPolicy,'PUT',{revision:0,policy:{money:true}},hostCookie)).status,200);
+  assert.equal((await navGet(guestCookie)).extras.money,true);
+  assert.equal((await mutate(navPolicy,'PUT',{revision:0,policy:{}},hostCookie)).status,409);
+  assert.equal((await mutate('/api/admin/navigation/users/'+tenantUser.body.id,'PUT',{revision:0,policy:{money:true}},hostCookie)).status,404);
+  assert.equal((await mutate(navPolicy,'PUT',{revision:1,policy:{admin:true}},hostCookie)).status,400);
+  assert.equal((await mutate('/api/admin/navigation/groups/'+group.body.id,'PUT',{revision:0,policy:{meetings:true}},hostCookie)).status,200);
+  assert.equal((await navGet(guestCookie)).extras.meetings,true);
+  assert.equal((await mutate(navPolicy,'PUT',{revision:1,policy:{meetings:false}},hostCookie)).status,200);
+  assert.equal((await navGet(guestCookie)).extras.meetings,false);
+  assert.equal((await mutate('/api/messenger/preferences','PUT',{highContrast:true,reduceMotion:true},guestCookie)).status,200);
+  const pref=await fetch(base+'/api/messenger/preferences',{headers:{Cookie:guestCookie}});assert.deepEqual(await pref.json(),{highContrast:true,reduceMotion:true});
+  const hostPref=await fetch(base+'/api/messenger/preferences',{headers:{Cookie:hostCookie}});assert.deepEqual(await hostPref.json(),{highContrast:false,reduceMotion:false});
+  // Scheduled calls are private, persisted, bounded and removable only by their owner.
+  const scheduled=await post('/api/softphone/scheduled',{title:'Test call',address:'sip:friend@example.com',startsAt:new Date(Date.now()+3600000).toISOString()},guestCookie);
+  assert.equal(scheduled.status,201,JSON.stringify(scheduled.body));
+  const scheduledList=await fetch(base+'/api/softphone/scheduled',{headers:{Cookie:guestCookie}});assert.ok((await scheduledList.json()).calls.some(call=>call.id===scheduled.body.id));
+  assert.equal((await mutate('/api/softphone/scheduled/'+scheduled.body.id,'DELETE',{},hostCookie)).status,404);
+  assert.equal((await mutate('/api/softphone/scheduled/'+scheduled.body.id,'DELETE',{},guestCookie)).status,200);
+
   // Full messenger workflows and access boundaries on MySQL.
   const media=await post('/api/messenger/attachments',{name:'pixel.png',mime:'image/png',data:Buffer.from('89504e470d0a1a0a0000','hex').toString('base64')},hostCookie);
   assert.equal(media.status,201,JSON.stringify(media.body)+log);

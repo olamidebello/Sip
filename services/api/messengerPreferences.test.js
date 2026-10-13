@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {validateMessengerPreferences} from './messengerPreferences.js';
+test('accessibility preferences reject unknown keys and nonboolean settings',()=>{assert.deepEqual(validateMessengerPreferences({highContrast:true,reduceMotion:false}),{highContrast:true,reduceMotion:false});for(const value of [{},{highContrast:1,reduceMotion:false},{highContrast:true,reduceMotion:false,role:'admin'},null])assert.throws(()=>validateMessengerPreferences(value));});

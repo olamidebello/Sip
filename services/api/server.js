@@ -1,3 +1,6 @@
+import {handleMessengerPreferences} from './messengerPreferences.js';
+import {handleScheduledCalls} from './scheduledCalls.js';
+import {handleNavigationPolicy} from './navigationPolicy.js';
 import {createProxyClientResolver,createRequestLimiter,requestLimitRule} from './requestLimits.js';
 import {handleMessengerFeatures} from './messengerFeatures.js';
 import {createLimitedSession,handleSessionPolicy} from './sessionPolicy.js';
@@ -242,7 +245,7 @@ async function handler(req, res) {
       );
       return send(res, 200, { plans: result.rows });
     }
-    if (path==="/api/activity/events" || path.startsWith("/api/store/") || path==="/api/help/agent" || path.startsWith("/api/rates/flowroute/") || path.startsWith("/api/external-sms/") || path.startsWith("/api/contacts") || path.startsWith("/api/messenger/") || path.startsWith("/api/messages") ||
+    if (path==="/api/activity/events" || path==="/api/navigation" || path.startsWith("/api/store/") || path==="/api/help/agent" || path.startsWith("/api/rates/flowroute/") || path.startsWith("/api/external-sms/") || path.startsWith("/api/contacts") || path.startsWith("/api/messenger/") || path.startsWith("/api/messages") ||
         path.startsWith("/api/admin/") || path==='/api/redirector' || path.startsWith('/api/workspace/shortcuts') || path.startsWith('/api/work/items') || path.startsWith('/api/campaigns/') || path.startsWith("/api/account/") || path==="/api/background" || path==="/api/catalog-policy" || path.startsWith("/api/billing/") ||
         path.startsWith("/api/numbers") || path.startsWith("/api/porting") ||
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
@@ -252,6 +255,9 @@ async function handler(req, res) {
         path === "/api/admin/cdr" || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if(path.startsWith('/api/softphone/scheduled'))return await handleScheduledCalls({req,res,path,user,pool,send,readJson});
+      if(path==='/api/navigation'||path.startsWith('/api/admin/navigation'))return await handleNavigationPolicy({req,res,path,user,pool,send,readJson});
+      if(path==='/api/messenger/preferences')return await handleMessengerPreferences({req,res,user,pool,send,readJson});
       if(path.startsWith('/api/messenger/')||path.startsWith('/api/account/sessions'))return await handleMessengerFeatures({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin),sessionHash:tokenHash(currentToken(req)),closeSessions:hashes=>meetingSignaling?.closeSessions(hashes)});
       if(path.startsWith('/api/admin/user-sessions'))return await handleSessionPolicy({req,res,path,user,pool,send,readJson,closeSessions:hashes=>meetingSignaling?.closeSessions(hashes)});
       if(path==='/api/admin/google-contacts')return await handleGoogleContactsAdmin({req,res,user,pool,send,readJson});

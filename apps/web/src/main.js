@@ -1,3 +1,7 @@
+import {setupMessengerPreferences} from './messengerPreferences.js';
+import {styleMessengerSettings} from './messengerSettings.js';
+import {setupCallsScreen} from './callsScreen.js';
+import {setupNavigationPolicy} from './navigationPolicy.js';
 import {waitForSipRegistration} from './sipRegistration.js';
 import {messengerPanels,setupMessengerHub} from './messengerHub.js';
 import {setupSessionAdmin} from './sessionAdmin.js';
@@ -966,6 +970,7 @@ root.innerHTML = `
       <h4>User overrides</h4><label>User <select id="sip-policy-user"></select></label><div id="sip-user-choices"></div><button type="button" id="sip-user-save">Save user overrides</button>
       <p id="sip-policy-status" role="status"></p>
     </section>
+    <section id="navigation-policy-admin" hidden><h3>End-user navigation</h3><p>Default tabs: Chats, Updates, Communities and Calls. Extra pages start hidden. These settings do not grant administrator roles or service features.</p><button id="navigation-policy-refresh" type="button">Refresh policies</button><form id="navigation-policy-form"><label>Apply to <select name="kind"><option value="users">User</option><option value="groups">Group</option></select></label><label>Target <select name="target" required></select></label><div id="navigation-policy-fields"></div><button type="submit">Save navigation</button></form><p id="navigation-policy-status" role="status"></p></section>
     <section id="user-session-admin" hidden>
       <h3>User session limits</h3><p>Default: one session per user. New logins replace the oldest sessions. Reducing a limit ends excess sessions immediately.</p>
       <button id="session-policy-refresh" type="button">Refresh users and sessions</button>
@@ -1106,7 +1111,7 @@ root.innerHTML = `
     <p id="agent-status-result" role="status"></p>
   </section>
   <section id="calling-workspace" class="calling-workspace" hidden>
-  <h2>Olamide dialer</h2>
+  <h2>Calls</h2>
   <p id="calling-access" role="status">Internal SIP calls are available without a subscription after your SIP account is activated. External calls require an active plan.</p><a href="#billing">Manage calling plan</a>
   <button id="connect-assigned-sip" type="button">Reconnect</button>
   <p>Connection details are assigned automatically when you sign in. Use this button to retry activation or reconnect.</p>
@@ -1161,6 +1166,8 @@ root.innerHTML = `
 `;
 
 root.insertAdjacentHTML('beforeend',messengerPanels());
+root.insertAdjacentHTML('beforeend','<section id="messenger-accessibility" hidden><h2>Accessibility</h2><form id="messenger-accessibility-form"><label><input name="highContrast" type="checkbox"> Increase contrast</label><label><input name="reduceMotion" type="checkbox"> Reduce animation</label><button type="submit">Save preferences</button></form><p id="messenger-accessibility-status" role="status"></p></section>');
+styleMessengerSettings(document);
 const $ = (selector) => document.querySelector(selector);
 root.append($('#fleet-admin'));
 root.append($('#activity-monitor'));
@@ -1173,7 +1180,7 @@ setupChatGestures(document);
 const messengerHub=setupMessengerHub({document,request:(...args)=>accountRequest(...args),get:(...args)=>apiGet(...args),show:showWorkspace,isSignedIn:()=>!!activeRole,openContact:id=>{showWorkspace('chat');const select=$('#contact-list');select.value=id;select.dispatchEvent(new window.Event('change',{bubbles:true}));$('#chat').classList.add('thread-open');}});
 const callGui=setupCallGui({document,openVideo:()=>{
   if($('#meetings').hidden){$('#chat-status').textContent='Video meetings are not enabled for this account.';return;}
-  showWorkspace('meetings');$('#meeting-create input')?.focus();
+  videoWorkflow=true;showWorkspace('meetings');$('#meeting-create input')?.focus();
 }});
 setupDownloads();
 setupCarrierControl();
@@ -1181,12 +1188,14 @@ const navigationGroups=[
   {label:"Workspace",items:[["dashboard","Dashboard"],["campaign-inbox-panel","Announcements"],["planner","Events & tasks"],["search-panel","Search"],["support","Support tickets"],["help","Help & tutorials"]]},
   {label:"Communications",items:[["messenger-groups","Groups & communities"],["messenger-updates","Status updates"],["messenger-broadcast","Broadcast"],["messenger-starred","Starred messages"],["messenger-sessions","Linked sessions"],["messenger-storage","Storage & data"],["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["money","Money"],["product-store","Products & services"],["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
-  {label:"My settings",items:[["messenger-settings","Messenger settings"],["account","Account & security"],["activity-monitor","Activity monitor"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
+  {label:"My settings",items:[["messenger-accessibility","Accessibility"],["messenger-settings","Messenger settings"],["account","Account & security"],["activity-monitor","Activity monitor"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
   {label:"Administration",roles:["admin","super_admin"],items:[["product-store-admin","Product catalog & orders"],["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio services"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["passkey-policy-admin","Passkey requirements"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
-  {label:"Super admin",roles:["super_admin"],items:[["user-session-admin","User sessions"],["tenant-admin","Tenants & roles"],["google-oauth-admin","Google Contacts OAuth"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["wallet-providers-admin","Dwolla & Flutterwave API"],["provider-credentials-admin","Carrier credentials"],["carrier-adapter-admin","Carrier adapters"]]}
+  {label:"Super admin",roles:["super_admin"],items:[["navigation-policy-admin","End-user navigation"],["user-session-admin","User sessions"],["tenant-admin","Tenants & roles"],["google-oauth-admin","Google Contacts OAuth"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["wallet-providers-admin","Dwolla & Flutterwave API"],["provider-credentials-admin","Carrier credentials"],["carrier-adapter-admin","Carrier adapters"]]}
 ];
+let videoWorkflow=false;
+let navigationPolicy;
 let configurationLinks;
 let localeSettings;
 let userActivity;
@@ -1200,13 +1209,16 @@ const adminTargets=new Set(navigationGroups.filter(group=>group.roles||group.lab
 adminTargets.add('help-admin');
 for(const id of adminTargets)document.getElementById(id)?.setAttribute('data-admin-panel','true');
 function adminTarget(target){return !!document.getElementById(target)?.closest('[data-admin-panel]');}
-function userHome(){if(meetings.invitationId()&&!$('#meetings').hidden)return 'meetings';return !$('#chat').hidden?'chat':'calling-workspace';}
+function navigationAllowed(target){let node=document.getElementById(target);while(node&&node!==root){if(node.id&&!navigationPolicy?.allowed(node.id)&&!(node.id==='meetings'&&(videoWorkflow||meetings.invitationId())))return false;node=node.parentElement;}return true;}
+function userHome(){if(meetings.invitationId()&&navigationAllowed('meetings')&&!$('#meetings').hidden)return 'meetings';return !$('#chat').hidden?'chat':'calling-workspace';}
 let activeView="dashboard";
 function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   if(target==="top")target=userHome();
+  if(!document.getElementById(target)?.closest("#meetings"))videoWorkflow=false;
   if(!activeRole) return false;
   if(activeRole.startsWith("pending_")&&target!=="account")return false;
   if(adminTarget(target)&&!['admin','super_admin'].includes(activeRole))return false;
+  if(!adminTarget(target)&&navigationPolicy&&!navigationAllowed(target))return false;
   const adminMode=adminTarget(target);
   const modeChanged=document.body.classList.contains('admin-mode')!==adminMode;
   document.body.classList.toggle('admin-mode',adminMode);
@@ -1220,6 +1232,7 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   const rootView=workspaceViews.find(id=>{const section=document.getElementById(id);return section&&(section===requested||section.contains(requested));});
   if(!rootView) return false;
   activeView=target;
+  const titleNode=$("#app-nav .menu-heading strong");if(titleNode&&!adminMode)titleNode.textContent=({"calling-workspace":"Calls","messenger-updates":"Updates","messenger-groups":"Communities","messenger-settings":"Settings"}[target]||"Olamide");
   for(const link of $('#app-nav').querySelectorAll('.messenger-tabs a')){if(link.hash===`#${target}`)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
   userActivity?.track("navigate",target);
   if(!preserveForm&&historyMode!=="none") {
@@ -1259,15 +1272,15 @@ function updateNavigation() {
   nav.hidden=!activeRole;
   if (!activeRole) return;
   const heading=document.createElement("div");heading.className="menu-heading";
-  const title=document.createElement("strong");title.textContent=document.body.classList.contains("admin-mode")?"Olamide administration":"Olamide";
+  const title=document.createElement("strong");title.textContent=document.body.classList.contains("admin-mode")?"Olamide administration":({"calling-workspace":"Calls","messenger-updates":"Updates","messenger-groups":"Communities","messenger-settings":"Settings"}[activeView]||"Olamide");
   const role=document.createElement("span");role.className="role-badge";role.textContent=activeRole==="super_admin"?"Super admin":activeRole==="admin"?"Administrator":"User";
   heading.append(title,role);nav.append(heading);
   const connection=document.createElement('span');connection.id='communication-status';connection.className='communication-status';connection.setAttribute('role','status');connection.textContent=sipRegistered?'Connected for calls':'Connecting your SIP account…';heading.append(connection);
   const returnToCall=document.createElement("a");returnToCall.id="return-to-call";returnToCall.href="#calling-workspace";returnToCall.textContent="Return to call";returnToCall.hidden=!onCall;
   nav.append(returnToCall);
   const tabs=document.createElement('div');tabs.className='messenger-tabs';
-  for(const [id,label,symbol] of [['chat','Chats','chat'],['messenger-updates','Updates','updates'],['messenger-groups','Groups','people'],['calling-workspace','Calls','calls'],['money','Money','money']]){
-    if(document.getElementById(id)?.closest('[hidden]'))continue;
+  for(const [id,label,symbol] of [['chat','Chats','chat'],['messenger-updates','Updates','updates'],['messenger-groups','Communities','people'],['calling-workspace','Calls','calls'],['money','Money','money']]){
+    if(!navigationAllowed(id)||document.getElementById(id)?.closest('[hidden]'))continue;
     const link=document.createElement('a');link.href=`/#${id}`;link.innerHTML=icon(symbol);const caption=document.createElement('span');caption.textContent=label;link.append(caption);if(activeView===id)link.setAttribute('aria-current','page');tabs.append(link);
   }
   if(['admin','super_admin'].includes(activeRole)){
@@ -1277,11 +1290,11 @@ function updateNavigation() {
   nav.append(tabs);
   if(!document.body.classList.contains('admin-mode')){
     const actions=document.createElement('div');actions.className='messenger-app-actions';
-    const searchChat=document.createElement('button');searchChat.type='button';searchChat.innerHTML=icon('search');searchChat.setAttribute('aria-label','Search chats');searchChat.onclick=()=>{showWorkspace('chat');$('#chat').classList.remove('thread-open');$('#chat .chat-sidebar>input').focus();};actions.append(searchChat);
+    const searchChat=document.createElement('button');searchChat.type='button';searchChat.innerHTML=icon('search');searchChat.setAttribute('aria-label','Search chats');searchChat.onclick=()=>{if(activeView==='calling-workspace'){callsScreen.open('contacts');$('#dialer-contact-search').focus();}else{showWorkspace('chat');$('#chat').classList.remove('thread-open');$('#chat .chat-sidebar>input').focus();}};actions.append(searchChat);
     const logoutButton=document.createElement('button');logoutButton.type='button';logoutButton.className='messenger-logout';logoutButton.textContent='Logout';logoutButton.setAttribute('aria-label','Logout');logoutButton.onclick=()=>$('#logout').click();actions.append(logoutButton);
     const more=document.createElement('button');more.type='button';more.innerHTML=icon('more');more.setAttribute('aria-label','Open menu');more.setAttribute('aria-expanded','false');
     actions.append(more);nav.append(actions);
-    overflowMenu=setupMessengerOverflow({document,nav,trigger:more,show:showWorkspace,newChat:()=>{showWorkspace('chat');$('#chat .chat-new').click();},openHub:kind=>messengerHub.open(kind),readAll:async()=>{try{await accountRequest('/api/messages/read-all',{});await loadContacts();$('#chat-status').textContent='All incoming messages marked as read.';}catch(error){$('#chat-status').textContent=error.message;}},isAdmin:['admin','super_admin'].includes(activeRole)});
+    overflowMenu=setupMessengerOverflow({document,nav,trigger:more,show:showWorkspace,newChat:()=>{showWorkspace('chat');$('#chat .chat-new').click();},openHub:kind=>messengerHub.open(kind),readAll:async()=>{try{await accountRequest('/api/messages/read-all',{});await loadContacts();$('#chat-status').textContent='All incoming messages marked as read.';}catch(error){$('#chat-status').textContent=error.message;}},isAdmin:['admin','super_admin'].includes(activeRole),allow: navigationAllowed,hasExtras:navigationPolicy?.hasExtras(),isCalls:()=>activeView==='calling-workspace',clearCalls:()=>$('#clear-calls').click(),scheduledCalls:()=>callsScreen.open('schedule')});
     const settings=document.createElement('a');settings.href='/#account';settings.textContent='Settings';settings.className='messenger-settings-entry';nav.append(settings);
   }
   const search=document.createElement("input");search.type="search";search.className="menu-search";search.placeholder="Find a menu…";search.setAttribute("aria-label","Find a menu");nav.append(search);
@@ -1290,7 +1303,7 @@ function updateNavigation() {
     if(group.roles&&!group.roles.includes(activeRole)) continue;
     const adminGroup=!!group.roles||group.label==='Fleet operations';
     if(adminGroup!==document.body.classList.contains('admin-mode'))continue;
-    const items=group.items.filter(([id])=>{const section=document.getElementById(id);return section&&!section.closest("[hidden]");});
+    const items=group.items.filter(([id])=>{const section=document.getElementById(id);return section&&navigationAllowed(id)&&!section.closest("[hidden]");});
     if(!items.length) continue;
     const details=document.createElement("details");details.className="menu-group";details.open=group.label==="Workspace";
     const summary=document.createElement("summary");summary.textContent=group.label;details.append(summary);
@@ -1319,7 +1332,7 @@ function updateNavigation() {
   localeSettings?.refreshQuick();
 }
 updateNavigation();
-pageRoutes=setupPageRoutes({showWorkspace,isSignedIn:()=>!!activeRole,isAdminTarget:adminTarget});
+pageRoutes=setupPageRoutes({canNavigate:navigationAllowed,showWorkspace,isSignedIn:()=>!!activeRole,isAdminTarget:adminTarget});
 $("#app-nav").addEventListener("keydown",event=>{
   if(event.key!=="Escape") return;
   for(const menu of $("#app-nav").querySelectorAll("details[open]")) menu.open=false;
@@ -1367,7 +1380,7 @@ const passkeyPolicy=setupPasskeyPolicy();
 const providerWebhooks=setupProviderWebhookAdmin({get:apiGet,request:accountRequest});
 const walletProvidersAdmin=setupWalletProvidersAdmin({get:apiGet,request:accountRequest});
 const providerCredentialsAdmin=setupProviderCredentialsAdmin({get:apiGet,request:accountRequest,onSaved:()=>didwwAdmin.refresh()});
-configurationLinks=setupConfigurationLinks({show:showWorkspace});
+configurationLinks=setupConfigurationLinks({show:showWorkspace,allowed:navigationAllowed});
 userActivity=setupUserActivity({get:apiGet,request:accountRequest});
 const didwwAdmin=setupDidwwAdmin({get:apiGet,request:accountRequest});
 const adapterAdmin=setupAdapterAdmin({get:apiGet,request:accountRequest});
@@ -1375,7 +1388,10 @@ const operatorAdmin=setupOperatorControl();
 const switchAdmin=setupKamailioAdmin();
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
+const callsScreen=setupCallsScreen({document,get:apiGet,request:accountRequest,show:showWorkspace,dial:address=>{dialForm.elements.target.value=address;dialForm.requestSubmit();}});
+const messengerPreferences=setupMessengerPreferences({document,get:apiGet,request:accountRequest});
 const sessionAdmin=setupSessionAdmin(document);
+navigationPolicy=setupNavigationPolicy({document,get:apiGet,request:accountRequest,changed:()=>{updateNavigation();if(activeRole&&!adminTarget(activeView)&&!navigationAllowed(activeView))showWorkspace(userHome(),{historyMode:'replace'});}});
 const sessionWatch=createSessionWatch({window,check:async()=>{const response=await fetch('/api/me',{cache:'no-store'});return response.status!==401;},onRevoked:async()=>{
   messengerHub.stop();conversations.stopMedia();await autoSip.stop().catch(()=>{});meetings.hide();
   if(phone){await phone.hangup().catch(()=>{});await phone.unregister().catch(()=>{});await phone.disconnect().catch(()=>{});phone=undefined;}
@@ -1444,7 +1460,9 @@ function renderSoftphoneLists() {
   for (const call of recentCalls.slice(0, 50)) {
     if (!call || typeof call.address !== "string") continue;
     const item = document.createElement("li");
-    item.textContent = `${call.direction} · ${call.result} · ${call.address} · ${new Date(call.at).toLocaleString()}`;
+    const avatar=document.createElement('span');avatar.className='chat-avatar';avatar.textContent=call.address.replace(/^sip:/,'').slice(0,2).toUpperCase();
+    const copy=document.createElement('div');copy.className='call-row-copy';const name=document.createElement('strong');name.textContent=call.address.replace(/^sip:/,'').split('@')[0];const detail=document.createElement('small');detail.textContent=(call.direction==='incoming'?'↙ ':'↗ ')+new Date(call.at).toLocaleString();copy.append(name,detail);if(call.result!=='completed')item.classList.add('call-missed');
+    const redial=document.createElement('button');redial.type='button';redial.innerHTML=icon('calls');redial.setAttribute('aria-label','Call '+name.textContent);redial.onclick=()=>{dialForm.elements.target.value=call.address;dialForm.requestSubmit();};item.append(avatar,copy,redial);
     history.append(item);
   }
 }
@@ -1728,6 +1746,8 @@ const conversations=setupConversations({get:apiGet,request:accountRequest,isSign
 async function loadMessages(){await conversations.refresh();}
 function signedIn(user) {
   sessionWatch.start();
+  $("#messenger-accessibility").hidden=false;void messengerPreferences.refresh().catch(()=>{});
+  void navigationPolicy.refresh(user).catch(error=>{$('#navigation-policy-status').textContent=error.message;});
   void messengerHub.refresh(user);conversations.resumeMedia();
   sessionAdmin.refresh(user).catch(error=>{$("#session-policy-status").textContent=error.message;});
   if(user.mustChangePassword){
@@ -1860,7 +1880,8 @@ function signedIn(user) {
     workspaceQuick.refresh();
   }).catch(()=>{});
   const requested=fragmentTarget(location.hash)||(location.pathname==='/admin'?'admin':'');
-  showWorkspace(pageId(location.pathname) ? document.getElementById(pageId(location.pathname))?.closest('section[id]')?.id || userHome() : requested&&document.getElementById(requested)&&!document.getElementById(requested).closest("[hidden]")?requested:userHome(),{preserveForm:!!pageId(location.pathname)});
+  const openedWorkspace=showWorkspace(pageId(location.pathname) ? document.getElementById(pageId(location.pathname))?.closest('section[id]')?.id || userHome() : requested&&document.getElementById(requested)&&!document.getElementById(requested).closest("[hidden]")?requested:userHome(),{preserveForm:!!pageId(location.pathname)});
+  if(!openedWorkspace)showWorkspace(userHome(),{historyMode:"replace"});
   pageRoutes.render();
   dashboard.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#dashboard-status").textContent=error.message;});
   support.refresh(["admin","super_admin"].includes(user.role)).catch(error=>{$("#support-status").textContent=error.message;});
@@ -2350,6 +2371,7 @@ $("#ldap-login").addEventListener("submit",async(event)=>{
 });
 $("#logout").onclick = async () => {
   sessionWatch.stop();messengerHub.stop();conversations.stopMedia();
+  videoWorkflow=false;callsScreen.stop();navigationPolicy.stop();messengerPreferences.stop();$("#messenger-accessibility").hidden=true;
   $("#user-session-admin").hidden=true;
   try {
     dialerContacts.clear();
@@ -2528,7 +2550,8 @@ setupDialpad({root:$('#dialpad'),input:dialForm.elements.target,inCall:()=>onCal
   sendTone:digit=>phone.sendDTMF(digit),onError:report});
 dialForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (!phone || onCall) return;
+  if (!phone||!sipRegistered){status("Calls are unavailable while SIP is reconnecting. Try again when connected.");autoSip.wake();return;}
+  if(onCall){status("Finish the active call before starting another.");return;}
   let target;
   try{target=dialTarget(String(new FormData(dialForm).get('target')),connectForm.elements.aor.value.split('@')[1]);}
   catch(error){report(error);return;}

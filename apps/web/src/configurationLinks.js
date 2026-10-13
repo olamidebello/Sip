@@ -20,14 +20,15 @@ const related={
   'planner':['campaign-inbox-panel','support'],
   'chat':['account','support']
 };
-export function setupConfigurationLinks({show}){
+export function setupConfigurationLinks({show,allowed=()=>true}){
   function refresh(){
     const panels=[...document.querySelectorAll('section[id]')];
+    if(!document.body.classList.contains('admin-mode')){document.querySelectorAll('.configuration-links').forEach(node=>node.remove());return;}
     for(const panel of panels){
       let nav=panel.querySelector(':scope > .configuration-links');
       if(panel.closest('[hidden]')){nav?.remove();continue;}
       const ids=[...new Set([...(related[panel.id]||['account','help','support']),'provider-credentials-admin','payment-admin','auth-providers-admin','activity-monitor'])];
-      const targets=ids.map(id=>document.getElementById(id)).filter(target=>target&&target!==panel&&!target.closest('[hidden]'));
+      const targets=ids.map(id=>document.getElementById(id)).filter(target=>target&&allowed(target.id)&&target!==panel&&!target.closest('[hidden]'));
       if(!targets.length){nav?.remove();continue;}
       if(!nav){nav=document.createElement('nav');nav.className='configuration-links';nav.setAttribute('aria-label','Related settings and help');
         const heading=panel.querySelector(':scope > h2,:scope > h3,:scope > h4');if(!heading)continue;heading.after(nav);}

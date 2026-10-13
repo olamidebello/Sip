@@ -1,0 +1,6 @@
+export function setupMessengerPreferences({document,get,request}){
+ const form=document.getElementById('messenger-accessibility-form');let generation=0;
+ function apply(value){form.elements.highContrast.checked=value.highContrast;form.elements.reduceMotion.checked=value.reduceMotion;document.body.classList.toggle('messenger-high-contrast',value.highContrast);document.body.classList.toggle('messenger-reduce-motion',value.reduceMotion);}
+ form.onsubmit=async event=>{event.preventDefault();const token=generation,button=form.querySelector('button');button.disabled=true;try{const value=await request('/api/messenger/preferences',{highContrast:form.elements.highContrast.checked,reduceMotion:form.elements.reduceMotion.checked},'PUT');if(token!==generation)return;apply(value);document.getElementById('messenger-accessibility-status').textContent='Preferences saved to your account.';}catch(error){document.getElementById('messenger-accessibility-status').textContent=error.message;}finally{button.disabled=false;}};
+ return {async refresh(){const token=++generation;const value=await get('/api/messenger/preferences');if(token===generation)apply(value);},stop(){generation++;apply({highContrast:false,reduceMotion:false});document.getElementById('messenger-accessibility-status').textContent='';}};
+}

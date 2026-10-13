@@ -5,7 +5,7 @@ export function pageId(pathname) {
   return match?.[1] || null;
 }
 
-export function setupPageRoutes({ showWorkspace, isSignedIn, isAdminTarget=()=>false }) {
+export function setupPageRoutes({ showWorkspace, isSignedIn, isAdminTarget=()=>false,canNavigate=()=>true }) {
   const forms = [...document.querySelectorAll('form[id]:not(#quick-locale)')];
   const index = new Map(forms.map(form => [form.id, form]));
   const auth = new Set(['signup', 'signup-verify', 'login', 'ldap-login']);
@@ -42,6 +42,7 @@ export function setupPageRoutes({ showWorkspace, isSignedIn, isAdminTarget=()=>f
     if(isAdminTarget(id)&&!location.pathname.startsWith('/admin/'))history.replaceState(null,'',pagePath(id,true));
     const section = form.closest('section[id]');
     if (!section) return;
+    if(isSignedIn()&&!canNavigate(section.id)){history.replaceState(null,'','/#chat');showWorkspace('chat',{historyMode:'none'});return render();}
     if (isSignedIn()) showWorkspace(section.id,{preserveForm:true});
     else {
       document.body.classList.add('workspace-mode', 'public-form-page');
