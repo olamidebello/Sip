@@ -1395,7 +1395,7 @@ const operatorAdmin=setupOperatorControl();
 const switchAdmin=setupKamailioAdmin();
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
-const callsScreen=setupCallsScreen({document,get:apiGet,request:accountRequest,show:showWorkspace,dial:address=>{dialForm.elements.target.value=address;dialForm.requestSubmit();}});
+const callsScreen=setupCallsScreen({document,get:apiGet,request:accountRequest,show:showWorkspace,retryConnection:()=>autoSip.wake(),dial:address=>{dialForm.elements.target.value=address;dialForm.requestSubmit();}});
 const messengerPreferences=setupMessengerPreferences({document,get:apiGet,request:accountRequest});
 const sessionAdmin=setupSessionAdmin(document);
 navigationPolicy=setupNavigationPolicy({document,get:apiGet,request:accountRequest,changed:()=>{updateNavigation();chatComposer?.refresh();if(activeRole&&!adminTarget(activeView)&&!navigationAllowed(activeView))showWorkspace(userHome(),{historyMode:'replace'});}});
@@ -2467,7 +2467,7 @@ fetch("/api/me", { credentials: "same-origin" })
   .then(async (response) => response.ok ? signedIn(await response.json()) : undefined)
   .catch(() => { $("#account-status").textContent = "Account service unavailable"; });
 
-function status(message) { $("#status").textContent = message;const badge=$('#communication-status');if(badge)badge.textContent=message; }
+function status(message) { callsScreen.connectionStatus(message);$("#status").textContent = message;const badge=$('#communication-status');if(badge)badge.textContent=message; }
 function callState(active) {
   onCall = active;
   callGui.active(active);
