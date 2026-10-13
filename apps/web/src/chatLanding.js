@@ -22,12 +22,13 @@ export function setupChatLanding(document){
   for(const child of [...chat.children])if(!child.matches('h2,.messenger-subtitle'))thread.append(child);
   const header=document.createElement('div');header.className='chat-thread-header';
   const back=document.createElement('button');back.type='button';back.innerHTML=icon('back');back.setAttribute('aria-label','Back to chats');back.onclick=()=>{chat.classList.remove('thread-open','chat-overlay');};
-  const title=document.createElement('strong');title.textContent=select.selectedOptions[0]?.textContent||'Select a conversation';header.append(back,title);thread.prepend(header);
+  const avatar=document.createElement('span');avatar.className='chat-avatar chat-header-avatar';avatar.setAttribute('aria-hidden','true');const copy=document.createElement('div');copy.className='chat-header-copy';const title=document.createElement('strong');const typing=document.getElementById('conversation-typing');copy.append(title);if(typing)copy.append(typing);header.append(back,avatar,copy);thread.prepend(header);
+  function headerContact(){const selected=select.selectedOptions[0],name=selected?.dataset.name||selected?.textContent||'Select a conversation';title.textContent=name;avatar.textContent=selected?.value?name.slice(0,2).toUpperCase():'?';}headerContact();
   const options=document.createElement('details');options.className='chat-options';
   const summary=document.createElement('summary');summary.textContent='Conversation options';options.append(summary);
   for(const child of [...thread.children]){
     if(child===header||child.id==='conversation-typing'||child.id==='message-list')continue;
-    if(child.tagName==='LABEL'||child.classList.contains('conversation-toolbar')||child.id==='load-messages'||(child.tagName==='P'&&!child.id))options.append(child);
+    if(child.tagName==='LABEL'||child.classList.contains('conversation-toolbar')||child.classList.contains('bulk-controls')||child.id==='add-contact'||child.id==='load-messages'||(child.tagName==='P'&&!child.id))options.append(child);
   }
   header.after(options);
   const call=thread.querySelector('#call-contact');
@@ -56,7 +57,7 @@ export function setupChatLanding(document){
   }
   shell.append(sidebar,thread);chat.append(shell);
   function render(){
-    list.replaceChildren();
+    headerContact();list.replaceChildren();
     const query=search.value.toLocaleLowerCase();
     for(const option of select.options){
       if(!option.value||!option.textContent.toLocaleLowerCase().includes(query)||(filter==='unread'&&option.dataset.unread!=='true')||(filter==='pinned'&&option.dataset.pinned!=='true'))continue;
@@ -66,11 +67,16 @@ export function setupChatLanding(document){
       const name=document.createElement('span');name.className='chat-name';name.textContent=option.dataset.name||option.textContent;
       const preview=document.createElement('small');preview.className='chat-preview';preview.textContent=(option.dataset.pinned==='true'?'📌 ': '')+(option.dataset.unread==='true'?'● Unread · ':'')+(option.dataset.preview||'Open conversation');copy.append(name,preview);button.append(avatar,copy);
       button.setAttribute('aria-pressed',String(option.value===select.value));
-      button.addEventListener('click',()=>{select.value=option.value;title.textContent=option.textContent;chat.classList.add('thread-open');select.dispatchEvent(new document.defaultView.Event('change',{bubbles:true}));render();});list.append(button);
+      button.addEventListener('click',()=>{select.value=option.value;headerContact();chat.classList.add('thread-open');select.dispatchEvent(new document.defaultView.Event('change',{bubbles:true}));render();});list.append(button);
     }
     if(!list.children.length){const empty=document.createElement('p');empty.textContent=query?'No matching chats.':'Add a contact to start a conversation.';list.append(empty);}
   }
-  search.addEventListener('input',render);select.addEventListener('change',()=>{title.textContent=select.selectedOptions[0]?.textContent||'Select a conversation';render();});
+  search.addEventListener('input',render);select.addEventListener('change',()=>{headerContact();render();});
+  const outside=event=>{if(options.open&&!options.contains(event.target)&&!menu.contains(event.target))options.open=false;};
+  const escape=event=>{if(event.key==='Escape'&&options.open){options.open=false;menu.focus();}};
+  document.addEventListener('click',outside);document.addEventListener('keydown',escape);
+  const threadMode=()=>document.body.classList.toggle('chat-thread-mode',chat.classList.contains('thread-open')&&!chat.classList.contains('workspace-inactive'));
+  const modeObserver=new document.defaultView.MutationObserver(threadMode);modeObserver.observe(chat,{attributes:true,attributeFilter:['class']});threadMode();
   const observer=new document.defaultView.MutationObserver(render);observer.observe(select,{childList:true,subtree:true,characterData:true});render();
-  return {render,dispose:()=>observer.disconnect()};
+  return {render,dispose(){modeObserver.disconnect();document.body.classList.remove('chat-thread-mode');observer.disconnect();document.removeEventListener('click',outside);document.removeEventListener('keydown',escape);}};
 }

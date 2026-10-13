@@ -1,0 +1,66 @@
+---
+- name: Require complete implemented chat release
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Verify chat and backend source files exist
+      ansible.builtin.stat:
+        path: '/opt/olamide/repo/{{ item }}'
+      loop:
+        - apps/web/src/chatGestures.js
+        - apps/web/src/chatComposerShortcuts.js
+        - apps/web/src/chatPresentation.js
+        - apps/web/src/conversations.js
+        - services/api/messengerFeatures.js
+        - services/api/navigationPolicy.js
+        - services/api/messengerPreferences.js
+        - services/api/migrate.js
+      register: chat_sources
+    - name: Require every implementation before building
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+        fail_msg: 'Missing implemented source: {{ item.item }}. Pull the complete validated release first.'
+      loop: '{{ chat_sources.results }}'
+      loop_control:
+        label: '{{ item.item }}'
+
+- name: Build API and web, back up MySQL, apply additive schema and restart
+  ansible.builtin.import_playbook: messenger-features.yml
+
+- name: Verify installed chat bundle capabilities
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Read public chat entry page
+      ansible.builtin.uri:
+        url: https://sip.dobhrap.com/
+        status_code: 200
+        return_content: true
+        validate_certs: true
+        timeout: 20
+      register: chat_entry
+    - name: Locate built application asset
+      ansible.builtin.set_fact:
+        chat_asset: '{{ (chat_entry.content | regex_findall(''src="(/assets/[^" ]+\.js)"'')) | first | default("") }}'
+    - name: Require a same-origin application bundle
+      ansible.builtin.assert:
+        that: chat_asset is match('^/assets/[a-zA-Z0-9_.-]+\.js$')
+    - name: Download the deployed application bundle
+      ansible.builtin.uri:
+        url: 'https://sip.dobhrap.com{{ chat_asset }}'
+        status_code: 200
+        return_content: true
+        validate_certs: true
+        timeout: 20
+      register: chat_bundle
+    - name: Verify implemented chat controls are in the public bundle
+      ansible.builtin.assert:
+        that:
+          - "'chat-icon-composer' in chat_bundle.content"
+          - "'message-selected' in chat_bundle.content"
+          - "'chat-date-divider' in chat_bundle.content"
+          - "'chat-message-dialog' in chat_bundle.content"
+    - name: Report supported features and acceptance requirements
+      ansible.builtin.debug:
+        msg: 'Chat release installed: text/media/voice, emoji, reply/swipe/long-press, copy/info, stars/forward/reactions, sender editing/removal, preferences, dates/read indicators, groups/status, SIP audio, video invitations and confirmed wallet actions. Test with two accounts on real devices. Messages are not end-to-end encrypted. View-once, disappearing messages, native backup/sync and a full WhatsApp sticker/GIF catalog are not supplied by this installer.'

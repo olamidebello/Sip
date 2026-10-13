@@ -27,12 +27,14 @@ jobs:
       - name: Deployment configuration checks
         run: |
           bash -n deployment/bootstrap.sh deployment/install-all.sh deployment/install.sh deployment/install-ansible.sh deployment/update.sh deployment/verified-sha.sh deployment/docker/turn-entrypoint.sh
-          bash -n deployment/deploy-production.sh
+          bash -n deployment/deploy-production.sh deployment/deploy-chat-experience.sh
           python3 tools/test_production_deployment.py
           python3 tools/test_native_push_install.py
           python3 -m py_compile deployment/production/runtime-secrets.py deployment/production/release.py deployment/production/check-public.py
           sudo apt-get update
           sudo apt-get install -y ansible
+          python3 tools/test_chat_experience_deployment.py
+          ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/chat-experience.yml
           ansible-playbook --syntax-check -i deployment/production/inventory.example.ini deployment/ansible/production.yml
           ansible-playbook --syntax-check -i deployment/native-push/inventory.example.ini deployment/ansible/native-system-calls.yml
           ansible-playbook --syntax-check -i deployment/native-push/inventory.example.ini deployment/ansible/native-server-access.yml
