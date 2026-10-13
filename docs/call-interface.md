@@ -1,0 +1,5 @@
+# Call interface
+
+Calls use an Olamide-branded purple call screen inspired by the requested TextNow layout. Outgoing dialing displays Calling before answer; connected state starts the timer. Incoming answer/reject, mute, hold/resume and hang-up preserve the existing SIP.js handlers and server authorization. The keypad routes digits through the existing send-tone handler. Call controls requiring a connected call are disabled while dialing. Audio output opens the existing device settings; browser device-routing support still determines available outputs. Minimize retains the call.
+
+Deploy the CI-approved release using `deployment/deploy-messaging-gui.sh`. Test outgoing answer, rejection, hang-up, hold, mute and DTMF with two real endpoints. Browser tests verify wiring but cannot prove RTP/media or carrier DTMF delivery. This does not install every TextNow product feature, native speaker/earpiece routing, emergency calling or live voice translation. Billing, subscriptions and external-number authorization are unchanged.

@@ -1198,7 +1198,7 @@ setupContactManagerLayout(document);
 setupChatLanding(document);
 setupChatGestures(document);
 const messengerHub=setupMessengerHub({document,request:(...args)=>accountRequest(...args),get:(...args)=>apiGet(...args),show:showWorkspace,isSignedIn:()=>!!activeRole,openContact:id=>{showWorkspace('chat');const select=$('#contact-list');select.value=id;select.dispatchEvent(new window.Event('change',{bubbles:true}));$('#chat').classList.add('thread-open');}});
-const callGui=setupCallGui({document,openVideo:()=>{
+const callGui=setupCallGui({document,openAudio:()=>callsScreen.open('settings'),openVideo:()=>{
   if($('#meetings').hidden){$('#chat-status').textContent='Video meetings are not enabled for this account.';return;}
   videoWorkflow=true;showWorkspace('meetings');$('#meeting-create input')?.focus();
 }});
@@ -2599,8 +2599,8 @@ dialForm.addEventListener("submit", async (event) => {
   try {const access=await accountRequest('/api/softphone/authorize',{target});authorizedTarget=access.target||target;}catch(error){status(error.message);return;}
   currentCall = { direction: "outgoing", address: target };
   callGui.identity(target);
-  try { status("Calling…"); await phone.call(authorizedTarget); }
-  catch (error) { finishCall("failed"); report(error); }
+  try { callGui.pending();status("Calling…"); await phone.call(authorizedTarget); }
+  catch (error) { finishCall("failed");callState(false); report(error); }
 });
 $("#check-location").onclick = async () => {
   try {await loadGeofencePolicy();} catch {$("#geo-result").textContent="Location policy unavailable";return;}
