@@ -1,0 +1,7 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {JSDOM} from 'jsdom';
+import {setupCallsScreen} from './callsScreen.js';
+test('contact picker has an explicit call action gated by destination and connection',()=>{
+ const {window}=new JSDOM('<section id="calling-workspace"><h2>Calls</h2><ul id="recent-calls"></ul><details id="dialer-contacts"></details><form id="dial"><input name="target"></form><div id="softphone-tools"></div><p id="status">Connected</p></section>');const doc=window.document;window.HTMLDialogElement.prototype.showModal=function(){this.open=true;};window.HTMLDialogElement.prototype.close=function(){this.open=false;this.dispatchEvent(new window.Event('close'));};let connected=false;const dialed=[];const screen=setupCallsScreen({document:doc,get:async()=>({calls:[]}),request:async()=>{},show(){},dial:a=>dialed.push(a),connected:()=>connected});screen.open('contacts');const call=doc.querySelector('.calls-contact-call'),input=doc.querySelector('[name=target]');assert.equal(call.hidden,false);assert.equal(call.disabled,true);input.value='sip:alice@example.com';input.dispatchEvent(new window.Event('input'));assert.equal(call.disabled,true);connected=true;screen.connectionStatus('Connected');assert.equal(call.disabled,false);assert.equal(doc.querySelector('.calls-sip-retry').hidden,true);call.click();assert.deepEqual(dialed,['sip:alice@example.com']);assert.equal(doc.querySelector('dialog').open,false);screen.stop();
+});

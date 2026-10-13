@@ -26,7 +26,7 @@ body.messenger-mode #send-message label{flex:1;margin:0}
 body.messenger-mode #send-message textarea{min-height:48px;border-radius:14px;resize:vertical}
 body.messenger-mode #send-message button{background:#16876a;border-radius:999px;min-height:48px}
 body.messenger-mode #chat .bulk-controls,body.messenger-mode #add-contact{margin:.8rem 0}
-@media(max-width:620px){body.messenger-mode{padding:.5rem .5rem 1rem}.messenger-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:.3rem}.messenger-tabs a{text-align:center;padding:.6rem .3rem;font-size:.85rem}body.messenger-mode #chat{padding:.8rem}body.messenger-mode #send-message{padding:.5rem}}
+@media(max-width:620px){body.messenger-mode{padding:.5rem .5rem 1rem}.messenger-tabs{display:flex;flex-wrap:nowrap;gap:0}.messenger-tabs a{text-align:center;padding:.6rem .3rem;font-size:.85rem}body.messenger-mode #chat{padding:.8rem}body.messenger-mode #send-message{padding:.5rem}}
 html{min-height:100%;background:#000}
 body{font:16px/1.55 system-ui,sans-serif;max-width:1180px;margin:0 auto;padding:0 clamp(1rem,4vw,3rem) 3rem;color:#eef4ff}
 html[data-background="midnight"]{background-image:linear-gradient(145deg,#060b19,#142b45 55%,#050b17)}
@@ -280,3 +280,5 @@ body.messenger-mode #send-message.chat-icon-composer .chat-view-once{order:5;col
 
 /* Keep every enabled primary destination in the same navigation row. */
 body.messenger-mode .messenger-tabs{display:flex;flex-wrap:nowrap;overflow-x:auto;align-items:center;gap:0}body.messenger-mode .messenger-tabs>a:not(.admin-entry){flex:1 1 0;min-width:0;box-sizing:border-box;white-space:nowrap}body.messenger-mode .messenger-tabs>a>span{max-width:100%;overflow:hidden;text-overflow:ellipsis}@media(max-width:900px){body.messenger-mode .messenger-tabs a:not(.admin-entry){padding:2px 3px;font-size:11px}body.messenger-mode .messenger-tabs a>svg,body.messenger-mode .messenger-tabs a[aria-current=page]>svg{width:22px;height:22px;padding:6px 8px}}
+
+.messenger-tabs{display:flex;flex-flow:row nowrap;width:100%;box-sizing:border-box}.calls-dialog[data-mode=contacts] #dialer-contact-results{max-height:38dvh;margin:12px 0;overflow:auto}.calls-dialog[data-mode=contacts] #dialer-contact-results li{padding:0;border:0;margin:0}.calls-dialog[data-mode=contacts] #dialer-contact-results button{margin:0;padding:14px 8px;min-height:64px;line-height:1.4}.calls-dialog[data-mode=contacts] #dialer-contact-results strong,.calls-dialog[data-mode=contacts] #dialer-contact-results small{display:block}.calls-contact-call{position:sticky;bottom:0;display:block;width:100%;padding:14px;background:#20c56a;color:#082519;border:0;border-radius:14px;font-weight:700}.calls-contact-call:disabled{opacity:.45}

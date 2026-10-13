@@ -1,8 +1,12 @@
 import {icon} from './messengerIcons.js';
-export function setupCallsScreen({document,get,request,show,dial,retryConnection=()=>{}}){
+export function setupCallsScreen({document,get,request,show,dial,retryConnection=()=>{},connected=()=>true}){
  const panel=document.getElementById('calling-workspace'),dialog=document.createElement('dialog');dialog.className='calls-dialog';dialog.innerHTML='<button type="button" class="calls-close" aria-label="Close">×</button><h2 id="calls-dialog-title"></h2><div id="calls-dialog-content"></div><p id="scheduled-call-status" role="status"></p>';panel.append(dialog);
+ const callSelected=document.createElement('button');callSelected.type='button';callSelected.className='calls-contact-call';callSelected.textContent='Call selected contact';callSelected.hidden=true;dialog.append(callSelected);
+ function refreshCall(){callSelected.disabled=!connected()||!document.getElementById('dial')?.elements?.target?.value?.trim();}
+ document.getElementById('dial')?.elements?.target?.addEventListener('input',refreshCall);
+ callSelected.onclick=()=>{const address=document.getElementById('dial')?.elements?.target?.value?.trim();if(!address||!connected())return;dialog.close();dial(address);};
  const retry=document.createElement('button');retry.type='button';retry.textContent='Retry SIP connection';retry.className='calls-sip-retry';retry.onclick=()=>retryConnection();dialog.append(retry);
- function connectionStatus(message){if(['keypad','contacts'].includes(dialog.dataset.mode))dialog.querySelector('[role=status]').textContent=message;}
+ function connectionStatus(message){refreshCall();retry.hidden=!['keypad','contacts'].includes(dialog.dataset.mode)||connected();if(['keypad','contacts'].includes(dialog.dataset.mode))dialog.querySelector('[role=status]').textContent=message;}
 
  const content=dialog.querySelector('#calls-dialog-content');let moved=null,original=null,next=null,dialogGeneration=0;
  function restore(){if(moved){original.insertBefore(moved,next?.parentNode===original?next:null);moved=null;}}
@@ -16,6 +20,7 @@ export function setupCallsScreen({document,get,request,show,dial,retryConnection
  function open(mode){dialogGeneration++;dialog.dataset.mode=mode;show('calling-workspace');restore();content.replaceChildren();dialog.querySelector('[role=status]').textContent='';dialog.querySelector('h2').textContent={contacts:'New call',schedule:'Scheduled calls',keypad:'Keypad',favorites:'Favorites',settings:'Call settings'}[mode]||'Calls';
  if(mode==='schedule'){content.innerHTML='<form id="scheduled-call-form"><label>Title <input name="title" maxlength="100" required></label><label>SIP address <input name="address" placeholder="sip:contact@domain" maxlength="255" required></label><label>When <input name="startsAt" type="datetime-local" required></label><button type="submit">Schedule call</button></form><p>Saved to your account. Open this list and tap Call when ready; calls require your confirmation.</p><ul></ul>';const form=content.querySelector('form');form.onsubmit=async event=>{event.preventDefault();const submit=form.querySelector('button');submit.disabled=true;try{await request('/api/softphone/scheduled',{title:form.elements.title.value,address:form.elements.address.value,startsAt:new Date(form.elements.startsAt.value).toISOString()});form.reset();await scheduled();}catch(error){dialog.querySelector('[role=status]').textContent=error.message;}finally{submit.disabled=false;}};void scheduled().catch(error=>dialog.querySelector('[role=status]').textContent=error.message);
  }else{moved=document.getElementById({contacts:'dialer-contacts',keypad:'dial',favorites:'softphone-tools',settings:'softphone-tools'}[mode]||'softphone-tools');if(mode==='favorites'||mode==='settings')moved=moved.closest('details')||moved;original=moved.parentNode;next=moved.nextSibling;content.append(moved);if(moved.tagName==='DETAILS')moved.open=true;if(mode==='keypad'){if(moved.hidden){dialog.querySelector('[role=status]').textContent='Waiting for SIP connection. You can enter a number now; calling requires an active connection.';}moved.hidden=false;}}
+ callSelected.hidden=mode!=='contacts';refreshCall();
  retry.hidden=!['keypad','contacts'].includes(mode);if(!retry.hidden)connectionStatus(document.getElementById('status')?.textContent||'Waiting for SIP connection');
  if(!dialog.open)dialog.showModal();
  }

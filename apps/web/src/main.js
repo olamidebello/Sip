@@ -1414,7 +1414,7 @@ const operatorAdmin=setupOperatorControl();
 const switchAdmin=setupKamailioAdmin();
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
-const callsScreen=setupCallsScreen({document,get:apiGet,request:accountRequest,show:showWorkspace,retryConnection:()=>autoSip.wake(),dial:address=>{dialForm.elements.target.value=address;dialForm.requestSubmit();}});
+const callsScreen=setupCallsScreen({document,get:apiGet,request:accountRequest,show:showWorkspace,retryConnection:()=>autoSip.wake(),connected:()=>sipRegistered&&!!phone?.isConnected(),dial:address=>{dialForm.elements.target.value=address;dialForm.requestSubmit();}});
 const messengerPreferences=setupMessengerPreferences({document,get:apiGet,request:accountRequest});
 const sessionAdmin=setupSessionAdmin(document);
 navigationPolicy=setupNavigationPolicy({document,get:apiGet,request:accountRequest,changed:()=>{updateNavigation();chatComposer?.refresh();if(activeRole&&!adminTarget(activeView)&&!navigationAllowed(activeView))showWorkspace(userHome(),{historyMode:'replace'});}});
