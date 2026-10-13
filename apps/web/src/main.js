@@ -2170,7 +2170,7 @@ apiGet("/api/config").then(({ sipWssUrl }) => {
 }).catch(() => {});
 const signupCaptcha=setupSignupCaptcha({document,get:apiGet});
 const refreshSignupCaptcha=signupCaptcha.refresh;
-refreshSignupCaptcha();
+if(pageId(location.pathname)==='signup')refreshSignupCaptcha();
 $("#signup").addEventListener("submit", async event=>{
  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button:last-child');
  if(!signupCaptcha.ready()){await refreshSignupCaptcha();$('#account-status').textContent=signupCaptcha.ready()?'CAPTCHA refreshed. Enter the new six digits, then submit again.':'CAPTCHA unavailable. Tap New CAPTCHA to retry.';return;}
