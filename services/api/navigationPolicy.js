@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 // Presentation permissions never confer administrator roles or service entitlements.
-export const EXTRA_NAVIGATION = Object.freeze({money:'Money',dashboard:'Dashboard','campaign-inbox-panel':'Announcements',planner:'Events & tasks','search-panel':'Workspace search','external-sms':'External text messages','outbound-rates':'Outbound rates',meetings:'Meetings','agent-panel':'Call center','product-store':'Products & services',billing:'Plans, numbers & billing','dialplan-marketplace':'Dial plan marketplace',geo:'Calling area','activity-monitor':'Activity monitor'});
+export const EXTRA_NAVIGATION = Object.freeze({money:'Money',social:'Social',dashboard:'Dashboard','campaign-inbox-panel':'Announcements',planner:'Events & tasks','search-panel':'Workspace search','external-sms':'External text messages','outbound-rates':'Outbound rates',meetings:'Meetings','agent-panel':'Call center','product-store':'Products & services',billing:'Plans, numbers & billing','dialplan-marketplace':'Dial plan marketplace',geo:'Calling area','activity-monitor':'Activity monitor'});
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const decode=value=>typeof value==='string'?JSON.parse(value):value||{};
 export function validateNavigationPolicy(value){
@@ -9,7 +9,7 @@ export function validateNavigationPolicy(value){
 }
 export function resolveNavigation(groups=[],override={}){
  const result=Object.fromEntries(Object.keys(EXTRA_NAVIGATION).map(key=>[key,false]));
- for(const key of Object.keys(result)){const values=groups.map(decode).map(g=>g[key]);result[key]=values.includes(false)?false:values.includes(true)||key==='money';}
+ for(const key of Object.keys(result)){const values=groups.map(decode).map(g=>g[key]);result[key]=values.includes(false)?false:values.includes(true)||['money','social'].includes(key);}
  return {...result,...validateNavigationPolicy(decode(override))};
 }
 export async function migrateNavigationPolicy(pool){

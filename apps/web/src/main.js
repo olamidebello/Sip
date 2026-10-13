@@ -1,3 +1,4 @@
+import {setupSocialWorkspace} from './socialWorkspace.js';
 import {setupSignupCaptcha} from './signupCaptcha.js';
 import {setupContactDiscovery} from './contactDiscovery.js';
 import {setupSubscriberDelivery} from './subscriberDelivery.js';
@@ -397,6 +398,13 @@ root.innerHTML = `
     <div id="store-admin-products"></div><h3>Order commissioning &amp; delivery</h3><ul id="store-admin-orders"></ul>
   </section>
 
+  <section id="social" hidden aria-label="Social platform">
+    <h2>Olamide Social</h2><p>Connect and share with your workspace.</p>
+    <nav aria-label="Social feed"><button type="button" data-social-mode="all">For you</button><button type="button" data-social-mode="following">Following</button><button type="button" data-social-mode="bookmarks">Bookmarks</button></nav>
+    <form><label>What is happening? <textarea name="body" required maxlength="560" rows="3" placeholder="Share a post (280 characters)"></textarea></label><p data-social-reply></p><button>Post</button><button type="button" data-social-cancel>Cancel reply</button></form>
+    <label>Search posts or people <input data-social-search maxlength="80" type="search"></label><button type="button" data-social-refresh>Search / refresh feed</button><button type="button" data-social-people>Find people</button><ul data-social-profiles></ul>
+    <p role="status"></p><div data-social-feed></div>
+  </section>
   <section id="money" hidden aria-label="Money workspace">
     <div class="money-header"><button id="money-back" type="button" aria-label="Back to chats">←</button><h2>Money <span>$</span></h2><button id="money-settings" type="button" aria-label="Money profile and settings">Profile</button></div>
     <div class="money-balance-card"><small>Available balance · USD</small><strong id="money-total">$0.00</strong><div><button id="money-funding" type="button" disabled>Add money</button><button id="money-payout" type="button" disabled>Cash out</button></div><p id="money-funding-note"></p></div>
@@ -1194,7 +1202,7 @@ setupCarrierControl();
 const navigationGroups=[
   {label:"Workspace",items:[["dashboard","Dashboard"],["campaign-inbox-panel","Announcements"],["planner","Events & tasks"],["search-panel","Search"],["support","Support tickets"],["help","Help & tutorials"]]},
   {label:"Communications",items:[["messenger-groups","Groups & communities"],["messenger-updates","Status updates"],["messenger-broadcast","Broadcast"],["messenger-starred","Starred messages"],["messenger-sessions","Linked sessions"],["messenger-storage","Storage & data"],["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
-  {label:"Commerce",items:[["money","Money"],["product-store","Products & services"],["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
+  {label:"Commerce",items:[["money","Money"],["social","Social"],["product-store","Products & services"],["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["messenger-accessibility","Accessibility"],["messenger-settings","Messenger settings"],["account","Account & security"],["activity-monitor","Activity monitor"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
   {label:"Administration",roles:["admin","super_admin"],items:[["product-store-admin","Product catalog & orders"],["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio services"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["passkey-policy-admin","Passkey requirements"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
@@ -1232,6 +1240,7 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   document.body.classList.toggle('admin-mode',adminMode);
   document.body.classList.toggle('messenger-mode',!adminMode);
   document.body.classList.toggle('money-mode',target==='money');
+  if(target==='social')void socialWorkspace.refresh();
   if(target==='money')void moneyWorkspace.refresh();
   if(modeChanged)updateNavigation();
   const requested=document.getElementById(target);
@@ -1289,7 +1298,7 @@ function updateNavigation() {
   const returnToCall=document.createElement("a");returnToCall.id="return-to-call";returnToCall.href="#calling-workspace";returnToCall.textContent="Return to call";returnToCall.hidden=!onCall;
   nav.append(returnToCall);
   const tabs=document.createElement('div');tabs.className='messenger-tabs';
-  for(const [id,label,symbol] of [['chat','Chats','chat'],['messenger-updates','Updates','updates'],['messenger-groups','Communities','people'],['calling-workspace','Calls','calls'],['money','Money','money']]){
+  for(const [id,label,symbol] of [['chat','Chats','chat'],['messenger-updates','Updates','updates'],['messenger-groups','Communities','people'],['calling-workspace','Calls','calls'],['money','Money','money'],['social','Social','social']]){
     if(!navigationAllowed(id)||document.getElementById(id)?.closest('[hidden]'))continue;
     const link=document.createElement('a');link.href=`/#${id}`;link.innerHTML=icon(symbol);const caption=document.createElement('span');caption.textContent=label;link.append(caption);if(activeView===id)link.setAttribute('aria-current','page');tabs.append(link);
   }
@@ -1375,6 +1384,7 @@ const support=setupSupport({get:path=>apiGet(path),request:(path,body,method)=>a
 localeSettings=setupLocaleSettings({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const groupAdmin = setupGroupAdmin();
 const sipProfiles = setupSipProfiles({get:apiGet,request:accountRequest,permissionsChanged:updateNavigation});
+const socialWorkspace=setupSocialWorkspace({document,get:apiGet,request:accountRequest});
 const moneyWorkspace=setupMoneyWorkspace({document,get:apiGet,request:accountRequest,show:showWorkspace});
 const productStore=setupProductStore({get:apiGet,request:accountRequest,refreshBilling});
 const commerceOps=setupCommerceOps({get:apiGet,request:accountRequest});
@@ -1858,6 +1868,7 @@ function signedIn(user) {
   $("#product-store").hidden=!user.features?.billing;
   $("#product-store-admin").hidden=!user.features?.billing||!["admin","super_admin"].includes(user.role);
   if(user.features?.billing){productStore.refresh();if(["admin","super_admin"].includes(user.role))productStore.refreshAdmin();}
+  $("#social").hidden=false;
   $("#money").hidden=!user.features?.billing;
   if(user.features?.billing)moneyWorkspace.start(user);
   $("#billing").hidden = !user.features?.billing;
@@ -2388,6 +2399,7 @@ $("#logout").onclick = async () => {
   try {
     dialerContacts.clear();
     contactDirectory.clear();
+    socialWorkspace.stop();
     moneyWorkspace.stop();
     await nativeCalls.stop();
     await nativePush.stop();
@@ -2425,6 +2437,7 @@ $("#logout").onclick = async () => {
     $("#chat").hidden = true;
     $("#product-store").hidden=true;
     $("#product-store-admin").hidden=true;
+    $("#social").hidden=true;
     $("#money").hidden=true;
     $("#billing").hidden = true;
     meetings.hide();

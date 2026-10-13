@@ -1,4 +1,4 @@
-export const extraNavigation=['money','dashboard','campaign-inbox-panel','planner','search-panel','external-sms','outbound-rates','meetings','agent-panel','product-store','billing','dialplan-marketplace','geo','activity-monitor'];
+export const extraNavigation=['money','social','dashboard','campaign-inbox-panel','planner','search-panel','external-sms','outbound-rates','meetings','agent-panel','product-store','billing','dialplan-marketplace','geo','activity-monitor'];
 export function setupNavigationPolicy({document,get,request,changed}){
  let extras={},owner=null,generation=0,data=null;
  const panel=document.getElementById('navigation-policy-admin'),form=document.getElementById('navigation-policy-form'),kind=form.elements.kind,target=form.elements.target,status=document.getElementById('navigation-policy-status'),fields=document.getElementById('navigation-policy-fields');

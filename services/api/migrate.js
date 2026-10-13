@@ -1,3 +1,4 @@
+import {migrateSocial} from './social.js';
 import {migrateDefaultPresence} from './defaultPresence.js';
 import {migrateContactDiscovery} from './contactDiscovery.js';
 import {migrateSubscriberDelivery} from './subscriberDelivery.js';
@@ -130,7 +131,8 @@ export async function migrate(pool) {
       ['subscriber_delivery', () => migrateSubscriberDelivery(pool)],
       ['subscriber_routing', () => migrateSubscriberRouting(pool)],
       ['locales', () => migrateLocales(pool)],
-      ['contact_discovery', () => migrateContactDiscovery(pool)]
+      ['contact_discovery', () => migrateContactDiscovery(pool)],
+      ['social', () => migrateSocial(pool)]
     ];
     for (const [name, action] of steps) {
       await action();

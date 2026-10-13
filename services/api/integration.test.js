@@ -81,6 +81,10 @@ test("registered users can create and join a room; host controls it", {
   assert.equal(hostLogin.status, 200);
   const hostCookie = hostLogin.cookie.split(";")[0];
   const guestCookie = guestLogin.cookie.split(";")[0];
+  const socialPost=await post('/api/social/posts',{body:'Social integration post'},guestCookie);assert.equal(socialPost.status,201,JSON.stringify(socialPost.body));
+  const socialLike=await fetch(base+'/api/social/posts/'+socialPost.body.id+'/likes',{method:'PUT',headers:{Origin:origin,Cookie:guestCookie,'Content-Type':'application/json'},body:'{}'});assert.equal(socialLike.status,200);
+  const socialFeed=await fetch(base+'/api/social/posts',{headers:{Cookie:guestCookie}}).then(r=>r.json());assert.equal(socialFeed.posts.find(p=>p.id===socialPost.body.id).likes,1);
+
   assert.equal(guestLogin.body.features.remote_assist, false);
   const created = await post("/api/meetings", { title:"Team call" }, hostCookie);
   assert.equal(created.status, 201, JSON.stringify(created.body) + "\nAPI stderr: " + log);
