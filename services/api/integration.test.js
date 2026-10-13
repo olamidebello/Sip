@@ -434,10 +434,10 @@ test("registered users can create and join a room; host controls it", {
   const expiredFeed=await fetch(base+'/api/messages?contact='+hostLogin.body.id,{headers:{Cookie:guestCookie}});assert.ok(!(await expiredFeed.json()).messages.some(m=>m.id===disappearing.body.id));
   assert.equal((await mutate('/api/messenger/messages/'+disappearing.body.id+'/forward','POST',{recipient:guestLogin.body.id},hostCookie)).status,404);
   const onceFile=await post('/api/messenger/attachments',{name:'once.png',mime:'image/png',data:Buffer.from('89504e470d0a1a0a0000','hex').toString('base64')},hostCookie);assert.equal(onceFile.status,201);
-  const once=await post('/api/messages',{recipient:guestLogin.body.id,body:'View once',attachmentId:onceFile.body.id,viewOnce:true},hostCookie);assert.equal(once.status,201,JSON.stringify(once.body));
+  const onceMessage=await post('/api/messages',{recipient:guestLogin.body.id,body:'View once',attachmentId:onceFile.body.id,viewOnce:true},hostCookie);assert.equal(onceMessage.status,201,JSON.stringify(onceMessage.body));
   assert.equal((await fetch(base+'/api/messenger/attachments/'+onceFile.body.id,{headers:{Cookie:guestCookie}})).status,404);
   assert.equal((await fetch(base+'/api/messenger/attachments/'+onceFile.body.id,{headers:{Cookie:hostCookie}})).status,404);
-  const openOnce=async(cookie)=>fetch(base+'/api/messenger/messages/'+once.body.id+'/open',{method:'POST',headers:{Origin:origin,Cookie:cookie,'Content-Type':'application/json'},body:'{}'});
+  const openOnce=async(cookie)=>fetch(base+'/api/messenger/messages/'+onceMessage.body.id+'/open',{method:'POST',headers:{Origin:origin,Cookie:cookie,'Content-Type':'application/json'},body:'{}'});
   assert.equal((await openOnce(hostCookie)).status,410);const results=await Promise.all([openOnce(guestCookie),openOnce(guestCookie)]);assert.deepEqual(results.map(r=>r.status).sort(),[200,410]);
   assert.equal((await openOnce(guestCookie)).status,410);
 
