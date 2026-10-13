@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Backed-up local subscriber repair. No carrier configuration or passwords printed."""
-import argparse,datetime,os,pathlib,re,subprocess,shutil,gzip
+import argparse,datetime,os,pathlib,re,subprocess,shutil,gzip,time,urllib.request,urllib.error
 
 def replace_domain(text,old,new):
     values=re.findall(r'^SIP_ACCOUNT_DOMAIN=(.*)$',text,re.M)
@@ -40,6 +40,14 @@ def main():
             tmp=path.with_name(path.name+'.sip-domain.tmp');tmp.write_text(content);tmp.chmod(0o600);tmp.replace(path)
     finally:
         subprocess.run(compose+['up','-d','--no-deps','api'],cwd=cwd,check=True)
+    deadline=time.monotonic()+60
+    while True:
+        try:
+            with urllib.request.urlopen('https://'+a.to_domain+'/api/health',timeout=5)as response:
+                if response.status==200:break
+        except (urllib.error.URLError,TimeoutError):pass
+        if time.monotonic()>=deadline:raise SystemExit('API health did not recover; domain repair is committed, see private backups')
+        time.sleep(2)
     subprocess.run(compose+['exec','-T','api','node','sipLiveCheck.js'],cwd=cwd,check=True)
     print('Domain repair and authenticated REGISTER passed. Sign out and sign in again on clients.')
 if __name__=='__main__':main()
