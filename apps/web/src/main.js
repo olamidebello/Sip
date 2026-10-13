@@ -1,3 +1,4 @@
+import {setupSubscriberDelivery} from './subscriberDelivery.js';
 import {setupChatComposerShortcuts} from './chatComposerShortcuts.js';
 import {setupMessengerPreferences} from './messengerPreferences.js';
 import {styleMessengerSettings} from './messengerSettings.js';
@@ -1259,6 +1260,7 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   return true;
 }
 function resetWorkspace() {
+  subscriberDelivery.stop();
   userActivity?.stop();
   $("#activity-monitor").hidden=true;
   $("#fleet-admin").hidden=true;
@@ -1745,6 +1747,7 @@ const conversations=setupConversations({get:apiGet,request:accountRequest,isSign
   preferencesChanged:()=>loadContacts(),
   isVisible:()=>!$('#chat').hidden&&!$('#chat').classList.contains('workspace-inactive')&&(!window.matchMedia('(max-width:900px)').matches||$('#chat').classList.contains('thread-open')),
   callContact:address=>{dialForm.elements.target.value=address;showWorkspace('calling-workspace');status('Contact selected. Connect your SIP account, then press Call.');}});
+const subscriberDelivery=setupSubscriberDelivery({document,get:apiGet,request:accountRequest,isRegistered:()=>sipRegistered&&!!phone?.isConnected()});
 chatComposer=setupChatComposerShortcuts({document,moneyAllowed:()=>navigationAllowed('money')&&!$('#money').hidden,payContact:email=>moneyWorkspace.payContact(email)});
 async function loadMessages(){await conversations.refresh();}
 function signedIn(user) {
@@ -1796,6 +1799,7 @@ function signedIn(user) {
   $("#sip-account-panel").hidden=false;
   refreshSipAccount();
   autoSip.start(user.id);
+  void subscriberDelivery.start();
   void dialerContacts.refresh();
   void nativePush.start();
   apiGet('/api/softphone/access').then(access=>{$('#calling-access').textContent=access.externalCalls?'Your active plan permits external calling, subject to carrier and billing limits.':'Free account: call active SIP users in your workspace. An active plan is required for external calls and texts.';}).catch(error=>{$('#calling-access').textContent=error.message;});
@@ -2657,9 +2661,11 @@ async function refreshExternalSms(){
   }
 }
 $('#sms-refresh').onclick=()=>refreshExternalSms().catch(error=>{$('#sms-status').textContent=error.message;});
+let pendingSubscriberSms;
 $('#sms-send').onsubmit=async event=>{
   event.preventDefault();const form=event.currentTarget;const input=Object.fromEntries(new FormData(form));
-  try{const result=await accountRequest('/api/external-sms/send',input);$('#sms-status').textContent=`Carrier accepted SMS ${result.providerId}`;form.elements.body.value='';await refreshExternalSms();}
+  const signature=JSON.stringify(input);if(!pendingSubscriberSms||pendingSubscriberSms.signature!==signature)pendingSubscriberSms={signature,key:crypto.randomUUID()};
+  try{const result=await accountRequest('/api/external-sms/send',{...input,idempotencyKey:pendingSubscriberSms.key});pendingSubscriberSms=null;$('#sms-status').textContent=result.status==='subscriber_accepted'?`Subscriber text accepted. Chat: ${result.chatDelivered?'delivered':'off'}; email: ${result.emailQueued?'queued':'off'}.`:`Carrier accepted SMS ${result.providerId}`;form.elements.body.value='';await refreshExternalSms();}
   catch(error){$('#sms-status').textContent=error.message;}
 };
 async function refreshSmsNumberAdmin(){

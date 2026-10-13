@@ -1,0 +1,10 @@
+---
+- name: Deploy CI validated subscriber delivery and database schema
+  ansible.builtin.import_playbook: chat-experience.yml
+- name: Report subscriber delivery configuration
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Report required configuration and device checks
+      ansible.builtin.debug:
+        msg: 'Subscriber SMS/chat/email and app number-to-SIP routing installed. Assign verified SMS numbers in carrier administration. Users manage chat copies, opt-in email copies, and opt-in number calls in Settings. Email requires RESEND_API_KEY and RESEND_FROM. Registration heartbeat must be fresh and tied to a live session. Test two devices. This does not rewrite inbound PSTN calls or texts sent from another native SMS application.'

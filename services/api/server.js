@@ -1,3 +1,4 @@
+import {handleSubscriberSettings,deliverSubscriberSms,startSubscriberEmail} from './subscriberDelivery.js';
 import {handleViewOnce,startMessageExpiry} from './messagePrivacy.js';
 import {handleMessengerPreferences} from './messengerPreferences.js';
 import {handleScheduledCalls} from './scheduledCalls.js';
@@ -258,6 +259,7 @@ async function handler(req, res) {
       if (!user) return send(res, 401, { error: "Sign in required" });
       if(path.startsWith('/api/softphone/scheduled'))return await handleScheduledCalls({req,res,path,user,pool,send,readJson});
       if(path==='/api/navigation'||path.startsWith('/api/admin/navigation'))return await handleNavigationPolicy({req,res,path,user,pool,send,readJson});
+      if(path==='/api/account/subscriber-delivery'||path==='/api/account/subscriber-registration')return await handleSubscriberSettings({req,res,path,user,pool,send,readJson,sessionHash:tokenHash(currentToken(req))});
       if(path==='/api/messenger/privacy/capabilities'&&req.method==='GET')return send(res,200,{directDisappearing:!!user.features?.messaging,directViewOnce:!!user.features?.messaging,endToEndEncryption:false,nativeBackupSync:false});
       if(/^\/api\/messenger\/messages\/[0-9a-f-]{36}\/open$/.test(path))return await handleViewOnce({req,res,path,user,pool,send});
       if(path==='/api/messenger/preferences')return await handleMessengerPreferences({req,res,user,pool,send,readJson});
@@ -292,7 +294,8 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/rates/flowroute') || path==='/api/rates/flowroute/search')
         return await handleFlowrouteRates({req,res,path,user,pool,send});
       if(path==='/api/admin/messaging/numbers') return await handleSmsNumberAdmin({req,res,path,user,pool,send,readJson});
-      if(path==='/api/external-sms/send' && req.method==='POST' && !await activeSubscription(pool,user))return send(res,403,{error:'An active subscription is required for external texts',configurationUrl:'/#billing'});
+      if(path==='/api/external-sms/send'&&req.method==='POST'){const input=await readJson(req);try{const local=await deliverSubscriberSms({user,pool,input});if(local)return send(res,202,local);}catch(e){if(e.status)return send(res,e.status,{error:e.message});throw e;}if(!await activeSubscription(pool,user))return send(res,403,{error:'An active subscription is required for external texts',configurationUrl:'/#billing'});return await handleExternalSms({req,res,path,user,pool,send,readJson:async()=>input});}
+
       if(path.startsWith('/api/external-sms/')) return await handleExternalSms({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/messaging/webhooks') return await handleMessagingWebhookAdmin({req,res,user,pool,send,origin});
       if(path.startsWith('/api/admin/carrier-adapters')) return await handleAdapterRegistry({req,res,path,user,pool,send,readJson});
@@ -781,6 +784,8 @@ await migrate(pool);
 const kamailioHttpBridge=startKamailioHttpBridge(pool);
 const stopSipProvisioning=startSipProvisioning(pool,origin);
 const stopMessageExpiry=startMessageExpiry(pool);
+const stopSubscriberEmail=startSubscriberEmail(pool);
+server.on("close",stopSubscriberEmail);
 const stopNativePush=startNativePush(pool);
 const stopRateSync=startFlowrouteRateSync(pool);
 const stopStoreRenewals=startStoreRenewals(pool);

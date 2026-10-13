@@ -1,3 +1,4 @@
+import {migrateSubscriberDelivery} from './subscriberDelivery.js';
 import {migrateMessagePrivacy} from './messagePrivacy.js';
 import {migrateMessengerPreferences} from './messengerPreferences.js';
 import {migrateScheduledCalls} from './scheduledCalls.js';
@@ -122,7 +123,8 @@ export async function migrate(pool) {
       ['scheduled_calls', () => migrateScheduledCalls(pool)],
       ['messenger_preferences', () => migrateMessengerPreferences(pool)],
       ['support', () => migrateSupport(pool)],
-      ['locales', () => migrateLocales(pool)]
+      ['locales', () => migrateLocales(pool)],
+      ['subscriber_delivery', () => migrateSubscriberDelivery(pool)]
     ];
     for (const [name, action] of steps) {
       await action();

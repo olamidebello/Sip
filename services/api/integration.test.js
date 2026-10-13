@@ -441,6 +441,25 @@ test("registered users can create and join a room; host controls it", {
   assert.equal((await openOnce(hostCookie)).status,410);const results=await Promise.all([openOnce(guestCookie),openOnce(guestCookie)]);assert.deepEqual(results.map(r=>r.status).sort(),[200,410]);
   assert.equal((await openOnce(guestCookie)).status,410);
 
+  // Subscriber number delivery is tenant-scoped, opted in, idempotent and bound to a live session.
+  const subscriberNumber='+12025550999';
+  await db.query("UPDATE sip_accounts SET status='active' WHERE user_id=$1",[guestLogin.body.id]);
+  const guestAccount=(await db.query('SELECT id,username,domain FROM sip_accounts WHERE user_id=$1',[guestLogin.body.id])).rows[0];
+  await db.query('INSERT INTO olamide_sip_subscribers(account_id,username,domain,ha1,ha1b) VALUES($1,$2,$3,$4,$5)',[guestAccount.id,guestAccount.username,guestAccount.domain,'a'.repeat(32),'b'.repeat(32)]);
+  await db.query('INSERT INTO flowroute_sms_numbers(number_e164,tenant_id,user_id,enabled) VALUES($1,$2,$3,TRUE)',[subscriberNumber,tenantId,guestLogin.body.id]);
+  assert.equal((await mutate('/api/account/subscriber-delivery','PUT',{sms_chat:true,sms_email:false,number_calls:true},guestCookie)).status,200);
+  assert.equal((await post('/api/account/subscriber-registration',{registered:true},guestCookie)).status,200);
+  const route=await post('/api/softphone/authorize',{target:'sip:'+subscriberNumber+'@carrier.example'},hostCookie);assert.equal(route.status,200,JSON.stringify(route.body));assert.equal(route.body.target,'sip:'+guestAccount.username+'@'+guestAccount.domain);
+  const smsInput={to:subscriberNumber,body:'Subscriber text',idempotencyKey:randomUUID()};
+  const localSms=await post('/api/external-sms/send',smsInput,hostCookie);assert.equal(localSms.status,202,JSON.stringify(localSms.body));assert.equal(localSms.body.chatDelivered,true);
+  assert.equal((await post('/api/external-sms/send',smsInput,hostCookie)).body.duplicate,true);
+  assert.equal(Number((await db.query('SELECT COUNT(*) AS n FROM messages WHERE id=$1',[localSms.body.id])).rows[0].n),1);
+  assert.equal((await post('/api/external-sms/send',{...smsInput,body:'Changed'},hostCookie)).status,409);
+  await post('/api/account/subscriber-registration',{registered:false},guestCookie);
+  assert.equal((await post('/api/softphone/authorize',{target:'sip:'+subscriberNumber+'@carrier.example'},hostCookie)).status,403);
+  assert.equal((await mutate('/api/account/subscriber-delivery','PUT',{sms_chat:false,sms_email:false,number_calls:false},guestCookie)).status,200);
+  assert.equal((await post('/api/external-sms/send',{...smsInput,idempotencyKey:randomUUID()},hostCookie)).status,403);
+
   // Full messenger workflows and access boundaries on MySQL.
   const media=await post('/api/messenger/attachments',{name:'pixel.png',mime:'image/png',data:Buffer.from('89504e470d0a1a0a0000','hex').toString('base64')},hostCookie);
   assert.equal(media.status,201,JSON.stringify(media.body)+log);
