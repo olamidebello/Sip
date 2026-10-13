@@ -1,4 +1,39 @@
 ---
+- name: Enable requested subscriber forwarding consistently
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Read release before configuration changes
+      ansible.builtin.command:
+        argv: [git, rev-parse, HEAD]
+        chdir: /opt/olamide/repo
+      register: discovery_head
+      changed_when: false
+    - name: Fetch successful exact release validations
+      ansible.builtin.uri:
+        url: 'https://api.github.com/repos/olamidebello/Sip/actions/workflows/deploy.yml/runs?branch=main&event=push&status=success&per_page=100'
+        return_content: true
+        headers:
+          Accept: application/vnd.github+json
+          User-Agent: Olamide-discovery-deployer
+      register: discovery_ci
+    - name: Require validated release before enabling forwarding
+      ansible.builtin.assert:
+        that:
+          - discovery_head.stdout in (discovery_ci.json.workflow_runs | map(attribute='head_sha') | list)
+        fail_msg: 'Wait for deployment CI success for this exact release before changing configuration.'
+    - name: Enable routing in canonical and saved application environment
+      ansible.builtin.lineinfile:
+        path: '{{ item }}'
+        regexp: '^SUBSCRIBER_ROUTING_ENABLED='
+        line: 'SUBSCRIBER_ROUTING_ENABLED=true'
+        create: false
+        backup: true
+        mode: '0600'
+      loop:
+        - /etc/olamide/secrets.env
+        - /opt/olamide/repo/deployment/docker/.env
+      no_log: true
 - name: Deploy validated subscriber delivery and contact discovery schemas
   ansible.builtin.import_playbook: subscriber-delivery.yml
 - name: Report contact discovery controls
@@ -7,4 +42,4 @@
   tasks:
     - name: Report required privacy and import settings
       ansible.builtin.debug:
-        msg: 'Email and international phone search and in-app contact registration alerts installed. Users must enable discoverability to appear. Alerts use contacts already imported into Olamide and can be disabled or dismissed in Settings. This does not monitor phone contacts without permission or send OS push notifications.'
+        msg: 'Email and international phone search and in-app contact registration alerts installed. Users must enable discoverability to appear. Alerts use contacts already imported into Olamide and can be disabled or dismissed in Settings. Forwarding feature gate enabled; email requires verified profile email and configured Resend, number calls require configured private registrar lookup. This does not monitor phone contacts without permission or send OS push notifications.'
