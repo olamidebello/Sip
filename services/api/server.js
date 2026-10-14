@@ -12,6 +12,7 @@ import {createProxyClientResolver,createRequestLimiter,requestLimitRule} from '.
 import {handleMessengerFeatures} from './messengerFeatures.js';
 import {createLimitedSession,handleSessionPolicy} from './sessionPolicy.js';
 import {handleGoogleContactsAdmin} from './googleContactsConfig.js';
+import {migratePstnBilling} from './pstnBilling.js';
 import {startKamailioHttpBridge} from './kamailioHttpBridge.js';
 import {handleNativePush,pushHookAuthorized,startNativePush} from './nativePush.js';
 import {handleContactSettings} from './contactSettings.js';
@@ -791,6 +792,7 @@ async function handler(req, res) {
 }
 
 await migrate(pool);
+await migratePstnBilling(pool);
 const kamailioHttpBridge=startKamailioHttpBridge(pool);
 const stopSipProvisioning=startSipProvisioning(pool,origin);
 const stopMessageExpiry=startMessageExpiry(pool);
