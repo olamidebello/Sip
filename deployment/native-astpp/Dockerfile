@@ -4,9 +4,9 @@ ARG ASTPP_COMMIT=9479778d1c9a325fc28b0265575f256703626077
 RUN printf 'deb https://deb.debian.org/debian bullseye main\ndeb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260903T220410Z/ bullseye-security main\n' > /etc/apt/sources.list \
  && rm -rf /var/lib/apt/lists/* \
  && apt-get -o Acquire::Retries=3 -o Acquire::http::No-Cache=true -o Acquire::https::No-Cache=true update \
- && apt-get -o Acquire::Retries=3 install -y --no-install-recommends git ca-certificates curl libmcrypt-dev libonig-dev libzip-dev libpng-dev libjpeg62-turbo-dev libfreetype6-dev libicu-dev libxml2-dev locales && rm -rf /var/lib/apt/lists/* \
+ && apt-get -o Acquire::Retries=3 install -y --no-install-recommends git ca-certificates curl libmcrypt-dev libonig-dev libzip-dev libpng-dev libjpeg62-turbo-dev libfreetype6-dev libcurl4-openssl-dev libxml2-dev locales && rm -rf /var/lib/apt/lists/* \
  && docker-php-ext-configure gd --with-freetype --with-jpeg \
- && docker-php-ext-install -j2 mysqli pdo_mysql mbstring gettext gd intl bcmath zip soap \
+ && docker-php-ext-install -j2 mysqli pdo_mysql mbstring gettext gd curl bcmath zip soap \
  && pecl install mcrypt-1.0.7 && docker-php-ext-enable mcrypt \
  && a2enmod rewrite headers \
  && git init /usr/src/astpp && cd /usr/src/astpp && git remote add origin https://github.com/iNextrix/ASTPP.git && git fetch --depth=1 origin "$ASTPP_COMMIT" && git checkout --detach FETCH_HEAD \
