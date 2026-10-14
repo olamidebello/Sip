@@ -1,0 +1,7 @@
+# Native ASTPP Community feature stages
+
+`bash deployment/deploy-astpp-features.sh` installs the pinned original native Community GUI/database independently of production Kamailio, then verifies backend schema/menu records one stage at a time: accounts, carriers, rates, billing, numbers, products, reports and settings. Use `--tags native_rates` to select a verification stage; base installation and release checks always run. Existing menus, role data and operator changes are preserved, not replaced with mock records. The native schema is initialized from the pinned upstream release and upgrade SQL.
+
+Administration → SIP & carriers → Native ASTPP Community provides a grouped guide and opens the private native GUI after SSH forwarding. Credentials stay server-side. Native form actions use the native backend/database; Olamide forms continue to use the Olamide backend/database. These are independent systems, with no implied gateway, balance or account synchronization.
+
+The package does not supply paid enterprise add-ons, banking providers or a native SIP switch. Native runtime-dependent controls, automated billing jobs and live native calls require additional integrations and acceptance testing. For production Kamailio prepaid calls, use the separate `deploy-kamailio-paid-calls.sh` installer and its controlled call acceptance process. Stage verification proves schema/menu installation, not all provider integrations or every call/media path.

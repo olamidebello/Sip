@@ -1,0 +1,95 @@
+---
+- import_playbook: optional-native-astpp.yml
+  tags: [always]
+- name: Verify original native Community features in ordered stages
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Verify Accounts, users and SIP devices
+      ansible.builtin.command:
+        argv: [docker, compose, '-p', olamide-native-astpp, '--env-file', /etc/olamide/native-astpp/runtime.env, exec, '-T', native-web, php, /usr/local/lib/native-astpp/verify_menus.php, accounts]
+        chdir: /opt/olamide/repo/deployment/native-astpp
+      register: native_feature_stage
+      changed_when: false
+      tags: [native_accounts]
+    - name: Report accounts stage
+      ansible.builtin.debug:
+        msg: '{{ native_feature_stage.stdout | from_json }}'
+      tags: [native_accounts]
+    - name: Verify Trunks, gateways and routing
+      ansible.builtin.command:
+        argv: [docker, compose, '-p', olamide-native-astpp, '--env-file', /etc/olamide/native-astpp/runtime.env, exec, '-T', native-web, php, /usr/local/lib/native-astpp/verify_menus.php, carriers]
+        chdir: /opt/olamide/repo/deployment/native-astpp
+      register: native_feature_stage
+      changed_when: false
+      tags: [native_carriers]
+    - name: Report carriers stage
+      ansible.builtin.debug:
+        msg: '{{ native_feature_stage.stdout | from_json }}'
+      tags: [native_carriers]
+    - name: Verify Origination, termination and rate decks
+      ansible.builtin.command:
+        argv: [docker, compose, '-p', olamide-native-astpp, '--env-file', /etc/olamide/native-astpp/runtime.env, exec, '-T', native-web, php, /usr/local/lib/native-astpp/verify_menus.php, rates]
+        chdir: /opt/olamide/repo/deployment/native-astpp
+      register: native_feature_stage
+      changed_when: false
+      tags: [native_rates]
+    - name: Report rates stage
+      ansible.builtin.debug:
+        msg: '{{ native_feature_stage.stdout | from_json }}'
+      tags: [native_rates]
+    - name: Verify Invoices, payments and taxes
+      ansible.builtin.command:
+        argv: [docker, compose, '-p', olamide-native-astpp, '--env-file', /etc/olamide/native-astpp/runtime.env, exec, '-T', native-web, php, /usr/local/lib/native-astpp/verify_menus.php, billing]
+        chdir: /opt/olamide/repo/deployment/native-astpp
+      register: native_feature_stage
+      changed_when: false
+      tags: [native_billing]
+    - name: Report billing stage
+      ansible.builtin.debug:
+        msg: '{{ native_feature_stage.stdout | from_json }}'
+      tags: [native_billing]
+    - name: Verify DIDs, access numbers and caller IDs
+      ansible.builtin.command:
+        argv: [docker, compose, '-p', olamide-native-astpp, '--env-file', /etc/olamide/native-astpp/runtime.env, exec, '-T', native-web, php, /usr/local/lib/native-astpp/verify_menus.php, numbers]
+        chdir: /opt/olamide/repo/deployment/native-astpp
+      register: native_feature_stage
+      changed_when: false
+      tags: [native_numbers]
+    - name: Report numbers stage
+      ansible.builtin.debug:
+        msg: '{{ native_feature_stage.stdout | from_json }}'
+      tags: [native_numbers]
+    - name: Verify Products, orders and packages
+      ansible.builtin.command:
+        argv: [docker, compose, '-p', olamide-native-astpp, '--env-file', /etc/olamide/native-astpp/runtime.env, exec, '-T', native-web, php, /usr/local/lib/native-astpp/verify_menus.php, products]
+        chdir: /opt/olamide/repo/deployment/native-astpp
+      register: native_feature_stage
+      changed_when: false
+      tags: [native_products]
+    - name: Report products stage
+      ansible.builtin.debug:
+        msg: '{{ native_feature_stage.stdout | from_json }}'
+      tags: [native_products]
+    - name: Verify Call and provider reports
+      ansible.builtin.command:
+        argv: [docker, compose, '-p', olamide-native-astpp, '--env-file', /etc/olamide/native-astpp/runtime.env, exec, '-T', native-web, php, /usr/local/lib/native-astpp/verify_menus.php, reports]
+        chdir: /opt/olamide/repo/deployment/native-astpp
+      register: native_feature_stage
+      changed_when: false
+      tags: [native_reports]
+    - name: Report reports stage
+      ansible.builtin.debug:
+        msg: '{{ native_feature_stage.stdout | from_json }}'
+      tags: [native_reports]
+    - name: Verify System settings, languages and currencies
+      ansible.builtin.command:
+        argv: [docker, compose, '-p', olamide-native-astpp, '--env-file', /etc/olamide/native-astpp/runtime.env, exec, '-T', native-web, php, /usr/local/lib/native-astpp/verify_menus.php, settings]
+        chdir: /opt/olamide/repo/deployment/native-astpp
+      register: native_feature_stage
+      changed_when: false
+      tags: [native_settings]
+    - name: Report settings stage
+      ansible.builtin.debug:
+        msg: '{{ native_feature_stage.stdout | from_json }}'
+      tags: [native_settings]

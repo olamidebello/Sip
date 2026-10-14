@@ -2,6 +2,8 @@
 set -euo pipefail
 [[ $(id -u) == 0 ]] || { echo 'Run as root'; exit 1; }
 repo=/opt/olamide/repo
+exec 9>/run/olamide-update.lock
+flock -n 9 || { echo "Another deployment is running" >&2; exit 1; }
 stage=$(mktemp -d /tmp/olamide-paid-calls.XXXXXX)
 trap 'rm -rf "$stage"' EXIT
 cp "$repo/deploy/ansible/kamailio-paid-calls.yml" "$stage/"

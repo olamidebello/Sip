@@ -70,6 +70,15 @@
       until: native_astpp_health.status | default(0) == 200 and 'password' in (native_astpp_health.content | default(''))
       retries: 30
       delay: 5
+    - name: Verify native menu records and required backend schema
+      ansible.builtin.command:
+        argv: [docker, compose, '-p', olamide-native-astpp, '--env-file', /etc/olamide/native-astpp/runtime.env, exec, '-T', native-web, php, /usr/local/lib/native-astpp/verify_menus.php]
+        chdir: /opt/olamide/repo/deployment/native-astpp
+      register: native_menu_verification
+      changed_when: false
+    - name: Report native menu and schema inventory
+      ansible.builtin.debug:
+        msg: '{{ native_menu_verification.stdout | from_json }}'
     - name: Report separate native GUI access
       ansible.builtin.debug:
         msg: 'Native ASTPP Community V6.0 GUI and separate database installed at private port 8089. Access through SSH forwarding; native operator credentials are in /etc/olamide/native-astpp/operator.json (root only). Native FreeSWITCH/media/charging commissioning is separate. Olamide trunks and native ASTPP records use separate databases.'

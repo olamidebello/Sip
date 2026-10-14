@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {appFixture} from '../navigationTestSupport.js';
 import {adminNavigationGroups} from './adminNavigation.js';
-test('admin destinations are uniquely grouped',()=>{const ids=adminNavigationGroups.flatMap(g=>g.items.map(i=>i[0]));assert.equal(ids.length,new Set(ids).size);assert.equal(ids.length,39);});
+test('admin destinations are uniquely grouped',()=>{const ids=adminNavigationGroups.flatMap(g=>g.items.map(i=>i[0]));assert.equal(ids.length,new Set(ids).size);assert.equal(ids.length,40);});
 test('super admin navigation opens existing panels, tracks location and filters groups',async()=>{
  const app=await appFixture({url:'https://sip.example.com/admin'});try{
   await app.signIn('super_admin');app.window.audit.showWorkspace('admin');

@@ -40,6 +40,13 @@ jobs:
           python3 -m unittest tools/test_native_astpp_deployment.py
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/carrier-console.yml
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/native-astpp-gui.yml
+          ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/optional-native-astpp.yml
+          ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/astpp-features.yml
+          bash -n deployment/deploy-astpp-features.sh
+          bash -n deployment/deploy-native-astpp.sh deployment/deploy-kamailio-paid-calls.sh
+          ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/kamailio-paid-calls.yml
+          python3 tools/test_prepare_kamailio_paid_route.py
+          python3 -m unittest discover -s services/carrier-adapter -p 'test_*.py'
           bash -n deployment/deploy-carrier-console.sh
           bash -n deployment/deploy-flowroute-gateway.sh
           python3 -m unittest tools/test_import_flowroute_pdf.py
@@ -98,6 +105,8 @@ jobs:
             sleep 5
           done
           python3 tools/native_astpp_smoke.py --directory "$RUNNER_TEMP/native-astpp"
+          docker compose -p olamide-native-astpp --env-file "$RUNNER_TEMP/native-astpp/runtime.env" -f deployment/native-astpp/compose.yml exec -T native-web php /usr/local/lib/native-astpp/verify_menus.php
+          for stage in accounts carriers rates billing numbers products reports settings; do docker compose -p olamide-native-astpp --env-file "$RUNNER_TEMP/native-astpp/runtime.env" -f deployment/native-astpp/compose.yml exec -T native-web php /usr/local/lib/native-astpp/verify_menus.php "$stage"; done
       - name: Report native runtime failures
         if: failure()
         run: docker logs olamide-native-astpp-native-db-1 --tail 40; docker logs olamide-native-astpp-native-web-1 --tail 40

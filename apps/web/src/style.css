@@ -332,3 +332,22 @@ body.admin-mode #app>section:not(.workspace-inactive):not([hidden]){border-radiu
  body.admin-mode #app-nav.admin-menu-open .admin-menu-content{display:flex;max-height:65dvh;overflow:auto}
  body.admin-mode #app>section:not(.workspace-inactive):not([hidden]){padding:16px}
 }
+
+/* User tools: a searchable grouped menu above the primary icon row. */
+body.messenger-mode #app-nav .user-tools-panel{position:fixed;top:80px;right:max(16px,calc((100vw - 1280px)/2));width:min(420px,calc(100vw - 32px));max-height:calc(100dvh - 170px);overflow:auto;padding:18px;border:1px solid #344b56;border-radius:18px;background:#15252d;box-shadow:0 18px 60px #0008;z-index:65;display:flex;flex-direction:column;gap:14px}
+body.messenger-mode #app-nav .user-tools-panel[hidden]{display:none!important}
+.user-tools-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.user-tools-heading strong{font-size:1.2rem}.user-tools-heading button{background:transparent;border:1px solid #344b56;color:#e9edef}
+body.messenger-mode #app-nav .user-tools-panel .menu-search{display:block;width:100%;margin:0;min-width:0}
+body.messenger-mode #app-nav .user-tools-panel .menu-groups{display:flex;flex-direction:column;width:100%;padding:0;background:transparent;gap:6px}
+body.messenger-mode #app-nav .user-tools-panel .menu-group{position:static;width:100%;border:0;background:transparent}
+body.messenger-mode #app-nav .user-tools-panel summary{padding:12px 4px;color:#dce8ee;font-weight:650;cursor:pointer}
+body.messenger-mode #app-nav .user-tools-panel .menu-links{position:static;width:100%;max-width:100%;min-width:0;max-height:none;box-shadow:none;border:0;background:transparent;padding:0 0 6px 12px;display:block}
+body.messenger-mode #app-nav .user-tools-panel .menu-group:not([open])>.menu-links{display:none}
+body.messenger-mode #app-nav .user-tools-panel .menu-links a{padding:11px 12px;color:#c2d6e0;line-height:1.4}
+body.messenger-mode #app-nav .user-tools-panel .menu-links a:hover,body.messenger-mode #app-nav .user-tools-panel .menu-links a[aria-current=page]{background:#19443b;color:#b2f5df}
+body.messenger-mode #app-nav .user-tools-panel .menu-links a[hidden]{display:none!important}
+body.messenger-mode #app-nav .user-tools-panel .locale-menu .quick-locale{position:static;width:100%;max-width:100%;box-shadow:none}
+body.messenger-mode #app-nav .user-tools-panel .locale-menu{margin:0}
+@media(max-width:620px){body.messenger-mode #app-nav .user-tools-panel{top:72px;right:12px;width:calc(100vw - 24px);max-height:calc(100dvh - 165px)}}
+
+.native-feature-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;margin:24px 0}.native-feature-groups article{padding:18px;background:#132e40;border:1px solid #365465;border-radius:12px}.native-astpp-open{display:inline-block;padding:12px 18px;background:#19443f;color:#b2f5df;border-radius:9px;text-decoration:none}

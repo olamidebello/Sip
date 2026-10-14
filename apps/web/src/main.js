@@ -1,3 +1,4 @@
+import {userNavigationGroups,setupUserNavigation} from './userNavigation.js';
 import {adminNavigationGroups,renderAdminNavigation,syncAdminNavigation} from './adminNavigation.js';
 import {setupCarrierConsole} from './carrierConsole.js';
 import {setupContactCard} from './contactCard.js';
@@ -1190,6 +1191,7 @@ root.innerHTML = `
 `;
 
 root.insertAdjacentHTML('beforeend',messengerPanels());
+root.insertAdjacentHTML('beforeend',`<section id="native-astpp-admin" hidden><h2>Native ASTPP Community</h2><p>The optional native GUI uses its original menus, backend and separate database. Open an SSH tunnel to port 8089 before opening the private console.</p><a class="native-astpp-open" href="http://localhost:8089/" target="_blank" rel="noopener noreferrer">Open native ASTPP console</a><div class="native-feature-groups"><article><h3>Accounts & access</h3><p>Customers, resellers, SIP devices and roles.</p></article><article><h3>Carriers & rates</h3><p>Trunks, gateways, routes and rate decks.</p></article><article><h3>Billing & services</h3><p>Invoices, taxes, DIDs, products and orders.</p></article><article><h3>Reports & settings</h3><p>Call records, provider reports, languages and currencies.</p></article></div><p>Kamailio paid calls use the separate Olamide charging integration. Installing this native GUI does not connect its routing or balances to Kamailio. Native switch-dependent controls require their own supported integration.</p></section>`);
 root.insertAdjacentHTML('beforeend','<section id="messenger-accessibility" hidden><h2>Accessibility</h2><form id="messenger-accessibility-form"><label><input name="highContrast" type="checkbox"> Increase contrast</label><label><input name="reduceMotion" type="checkbox"> Reduce animation</label><button type="submit">Save preferences</button></form><p id="messenger-accessibility-status" role="status"></p></section>');
 styleMessengerSettings(document);
 const $ = (selector) => document.querySelector(selector);
@@ -1210,10 +1212,7 @@ const callGui=setupCallGui({document,openAudio:()=>callsScreen.open('settings'),
 setupDownloads();
 setupCarrierControl();
 const navigationGroups=[
-  {label:"Workspace",items:[["dashboard","Dashboard"],["campaign-inbox-panel","Announcements"],["planner","Events & tasks"],["search-panel","Search"],["support","Support tickets"],["help","Help & tutorials"]]},
-  {label:"Communications",items:[["messenger-groups","Groups & communities"],["messenger-updates","Status updates"],["messenger-broadcast","Broadcast"],["messenger-starred","Starred messages"],["messenger-sessions","Linked sessions"],["messenger-storage","Storage & data"],["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
-  {label:"Commerce",items:[["money","Money"],["social","Social"],["product-store","Products & services"],["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
-  {label:"My settings",items:[["messenger-accessibility","Accessibility"],["messenger-settings","Messenger settings"],["account","Account & security"],["activity-monitor","Activity monitor"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
+  ...userNavigationGroups,
   ...adminNavigationGroups
 ];
 let videoWorkflow=false;
@@ -1293,11 +1292,13 @@ function resetWorkspace() {
   $("#admin").classList.remove("admin-subview");
 }
 let overflowMenu;
+let userTools;
 function updateNavigation() {
   overflowMenu?.dispose();
+  userTools?.dispose();
   configurationLinks?.refresh();
   const nav=$("#app-nav");nav.replaceChildren();
-  delete nav.dataset.groupedAdmin;nav.onclick=null;nav.onkeydown=null;nav.removeAttribute("aria-label");
+  delete nav.dataset.groupedAdmin;delete nav.dataset.groupedUser;nav.classList.remove("show-user-tools");nav.onclick=null;nav.onkeydown=null;nav.removeAttribute("aria-label");
   nav.hidden=!activeRole;
   if (!activeRole) return;
   const heading=document.createElement("div");heading.className="menu-heading";
@@ -1325,10 +1326,11 @@ function updateNavigation() {
     const actions=document.createElement('div');actions.className='messenger-app-actions';
     const searchChat=document.createElement('button');searchChat.type='button';searchChat.innerHTML=icon('search');searchChat.setAttribute('aria-label','Search chats');searchChat.onclick=()=>{if(activeView==='calling-workspace'){callsScreen.open('contacts');$('#dialer-contact-search').focus();}else{showWorkspace('chat');$('#chat').classList.remove('thread-open');$('#chat .chat-sidebar>input').focus();}};actions.append(searchChat);
     const logoutButton=document.createElement('button');logoutButton.type='button';logoutButton.className='messenger-logout';logoutButton.textContent='Logout';logoutButton.setAttribute('aria-label','Logout');logoutButton.onclick=()=>$('#logout').click();actions.append(logoutButton);
+    const explore=document.createElement('button');explore.type='button';explore.className='user-menu-trigger';explore.textContent='Menus';explore.setAttribute('aria-label','Explore menus');explore.setAttribute('aria-controls','user-tools-panel');explore.setAttribute('aria-expanded','false');explore.onclick=()=>userTools?.open(explore);actions.append(explore);
     const more=document.createElement('button');more.type='button';more.innerHTML=icon('more');more.setAttribute('aria-label','Open menu');more.setAttribute('aria-expanded','false');
     actions.append(more);nav.append(actions);
-    overflowMenu=setupMessengerOverflow({document,nav,trigger:more,show:showWorkspace,newChat:()=>{showWorkspace('chat');$('#chat .chat-new').click();},openHub:kind=>messengerHub.open(kind),readAll:async()=>{try{await accountRequest('/api/messages/read-all',{});await loadContacts();$('#chat-status').textContent='All incoming messages marked as read.';}catch(error){$('#chat-status').textContent=error.message;}},isAdmin:['admin','super_admin'].includes(activeRole),allow: navigationAllowed,hasExtras:navigationPolicy?.hasExtras(),isCalls:()=>activeView==='calling-workspace',clearCalls:()=>$('#clear-calls').click(),scheduledCalls:()=>callsScreen.open('schedule')});
-    const settings=document.createElement('a');settings.href='/#account';settings.textContent='Settings';settings.className='messenger-settings-entry';nav.append(settings);
+    overflowMenu=setupMessengerOverflow({document,nav,trigger:more,show:showWorkspace,newChat:()=>{showWorkspace('chat');$('#chat .chat-new').click();},openHub:kind=>messengerHub.open(kind),readAll:async()=>{try{await accountRequest('/api/messages/read-all',{});await loadContacts();$('#chat-status').textContent='All incoming messages marked as read.';}catch(error){$('#chat-status').textContent=error.message;}},openTools:()=>userTools?.open(),isAdmin:['admin','super_admin'].includes(activeRole),allow: navigationAllowed,hasExtras:navigationPolicy?.hasExtras(),isCalls:()=>activeView==='calling-workspace',clearCalls:()=>$('#clear-calls').click(),scheduledCalls:()=>callsScreen.open('schedule')});
+    
   }
   const search=document.createElement("input");search.type="search";search.className="menu-search";search.placeholder="Find a menu…";search.setAttribute("aria-label","Find a menu");nav.append(search);
   const groups=document.createElement("div");groups.className="menu-groups";nav.append(groups);
@@ -1361,6 +1363,7 @@ function updateNavigation() {
     for(const group of groups.children){let count=0;for(const link of group.querySelectorAll("a")){link.hidden=!!query&&!link.textContent.toLocaleLowerCase().includes(query);if(!link.hidden)count++;}group.hidden=count===0;visible+=count;if(query&&count)group.open=true;}
     empty.hidden=!query||visible>0;
   };
+  userTools=setupUserNavigation({document,nav,target:activeView});
   pageRoutes?.refresh();
   localeSettings?.refreshQuick();
 }
@@ -1919,6 +1922,7 @@ function signedIn(user) {
   $("#agent-panel").hidden = !user.features?.call_center;
   pbx.refreshSelf(user).catch((error) => { $("#agent-status-result").textContent = error.message; });
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
+  $("#native-astpp-admin").hidden = $("#admin").hidden;
   updateNavigation();
   workspaceQuick.refresh();workPlanner.refresh();campaigns.inbox();
   if(["admin","super_admin"].includes(user.role)){ $("#campaign-admin").hidden=false;$("#campaign-form [name=audience] option[value=all]").hidden=user.role!=="super_admin";campaigns.refresh();passkeyPolicy.refresh(); }
@@ -2472,6 +2476,7 @@ $("#logout").onclick = async () => {
     meetings.hide();
     $("#agent-panel").hidden = true;
     $("#admin").hidden = true;
+    $("#native-astpp-admin").hidden = true;
     $("#message-list").replaceChildren();
     $("#account-status").textContent = "Signed out";
     updateNavigation();

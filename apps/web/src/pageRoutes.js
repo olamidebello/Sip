@@ -12,7 +12,7 @@ export function setupPageRoutes({ showWorkspace, isSignedIn, isAdminTarget=()=>f
   const navigation = document.getElementById('app-nav');
   function refresh() {
     navigation.querySelectorAll('.page-links').forEach(list=>list.remove());
-    if(navigation.dataset.groupedAdmin==='true')return;
+    if(navigation.dataset.groupedAdmin==='true'||navigation.dataset.groupedUser==='true')return;
     for(const group of navigation.querySelectorAll('.menu-links')) {
       for(const sectionLink of group.querySelectorAll(':scope > a')) {
         const section=document.getElementById(sectionLink.hash.slice(1));

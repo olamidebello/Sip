@@ -17,7 +17,7 @@ test('Calls reference shortcuts open working dialogs and the call menu uses exis
  const app=await appFixture({navigationExtras:{}});try{await app.signIn('user');app.window.audit.showWorkspace('calling-workspace');
  const shortcuts=[...app.document.querySelectorAll('.calls-shortcuts button')];assert.deepEqual(shortcuts.map(button=>button.textContent),['Call','Schedule','Keypad','Favorites']);
  shortcuts[1].click();assert.equal(app.document.querySelector('.calls-dialog').open,true);assert.ok(app.document.getElementById('scheduled-call-form').onsubmit);app.document.querySelector('.calls-close').click();
- app.document.querySelector('[aria-label="Open menu"]').click();assert.deepEqual([...app.document.querySelectorAll('#messenger-overflow button')].map(button=>button.textContent),['Clear call log','Scheduled calls','Settings']);
+ app.document.querySelector('[aria-label="Open menu"]').click();assert.deepEqual([...app.document.querySelectorAll('#messenger-overflow button')].map(button=>button.textContent),['Clear call log','Scheduled calls','Settings','Explore menus']);
  }finally{app.close();}
 });
 test('login with a hidden workspace hash falls back to Chats',async()=>{const app=await appFixture({url:'https://sip.example.com/#money',navigationExtras:{}});try{await app.signIn('user');assert.equal(app.window.location.hash,'#chat');assert.equal(app.document.getElementById('chat').closest('.workspace-inactive'),null);}finally{app.close();}});
