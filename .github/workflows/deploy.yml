@@ -90,7 +90,7 @@ jobs:
           chmod 644 "$RUNNER_TEMP/native-astpp/bootstrap.sql"
           docker compose -p olamide-native-astpp --env-file "$RUNNER_TEMP/native-astpp/runtime.env" -f deployment/native-astpp/compose.yml up -d
           for attempt in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:8089/ | grep -qi password; then break; fi
+            if curl -fsS http://127.0.0.1:8089/ -o "$RUNNER_TEMP/native-login.html" && grep -qi password "$RUNNER_TEMP/native-login.html"; then break; fi
             sleep 5
           done
           python3 tools/native_astpp_smoke.py --directory "$RUNNER_TEMP/native-astpp"
