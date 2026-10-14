@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Native smoke check; credentials are read from a private file, never printed."""
-import json,pathlib,http.cookiejar,urllib.request,urllib.parse,argparse,re
+import json,pathlib,http.cookiejar,urllib.request,urllib.parse,argparse,re,html.parser
 
 def check(directory,origin='http://localhost:8089'):
     config=json.loads((pathlib.Path(directory)/'config.json').read_text())
@@ -10,8 +10,18 @@ def check(directory,origin='http://localhost:8089'):
         diagnostic=re.sub(r'<[^>]+>', ' ', page)
         for value in config.values():diagnostic=diagnostic.replace(str(value),'[private]')
         raise AssertionError('Native login form missing: '+re.sub(r'\s+', ' ', diagnostic)[:600])
+    class LoginForm(html.parser.HTMLParser):
+        action=None
+        def handle_starttag(self,tag,attrs):
+            a=dict(attrs)
+            if tag=='form' and a.get('id')=='login_form':self.action=a.get('action')
+    form=LoginForm();form.feed(page)
+    assert form.action, 'Native login form action missing'
+    action=urllib.parse.urljoin(origin+'/',form.action)
+    parsed=urllib.parse.urlparse(action);trusted=urllib.parse.urlparse(origin)
+    assert (parsed.scheme,parsed.netloc)==(trusted.scheme,trusted.netloc), 'Native login action is outside the private origin'
     payload=urllib.parse.urlencode({'username':'admin','password':config['operatorPassword']}).encode()
-    login=client.open(urllib.request.Request(origin+'/login',data=payload),timeout=45).read().decode(errors='replace')
+    login=client.open(urllib.request.Request(action,data=payload),timeout=45).read().decode(errors='replace')
     if 'logout' not in login.lower():
         diagnostic=re.sub(r'<[^>]+>', ' ', login)
         for value in config.values():diagnostic=diagnostic.replace(str(value),'[private]')
