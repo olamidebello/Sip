@@ -37,3 +37,9 @@ A successful page/login or adapter acknowledgment is not a two-way media, DTMF, 
 
 Upstream references: https://github.com/iNextrix/ASTPP and https://inextrix.atlassian.net/wiki/spaces/ASTPP7/pages/579177821
 Native source retains ASTPP's AGPL-3.0 license and attribution. Olamide's carrier console is an independent interface using Olamide APIs; it is not an exact copy of the native ASTPP GUI.
+
+## Next-stage commissioning inventory
+
+After installing the GUI/database, run `bash deployment/check-astpp-commissioning.sh` from `/opt/olamide/repo`. This unattended Ansible check reads native runtime configuration, the private login page, native database bootstrap/admin state and record counts, and the existing carrier adapter backend. If the adapter uses a configured local FreeSWITCH CLI, it checks process status only. Credentials, tokens, database errors and raw CLI output are not printed.
+
+The result distinguishes `gui_runtime_ready` from `gui_install_needed`. It always reports native call and billing acceptance as `unverified`: it does not place calls, alter routes, synchronize databases, activate gateways, or turn on a commissioning flag. An Olamide Kamailio/FreeSWITCH adapter is not proof of native ASTPP XML/Lua, charging, credit-cutoff or media integration. Use the server report to select the subsequent native switch commissioning workflow. A missing native GUI/database causes the check to stop after displaying its report.

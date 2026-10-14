@@ -33,6 +33,9 @@ jobs:
           python3 -m py_compile deployment/production/runtime-secrets.py deployment/production/release.py deployment/production/check-public.py
           sudo apt-get update
           sudo apt-get install -y ansible
+          python3 -m unittest tools/test_astpp_commissioning_check.py
+          ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/astpp-commissioning-check.yml
+          bash -n deployment/check-astpp-commissioning.sh
           python3 -m unittest tools/test_native_astpp_deployment.py
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/carrier-console.yml
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/native-astpp-gui.yml

@@ -1,0 +1,18 @@
+---
+- name: Inventory native ASTPP runtime and existing carrier switch without changing traffic
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Collect credential-safe runtime inventory
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/astpp_commissioning_check.py]
+      register: astpp_inventory
+      changed_when: false
+      failed_when: astpp_inventory.rc not in [0, 2]
+    - name: Report GUI state and remaining native acceptance checks
+      ansible.builtin.debug:
+        msg: '{{ astpp_inventory.stdout | from_json }}'
+    - name: Require installed native GUI and database before switch commissioning
+      ansible.builtin.assert:
+        that: astpp_inventory.rc == 0
+        fail_msg: Install or repair the native ASTPP GUI/database first. This inventory has not changed any live routes.
