@@ -65,3 +65,13 @@ test('Flowroute trunk settings are restricted to super admin before querying',as
  const r=await handleCarrierProviders({req:{method:'PUT'},path:'/api/admin/carriers/flowroute/trunk',user:{role},pool:{query:()=>{throw Error('must not query');}},send:(_r,status,body)=>({status,body})});assert.equal(r.status,403);
  }
 });
+
+test('gateway status is tenant scoped and excludes credentials',async()=>{
+ const calls=[];const pool={query:async(sql,args)=>{calls.push({sql,args});return {rows:[],rowCount:0};}};
+ const r=await handleCarrierProviders({req:{method:'GET'},path:'/api/admin/carriers/flowroute/trunk/status',user:{role:'super_admin',tenant_id:'tenant-a'},pool,send:(_r,status,body)=>({status,body})});
+ assert.equal(r.status,200);assert.ok(calls.every(c=>c.args[0]==='tenant-a'));assert.equal(JSON.stringify(r.body).includes('sipPassword'),false);
+});
+test('active gateway credentials cannot be removed',async()=>{
+ let deleted=false;const db={query:async(sql)=>{if(sql.includes('GET_LOCK'))return {rows:[{acquired:1}],rowCount:1};if(sql.includes("status='active'"))return {rows:[{}],rowCount:1};if(sql.startsWith('DELETE'))deleted=true;return {rows:[],rowCount:0};},release(){}};
+ const r=await handleCarrierProviders({req:{method:'DELETE'},path:'/api/admin/carriers/flowroute/trunk',user:{role:'super_admin',tenant_id:'tenant-a'},pool:{connect:async()=>db},readJson:async()=>({expectedRevision:1}),send:(_r,status,body)=>({status,body})});assert.equal(r.status,409);assert.equal(deleted,false);
+});

@@ -37,6 +37,7 @@ jobs:
           python3 -m unittest tools/test_import_flowroute_pdf.py
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/flowroute-gateway.yml
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/flowroute-gateway-interactive.yml
+          ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/flowroute-gateway-gui.yml
           python3 -m unittest tools/test_flowroute_interactive.py
           python3 tools/test_chat_experience_deployment.py
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/chat-experience.yml

@@ -1,0 +1,29 @@
+---
+- import_playbook: messenger-features.yml
+- name: Prepare secure Flowroute management without deployment prompts
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Preserve or create private provider encryption key
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/prepare_flowroute_key.py]
+      no_log: true
+      changed_when: true
+    - name: Load private key into API
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, up, '-d', '--no-deps', '--force-recreate', api]
+        chdir: /opt/olamide/repo/deployment/docker
+      no_log: true
+      changed_when: true
+    - name: Wait for healthy API after key preparation
+      ansible.builtin.uri:
+        url: https://sip.dobhrap.com/api/health
+        status_code: 200
+        validate_certs: true
+      register: flowroute_gui_health
+      until: flowroute_gui_health is succeeded
+      retries: 12
+      delay: 5
+    - name: Report GUI management location
+      ansible.builtin.debug:
+        msg: 'Flowroute management deployed without credential prompts. Super admin → Carrier credentials → Flowroute outbound SIP gateway provides settings, credentials, Tech Prefix, provisioning, status, deactivation and credential removal. Enter credentials in the GUI. Switch activation requires compatible adapter acknowledgment; verify a paid call and two-way audio.'

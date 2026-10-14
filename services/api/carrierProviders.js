@@ -47,6 +47,28 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
   if(!isAdmin(user)) return send(res,403,{error:'Administrator required'});
   if(path.startsWith('/api/admin/carriers/flowroute/trunk')){
     if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
+    if(path==='/api/admin/carriers/flowroute/trunk/status'&&req.method==='GET'){
+      const [profiles,trunks,assignments,operations]=await Promise.all([
+        pool.query("SELECT status,routing_mode,max_concurrent_calls,last_error,provisioned_at FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider='flowroute'",[user.tenant_id]),
+        pool.query("SELECT t.id,t.name,t.host,t.port,t.transport,t.enabled FROM pbx_trunks t JOIN carrier_provider_profiles p ON p.trunk_id=t.id AND p.tenant_id=t.tenant_id WHERE p.tenant_id=$1 AND p.provider='flowroute'",[user.tenant_id]),
+        pool.query("SELECT n.name,n.region,n.health,n.last_check_at,n.enabled FROM carrier_adapter_assignments a JOIN carrier_adapter_nodes n ON n.id=a.adapter_id AND n.tenant_id=a.tenant_id WHERE a.tenant_id=$1 AND a.provider='flowroute'",[user.tenant_id]),
+        pool.query("SELECT action,outcome,created_at FROM carrier_adapter_operations WHERE tenant_id=$1 AND provider='flowroute' ORDER BY created_at DESC LIMIT 10",[user.tenant_id])]);
+      return send(res,200,{profile:profiles.rows[0]||null,trunk:trunks.rows[0]||null,adapter:assignments.rows[0]||null,adapterConfigured:adapterReady(),operations:operations.rows});
+    }
+    if(path==='/api/admin/carriers/flowroute/trunk'&&req.method==='DELETE'){
+      const b=await readJson(req);if(!Number.isSafeInteger(b.expectedRevision)||b.expectedRevision<1)return send(res,400,{error:'Current revision required'});
+      return withFlowrouteLock(pool,user.tenant_id,async()=>{
+        const db=await pool.connect();try{
+          await db.query('START TRANSACTION');
+          const active=await db.query("SELECT 1 FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider='flowroute' AND status='active'",[user.tenant_id]);
+          if(active.rowCount){await db.query('ROLLBACK');return send(res,409,{error:'Deactivate Flowroute before removing SIP credentials'});}
+          const deleted=await db.query("DELETE FROM provider_api_credentials WHERE tenant_id=$1 AND provider='flowroute_sip' AND revision=$2",[user.tenant_id,b.expectedRevision]);
+          if(!deleted.rowCount){await db.query('ROLLBACK');return send(res,409,{error:'Credentials changed; refresh before removal'});}
+          await db.query('INSERT INTO security_events(id,tenant_id,actor_id,action) VALUES($1,$2,$3,$4)',[randomUUID(),user.tenant_id,user.id,'flowroute_sip_settings_removed']);
+          await db.query('COMMIT');return send(res,200,{removed:true});
+        }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
+      });
+    }
     if(path==='/api/admin/carriers/flowroute/trunk'&&req.method==='GET')return send(res,200,publicTrunk(await flowrouteTrunk(pool,user.tenant_id)));
     if(path==='/api/admin/carriers/flowroute/trunk'&&req.method==='PUT'){const result=await saveFlowrouteTrunk(pool,user,await readJson(req));return send(res,result.code,result.body);}
     if(path==='/api/admin/carriers/flowroute/trunk/provision'&&req.method==='POST'){

@@ -12,3 +12,11 @@ class InteractiveTest(unittest.TestCase):
   importer=(root/'services/api/importFlowrouteTrunk.js').read_text()
   self.assertIn('if(old&&!b.replaceExisting)',importer)
   self.assertIn('expectedRevision:old?.revision||0',importer)
+
+class GuiDeploymentTest(unittest.TestCase):
+ def test_default_is_unattended_and_preserves_credentials(self):
+  wrapper=(root/'deployment/deploy-flowroute-gateway.sh').read_text()
+  self.assertIn('play_name=flowroute-gateway-gui',wrapper)
+  play=yaml.safe_load((root/'deploy/ansible/flowroute-gateway-gui.yml').read_text())[1]
+  self.assertNotIn('vars_prompt',play)
+  self.assertFalse(any('importFlowrouteTrunk' in str(t) for t in play['tasks']))

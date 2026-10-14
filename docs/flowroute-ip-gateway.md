@@ -46,3 +46,17 @@ The installer prompts for the eight-digit SIP username/Tech Prefix, hidden and c
 
 Provisioning is attempted automatically when an authorized caller ID and IP allowlist confirmation are supplied. Missing or incompatible switch adapters leave activation pending. User subscription, SIP registration and outbound billing policies remain in effect. This prompt does not grant calling credit or add money to wallets.
 
+
+## Unattended deployment with GUI management (default)
+
+```bash
+cd /opt/olamide/repo &&
+git pull --ff-only origin main &&
+bash deployment/deploy-flowroute-gateway.sh
+```
+
+This default path builds and deploys the API/web, applies migrations with backup and exact-commit CI validation, prepares the private encryption key, and checks API health. It requires no PDF, credential variables or interactive terminal. No existing SIP settings are overwritten by this installation.
+
+After installation, Super admin → Carrier credentials → Flowroute outbound SIP gateway manages username/password, separate Tech Prefix, IP/digest authentication, PoP, egress IP, caller ID, capacity and allowlist confirmation. The same panel shows trunk host/port, gateway lifecycle state, assigned adapter health, provisioning operation history and errors. Provision activates only after switch acknowledgment. Deactivate releases the commissioned gateway through the switch adapter; edit/rotate afterward. Remove saved SIP credentials requires deactivation, the current revision and confirmation, preserves inventory API keys and records an audit event. Status displays adapter state, not a media/call success claim.
+
+PDF imports remain available with `--pdf-import -e flowroute_credentials_pdf=/root/flowroute.pdf`; the older PDF-variable invocation is also recognized. `--interactive` remains an optional alternative. The installer deploys application management; it does not install a compatible trunk adapter into an unknown running switch. Actual call termination needs that adapter, the remote Flowroute allowlist and authorized caller ID.

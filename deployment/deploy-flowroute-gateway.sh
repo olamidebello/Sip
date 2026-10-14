@@ -2,11 +2,17 @@
 set -euo pipefail
 repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 [[ "$repo_dir" == /opt/olamide/repo ]] || { echo 'Run from /opt/olamide/repo' >&2; exit 1; }
-play_name=flowroute-gateway
+play_name=flowroute-gateway-gui
 if [[ "${1:-}" == --interactive ]]; then
   [[ -t 0 && -t 1 ]] || { echo 'Interactive setup requires an SSH terminal' >&2; exit 1; }
   play_name=flowroute-gateway-interactive
   shift
+fi
+if [[ "${1:-}" == --pdf-import ]]; then
+  play_name=flowroute-gateway
+  shift
+elif [[ "$play_name" == flowroute-gateway-gui && "$*" == *flowroute_credentials_pdf* ]]; then
+  play_name=flowroute-gateway
 fi
 exec 9>/run/olamide-update.lock
 flock -n 9 || { echo 'Another deployment is running' >&2; exit 1; }
