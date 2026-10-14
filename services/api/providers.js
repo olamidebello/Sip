@@ -31,7 +31,7 @@ export async function availableNumbers(provider, options={}) {
     if (!key || !secret) throw new Error("Flowroute is not configured");
     const query=new URLSearchParams({limit:"20",offset:String(offset)});
     if (prefix) query.set("starts_with",prefix);
-    const payload = await providerJson("https://api.flowroute.com/v2.1/numbers/available?"+query, {
+    const payload = await providerJson("https://api.flowroute.com/v2/numbers/available?"+query, {
       Authorization: "Basic " + Buffer.from(key + ":" + secret).toString("base64"),
       Accept: "application/vnd.api+json"
     });
