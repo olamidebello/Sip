@@ -30,3 +30,20 @@ $count=0;
 $source=preg_replace('/(function\s+show_error\s*\([^)]*\)\s*\{)/','$1'."\n".$logging,$source,1,$count);
 if($count!==1)throw new RuntimeException('Native framework error function changed');
 file_put_contents($path,$source);
+
+// Record authentication progress as booleans only.
+$path='/var/www/html/application/modules/login/controllers/login.php';
+$source=file_get_contents($path);
+$target=<<<'AUTH'
+                $actual_password = $_POST['password'];
+AUTH;
+if(strpos($source,$target)===false)throw new RuntimeException('Native login handler changed');
+$source=str_replace($target,$target."\n                error_log('Native ASTPP auth handler reached');",$source);
+$target=<<<'AUTH'
+                $user_valid = $this->Auth_model->verify_login($_POST['username'], $_POST['password']);
+AUTH;
+$logging=<<<'AUTH'
+                error_log('Native ASTPP auth accepted='.(int)$user_valid);
+AUTH;
+if(strpos($source,$target)===false)throw new RuntimeException('Native login verification changed');
+file_put_contents($path,str_replace($target,$target."\n".$logging,$source));

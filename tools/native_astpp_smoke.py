@@ -21,7 +21,10 @@ def check(directory,origin='http://localhost:8089'):
     parsed=urllib.parse.urlparse(action);trusted=urllib.parse.urlparse(origin)
     assert (parsed.scheme,parsed.netloc)==(trusted.scheme,trusted.netloc), 'Native login action is outside the private origin'
     payload=urllib.parse.urlencode({'username':'admin','password':config['operatorPassword']}).encode()
-    login=client.open(urllib.request.Request(action,data=payload),timeout=45).read().decode(errors='replace')
+    response=client.open(urllib.request.Request(action,data=payload),timeout=45)
+    raw=response.read()
+    print('Native login response: status='+str(response.status)+' bytes='+str(len(raw))+' content-type='+str(response.headers.get('Content-Type'))+' encoding='+str(response.headers.get('Content-Encoding'))+' redirect='+str(response.headers.get('Refresh') or response.headers.get('Location') or 'none'))
+    login=raw.decode(errors='replace')
     if 'logout' not in login.lower():
         diagnostic=re.sub(r'<[^>]+>', ' ', login)
         for value in config.values():diagnostic=diagnostic.replace(str(value),'[private]')
