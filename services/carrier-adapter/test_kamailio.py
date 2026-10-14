@@ -18,7 +18,7 @@ class Tests(unittest.TestCase):
             self.assertEqual(p.read_bytes(),b'')
     def test_uncommissioned_route_refused(self):
         a=self.make('/unused',False)
-        self.assertEqual(a.handle(dict(tenantId=TENANT,provider='flowroute',action='health')),{'status':'healthy'})
+        self.assertEqual(a.handle(dict(tenantId=TENANT,provider='flowroute',action='health')),{'status':'healthy','backend':'kamailio','routingCommissioned':False})
         self.assertRaises(ValueError,a.handle,dict(tenantId=TENANT,provider='flowroute',action='verify'))
     def test_failed_readback_restores_runtime(self):
         with tempfile.TemporaryDirectory() as d:
