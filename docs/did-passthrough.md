@@ -103,3 +103,21 @@ bash deployment/deploy-didww-ip-only.sh
 ```
 
 Existing Flowroute assignments are retained; assignments explicitly supplied for the same tenant/user are replaced with the verified DIDWW assignment. Provider attribute snapshots are retained under `/etc/olamide/didww-prerequisites-backups/`. Provider-side allowlist/CLI changes are retained if subsequent local deployment fails; the local installer restores its previous API/policy/routes. Review the private provider snapshot before manually restoring remote settings. No paid test call is placed. Missing rates, wallet credit or subscription still deny calls.
+
+## Super Admin GUI provisioning
+
+Install the GUI and private worker once, after deployment CI succeeds:
+
+```bash
+cd /opt/olamide/repo
+git pull --ff-only origin main
+bash deployment/deploy-didww-gui.sh
+```
+
+Open **Super admin → Carrier credentials → DIDWW outbound DID provisioning**. Enter the existing outbound trunk ID, server public IP, regional gateway, capacity, DIDWW approval reference, and production API key. Blank key preserves the dedicated saved key; it is encrypted and never returned to the browser. Alternatively the worker uses tenant-scoped production DIDWW credentials already saved in Carrier credentials. Environment credentials require matching DIDWW_TENANT_ID and production environment.
+
+Add each active user, assigned number and number-rights reference using the form. Confirm approval/rights and save. **Verify prerequisites** reads the provider and performs validation only. **Provision DIDWW** updates approved provider IP/CLI settings, generates the private server JSON automatically and runs the Ansible installer. There is no need to hand-create JSON for the GUI workflow. Only super administrators of that tenant can read/save settings or queue work. The API validates that each assigned user belongs to the tenant. Revisions reject stale edits; pending jobs prevent overlapping changes.
+
+The application queues encrypted configuration snapshots in MySQL. The root-owned systemd worker polls the private container CLI and executes fixed commands; the web API has no shell or root access. The worker does not listen on a network port. Status appears as queued, running, verified, installed or failed. Installed means deployment and local health checks passed; verify a controlled billed call and audio separately. Provisioning can restart Kamailio and interrupt active calls. Terminal messages never include API keys or raw command output. Inspect `/var/log/olamide/didww-provisioning.log` as root for full deployment output; Ansible suppresses credential-bearing tasks.
+
+If the worker is interrupted, running jobs older than an hour are marked failed, without automatic replay of provider changes. Review private logs before queuing another job. The GUI installer is a one-time server operation; subsequent settings and provisioning can be managed from the Super Admin panel. Provider IP-only approval, actual DID rights, active provider rates and funded subscriptions remain prerequisites.

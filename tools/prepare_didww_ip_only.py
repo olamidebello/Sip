@@ -47,7 +47,7 @@ def run(config,apply=False):
     for a in assignments:
         uuid.UUID(a['userId'])
         if a.get('provider')!='didww' or a.get('authorized') is not True or not a.get('evidence') or not re.fullmatch(r'\+[1-9][0-9]{7,14}',a.get('number','')):raise ValueError('Verified DIDWW assignments required')
-    key=os.environ.get('DIDWW_API_KEY')
+    key=config.get('apiKey') or os.environ.get('DIDWW_API_KEY')
     if not key:
         for line in pathlib.Path('/etc/olamide/secrets.env').read_text().splitlines():
             if line.startswith('DIDWW_API_KEY='):

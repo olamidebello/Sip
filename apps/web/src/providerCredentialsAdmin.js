@@ -1,3 +1,4 @@
+import {setupDidwwProvisionAdmin} from './didwwProvisionAdmin.js';
 import {setupFlowrouteTrunkAdmin} from './flowrouteTrunkAdmin.js';
 export function setupProviderCredentialsAdmin({get,request,onSaved=()=>{}}){
   const root=document.querySelector('#provider-credentials-admin');
@@ -5,6 +6,7 @@ export function setupProviderCredentialsAdmin({get,request,onSaved=()=>{}}){
   const status=root.querySelector('#provider-credentials-status');
   const list=root.querySelector('#provider-credentials-list');
   const trunk=setupFlowrouteTrunkAdmin({root,get,request,onSaved});
+  const didwwProvision=setupDidwwProvisionAdmin({root,get,request});
   let revisions=new Map();
   function choose(){
     form.elements.callbackSecret.value='';form.elements.callEventsToken.value='';
@@ -23,6 +25,7 @@ export function setupProviderCredentialsAdmin({get,request,onSaved=()=>{}}){
   }
   async function refresh(){
     await trunk.refresh();
+    await didwwProvision.refresh();
     try{
       const data=await get('/api/admin/carriers/credentials');
       revisions=new Map(data.entries.map(row=>[row.provider,Number(row.revision)]));

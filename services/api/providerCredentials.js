@@ -11,7 +11,7 @@ export function seal(value,key,tenant,provider){
   cipher.setAAD(Buffer.from(tenant+':'+provider));
   return Buffer.concat([iv,cipher.update(JSON.stringify(value),'utf8'),cipher.final(),cipher.getAuthTag()]);
 }
-function unseal(value,key,tenant,provider){
+export function unseal(value,key,tenant,provider){
   const buf=Buffer.from(value),cipher=createDecipheriv('aes-256-gcm',key,buf.subarray(0,12));
   cipher.setAAD(Buffer.from(tenant+':'+provider));cipher.setAuthTag(buf.subarray(-16));
   return JSON.parse(Buffer.concat([cipher.update(buf.subarray(12,-16)),cipher.final()]).toString('utf8'));

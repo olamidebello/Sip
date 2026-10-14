@@ -1,3 +1,4 @@
+import {handleDidwwProvisioning,migrateDidwwProvisioning} from './didwwProvisioning.js';
 import {flowrouteTrunk,publicTrunk,saveFlowrouteTrunk,adapterTrunk,withFlowrouteLock} from './flowrouteTrunk.js';
 import {providerCredentials} from './providerCredentials.js';
 import { randomUUID } from 'node:crypto';
@@ -14,6 +15,7 @@ async function catalog(pool,tenant){
 }
 
 export async function migrateCarrierProviders(pool){
+ await migrateDidwwProvisioning(pool);
   await pool.query(`CREATE TABLE IF NOT EXISTS carrier_provider_catalog (
     tenant_id CHAR(36) NOT NULL,provider VARCHAR(16) NOT NULL,
     display_name VARCHAR(80) NOT NULL,enabled BOOLEAN NOT NULL DEFAULT TRUE,
@@ -46,6 +48,7 @@ export async function carrierActive(pool,tenant,provider){
 export async function handleCarrierProviders({req,res,path,user,pool,send,readJson,flowrouteLocked=false}){
   if(!isAdmin(user)) return send(res,403,{error:'Administrator required'});
   if(path.startsWith('/api/admin/carriers/flowroute/trunk')&&user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
+  if(path.startsWith('/api/admin/carriers/didww/ip-only'))return handleDidwwProvisioning({req,res,path,user,pool,send,readJson});
   const needsTargets=req.method==='GET'||/\/(provision|activate|deactivate|verify)$/.test(path);
   const adapterConfigured=needsTargets?Object.keys(await adapterTargetsFor(pool,user.tenant_id)).length>0:false;
   const adapterReady=()=>adapterConfigured;

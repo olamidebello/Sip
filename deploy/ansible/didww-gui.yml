@@ -1,0 +1,49 @@
+---
+- import_playbook: flowroute-gateway-gui.yml
+- name: Install private DIDWW GUI provisioning worker
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Install prerequisite runtime
+      ansible.builtin.apt:
+        name: [python3, ca-certificates, dnsutils]
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+    - name: Create worker status directory
+      ansible.builtin.file:
+        path: /var/lib/olamide/service-inventory
+        state: directory
+        mode: '0755'
+    - name: Install private worker service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/olamide-didww-gui.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Private Olamide DIDWW provisioning worker
+          After=docker.service network-online.target
+          Wants=network-online.target
+          [Service]
+          Type=simple
+          User=root
+          WorkingDirectory=/opt/olamide/repo
+          ExecStart=/usr/bin/python3 /opt/olamide/repo/tools/didww_gui_worker.py
+          Restart=on-failure
+          RestartSec=10
+          UMask=0077
+          PrivateTmp=true
+          [Install]
+          WantedBy=multi-user.target
+    - name: Start private worker
+      ansible.builtin.systemd:
+        name: olamide-didww-gui
+        daemon_reload: true
+        enabled: true
+        state: restarted
+    - name: Verify service is active
+      ansible.builtin.command: systemctl is-active olamide-didww-gui
+      changed_when: false
+    - name: Report GUI provisioning
+      ansible.builtin.debug:
+        msg: 'Open Super admin → Carrier credentials → DIDWW outbound DID provisioning. Save the trunk, production API key, approval reference and user DID assignments; verify prerequisites, then provision. Private JSON is generated automatically. DIDWW must approve IP-only mode. Jobs report verified/installed/failed, never claim live-call success. Root-only logs: /var/log/olamide/didww-provisioning.log.'
