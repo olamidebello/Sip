@@ -6,7 +6,12 @@ export function setupCallsScreen({document,get,request,show,dial,retryConnection
  document.getElementById('dial')?.elements?.target?.addEventListener('input',refreshCall);
  callSelected.onclick=()=>{const address=document.getElementById('dial')?.elements?.target?.value?.trim();if(!address||!connected())return;dialog.close();dial(address);};
  const retry=document.createElement('button');retry.type='button';retry.textContent='Retry SIP connection';retry.className='calls-sip-retry';retry.onclick=()=>retryConnection();dialog.append(retry);
- function connectionStatus(message){refreshCall();retry.hidden=!['keypad','contacts'].includes(dialog.dataset.mode)||connected();if(['keypad','contacts'].includes(dialog.dataset.mode))dialog.querySelector('[role=status]').textContent=message;}
+ function connectionStatus(message){
+  // Connection updates may hide the shared form while this modal is open.
+  // Keep number entry available; refreshCall gates only the call action.
+  if(dialog.open&&dialog.dataset.mode==='keypad')document.getElementById('dial').hidden=false;
+  refreshCall();retry.hidden=!['keypad','contacts'].includes(dialog.dataset.mode)||connected();if(['keypad','contacts'].includes(dialog.dataset.mode))dialog.querySelector('[role=status]').textContent=message;
+ }
 
  const content=dialog.querySelector('#calls-dialog-content');let moved=null,original=null,next=null,dialogGeneration=0;
  function restore(){if(moved){original.insertBefore(moved,next?.parentNode===original?next:null);moved=null;}}
