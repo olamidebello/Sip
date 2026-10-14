@@ -13,3 +13,9 @@ This is an implementation inventory and staged deployment of currently implement
 ## Optional reviewed PBX engine
 
 The same installer can run the existing Asterisk build/configuration role with `-e telecom_install_pbx=true -e @/etc/olamide/pbx-reviewed.json`. That private input file must supply `pbx_source_archive`, its independently verified `pbx_source_sha256`, `pbx_version` and `pbx_config_source`. The role validates the digest, builds the engine, checks required runtime modules and enforces loopback-only signaling/management behind Kamailio. It does not supply caller routing or provider secrets by guessing. Without complete inputs, the PBX stage stops; default catalog deployment leaves existing PBX services unchanged. Use a maintenance window when enabling the optional engine.
+
+## Caddy TLS inventory
+
+The prerequisites check verifies the certificate actually served by the local HTTPS terminator on `127.0.0.1:443`, with SNI and hostname validation for `sip.dobhrap.com` and the system CA trust store. It works with Caddy's Docker-managed ACME certificates without assuming a host Certbot directory. `valid_for_at_least_14_days`, `expiring_within_14_days`, `verification_failed` and `unavailable` are distinct outcomes. Connection failures do not mean that a certificate is missing or expired. Public certificate expiry is reported; private keys and Caddy storage are never exported or modified. For a TLS terminator on another address, pass `--tls-host ADDRESS` to `tools/telecom_requirements.py`.
+
+After updating, rerun only `python3 tools/telecom_requirements.py` from the checked-out server repository to refresh this read-only report. No certificate reissuance or application restart is required for this diagnostic fix. Other capability and provider-authentication statuses remain separate.
