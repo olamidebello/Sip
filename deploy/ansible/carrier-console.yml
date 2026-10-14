@@ -1,0 +1,14 @@
+---
+- import_playbook: flowroute-gateway-gui.yml
+- name: Verify unified carrier console source
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Check carrier console implementation
+      ansible.builtin.stat:
+        path: /opt/olamide/repo/apps/web/src/carrierConsole.js
+      register: carrier_console_source
+    - name: Require carrier management implementation
+      ansible.builtin.assert:
+        that: carrier_console_source.stat.exists
+- import_playbook: native-astpp-gui.yml

@@ -1,0 +1,32 @@
+services:
+  native-db:
+    image: mysql:8.4
+    command: ['--sql-mode=NO_ENGINE_SUBSTITUTION']
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${NATIVE_DB_ROOT_PASSWORD:?private root password required}
+      MYSQL_DATABASE: astpp
+      MYSQL_USER: astppuser
+      MYSQL_PASSWORD: ${NATIVE_DB_PASSWORD:?private database password required}
+    volumes:
+      - native_database:/var/lib/mysql
+      - ${NATIVE_STATE_DIR:-/etc/olamide/native-astpp}/bootstrap.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    networks: [native]
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent']
+      interval: 10s
+      retries: 30
+  native-web:
+    build: .
+    restart: unless-stopped
+    ports: ['127.0.0.1:8089:80']
+    volumes:
+      - ${NATIVE_STATE_DIR:-/etc/olamide/native-astpp}/config.json:/run/native-astpp/config.json:ro
+    depends_on:
+      native-db:
+        condition: service_healthy
+    networks: [native]
+networks:
+  native:
+volumes:
+  native_database:

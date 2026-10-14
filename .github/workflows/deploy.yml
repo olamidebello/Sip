@@ -33,6 +33,10 @@ jobs:
           python3 -m py_compile deployment/production/runtime-secrets.py deployment/production/release.py deployment/production/check-public.py
           sudo apt-get update
           sudo apt-get install -y ansible
+          python3 -m unittest tools/test_native_astpp_deployment.py
+          ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/carrier-console.yml
+          ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/native-astpp-gui.yml
+          bash -n deployment/deploy-carrier-console.sh
           bash -n deployment/deploy-flowroute-gateway.sh
           python3 -m unittest tools/test_import_flowroute_pdf.py
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/flowroute-gateway.yml
@@ -68,4 +72,29 @@ jobs:
         working-directory: apps/web
         run: npm install --no-audit --no-fund && npm test && npm run build
 
+
+
+  native_astpp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and smoke-test isolated native ASTPP GUI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c 'import os,pathlib,runpy; runpy.run_path("tools/prepare_native_astpp.py")["prepare"](pathlib.Path(os.environ["RUNNER_TEMP"])/"native-astpp")' 
+          docker compose -p olamide-native-astpp --env-file "$RUNNER_TEMP/native-astpp/runtime.env" -f deployment/native-astpp/compose.yml build native-web
+          docker run --rm --entrypoint sh olamide-native-astpp-native-web -c 'cat /usr/src/astpp/database/astpp-6.0.sql /usr/src/astpp/database/astpp-6.0.1.sql' > "$RUNNER_TEMP/native-astpp/schema.sql"
+          python3 deployment/native-astpp/sanitize_sql.py "$RUNNER_TEMP/native-astpp/schema.sql" > "$RUNNER_TEMP/native-astpp/bootstrap.sql"
+          chmod 644 "$RUNNER_TEMP/native-astpp/bootstrap.sql"
+          docker compose -p olamide-native-astpp --env-file "$RUNNER_TEMP/native-astpp/runtime.env" -f deployment/native-astpp/compose.yml up -d
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8089/ | grep -qi password; then break; fi
+            sleep 5
+          done
+          python3 tools/native_astpp_smoke.py --directory "$RUNNER_TEMP/native-astpp"
+      - name: Report native runtime failures
+        if: failure()
+        run: docker logs olamide-native-astpp-native-db-1 --tail 40; docker logs olamide-native-astpp-native-web-1 --tail 40
 

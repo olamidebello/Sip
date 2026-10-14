@@ -1,3 +1,4 @@
+import {setupCarrierConsole} from './carrierConsole.js';
 import {setupContactCard} from './contactCard.js';
 import {setupSocialPublishing} from './socialPublishing.js';
 import {setupLanguageTools} from './languageTools.js';
@@ -667,6 +668,7 @@ root.innerHTML = `
       </form>
       <p id="nigeria-status" role="status"></p>
     </section>
+    <section id="carrier-console" hidden></section>
     <section id="carrier-admin"><h3>Carrier provider commissioning</h3><p>Default outbound call termination: Flowroute. Other providers are excluded from outbound route selection. Calls require an active, commissioned Flowroute trunk and matching rate; there is no automatic provider fallback.</p>
       <p>Link a tenant trunk, set capacity, verify private provider credentials, then ask the switch adapter to activate. A provider remains blocked from DID requests until activation is acknowledged.</p>
       <form id="carrier-catalog-form" hidden><h4>Add a future carrier</h4>
@@ -1212,7 +1214,7 @@ const navigationGroups=[
   {label:"Communications",items:[["messenger-groups","Groups & communities"],["messenger-updates","Status updates"],["messenger-broadcast","Broadcast"],["messenger-starred","Starred messages"],["messenger-sessions","Linked sessions"],["messenger-storage","Storage & data"],["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["money","Money"],["social","Social"],["product-store","Products & services"],["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["messenger-accessibility","Accessibility"],["messenger-settings","Messenger settings"],["account","Account & security"],["activity-monitor","Activity monitor"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
-  {label:"Administration",roles:["admin","super_admin"],items:[["product-store-admin","Product catalog & orders"],["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio services"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
+  {label:"Administration",roles:["admin","super_admin"],items:[["carrier-console","Carriers & termination"],["product-store-admin","Product catalog & orders"],["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio services"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
   {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["passkey-policy-admin","Passkey requirements"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
   {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
   {label:"Super admin",roles:["super_admin"],items:[["payment-admin","Stripe management"],["navigation-policy-admin","End-user navigation"],["user-session-admin","User sessions"],["tenant-admin","Tenants & roles"],["google-oauth-admin","Google Contacts OAuth"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["wallet-providers-admin","Dwolla & Flutterwave API"],["provider-credentials-admin","Carrier credentials"],["carrier-adapter-admin","Carrier adapters"]]}
@@ -1250,6 +1252,7 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   document.body.classList.toggle('money-mode',target==='money');
   if(target==='social'){void socialWorkspace.refresh();void socialLinks.refresh();void socialPublishing.refresh();}
   if(target==='money')void moneyWorkspace.refresh();
+  if(target==='carrier-console')void carrierConsole.refresh();
   if(modeChanged)updateNavigation();
   const requested=document.getElementById(target);
   if(!requested || requested.closest("[hidden]")) return false;
@@ -1416,6 +1419,7 @@ const providerCredentialsAdmin=setupProviderCredentialsAdmin({get:apiGet,request
 configurationLinks=setupConfigurationLinks({show:showWorkspace,allowed:navigationAllowed});
 userActivity=setupUserActivity({get:apiGet,request:accountRequest});
 const didwwAdmin=setupDidwwAdmin({get:apiGet,request:accountRequest});
+const carrierConsole=setupCarrierConsole({document,get:apiGet,role:()=>activeRole});
 const adapterAdmin=setupAdapterAdmin({get:apiGet,request:accountRequest});
 const operatorAdmin=setupOperatorControl();
 const switchAdmin=setupKamailioAdmin();
@@ -1840,6 +1844,7 @@ function signedIn(user) {
   $("#provider-webhook-admin").hidden=user.role!=="super_admin";
   $("#google-oauth-admin").hidden=user.role!=="super_admin";
   if(user.role==="super_admin")void refreshGoogleOAuth();
+  $("#carrier-console").hidden=!["admin","super_admin"].includes(user.role);
   $("#provider-credentials-admin").hidden=user.role!=="super_admin";
   $("#wallet-providers-admin").hidden=user.role!=="super_admin";
   $("#activity-monitor").hidden=false;
@@ -2415,7 +2420,7 @@ $("#logout").onclick = async () => {
     dialerContacts.clear();
     contactDirectory.clear();
     languageTools.stop();
-    contactCard.stop();
+    contactCard.stop();carrierConsole.stop();
     socialPublishing.clear();
     socialLinks.clear();
     socialWorkspace.stop();
@@ -2767,3 +2772,4 @@ $('#routing-refresh').onclick=()=>refreshSubscriberRouting().catch(e=>{$('#routi
 $('#subscriber-routing').onsubmit=async event=>{event.preventDefault();try{const body={};for(const key of routingFlags)body[key]=event.currentTarget.elements[key].checked;await accountRequest('/api/account/subscriber-routing',body,'PUT');await refreshSubscriberRouting();}catch(e){$('#routing-status').textContent=e.message;}};
 $('#routing-email-code').onclick=async()=>{try{await accountRequest('/api/account/subscriber-routing/email-code',{});$('#routing-status').textContent='Verification code sent to your profile email.';}catch(e){$('#routing-status').textContent=e.message;}};
 $('#routing-verify').onsubmit=async event=>{event.preventDefault();try{await accountRequest('/api/account/subscriber-routing/verify-email',{code:event.currentTarget.elements.code.value});event.currentTarget.reset();await refreshSubscriberRouting();}catch(e){$('#routing-status').textContent=e.message;}};
+

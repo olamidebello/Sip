@@ -1,0 +1,75 @@
+---
+- name: Deploy isolated native ASTPP Community GUI and database
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Check existing native key file
+      ansible.builtin.stat:
+        path: /etc/olamide/native-astpp/config.json
+      register: native_key_file
+    - name: Check existing native database volume
+      ansible.builtin.command:
+        argv: [docker, volume, inspect, olamide-native-astpp_native_database]
+      register: native_database_volume
+      changed_when: false
+      failed_when: false
+      no_log: true
+    - name: Reject lost keys for an existing native database
+      ansible.builtin.assert:
+        that: native_database_volume.rc != 0 or native_key_file.stat.exists
+        fail_msg: Restore the existing native private key directory before starting its database; keys must not be regenerated.
+    - name: Prepare private native runtime keys
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/prepare_native_astpp.py]
+      no_log: true
+      changed_when: true
+    - name: Back up an existing running native database
+      ansible.builtin.shell: |
+        set -euo pipefail
+        if test -n "$(docker compose -p olamide-native-astpp --env-file /etc/olamide/native-astpp/runtime.env ps -q native-db)"; then
+          install -d -m 0700 /opt/olamide/backups
+          umask 077
+          backup=/opt/olamide/backups/native-astpp-$(date -u +%Y%m%dT%H%M%S%N).sql.gz
+          docker compose -p olamide-native-astpp --env-file /etc/olamide/native-astpp/runtime.env exec -T native-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump --single-transaction --hex-blob -uroot astpp' | gzip > "$backup"
+          test -s "$backup"
+        fi
+      args:
+        executable: /bin/bash
+        chdir: /opt/olamide/repo/deployment/native-astpp
+      no_log: true
+      changed_when: true
+    - name: Build pinned native ASTPP web application
+      ansible.builtin.command:
+        argv: [docker, compose, '-p', olamide-native-astpp, '--env-file', /etc/olamide/native-astpp/runtime.env, build, native-web]
+        chdir: /opt/olamide/repo/deployment/native-astpp
+      changed_when: true
+    - name: Export upstream schema without changing an existing database
+      ansible.builtin.shell: |
+        set -euo pipefail
+        if ! test -f /etc/olamide/native-astpp/bootstrap.sql; then
+          umask 077
+          docker run --rm --entrypoint sh olamide-native-astpp-native-web -c 'cat /usr/src/astpp/database/astpp-6.0.sql /usr/src/astpp/database/astpp-6.0.1.sql' > /etc/olamide/native-astpp/schema.tmp
+          python3 /opt/olamide/repo/deployment/native-astpp/sanitize_sql.py /etc/olamide/native-astpp/schema.tmp > /etc/olamide/native-astpp/bootstrap.sql
+          chmod 0644 /etc/olamide/native-astpp/bootstrap.sql
+          rm /etc/olamide/native-astpp/schema.tmp
+        fi
+      args:
+        executable: /bin/bash
+      no_log: true
+      changed_when: true
+    - name: Start separate native GUI and database without SIP port publication
+      ansible.builtin.command:
+        argv: [docker, compose, '-p', olamide-native-astpp, '--env-file', /etc/olamide/native-astpp/runtime.env, up, '-d']
+        chdir: /opt/olamide/repo/deployment/native-astpp
+      changed_when: true
+    - name: Verify native login page on private listener
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8089/
+        return_content: true
+      register: native_astpp_health
+      until: native_astpp_health.status | default(0) == 200 and 'password' in (native_astpp_health.content | default(''))
+      retries: 30
+      delay: 5
+    - name: Report separate native GUI access
+      ansible.builtin.debug:
+        msg: 'Native ASTPP Community V6.0 GUI and separate database installed at private port 8089. Access through SSH forwarding; native operator credentials are in /etc/olamide/native-astpp/operator.json (root only). Native FreeSWITCH/media/charging commissioning is separate. Olamide trunks and native ASTPP records use separate databases.'
