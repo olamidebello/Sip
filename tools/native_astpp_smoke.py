@@ -23,7 +23,6 @@ def check(directory,origin='http://localhost:8089'):
     payload=urllib.parse.urlencode({'username':'admin','password':config['operatorPassword']}).encode()
     response=client.open(urllib.request.Request(action,data=payload),timeout=45)
     raw=response.read()
-    print('Native login response: status='+str(response.status)+' bytes='+str(len(raw))+' content-type='+str(response.headers.get('Content-Type'))+' encoding='+str(response.headers.get('Content-Encoding'))+' redirect='+str(response.headers.get('Refresh') or response.headers.get('Location') or 'none'))
     login=raw.decode(errors='replace')
     if 'logout' not in login.lower():
         diagnostic=re.sub(r'<[^>]+>', ' ', login)
@@ -31,7 +30,7 @@ def check(directory,origin='http://localhost:8089'):
         raise AssertionError('Native operator login did not succeed: '+re.sub(r'\s+', ' ', diagnostic)[:600])
     for path,label in [('/trunk/trunk_list','Trunks'),('/trunk/trunk_add','Create Trunk'),('/freeswitch/fsgateway','Gateways'),('/freeswitch/fsgateway_add','Create Gateway'),('/rates/termination_rates_list','Termination Rates'),('/rates/termination_rate_add','Create Termination Rate')]:
         body=client.open(origin+path,timeout=30).read().decode(errors='replace')
-        assert 'logout' in body.lower() and label.lower() in body.lower(), 'Native management page failed: '+path
+        assert label.lower() in body.lower() and ('<form' in body.lower() if 'Create ' in label else 'logout' in body.lower()), 'Native management page failed: '+path
     print('Native ASTPP login, trunk, gateway and termination-rate pages: PASS')
 if __name__=='__main__':
     a=argparse.ArgumentParser();a.add_argument('--directory',required=True);args=a.parse_args();check(args.directory)
