@@ -1,8 +1,10 @@
+import {setupFlowrouteTrunkAdmin} from './flowrouteTrunkAdmin.js';
 export function setupProviderCredentialsAdmin({get,request,onSaved=()=>{}}){
   const root=document.querySelector('#provider-credentials-admin');
   const form=root.querySelector('#provider-credentials-form');
   const status=root.querySelector('#provider-credentials-status');
   const list=root.querySelector('#provider-credentials-list');
+  const trunk=setupFlowrouteTrunkAdmin({root,get,request,onSaved});
   let revisions=new Map();
   function choose(){
     form.elements.callbackSecret.value='';form.elements.callEventsToken.value='';
@@ -20,6 +22,7 @@ export function setupProviderCredentialsAdmin({get,request,onSaved=()=>{}}){
     form.elements.apiKey.required=didww;
   }
   async function refresh(){
+    await trunk.refresh();
     try{
       const data=await get('/api/admin/carriers/credentials');
       revisions=new Map(data.entries.map(row=>[row.provider,Number(row.revision)]));

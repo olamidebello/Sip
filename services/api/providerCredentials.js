@@ -2,11 +2,11 @@ import {randomBytes,createCipheriv,createDecipheriv} from 'node:crypto';
 
 const fields={flowroute:['accessKey','secretKey','sipUsername','sipPassword'],didww:['apiKey','environment','callbackSecret','callEventsToken'],dwolla:['clientId','clientSecret','environment'],flutterwave:['secretKey','webhookSecret','environment']};
 const required={flowroute:['accessKey','secretKey'],didww:['apiKey','environment','callbackSecret','callEventsToken'],dwolla:['clientId','clientSecret','environment'],flutterwave:['secretKey','webhookSecret','environment']};
-function masterKey(){
+export function masterKey(){
   const raw=process.env.PROVIDER_CREDENTIAL_KEY;
   return /^[a-f0-9]{64}$/i.test(raw||'')?Buffer.from(raw,'hex'):null;
 }
-function seal(value,key,tenant,provider){
+export function seal(value,key,tenant,provider){
   const iv=randomBytes(12),cipher=createCipheriv('aes-256-gcm',key,iv);
   cipher.setAAD(Buffer.from(tenant+':'+provider));
   return Buffer.concat([iv,cipher.update(JSON.stringify(value),'utf8'),cipher.final(),cipher.getAuthTag()]);

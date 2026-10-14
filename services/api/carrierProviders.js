@@ -1,3 +1,4 @@
+import {flowrouteTrunk,publicTrunk,saveFlowrouteTrunk,adapterTrunk,withFlowrouteLock} from './flowrouteTrunk.js';
 import {providerCredentials} from './providerCredentials.js';
 import { randomUUID } from 'node:crypto';
 import { isAdmin } from './tenancy.js';
@@ -42,8 +43,25 @@ export async function carrierActive(pool,tenant,provider){
   return !!found.rowCount;
 }
 
-export async function handleCarrierProviders({req,res,path,user,pool,send,readJson}){
+export async function handleCarrierProviders({req,res,path,user,pool,send,readJson,flowrouteLocked=false}){
   if(!isAdmin(user)) return send(res,403,{error:'Administrator required'});
+  if(path.startsWith('/api/admin/carriers/flowroute/trunk')){
+    if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
+    if(path==='/api/admin/carriers/flowroute/trunk'&&req.method==='GET')return send(res,200,publicTrunk(await flowrouteTrunk(pool,user.tenant_id)));
+    if(path==='/api/admin/carriers/flowroute/trunk'&&req.method==='PUT'){const result=await saveFlowrouteTrunk(pool,user,await readJson(req));return send(res,result.code,result.body);}
+    if(path==='/api/admin/carriers/flowroute/trunk/provision'&&req.method==='POST'){
+      const config=await flowrouteTrunk(pool,user.tenant_id);
+      try{adapterTrunk(config);}catch(e){return send(res,409,{error:e.message});}
+      if(!adapterReady())return send(res,409,{error:'Configure a Flowroute switch provisioning adapter before activation'});
+      const active=await pool.query("SELECT 1 FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider='flowroute' AND status='active'",[user.tenant_id]);
+      if(active.rowCount)return send(res,200,{provider:'flowroute',status:'active'});
+      const staged=await handleCarrierProviders({req:{method:'POST'},res,path:'/api/admin/carriers/flowroute/auto-provision',user,pool,readJson:async()=>({pop:config.pop,maxConcurrentCalls:config.maxConcurrentCalls,routingMode:'priority'}),send:(_r,code,body)=>({code,body})});
+      if(staged.code!==200)return send(res,staged.code,staged.body);
+      return handleCarrierProviders({req:{method:'POST'},res,path:'/api/admin/carriers/flowroute/activate',user,pool,readJson,send});
+    }
+    return send(res,405,{error:'Unsupported Flowroute trunk action'});
+  }
+  if(!flowrouteLocked&&['/api/admin/carriers/flowroute/activate','/api/admin/carriers/flowroute/deactivate','/api/admin/carriers/flowroute/auto-provision'].includes(path)&&req.method==='POST')return withFlowrouteLock(pool,user.tenant_id,()=>handleCarrierProviders({req,res,path,user,pool,send,readJson,flowrouteLocked:true}));
   let stored={};
   async function loadCredentials(){stored=Object.fromEntries(await Promise.all(providers.map(async provider=>[provider,await providerCredentials(pool,user.tenant_id,provider)])));}
   const configured=provider=>stored[provider]?.disabled?false:stored[provider]?true:provider==='flowroute'?!!(process.env.FLOWROUTE_ACCESS_KEY&&process.env.FLOWROUTE_SECRET_KEY):
@@ -169,7 +187,8 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
   }
   if(action==='activate' && req.method==='POST'){
     await loadCredentials();
-    if(!configured(provider)||!adapterReady())
+    const sipReady=provider==='flowroute'&&await flowrouteTrunk(pool,user.tenant_id);
+    if((!configured(provider)&&!sipReady)||!adapterReady())
       return send(res,409,{error:'Carrier credentials and HTTPS provisioning adapter required'});
     const found=await pool.query("SELECT trunk_id,max_concurrent_calls,routing_mode,status FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider=$2",[user.tenant_id,provider]);
     const profile=found.rows[0];

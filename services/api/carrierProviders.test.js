@@ -23,6 +23,7 @@ test('Flowroute auto setup stages the selected PoP and leaves traffic disabled',
     query:async(sql,params)=>{calls.push({sql,params});return {rowCount:0,rows:[]};},
     connect:async()=>({query:async(sql,params)=>{
       calls.push({sql,params});
+      if(sql.includes('GET_LOCK'))return {rowCount:1,rows:[{acquired:1}]};
       if(sql.startsWith('SELECT id FROM pbx_trunks')) return {rowCount:0,rows:[]};
       return {rowCount:1,rows:[]};
     },release(){}})
@@ -57,4 +58,10 @@ test('tenant administrator cannot register a future carrier',async()=>{
     user:{role:'admin',tenant_id:'tenant-1'},pool:{query:()=>{throw Error('must not query');}},
     send:(_res,status,body)=>({status,body})});
   assert.equal(result.status,403);
+});
+
+test('Flowroute trunk settings are restricted to super admin before querying',async()=>{
+ for(const role of ['user','admin']){
+ const r=await handleCarrierProviders({req:{method:'PUT'},path:'/api/admin/carriers/flowroute/trunk',user:{role},pool:{query:()=>{throw Error('must not query');}},send:(_r,status,body)=>({status,body})});assert.equal(r.status,403);
+ }
 });

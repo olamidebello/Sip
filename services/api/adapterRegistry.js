@@ -1,3 +1,4 @@
+import {flowrouteTrunk,adapterTrunk,acknowledgedTrunk} from './flowrouteTrunk.js';
 import {randomUUID} from 'node:crypto';
 import {terminationPolicy} from './operatorControl.js';
 
@@ -62,12 +63,13 @@ export async function invokeAdapter(node,action,body){
   if(!target)throw Error('Adapter target is not configured');
   const response=await fetch(target.url,{method:'POST',signal:AbortSignal.timeout(10000),
     headers:{Authorization:`Bearer ${target.token}`,'Content-Type':'application/json',
-      'Idempotency-Key':`${body.tenantId}:${body.provider}:${action}:${body.trunkId||node.id}`},
+      'Idempotency-Key':`${body.tenantId}:${body.provider}:${action}:${body.trunkId||node.id}:${body.flowrouteTrunk?.configurationRevision||0}`},
     body:JSON.stringify({action,...body})});
   if(!response.ok)throw Error('Adapter request failed');
   const result=await response.json();
   if(result.status!==({health:'healthy',verify:'verified',activate:'active',deactivate:'inactive'}[action]))
     throw Error('Adapter did not acknowledge '+action);
+  if(action==='activate'&&body.flowrouteTrunk&&!acknowledgedTrunk(result,body.flowrouteTrunk))throw Error('Adapter did not acknowledge Flowroute IP/digest routing configuration');
   return result;
 }
 
@@ -77,6 +79,7 @@ export async function recordAdapterOperation(pool,{tenant,provider,adapterId,act
 }
 
 export async function commissionCarrier(pool,user,provider,action,details){
+  if(provider==='flowroute'&&action==='activate'){const c=await flowrouteTrunk(pool,user.tenant_id);if(c)details={...details,flowrouteTrunk:adapterTrunk(c)};}
   const assigned=action==='deactivate';
   const node=await adapterFor(pool,user.tenant_id,provider,details.maxConcurrentCalls||0,assigned);
   if(node){
@@ -101,9 +104,10 @@ export async function commissionCarrier(pool,user,provider,action,details){
   if(!legacy)throw Error('Carrier adapter unavailable');
   const response=await fetch(legacy.url,{method:'POST',signal:AbortSignal.timeout(10000),
     headers:{Authorization:`Bearer ${legacy.token}`,'Content-Type':'application/json',
-      'Idempotency-Key':`${user.tenant_id}:${provider}:${action}`},
+      'Idempotency-Key':`${user.tenant_id}:${provider}:${action}:${details.flowrouteTrunk?.configurationRevision||0}`},
     body:JSON.stringify({action,tenantId:user.tenant_id,provider,...details,terminationPolicy})});
-  if(!response.ok||(await response.json()).status!==({verify:'verified',activate:'active',deactivate:'inactive'}[action]))
+  const result=response.ok?await response.json():{};
+  if(!response.ok||result.status!==({verify:'verified',activate:'active',deactivate:'inactive'}[action])||(action==='activate'&&details.flowrouteTrunk&&!acknowledgedTrunk(result,details.flowrouteTrunk)))
     throw Error('Legacy adapter did not acknowledge '+action);
   return {adapterId:null};
 }

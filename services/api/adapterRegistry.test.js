@@ -34,6 +34,7 @@ test('healthy adapter acknowledges activation and pins the assignment',async()=>
   const node={id:'00000000-0000-4000-8000-000000000003',target_key:'us-east',enabled:1,health:'healthy'};
   const pool={query:async(sql,params)=>{
     calls.push({sql,params});
+    if(sql.includes('FROM provider_api_credentials'))return {rowCount:0,rows:[]};
     if(sql.includes('FROM carrier_adapter_nodes WHERE tenant_id='))return {rowCount:1,rows:[node]};
     return {rowCount:1,rows:[]};
   }};

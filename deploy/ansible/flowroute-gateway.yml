@@ -1,0 +1,42 @@
+---
+- import_playbook: messenger-features.yml
+- name: Import private Flowroute outbound configuration
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Require a private server-side PDF
+      ansible.builtin.assert:
+        that:
+          - flowroute_credentials_pdf is defined
+          - flowroute_credentials_pdf is match('^/root/[^\n]+\.pdf$')
+        fail_msg: Copy the Flowroute PDF to /root and pass flowroute_credentials_pdf; credentials are never stored in Git.
+    - name: Install private PDF reader
+      ansible.builtin.apt:
+        name: python3-pdfplumber
+        state: present
+        update_cache: true
+    - name: Restrict attachment permissions
+      ansible.builtin.file:
+        path: '{{ flowroute_credentials_pdf }}'
+        owner: root
+        group: root
+        mode: '0600'
+    - name: Preserve or create private provider encryption key
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/prepare_flowroute_key.py]
+      no_log: true
+      changed_when: true
+    - name: Load private encryption key into API
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, up, '-d', '--no-deps', '--force-recreate', api]
+        chdir: /opt/olamide/repo/deployment/docker
+      no_log: true
+      changed_when: true
+    - name: Import SIP credentials with existing server encryption key
+      ansible.builtin.command:
+        argv: "{{ ['python3', '/opt/olamide/repo/tools/import_flowroute_pdf.py', '--pdf', flowroute_credentials_pdf] + (['--tenant-id', flowroute_tenant_id] if flowroute_tenant_id is defined else []) + (['--caller-id', flowroute_caller_id] if flowroute_caller_id is defined else []) + (['--ip-allowed'] if flowroute_allowed_ip_confirmed | default(false) | bool else []) }}"
+      no_log: true
+      changed_when: true
+    - name: Report commissioning requirements
+      ansible.builtin.debug:
+        msg: 'Private SIP configuration imported. In Super admin → Carrier credentials confirm the public egress IP is allowed by Flowroute, enter an authorized caller ID, and click Provision default outbound gateway. A configured switch adapter must acknowledge the exact configuration revision before Flowroute becomes active. Local SIP subscriber registration is unchanged.'
