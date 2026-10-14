@@ -3,9 +3,9 @@
     "id": "account-range",
     "name": "Account Range",
     "group": "Accounts & security",
-    "target": null,
-    "implementation": "not_implemented",
-    "detail": "Custom account-number allocation has not been implemented."
+    "target": "telecom-feature-account-range",
+    "implementation": "implemented",
+    "detail": "Tenant-scoped customer account-number ranges with stable allocation, range exhaustion checks and audit records. Separate from SIP usernames and native ASTPP account IDs."
   },
   {
     "id": "alarms",

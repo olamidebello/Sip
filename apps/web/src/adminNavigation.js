@@ -1,3 +1,4 @@
+import {advancedTelecomGroups} from './advancedTelecomNavigation.js';
 const admins=['admin','super_admin'];
 const superOnly=['super_admin'];
 export const adminNavigationGroups=[
@@ -8,7 +9,8 @@ export const adminNavigationGroups=[
  {label:'Payments & wallets',roles:admins,items:[['payment-admin','Stripe management'],['wallet-providers-admin','Dwolla & Flutterwave API',superOnly]]},
  {label:'Security & integrations',roles:admins,items:[['auth-providers-admin','Authentication'],['ldap-admin','LDAP groups'],['passkey-policy-admin','Passkey requirements'],['geofence-admin','Geofencing'],['google-oauth-admin','Google Contacts OAuth',superOnly],['provider-webhook-admin','Provider callbacks',superOnly],['messaging-webhooks','Messaging webhooks']]},
  {label:'Appearance & communication',roles:admins,items:[['background-admin','Tenant appearance'],['locale-admin','Locale defaults'],['dashboard-admin','Dashboard defaults'],['campaign-admin','Campaigns & alerts'],['mobile-admin','App releases']]},
- {label:'System & operations',roles:admins,items:[['cluster-admin','API capacity'],['fleet-admin','Server & network operations']]}
+ {label:'System & operations',roles:admins,items:[['cluster-admin','API capacity'],['fleet-admin','Server & network operations']]},
+ ...advancedTelecomGroups
 ];
 export function syncAdminNavigation(nav,target){
  if(nav.dataset.groupedAdmin!=='true')return;

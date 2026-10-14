@@ -1,3 +1,4 @@
+import {migrateAccountRanges} from './accountRanges.js';
 import {migrateContactCards} from './contactCards.js';
 import {migrateSocial} from './social.js';
 import {migrateDefaultPresence} from './defaultPresence.js';
@@ -76,6 +77,7 @@ export async function migrate(pool) {
       ['core', () => pool.initialize(awaitSql.core)],
       ['tenancy', () => migrateTenancy(pool)],
       ['access', () => migrateAccess(pool)],
+      ['account_ranges', () => migrateAccountRanges(pool)],
       ['onboarding', () => migrateOnboarding(pool)],
       ['sip_marketplace', () => migrateSipMarketplace(pool)],
       ['sip_provisioning', () => migrateSipProvisioning(pool)],

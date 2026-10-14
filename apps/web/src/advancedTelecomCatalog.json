@@ -1,0 +1,212 @@
+[
+  {
+    "id": "account-range",
+    "name": "Account Range",
+    "group": "Accounts & security"
+  },
+  {
+    "id": "alarms",
+    "name": "Alarms",
+    "group": "Monitoring & reports"
+  },
+  {
+    "id": "automated-report",
+    "name": "Automated Report",
+    "group": "Monitoring & reports"
+  },
+  {
+    "id": "access-control",
+    "name": "Access Control",
+    "group": "Accounts & security"
+  },
+  {
+    "id": "advanced-sip-routing",
+    "name": "Advanced SIP Routing",
+    "group": "Routing & numbers"
+  },
+  {
+    "id": "automated-cdrs",
+    "name": "Automated CDRs",
+    "group": "Monitoring & reports"
+  },
+  {
+    "id": "acl-management",
+    "name": "ACL Management",
+    "group": "Accounts & security"
+  },
+  {
+    "id": "country-reports",
+    "name": "Country Reports",
+    "group": "Monitoring & reports"
+  },
+  {
+    "id": "demand-routing",
+    "name": "Demand-Based Routing",
+    "group": "Routing & numbers"
+  },
+  {
+    "id": "did-transfer",
+    "name": "DID Call Transfer",
+    "group": "Routing & numbers"
+  },
+  {
+    "id": "fax",
+    "name": "Fax over IP",
+    "group": "Communications & PBX"
+  },
+  {
+    "id": "fraud-detection",
+    "name": "Fraud Detection",
+    "group": "Accounts & security"
+  },
+  {
+    "id": "international-credit",
+    "name": "International Credit Management",
+    "group": "Billing & payments"
+  },
+  {
+    "id": "local-number",
+    "name": "Local Number",
+    "group": "Routing & numbers"
+  },
+  {
+    "id": "logs",
+    "name": "Logs",
+    "group": "Monitoring & reports"
+  },
+  {
+    "id": "languages",
+    "name": "Languages",
+    "group": "Account experience"
+  },
+  {
+    "id": "mailchimp",
+    "name": "Mailchimp",
+    "group": "External integrations"
+  },
+  {
+    "id": "multi-tenant-pbx",
+    "name": "Multi-Tenant IP PBX",
+    "group": "Communications & PBX"
+  },
+  {
+    "id": "portability",
+    "name": "Number Portability Service",
+    "group": "Routing & numbers"
+  },
+  {
+    "id": "ported-sa",
+    "name": "Ported Number—South Africa",
+    "group": "External integrations"
+  },
+  {
+    "id": "personalized-rates",
+    "name": "Personalized Rates",
+    "group": "Billing & payments"
+  },
+  {
+    "id": "payfast",
+    "name": "Payfast",
+    "group": "External integrations"
+  },
+  {
+    "id": "rate-simulator",
+    "name": "Rate Simulator",
+    "group": "Routing & numbers"
+  },
+  {
+    "id": "stripe",
+    "name": "Stripe Payment Gateway",
+    "group": "Billing & payments"
+  },
+  {
+    "id": "support-ticket",
+    "name": "Support Ticket",
+    "group": "Account experience"
+  },
+  {
+    "id": "schedule-reports",
+    "name": "Schedule Reports",
+    "group": "Monitoring & reports"
+  },
+  {
+    "id": "shadow-billing",
+    "name": "Shadow Billing",
+    "group": "Billing & payments"
+  },
+  {
+    "id": "switch-monitoring",
+    "name": "Switch Monitoring",
+    "group": "Monitoring & reports"
+  },
+  {
+    "id": "two-factor",
+    "name": "Two-Factor Authentication",
+    "group": "Accounts & security"
+  },
+  {
+    "id": "whmcs",
+    "name": "WHMCS integration",
+    "group": "External integrations"
+  },
+  {
+    "id": "zoho",
+    "name": "Zoho CRM integration",
+    "group": "External integrations"
+  },
+  {
+    "id": "salesforce",
+    "name": "Salesforce integration",
+    "group": "External integrations"
+  },
+  {
+    "id": "stir-shaken",
+    "name": "STIR/SHAKEN",
+    "group": "External integrations"
+  },
+  {
+    "id": "mobile-dialer",
+    "name": "Mobile Dialer",
+    "group": "Account experience"
+  },
+  {
+    "id": "pc-dialer",
+    "name": "PC Dialer",
+    "group": "Account experience"
+  },
+  {
+    "id": "live-charging",
+    "name": "Prepaid & postpaid charging",
+    "group": "Billing & payments"
+  },
+  {
+    "id": "did-lifecycle",
+    "name": "DID lifecycle",
+    "group": "Routing & numbers"
+  },
+  {
+    "id": "call-center",
+    "name": "Call center & autodialer",
+    "group": "Communications & PBX"
+  },
+  {
+    "id": "sms",
+    "name": "SMS delivery & billing",
+    "group": "Communications & PBX"
+  },
+  {
+    "id": "resellers",
+    "name": "Resellers & commissions",
+    "group": "Accounts & security"
+  },
+  {
+    "id": "archive",
+    "name": "Archive, purge & cron",
+    "group": "Monitoring & reports"
+  },
+  {
+    "id": "n8n",
+    "name": "n8n integration",
+    "group": "External integrations"
+  }
+]

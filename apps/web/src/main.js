@@ -1,3 +1,5 @@
+import {setupAccountRanges} from './accountRanges.js';
+import {createAdvancedTelecomPanels,setupAdvancedTelecomNavigation,advancedTelecomIds} from './advancedTelecomNavigation.js';
 import {setupTelecomFeatures} from './telecomFeatures.js';
 import {userNavigationGroups,setupUserNavigation} from './userNavigation.js';
 import {adminNavigationGroups,renderAdminNavigation,syncAdminNavigation} from './adminNavigation.js';
@@ -1192,6 +1194,7 @@ root.innerHTML = `
 `;
 
 root.insertAdjacentHTML('beforeend',messengerPanels());
+createAdvancedTelecomPanels(document,root);
 root.insertAdjacentHTML('beforeend','<section id="telecom-features-admin" hidden><h2>Telecom feature catalog</h2><p>Review current implementation and prerequisites. Pending features cannot be activated from this inventory.</p><input type="search" aria-label="Search telecom features" placeholder="Find a feature or category…"><button type="button" class="telecom-refresh">Refresh inventory</button><p role="status"></p><div class="telecom-feature-list"></div></section>');
 root.insertAdjacentHTML('beforeend',`<section id="native-astpp-admin" hidden><h2>Native ASTPP Community</h2><p>The optional native GUI uses its original menus, backend and separate database. Open an SSH tunnel to port 8089 before opening the private console.</p><a class="native-astpp-open" href="http://localhost:8089/" target="_blank" rel="noopener noreferrer">Open native ASTPP console</a><div class="native-feature-groups"><article><h3>Accounts & access</h3><p>Customers, resellers, SIP devices and roles.</p></article><article><h3>Carriers & rates</h3><p>Trunks, gateways, routes and rate decks.</p></article><article><h3>Billing & services</h3><p>Invoices, taxes, DIDs, products and orders.</p></article><article><h3>Reports & settings</h3><p>Call records, provider reports, languages and currencies.</p></article></div><p>Kamailio paid calls use the separate Olamide charging integration. Installing this native GUI does not connect its routing or balances to Kamailio. Native switch-dependent controls require their own supported integration.</p></section>`);
 root.insertAdjacentHTML('beforeend','<section id="messenger-accessibility" hidden><h2>Accessibility</h2><form id="messenger-accessibility-form"><label><input name="highContrast" type="checkbox"> Increase contrast</label><label><input name="reduceMotion" type="checkbox"> Reduce animation</label><button type="submit">Save preferences</button></form><p id="messenger-accessibility-status" role="status"></p></section>');
@@ -1240,6 +1243,7 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   if(target==="top")target=userHome();
   if(!document.getElementById(target)?.closest("#meetings"))videoWorkflow=false;
   if(!activeRole) return false;
+  if(advancedTelecomIds.has(target)&&activeRole!=='super_admin')return false;
   if(activeRole.startsWith("pending_")&&target!=="account")return false;
   if(adminTarget(target)&&!['admin','super_admin'].includes(activeRole))return false;
   if(!adminTarget(target)&&navigationPolicy&&!navigationAllowed(target))return false;
@@ -1252,6 +1256,8 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   if(target==='money')void moneyWorkspace.refresh();
   if(target==='carrier-console')void carrierConsole.refresh();
   if(target==='telecom-features-admin')void telecomFeatureWorkspace.refresh();
+  if(advancedTelecomIds.has(target))void advancedTelecomWorkspace.refresh(target);
+  if(target==='telecom-feature-account-range')void accountRangesWorkspace.refresh();
   if(modeChanged)updateNavigation();
   const requested=document.getElementById(target);
   if(!requested || requested.closest("[hidden]")) return false;
@@ -1430,6 +1436,8 @@ const providerCredentialsAdmin=setupProviderCredentialsAdmin({get:apiGet,request
 configurationLinks=setupConfigurationLinks({show:showWorkspace,allowed:navigationAllowed});
 userActivity=setupUserActivity({get:apiGet,request:accountRequest});
 const didwwAdmin=setupDidwwAdmin({get:apiGet,request:accountRequest});
+const accountRangesWorkspace=setupAccountRanges({document,get:apiGet,request:accountRequest});
+const advancedTelecomWorkspace=setupAdvancedTelecomNavigation({document,get:apiGet,show:showWorkspace});
 const telecomFeatureWorkspace=setupTelecomFeatures({document,get:apiGet,show:showWorkspace});
 const carrierConsole=setupCarrierConsole({document,get:apiGet,role:()=>activeRole});
 const adapterAdmin=setupAdapterAdmin({get:apiGet,request:accountRequest});
@@ -1928,6 +1936,7 @@ function signedIn(user) {
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
   $("#native-astpp-admin").hidden = $("#admin").hidden;
   $("#telecom-features-admin").hidden = $("#admin").hidden;
+  advancedTelecomWorkspace.visibility(activeRole);
   updateNavigation();
   workspaceQuick.refresh();workPlanner.refresh();campaigns.inbox();
   if(["admin","super_admin"].includes(user.role)){ $("#campaign-admin").hidden=false;$("#campaign-form [name=audience] option[value=all]").hidden=user.role!=="super_admin";campaigns.refresh();passkeyPolicy.refresh(); }
@@ -2484,6 +2493,8 @@ $("#logout").onclick = async () => {
     $("#native-astpp-admin").hidden = true;
     $("#telecom-features-admin").hidden = true;
     telecomFeatureWorkspace.stop();
+    advancedTelecomWorkspace.stop();
+    accountRangesWorkspace.stop();
     $("#message-list").replaceChildren();
     $("#account-status").textContent = "Signed out";
     updateNavigation();

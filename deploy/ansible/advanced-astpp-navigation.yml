@@ -1,0 +1,25 @@
+---
+- import_playbook: telecom-features.yml
+- name: Verify advanced super-admin navigation and report missing implementations
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Verify grouped menus cover the complete backend feature inventory
+      ansible.builtin.command:
+        argv:
+          - python3
+          - '-c'
+          - |
+            import json,pathlib
+            root=pathlib.Path('/opt/olamide/repo')
+            backend=json.loads((root/'services/api/telecomFeatureCatalog.json').read_text())
+            frontend=json.loads((root/'apps/web/src/advancedTelecomCatalog.json').read_text())
+            assert len(frontend)==len(backend)==42
+            assert len({r['id'] for r in frontend})==42
+            assert {r['id'] for r in frontend}=={r['id'] for r in backend}
+            print(json.dumps({'advancedMenus':len(frontend),'allAdvertisedFeaturesInstalled':False,'implementedControls':[r['name'] for r in backend if r['implementation']=='implemented'],'incompleteOrExternal':[{'name':r['name'],'status':r['implementation'],'prerequisite':r['detail']} for r in backend if r['implementation']!='implemented']}))
+      changed_when: false
+      register: advanced_menu_coverage
+    - name: Report deployment coverage without inventing installed feature status
+      ansible.builtin.debug:
+        msg: '{{ advanced_menu_coverage.stdout | from_json }}'
