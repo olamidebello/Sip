@@ -48,7 +48,7 @@
         set -euo pipefail
         if ! test -f /etc/olamide/native-astpp/bootstrap.sql; then
           umask 077
-          docker run --rm --entrypoint sh olamide-native-astpp-native-web -c 'cat /usr/src/astpp/database/astpp-6.0.sql /usr/src/astpp/database/astpp-6.0.1.sql' > /etc/olamide/native-astpp/schema.tmp
+          docker run --rm --entrypoint sh olamide-native-astpp-native-web -c 'cat /usr/src/astpp/database/astpp-6.0.sql; printf "\n"; cat /usr/src/astpp/database/astpp-6.0.1.sql' > /etc/olamide/native-astpp/schema.tmp
           python3 /opt/olamide/repo/deployment/native-astpp/sanitize_sql.py /etc/olamide/native-astpp/schema.tmp > /etc/olamide/native-astpp/bootstrap.sql
           chmod 0644 /etc/olamide/native-astpp/bootstrap.sql
           rm /etc/olamide/native-astpp/schema.tmp

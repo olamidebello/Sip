@@ -85,7 +85,7 @@ jobs:
           set -euo pipefail
           python3 -c 'import os,pathlib,runpy; runpy.run_path("tools/prepare_native_astpp.py")["prepare"](pathlib.Path(os.environ["RUNNER_TEMP"])/"native-astpp")' 
           docker compose -p olamide-native-astpp --env-file "$RUNNER_TEMP/native-astpp/runtime.env" -f deployment/native-astpp/compose.yml build native-web
-          docker run --rm --entrypoint sh olamide-native-astpp-native-web -c 'cat /usr/src/astpp/database/astpp-6.0.sql /usr/src/astpp/database/astpp-6.0.1.sql' > "$RUNNER_TEMP/native-astpp/schema.sql"
+          docker run --rm --entrypoint sh olamide-native-astpp-native-web -c 'cat /usr/src/astpp/database/astpp-6.0.sql; printf "\n"; cat /usr/src/astpp/database/astpp-6.0.1.sql' > "$RUNNER_TEMP/native-astpp/schema.sql"
           python3 deployment/native-astpp/sanitize_sql.py "$RUNNER_TEMP/native-astpp/schema.sql" > "$RUNNER_TEMP/native-astpp/bootstrap.sql"
           chmod 644 "$RUNNER_TEMP/native-astpp/bootstrap.sql"
           docker compose -p olamide-native-astpp --env-file "$RUNNER_TEMP/native-astpp/runtime.env" -f deployment/native-astpp/compose.yml up -d
