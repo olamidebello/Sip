@@ -2,211 +2,733 @@
   {
     "id": "account-range",
     "name": "Account Range",
-    "group": "Accounts & security"
+    "group": "Accounts & security",
+    "target": "telecom-feature-account-range",
+    "implementation": "implemented",
+    "detail": "Tenant-scoped customer account-number ranges with stable allocation, range exhaustion checks and audit records. Separate from SIP usernames and native ASTPP account IDs."
   },
   {
     "id": "alarms",
     "name": "Alarms",
-    "group": "Monitoring & reports"
+    "group": "Monitoring & reports",
+    "target": "fleet-admin",
+    "implementation": "partial",
+    "detail": "Server monitoring exists; trunk and call-event alarms are incomplete."
   },
   {
     "id": "automated-report",
     "name": "Automated Report",
-    "group": "Monitoring & reports"
+    "group": "Monitoring & reports",
+    "target": "report-admin",
+    "implementation": "partial",
+    "detail": "Interactive reports and exports exist; automated generation needs a worker."
   },
   {
     "id": "access-control",
     "name": "Access Control",
-    "group": "Accounts & security"
+    "group": "Accounts & security",
+    "target": "navigation-policy-admin",
+    "implementation": "partial",
+    "detail": "Role and navigation permissions exist; portal/API IP rules need implementation."
   },
   {
     "id": "advanced-sip-routing",
     "name": "Advanced SIP Routing",
-    "group": "Routing & numbers"
+    "group": "Routing & numbers",
+    "target": "operator-admin",
+    "implementation": "partial",
+    "detail": "Route preview and fraud rules exist; cause-based extension failover is not installed."
   },
   {
     "id": "automated-cdrs",
     "name": "Automated CDRs",
-    "group": "Monitoring & reports"
+    "group": "Monitoring & reports",
+    "target": "cdr-admin",
+    "implementation": "partial",
+    "detail": "CDR records exist; scheduled summaries are incomplete."
   },
   {
     "id": "acl-management",
     "name": "ACL Management",
-    "group": "Accounts & security"
+    "group": "Accounts & security",
+    "target": "fleet-admin",
+    "implementation": "partial",
+    "detail": "Network controls exist; a unified SIP ACL module is incomplete."
   },
   {
     "id": "country-reports",
     "name": "Country Reports",
-    "group": "Monitoring & reports"
+    "group": "Monitoring & reports",
+    "target": "report-admin",
+    "implementation": "not_implemented",
+    "detail": "Country-level usage and revenue reporting has not been implemented."
   },
   {
     "id": "demand-routing",
     "name": "Demand-Based Routing",
-    "group": "Routing & numbers"
+    "group": "Routing & numbers",
+    "target": "operator-admin",
+    "implementation": "partial",
+    "detail": "Effective-date rate scheduling exists; time-window live routing is incomplete."
   },
   {
     "id": "did-transfer",
     "name": "DID Call Transfer",
-    "group": "Routing & numbers"
+    "group": "Routing & numbers",
+    "target": "inhouse-admin",
+    "implementation": "not_implemented",
+    "detail": "Disposition-based DID failover is not installed."
   },
   {
     "id": "fax",
     "name": "Fax over IP",
-    "group": "Communications & PBX"
+    "group": "Communications & PBX",
+    "target": null,
+    "implementation": "external_dependency",
+    "detail": "Requires a fax engine, storage and provider/media integration."
   },
   {
     "id": "fraud-detection",
     "name": "Fraud Detection",
-    "group": "Accounts & security"
+    "group": "Accounts & security",
+    "target": "operator-admin",
+    "implementation": "partial",
+    "detail": "Destination blocks and prepaid concurrency checks exist; anomaly detection is incomplete."
   },
   {
     "id": "international-credit",
     "name": "International Credit Management",
-    "group": "Billing & payments"
+    "group": "Billing & payments",
+    "target": "charging-admin",
+    "implementation": "not_implemented",
+    "detail": "Separate international spending limits are not implemented."
   },
   {
     "id": "local-number",
     "name": "Local Number",
-    "group": "Routing & numbers"
+    "group": "Routing & numbers",
+    "target": "inhouse-admin",
+    "implementation": "partial",
+    "detail": "DID inventory exists; shared-DID service routing is incomplete."
   },
   {
     "id": "logs",
     "name": "Logs",
-    "group": "Monitoring & reports"
+    "group": "Monitoring & reports",
+    "target": "fleet-admin",
+    "implementation": "partial",
+    "detail": "Operations controls exist; redacted live service-log streaming is incomplete."
   },
   {
     "id": "languages",
     "name": "Languages",
-    "group": "Account experience"
+    "group": "Account experience",
+    "target": "locale-admin",
+    "implementation": "partial",
+    "detail": "Language/locale settings exist; full interface translation coverage is incomplete."
   },
   {
     "id": "mailchimp",
     "name": "Mailchimp",
-    "group": "External integrations"
+    "group": "External integrations",
+    "target": null,
+    "implementation": "external_dependency",
+    "detail": "Requires an integration implementation and authorized Mailchimp credentials."
   },
   {
     "id": "multi-tenant-pbx",
     "name": "Multi-Tenant IP PBX",
-    "group": "Communications & PBX"
+    "group": "Communications & PBX",
+    "target": "pbx-admin",
+    "implementation": "partial",
+    "detail": "Tenant-scoped PBX records exist; live IVR, queues and voicemail need a media/PBX engine."
   },
   {
     "id": "portability",
     "name": "Number Portability Service",
-    "group": "Routing & numbers"
+    "group": "Routing & numbers",
+    "target": "inhouse-admin",
+    "implementation": "partial",
+    "detail": "Port-request records exist; global portability lookup requires a data provider."
   },
   {
     "id": "ported-sa",
-    "name": "Ported Number—South Africa",
-    "group": "External integrations"
+    "name": "Ported Number\u2014South Africa",
+    "group": "External integrations",
+    "target": null,
+    "implementation": "external_dependency",
+    "detail": "Requires a South African portability dataset/API and implementation."
   },
   {
     "id": "personalized-rates",
     "name": "Personalized Rates",
-    "group": "Billing & payments"
+    "group": "Billing & payments",
+    "target": "operator-admin",
+    "implementation": "not_implemented",
+    "detail": "Account-specific live tariff overrides are not implemented."
   },
   {
     "id": "payfast",
     "name": "Payfast",
-    "group": "External integrations"
+    "group": "External integrations",
+    "target": null,
+    "implementation": "external_dependency",
+    "detail": "Requires a signed webhook/payment integration and merchant credentials."
   },
   {
     "id": "rate-simulator",
     "name": "Rate Simulator",
-    "group": "Routing & numbers"
+    "group": "Routing & numbers",
+    "target": "operator-admin",
+    "implementation": "partial",
+    "detail": "A tariff route preview exists; it does not prove live switch rating."
   },
   {
     "id": "stripe",
     "name": "Stripe Payment Gateway",
-    "group": "Billing & payments"
+    "group": "Billing & payments",
+    "target": "payment-admin",
+    "implementation": "partial",
+    "detail": "Stripe management exists; every advertised payment flow is not implemented."
   },
   {
     "id": "support-ticket",
     "name": "Support Ticket",
-    "group": "Account experience"
+    "group": "Account experience",
+    "target": "support",
+    "implementation": "implemented",
+    "detail": "Existing tenant-scoped tickets, replies and status actions are available."
   },
   {
     "id": "schedule-reports",
     "name": "Schedule Reports",
-    "group": "Monitoring & reports"
+    "group": "Monitoring & reports",
+    "target": null,
+    "implementation": "not_implemented",
+    "detail": "Scheduled emailed reports need durable scheduling, recipients and SMTP."
   },
   {
     "id": "shadow-billing",
     "name": "Shadow Billing",
-    "group": "Billing & payments"
+    "group": "Billing & payments",
+    "target": null,
+    "implementation": "not_implemented",
+    "detail": "A separate shadow-rating ledger is not implemented."
   },
   {
     "id": "switch-monitoring",
     "name": "Switch Monitoring",
-    "group": "Monitoring & reports"
+    "group": "Monitoring & reports",
+    "target": "switch-admin",
+    "implementation": "partial",
+    "detail": "Kamailio readiness exists. Native FreeSWITCH monitoring is outside the selected architecture."
   },
   {
     "id": "two-factor",
     "name": "Two-Factor Authentication",
-    "group": "Accounts & security"
+    "group": "Accounts & security",
+    "target": "passkey-policy-admin",
+    "implementation": "partial",
+    "detail": "Passkeys and OTP flows exist; exact vendor MFA parity is not established."
   },
   {
     "id": "whmcs",
     "name": "WHMCS integration",
-    "group": "External integrations"
+    "group": "External integrations",
+    "target": null,
+    "implementation": "external_dependency",
+    "detail": "Requires a WHMCS connector and authorized API account."
   },
   {
     "id": "zoho",
     "name": "Zoho CRM integration",
-    "group": "External integrations"
+    "group": "External integrations",
+    "target": null,
+    "implementation": "external_dependency",
+    "detail": "Requires CRM connector implementation and OAuth authorization."
   },
   {
     "id": "salesforce",
     "name": "Salesforce integration",
-    "group": "External integrations"
+    "group": "External integrations",
+    "target": null,
+    "implementation": "external_dependency",
+    "detail": "Requires CRM connector implementation and OAuth authorization."
   },
   {
     "id": "stir-shaken",
     "name": "STIR/SHAKEN",
-    "group": "External integrations"
+    "group": "External integrations",
+    "target": null,
+    "implementation": "external_dependency",
+    "detail": "Requires approved signing credentials, certificate lifecycle and SIP integration."
   },
   {
     "id": "mobile-dialer",
     "name": "Mobile Dialer",
-    "group": "Account experience"
+    "group": "Account experience",
+    "target": "downloads",
+    "implementation": "partial",
+    "detail": "App download controls exist; native background-calling acceptance remains separate."
   },
   {
     "id": "pc-dialer",
     "name": "PC Dialer",
-    "group": "Account experience"
+    "group": "Account experience",
+    "target": "downloads",
+    "implementation": "partial",
+    "detail": "Web calling exists; full desktop dialer parity is not established."
   },
   {
     "id": "live-charging",
     "name": "Prepaid & postpaid charging",
-    "group": "Billing & payments"
+    "group": "Billing & payments",
+    "target": "charging-admin",
+    "implementation": "partial",
+    "detail": "Kamailio prepaid deployment exists. Postpaid, prorating, bundles and surcharge rules remain incomplete."
   },
   {
     "id": "did-lifecycle",
     "name": "DID lifecycle",
-    "group": "Routing & numbers"
+    "group": "Routing & numbers",
+    "target": "inhouse-admin",
+    "implementation": "partial",
+    "detail": "Inventory/provider controls exist; full purchase/release/recurring lifecycle depends on integrations."
   },
   {
     "id": "call-center",
     "name": "Call center & autodialer",
-    "group": "Communications & PBX"
+    "group": "Communications & PBX",
+    "target": "pbx-admin",
+    "implementation": "partial",
+    "detail": "PBX/call-center controls exist; live AMD, IVR, conferencing and interception need compatible engines."
   },
   {
     "id": "sms",
     "name": "SMS delivery & billing",
-    "group": "Communications & PBX"
+    "group": "Communications & PBX",
+    "target": "messaging-webhooks",
+    "implementation": "partial",
+    "detail": "SMS endpoints exist; provider acceptance and full SMS rating remain incomplete."
   },
   {
     "id": "resellers",
     "name": "Resellers & commissions",
-    "group": "Accounts & security"
+    "group": "Accounts & security",
+    "target": "tenant-admin",
+    "implementation": "not_implemented",
+    "detail": "Tenant roles exist; hierarchical reseller rating, commissions and provider portals are incomplete."
   },
   {
     "id": "archive",
     "name": "Archive, purge & cron",
-    "group": "Monitoring & reports"
+    "group": "Monitoring & reports",
+    "target": null,
+    "implementation": "not_implemented",
+    "detail": "Retention/archive workers and scheduled job administration are incomplete."
   },
   {
     "id": "n8n",
     "name": "n8n integration",
-    "group": "External integrations"
+    "group": "External integrations",
+    "target": null,
+    "implementation": "external_dependency",
+    "detail": "Requires authenticated workflow connectors and an n8n instance."
+  },
+  {
+    "id": "core-dashboard",
+    "name": "Overview",
+    "group": "Core \u00b7 Dashboard",
+    "target": "admin",
+    "endpoint": "/api/admin/overview",
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-customers",
+    "name": "Customers",
+    "group": "Core \u00b7 Accounts",
+    "target": "group-admin",
+    "endpoint": "/api/admin/users",
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-providers",
+    "name": "Providers",
+    "group": "Core \u00b7 Accounts",
+    "target": "carrier-admin",
+    "endpoint": "/api/admin/carriers",
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-roles",
+    "name": "Roles & permissions",
+    "group": "Core \u00b7 Accounts",
+    "target": "tenant-admin",
+    "endpoint": null,
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-sip-devices",
+    "name": "SIP devices & extensions",
+    "group": "Core \u00b7 Accounts",
+    "target": "pbx-admin",
+    "endpoint": "/api/pbx/extensions",
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-ip-settings",
+    "name": "IP authentication",
+    "group": "Core \u00b7 Accounts",
+    "target": "sip-profile-admin",
+    "endpoint": null,
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-callerids",
+    "name": "Caller IDs & CLI pools",
+    "group": "Core \u00b7 Accounts",
+    "target": "carrier-console",
+    "endpoint": null,
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-servers",
+    "name": "Switch servers",
+    "group": "Core \u00b7 Switch",
+    "target": "switch-admin",
+    "endpoint": null,
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-call-barring",
+    "name": "Call barring",
+    "group": "Core \u00b7 Switch",
+    "target": "operator-admin",
+    "endpoint": "/api/pbx/outbound-policies",
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-localizations",
+    "name": "Number localization",
+    "group": "Core \u00b7 Switch",
+    "target": "operator-admin",
+    "endpoint": null,
+    "implementation": "not_implemented",
+    "detail": "Unified number-normalization editing is not implemented."
+  },
+  {
+    "id": "core-rate-groups",
+    "name": "Rate groups",
+    "group": "Core \u00b7 Tariffs",
+    "target": "operator-admin",
+    "endpoint": null,
+    "implementation": "not_implemented",
+    "detail": "Independent rate-group CRUD and live assignment require implementation."
+  },
+  {
+    "id": "core-origination-rates",
+    "name": "Origination rates",
+    "group": "Core \u00b7 Tariffs",
+    "target": "pbx-admin",
+    "endpoint": "/api/pbx/rates",
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-rate-decks",
+    "name": "Rate decks",
+    "group": "Core \u00b7 Tariffs",
+    "target": "flowroute-rate-admin",
+    "endpoint": null,
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-call-types",
+    "name": "Call types",
+    "group": "Core \u00b7 Tariffs",
+    "target": "operator-admin",
+    "endpoint": null,
+    "implementation": "not_implemented",
+    "detail": "Independent call-type management is not implemented."
+  },
+  {
+    "id": "core-gateways",
+    "name": "Gateways",
+    "group": "Core \u00b7 Carriers",
+    "target": "carrier-console",
+    "endpoint": "/api/admin/carriers",
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-trunks",
+    "name": "Trunks",
+    "group": "Core \u00b7 Carriers",
+    "target": "pbx-admin",
+    "endpoint": "/api/pbx/trunks",
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-termination-rates",
+    "name": "Termination rates",
+    "group": "Core \u00b7 Carriers",
+    "target": "flowroute-rate-admin",
+    "endpoint": null,
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-routing-strategy",
+    "name": "Routing strategies",
+    "group": "Core \u00b7 Carriers",
+    "target": "operator-admin",
+    "endpoint": "/api/pbx/outbound-policies",
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-invoices",
+    "name": "Invoices",
+    "group": "Core \u00b7 Billing",
+    "target": "charging-admin",
+    "endpoint": "/api/admin/telecom/resources/invoices",
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-callerid-billing",
+    "name": "Caller ID based billing",
+    "group": "Core \u00b7 Billing",
+    "target": "charging-admin",
+    "endpoint": null,
+    "implementation": "not_implemented",
+    "detail": "Caller-ID-specific live charging is not implemented."
+  },
+  {
+    "id": "core-charge-history",
+    "name": "Charge history",
+    "group": "Core \u00b7 Billing",
+    "target": "charging-admin",
+    "endpoint": "/api/admin/telecom/resources/charges",
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-refills",
+    "name": "Refill history",
+    "group": "Core \u00b7 Billing",
+    "target": "charging-admin",
+    "endpoint": null,
+    "implementation": "not_implemented",
+    "detail": "Dedicated refill ledger and reporting require implementation."
+  },
+  {
+    "id": "core-packages",
+    "name": "Packages & subscriptions",
+    "group": "Core \u00b7 Billing",
+    "target": "catalog-controls",
+    "endpoint": "/api/admin/plans",
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-products",
+    "name": "Products & orders",
+    "group": "Core \u00b7 Billing",
+    "target": "product-store-admin",
+    "endpoint": null,
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-inbound",
+    "name": "Inbound routes",
+    "group": "Core \u00b7 Numbers",
+    "target": "pbx-admin",
+    "endpoint": "/api/pbx/inbound-routes",
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-dids",
+    "name": "DID inventory",
+    "group": "Core \u00b7 Numbers",
+    "target": "inhouse-admin",
+    "endpoint": null,
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-vanity",
+    "name": "Vanity numbers",
+    "group": "Core \u00b7 Numbers",
+    "target": "inhouse-admin",
+    "endpoint": null,
+    "implementation": "not_implemented",
+    "detail": "Vanity inventory classification is not implemented."
+  },
+  {
+    "id": "core-port-requests",
+    "name": "Port requests",
+    "group": "Core \u00b7 Numbers",
+    "target": "inhouse-admin",
+    "endpoint": null,
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-cdr",
+    "name": "Call detail records",
+    "group": "Core \u00b7 Reports",
+    "target": "cdr-admin",
+    "endpoint": "/api/admin/cdr",
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-summary",
+    "name": "Usage & financial summary",
+    "group": "Core \u00b7 Reports",
+    "target": "report-admin",
+    "endpoint": "/api/admin/reports",
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-audit",
+    "name": "Audit log",
+    "group": "Core \u00b7 Reports",
+    "target": "user-session-admin",
+    "endpoint": "/api/admin/telecom/resources/audit",
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-payments",
+    "name": "Payment reports",
+    "group": "Core \u00b7 Reports",
+    "target": "payment-admin",
+    "endpoint": null,
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-commissions",
+    "name": "Commission reports",
+    "group": "Core \u00b7 Reports",
+    "target": "charging-admin",
+    "endpoint": null,
+    "implementation": "not_implemented",
+    "detail": "Reseller commission ledger and settlement require implementation."
+  },
+  {
+    "id": "core-low-balance",
+    "name": "Low balance report",
+    "group": "Core \u00b7 Reports",
+    "target": "charging-admin",
+    "endpoint": "/api/admin/telecom/resources/low-balances",
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-email-history",
+    "name": "Email history",
+    "group": "Core \u00b7 Reports",
+    "target": "campaign-admin",
+    "endpoint": null,
+    "implementation": "not_implemented",
+    "detail": "Delivery history integration requires implementation."
+  },
+  {
+    "id": "core-live-calls",
+    "name": "Live calls & control",
+    "group": "Core \u00b7 Reports",
+    "target": "switch-admin",
+    "endpoint": null,
+    "implementation": "not_implemented",
+    "detail": "Live SIP dialog control requires switch RPC integration."
+  },
+  {
+    "id": "core-settings",
+    "name": "System settings",
+    "group": "Core \u00b7 Configuration",
+    "target": "admin",
+    "endpoint": null,
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-company",
+    "name": "Company profiles",
+    "group": "Core \u00b7 Configuration",
+    "target": "background-admin",
+    "endpoint": null,
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-templates",
+    "name": "Templates",
+    "group": "Core \u00b7 Configuration",
+    "target": "campaign-admin",
+    "endpoint": null,
+    "implementation": "not_implemented",
+    "detail": "Dedicated invoice and email template editor requires implementation."
+  },
+  {
+    "id": "core-taxes",
+    "name": "Taxes",
+    "group": "Core \u00b7 Configuration",
+    "target": "pricing-admin",
+    "endpoint": null,
+    "implementation": "not_implemented",
+    "detail": "Tax assessment and invoice tax lines require implementation."
+  },
+  {
+    "id": "core-countries",
+    "name": "Countries & currencies",
+    "group": "Core \u00b7 Configuration",
+    "target": "locale-admin",
+    "endpoint": "/api/locales/catalog",
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+  },
+  {
+    "id": "core-backups",
+    "name": "Database backup",
+    "group": "Core \u00b7 Configuration",
+    "target": "fleet-admin",
+    "endpoint": null,
+    "implementation": "not_implemented",
+    "detail": "Use reviewed database backup operations; no browser backup executor is installed."
+  },
+  {
+    "id": "core-calling-cards",
+    "name": "Calling cards",
+    "group": "Core \u00b7 Communication",
+    "target": "native-astpp-admin",
+    "endpoint": null,
+    "implementation": "not_implemented",
+    "detail": "Requires the native ASTPP calling-card application and supported switch integration."
+  },
+  {
+    "id": "core-mass-email",
+    "name": "Mass email",
+    "group": "Core \u00b7 Communication",
+    "target": "campaign-admin",
+    "endpoint": null,
+    "implementation": "partial",
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
   }
 ]

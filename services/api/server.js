@@ -1,3 +1,4 @@
+import {handleTelecomResources} from './telecomResources.js';
 import {handleAccountRanges} from './accountRanges.js';
 import {handleTelecomFeatures} from './telecomFeatures.js';
 import {handleContactCards} from './contactCards.js';
@@ -318,6 +319,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/carriers/credentials')) return await handleProviderCredentials({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/carriers')) return await handleCarrierProviders({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/account-range'||path==='/api/admin/account-range/assign')return await handleAccountRanges({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/admin/telecom/resources/'))return await handleTelecomResources({req,res,path,user,pool,send});
       if(path==='/api/admin/telecom/features')return await handleTelecomFeatures({req,res,user,send});
       if(path==='/api/admin/charging/overview') return await handleCharging({req,res,user,pool,send});
       if (path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales")

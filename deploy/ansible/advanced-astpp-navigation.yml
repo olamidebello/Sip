@@ -14,8 +14,8 @@
             root=pathlib.Path('/opt/olamide/repo')
             backend=json.loads((root/'services/api/telecomFeatureCatalog.json').read_text())
             frontend=json.loads((root/'apps/web/src/advancedTelecomCatalog.json').read_text())
-            assert len(frontend)==len(backend)==42
-            assert len({r['id'] for r in frontend})==42
+            assert len(frontend)==len(backend) and len(backend)>=42
+            assert len({r['id'] for r in frontend})==len(frontend)
             assert {r['id'] for r in frontend}=={r['id'] for r in backend}
             print(json.dumps({'advancedMenus':len(frontend),'allAdvertisedFeaturesInstalled':False,'implementedControls':[r['name'] for r in backend if r['implementation']=='implemented'],'incompleteOrExternal':[{'name':r['name'],'status':r['implementation'],'prerequisite':r['detail']} for r in backend if r['implementation']!='implemented']}))
       changed_when: false
