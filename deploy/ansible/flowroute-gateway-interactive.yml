@@ -1,0 +1,72 @@
+---
+- import_playbook: messenger-features.yml
+- name: Configure Flowroute with secure SSH credential prompts
+  hosts: switch_nodes
+  become: true
+  vars_prompt:
+    - name: flowroute_sip_username
+      prompt: Flowroute SIP username / Tech Prefix (8 digits)
+      private: false
+    - name: flowroute_sip_password
+      prompt: Flowroute SIP password
+      private: true
+      unsafe: true
+      confirm: true
+    - name: flowroute_pop
+      prompt: Flowroute PoP (US-East-VA or US-West-OR)
+      private: false
+      default: US-East-VA
+    - name: flowroute_public_ip
+      prompt: Server public egress IP
+      private: false
+      default: 154.29.77.102
+    - name: flowroute_caller_id
+      prompt: Authorized outbound caller ID (+countrycode and number; blank to configure later)
+      private: false
+      default: ''
+    - name: flowroute_ip_allowed
+      prompt: Is this public IP already in Flowroute Outbound Allowed IPs? (yes/no)
+      private: false
+      default: 'no'
+    - name: flowroute_max_calls
+      prompt: Maximum concurrent calls
+      private: false
+      default: '500'
+    - name: flowroute_tenant
+      prompt: Tenant UUID (blank if exactly one active super admin exists)
+      private: false
+      default: ''
+  tasks:
+    - name: Validate entered settings without logging secrets
+      ansible.builtin.assert:
+        that:
+          - flowroute_sip_username is match('^[0-9]{8}$')
+          - flowroute_sip_password | length > 0
+          - flowroute_sip_password | length <= 256
+          - flowroute_pop in ['US-East-VA', 'US-West-OR']
+          - flowroute_ip_allowed | lower in ['yes', 'no']
+          - flowroute_max_calls is match('^[0-9]+$')
+          - flowroute_max_calls | int >= 1
+          - flowroute_max_calls | int <= 100000
+      no_log: true
+    - name: Preserve or create provider encryption key
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/prepare_flowroute_key.py]
+      no_log: true
+      changed_when: true
+    - name: Load encryption key into API
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, up, '-d', '--no-deps', '--force-recreate', api]
+        chdir: /opt/olamide/repo/deployment/docker
+      no_log: true
+      changed_when: true
+    - name: Encrypt SIP credentials and attempt configured gateway provisioning
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, run, '--rm', '--no-deps', '-T', api, node, importFlowrouteTrunk.js]
+        chdir: /opt/olamide/repo/deployment/docker
+        stdin: "{{ {'tenantId': flowroute_tenant, 'replaceExisting': true, 'config': {'authenticationMode': 'ip', 'pop': flowroute_pop, 'sipUsername': flowroute_sip_username, 'sipPassword': flowroute_sip_password, 'techPrefix': flowroute_sip_username, 'publicIp': flowroute_public_ip, 'allowedIpConfirmed': flowroute_ip_allowed | lower == 'yes', 'callerId': flowroute_caller_id, 'maxConcurrentCalls': flowroute_max_calls | int}} | to_json }}"
+      no_log: true
+      changed_when: true
+    - name: Report next verification step
+      ansible.builtin.debug:
+        msg: 'SIP settings saved securely. Check Super admin → Carrier credentials and Carrier provider commissioning for activation status. The installer attempts activation when caller ID and IP allowlist confirmation are present; a compatible switch adapter must acknowledge it. Test an authorized outbound call and two-way audio.'

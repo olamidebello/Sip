@@ -31,3 +31,18 @@ The adapter must apply the exact configuration and return `status: active`, the 
 This work does not configure Flowroute's remote IP allowlist through SIP credentials, install an arbitrary dialplan into an unknown running Kamailio configuration, or enable free external calls. Inventory, DID purchasing and SMS continue using separate REST credentials.
 
 Official sources: https://support.bcmone.com/docs/set-up-ip-based-authentication-for-outbound-calls and https://support.bcmone.com/docs/flowroute-general-pbx-or-phone-system-setup-guide
+
+## Interactive server credential entry
+
+Run from a real SSH terminal:
+
+```bash
+cd /opt/olamide/repo &&
+git pull --ff-only origin main &&
+bash deployment/deploy-flowroute-gateway.sh --interactive
+```
+
+The installer prompts for the eight-digit SIP username/Tech Prefix, hidden and confirmed SIP password, PoP, public IP, authorized caller ID, IP allowlist confirmation, capacity and optional tenant ID. It defaults to IP authentication and needs no PDF. Passwords go through container stdin with Ansible no_log, never shell arguments, environment overrides or tracked files. Saved credentials are encrypted using the existing provider key. Interactive input replaces saved SIP settings using their current revision, but refuses to change an active Flowroute trunk; deactivate it first in the GUI. PDF-mode imports still preserve existing GUI settings.
+
+Provisioning is attempted automatically when an authorized caller ID and IP allowlist confirmation are supplied. Missing or incompatible switch adapters leave activation pending. User subscription, SIP registration and outbound billing policies remain in effect. This prompt does not grant calling credit or add money to wallets.
+
