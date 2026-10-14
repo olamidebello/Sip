@@ -1,3 +1,4 @@
+import {adminNavigationGroups,renderAdminNavigation,syncAdminNavigation} from './adminNavigation.js';
 import {setupCarrierConsole} from './carrierConsole.js';
 import {setupContactCard} from './contactCard.js';
 import {setupSocialPublishing} from './socialPublishing.js';
@@ -1213,10 +1214,7 @@ const navigationGroups=[
   {label:"Communications",items:[["messenger-groups","Groups & communities"],["messenger-updates","Status updates"],["messenger-broadcast","Broadcast"],["messenger-starred","Starred messages"],["messenger-sessions","Linked sessions"],["messenger-storage","Storage & data"],["calling-workspace","Dialer"],["geo","Calling area"],["chat","Account messages"],["external-sms","Text messages"],["outbound-rates","Outbound rates"],["meetings","Meetings"],["agent-panel","Call center"]]},
   {label:"Commerce",items:[["money","Money"],["social","Social"],["product-store","Products & services"],["billing","Plans, numbers & billing"],["dialplan-marketplace","Dial plan marketplace"]]},
   {label:"My settings",items:[["messenger-accessibility","Accessibility"],["messenger-settings","Messenger settings"],["account","Account & security"],["activity-monitor","Activity monitor"],["locale-settings","Language, country & currency"],["background-user","Appearance"],["downloads","Download apps"]]},
-  {label:"Administration",roles:["admin","super_admin"],items:[["carrier-console","Carriers & termination"],["product-store-admin","Product catalog & orders"],["admin","Overview & SIP server"],["group-admin","Users & groups"],["catalog-controls","Plans & access"],["inhouse-admin","DID inventory"],["pricing-admin","Pricing"],["pbx-admin","PBX"],["carrier-admin","Carrier providers"],["operator-admin","Wholesale tariffs"],["switch-admin","Kamailio services"],["flowroute-rate-admin","Carrier rate deck"],["messaging-webhooks","Messaging webhooks"],["charging-admin","Charging operations"],["payment-admin","Stripe gateway"],["cluster-admin","API capacity"],["report-admin","Reports"],["cdr-admin","Call records"],["nigeria-admin","Nigeria interconnect"]]},
-  {label:"Admin settings",roles:["admin","super_admin"],items:[["ldap-admin","LDAP groups"],["auth-providers-admin","Authentication"],["passkey-policy-admin","Passkey requirements"],["geofence-admin","Geofencing"],["background-admin","Tenant appearance"],["locale-admin","Locale defaults"],["dashboard-admin","Dashboard defaults"],["campaign-admin","Campaigns & alerts"],["mobile-admin","App releases"]]},
-  {label:"Fleet operations",items:[["fleet-admin","Server and network operations"]]},
-  {label:"Super admin",roles:["super_admin"],items:[["payment-admin","Stripe management"],["navigation-policy-admin","End-user navigation"],["user-session-admin","User sessions"],["tenant-admin","Tenants & roles"],["google-oauth-admin","Google Contacts OAuth"],["sip-profile-admin","SIP profile access"],["provider-webhook-admin","Provider callbacks"],["didww-admin","DIDWW API"],["wallet-providers-admin","Dwolla & Flutterwave API"],["provider-credentials-admin","Carrier credentials"],["carrier-adapter-admin","Carrier adapters"]]}
+  ...adminNavigationGroups
 ];
 let videoWorkflow=false;
 let chatComposer;
@@ -1277,6 +1275,7 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
     if(link.hash===`#${target}`) link.setAttribute("aria-current","page");
     else link.removeAttribute("aria-current");
   }
+  syncAdminNavigation($("#app-nav"),target);
   workspaceQuick.record(requested.closest("section[id]")?.id||target);
   if(requested.tagName==="DETAILS")requested.open=true;
   if(!preserveForm){const heading=requested.querySelector("h2,h3,h4,summary");if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});}requested.scrollIntoView({block:"start",behavior:"auto"});}
@@ -1298,6 +1297,7 @@ function updateNavigation() {
   overflowMenu?.dispose();
   configurationLinks?.refresh();
   const nav=$("#app-nav");nav.replaceChildren();
+  delete nav.dataset.groupedAdmin;nav.onclick=null;nav.onkeydown=null;nav.removeAttribute("aria-label");
   nav.hidden=!activeRole;
   if (!activeRole) return;
   const heading=document.createElement("div");heading.className="menu-heading";
@@ -1307,6 +1307,10 @@ function updateNavigation() {
   const connection=document.createElement('span');connection.id='communication-status';connection.className='communication-status';connection.setAttribute('role','status');connection.textContent=sipRegistered?'Connected for calls':'Connecting your SIP account…';heading.append(connection);
   const returnToCall=document.createElement("a");returnToCall.id="return-to-call";returnToCall.href="#calling-workspace";returnToCall.textContent="Return to call";returnToCall.hidden=!onCall;
   nav.append(returnToCall);
+  if(document.body.classList.contains('admin-mode')){
+    renderAdminNavigation({document,nav,role:activeRole,target:activeView,allowed:navigationAllowed,logout:()=>$('#logout').click()});
+    pageRoutes?.refresh();return;
+  }
   const tabs=document.createElement('div');tabs.className='messenger-tabs';
   for(const [id,label,symbol] of [['chat','Chats','chat'],['messenger-updates','Updates','updates'],['messenger-groups','Communities','people'],['calling-workspace','Calls','calls'],['money','Money','money'],['social','Social','social']]){
     if(!navigationAllowed(id)||document.getElementById(id)?.closest('[hidden]'))continue;
@@ -1364,11 +1368,13 @@ updateNavigation();
 pageRoutes=setupPageRoutes({canNavigate:navigationAllowed,showWorkspace,isSignedIn:()=>!!activeRole,isAdminTarget:adminTarget});
 $("#app-nav").addEventListener("keydown",event=>{
   if(event.key!=="Escape") return;
+  if($("#app-nav").dataset.groupedAdmin==='true')return;
   for(const menu of $("#app-nav").querySelectorAll("details[open]")) menu.open=false;
   $("#app-nav .menu-search")?.focus();
 });
 document.addEventListener("click",event=>{
   if($("#app-nav").contains(event.target)) return;
+  if($("#app-nav").dataset.groupedAdmin==='true')return;
   for(const menu of $("#app-nav").querySelectorAll("details[open]")) menu.open=false;
 });
 $(".login-menu").addEventListener('click',event=>{if(event.target.closest('button,a'))$(".login-menu").open=false;});

@@ -25,7 +25,10 @@ test('administrator switches between separate admin and user navigation',async()
     assert.equal(app.window.location.hash,'#admin');
     assert.ok(app.document.body.classList.contains('admin-mode'));
     for(const link of app.document.querySelectorAll('#app-nav .menu-links a'))assert.ok(link.pathname.startsWith('/admin'));
-    assert.ok(app.document.querySelector('#app-nav .page-links a[href^="/admin/pages/"]'));
+    assert.equal(app.document.querySelector('#app-nav .page-links'),null);
+    app.window.audit.pageRoutes.go('tenant-user-create');
+    assert.equal(app.window.location.pathname,'/admin/pages/tenant-user-create');
+    assert.equal(app.document.querySelector('#tenant-user-create').closest('[hidden],.workspace-inactive,.page-route-hidden'),null);
     app.document.querySelector('#app-nav a[href="/#chat"]').click();
     assert.equal(app.window.location.pathname,'/');
     assert.ok(app.document.body.classList.contains('messenger-mode'));

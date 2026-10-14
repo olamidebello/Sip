@@ -10,7 +10,7 @@ export function setupWorkspaceNavigation({navigate,isSignedIn}){
     const id=fragmentTarget(url.hash)||(url.pathname==='/admin'?'admin':null);
     if(!id)return;
     event.preventDefault();
-    if(navigate(id)){link.closest('#app-nav details')?.removeAttribute('open');}
+    if(navigate(id)){if(!link.closest('[data-grouped-admin="true"]'))link.closest('#app-nav details')?.removeAttribute('open');}
   });
   function restore(){
     if(!isSignedIn())return;
