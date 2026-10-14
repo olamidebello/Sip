@@ -11,7 +11,7 @@ RUN printf 'deb https://deb.debian.org/debian bullseye main\ndeb [check-valid-un
  && a2enmod rewrite headers \
  && git init /usr/src/astpp && cd /usr/src/astpp && git remote add origin https://github.com/iNextrix/ASTPP.git && git fetch --depth=1 origin "$ASTPP_COMMIT" && git checkout --detach FETCH_HEAD \
  && test "$(git rev-parse HEAD)" = "$ASTPP_COMMIT" \
- && cp -a web_interface/astpp/. /var/www/html/ && cp LICENSE /var/www/html/ASTPP-LICENSE \
+ && cp -a web_interface/astpp/. /var/www/html/ && rm -f /var/www/html/index.html && cp LICENSE /var/www/html/ASTPP-LICENSE \
  && mkdir -p /var/lib/astpp && chown -R www-data:www-data /var/www/html/application/cache /var/www/html/application/logs /var/lib/astpp \
  && sed -i 's|AllowOverride None|AllowOverride All|g' /etc/apache2/apache2.conf \
  && printf 'display_errors=Off\nlog_errors=On\nexpose_php=Off\n' > /usr/local/etc/php/conf.d/astpp-production.ini

@@ -6,7 +6,7 @@ Its original attribution and LICENSE are retained in the runtime and source down
 
 Olamide native-package wrappers © 2026 Olamide Olatayo Bello, AGPL-3.0-only.
 Changes: isolated Docker web/database services, private runtime config, removal of seeded login sessions,
-strong native administrator credentials, disabling seeded non-admin accounts, and trigger definer portability.
+strong native administrator credentials, disabling seeded non-admin accounts, trigger definer portability, and serving index.php instead of the upstream root index.html guard.
 Source offer: /astpp-source.tar.gz in the private native web service. Runtime keys and database data are excluded.
 
 The Olamide integrated carrier console is separate from the native ASTPP program and uses Olamide's APIs.
