@@ -2,6 +2,10 @@
 
 Olamide is a development browser softphone with a Node.js account API and MySQL 8.4 database. See the deployment checks below for the current server state.
 
+## Assigned DID outbound installation
+
+Flowroute and support-approved DIDWW IP-only passthrough can be installed with `bash deployment/deploy-did-passthrough.sh`. See [private DID assignments and carrier prerequisites](docs/did-passthrough.md). Carrier permissions and verified user/DID assignments are required to enable passthrough.
+
 ## Kamailio capability deployment
 
 Administration → Kamailio services exposes the 266-entry module inventory, per-node install/enable requests, deployment history and evidence-based status. A private Ansible controller applies reviewed complete configuration profiles. See [Kamailio deployment guide](deploy/ansible/README.md).

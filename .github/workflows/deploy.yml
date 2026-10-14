@@ -50,6 +50,12 @@ jobs:
           bash -n deployment/deploy-native-astpp.sh deployment/deploy-kamailio-paid-calls.sh
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/kamailio-paid-calls.yml
           python3 tools/test_prepare_kamailio_paid_route.py
+          python3 -m unittest discover -s tools -p test_did_passthrough.py
+          python3 -m unittest discover -s tools -p test_didww_ip_only.py
+          bash -n deployment/deploy-didww-ip-only.sh
+          ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/didww-ip-only.yml
+          bash -n deployment/deploy-did-passthrough.sh
+          ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/did-passthrough.yml
           python3 -m unittest discover -s services/carrier-adapter -p 'test_*.py'
           bash -n deployment/deploy-carrier-console.sh
           bash -n deployment/deploy-flowroute-gateway.sh

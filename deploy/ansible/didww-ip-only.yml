@@ -1,0 +1,60 @@
+---
+- name: Install and verify DIDWW IP-only prerequisites
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Require clean release
+      ansible.builtin.command: git diff HEAD --exit-code
+      args:
+        chdir: /opt/olamide/repo
+      changed_when: false
+    - name: Read release
+      ansible.builtin.command: git rev-parse HEAD
+      args:
+        chdir: /opt/olamide/repo
+      register: release
+      changed_when: false
+    - name: Check release validation before provider changes
+      ansible.builtin.uri:
+        url: 'https://api.github.com/repos/olamidebello/Sip/actions/workflows/deploy.yml/runs?branch=main&event=push&status=success&per_page=100&head_sha={{ release.stdout }}'
+        return_content: true
+        headers:
+          User-Agent: Olamide-DIDWW-installer
+      register: ci
+    - name: Require deployment CI success
+      ansible.builtin.assert:
+        that: release.stdout in (ci.json.workflow_runs | selectattr('conclusion', 'equalto', 'success') | map(attribute='head_sha') | list)
+    - name: Install prerequisite utilities
+      ansible.builtin.apt:
+        name: [python3, ca-certificates, dnsutils]
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+    - name: Check existing switch and media services
+      ansible.builtin.command: systemctl is-active kamailio olamide-billing-queue
+      changed_when: false
+    - name: Check existing RTPengine service
+      ansible.builtin.shell: systemctl is-active --quiet rtpengine-daemon || systemctl is-active --quiet rtpengine
+      changed_when: false
+    - name: Require operator-owned private configuration
+      ansible.builtin.stat:
+        path: /etc/olamide/didww-ip-only.json
+      register: config
+    - name: Require verified identifiers and assignments
+      ansible.builtin.assert:
+        that:
+          - config.stat.exists
+          - config.stat.uid | default(-1) == 0
+          - config.stat.mode | default('') == '0600'
+        fail_msg: Create root-owned /etc/olamide/didww-ip-only.json mode 0600 using docs/did-passthrough.md. DIDWW must approve IP-only access first.
+    - name: Validate account approval and prepare requested settings without mutation
+      ansible.builtin.command: python3 /opt/olamide/repo/tools/prepare_didww_ip_only.py
+      changed_when: false
+      no_log: true
+    - name: Reconcile approved provider IP and CLI settings and prepare policy
+      ansible.builtin.command: python3 /opt/olamide/repo/tools/prepare_didww_ip_only.py --apply
+      no_log: true
+      changed_when: true
+- import_playbook: did-passthrough.yml
+  vars:
+    did_policy_file: /etc/olamide/didww-outbound-dids.json

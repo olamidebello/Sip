@@ -1,0 +1,205 @@
+---
+- name: Install authorized DID passthrough for Flowroute and DIDWW
+  hosts: switch_nodes
+  become: true
+  vars:
+    repo: /opt/olamide/repo
+    policy_path: /var/lib/olamide/service-inventory/outbound-dids.json
+    compose_dir: /opt/olamide/repo/deployment/docker
+  tasks:
+    - name: Require clean repository
+      ansible.builtin.command: git diff HEAD --exit-code
+      args:
+        chdir: '{{ repo }}'
+      changed_when: false
+    - name: Read release
+      ansible.builtin.command: git rev-parse HEAD
+      args:
+        chdir: '{{ repo }}'
+      register: release
+      changed_when: false
+    - name: Fetch exact release CI result
+      ansible.builtin.uri:
+        url: 'https://api.github.com/repos/olamidebello/Sip/actions/workflows/deploy.yml/runs?branch=main&event=push&status=success&per_page=100&head_sha={{ release.stdout }}'
+        return_content: true
+        headers:
+          Accept: application/vnd.github+json
+          User-Agent: Olamide-DID-installer
+      register: ci
+    - name: Require successful deployment CI
+      ansible.builtin.assert:
+        that: release.stdout in (ci.json.workflow_runs | selectattr('conclusion', 'equalto', 'success') | map(attribute='head_sha') | list)
+        fail_msg: Wait for deployment CI to succeed for this commit before installing.
+    - name: Require existing paid backend
+      ansible.builtin.command: systemctl is-active kamailio olamide-billing-queue
+      changed_when: false
+    - name: Validate persisted carrier state for restart recovery
+      ansible.builtin.command: python3 /opt/olamide/repo/tools/restore_kamailio_carrier.py --check
+      changed_when: false
+      no_log: true
+    - name: Stage passthrough routes without changing live configuration
+      ansible.builtin.command: python3 /opt/olamide/repo/tools/prepare_did_passthrough.py
+      changed_when: false
+      no_log: true
+    - name: Validate staged Kamailio configuration
+      ansible.builtin.command: kamailio -c -f /etc/kamailio/.olamide-did-staged.cfg
+      changed_when: false
+      no_log: true
+    - name: Create private deployment backup
+      ansible.builtin.tempfile:
+        state: directory
+        path: /etc/olamide
+        prefix: did-backup-
+      register: backup
+    - name: Back up switch configuration
+      ansible.builtin.copy:
+        src: /etc/kamailio/kamailio.cfg
+        dest: '{{ backup.path }}/kamailio.cfg'
+        remote_src: true
+        mode: '0600'
+    - name: Inspect installed private policy
+      ansible.builtin.stat:
+        path: '{{ policy_path }}'
+      register: original_policy
+    - name: Back up existing private policy
+      ansible.builtin.copy:
+        src: '{{ policy_path }}'
+        dest: '{{ backup.path }}/outbound-dids.json'
+        remote_src: true
+        mode: '0600'
+      when: original_policy.stat.exists
+      no_log: true
+    - name: Read currently running API image for rollback
+      ansible.builtin.shell: |
+        set -eu
+        container=$(docker compose --env-file /etc/olamide/secrets.env ps -q api)
+        test -n "$container"
+        docker inspect --format '{{ "{{.Image}}" }}' "$container"
+      args:
+        chdir: '{{ compose_dir }}'
+      changed_when: false
+      register: previous_image
+    - name: Build updated API
+      ansible.builtin.command: docker compose --env-file /etc/olamide/secrets.env build api
+      args:
+        chdir: '{{ compose_dir }}'
+    - name: Back up database before additive migration
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        docker compose --env-file /etc/olamide/secrets.env exec -T mysql sh -c 'exec mysqldump --single-transaction --hex-blob -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' | gzip > '{{ backup.path }}/database.sql.gz'
+        test -s '{{ backup.path }}/database.sql.gz'
+      args:
+        executable: /bin/bash
+        chdir: '{{ compose_dir }}'
+      no_log: true
+    - name: Apply additive call identity columns
+      ansible.builtin.command: docker compose --env-file /etc/olamide/secrets.env run --rm --no-deps -T api node migrate.js
+      args:
+        chdir: '{{ compose_dir }}'
+      no_log: true
+    - name: Install with automatic rollback
+      block:
+        - name: Create private policy directory
+          ansible.builtin.file:
+            path: /var/lib/olamide/service-inventory
+            state: directory
+            mode: '0755'
+        - name: Install supplied root-owned assignments
+          ansible.builtin.copy:
+            src: '{{ did_policy_file }}'
+            dest: '{{ policy_path }}'
+            owner: root
+            group: '1000'
+            mode: '0640'
+          when: did_policy_file is defined
+          no_log: true
+        - name: Validate policy with the new API before starting it
+          ansible.builtin.command:
+            argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, run, '--rm', '--no-deps', '-T', api, node, '--input-type=module', '-e', "import {loadPolicy} from './outboundDids.js'; loadPolicy();"]
+          args:
+            chdir: '{{ compose_dir }}'
+          no_log: true
+        - name: Start new API
+          ansible.builtin.command: docker compose --env-file /etc/olamide/secrets.env up -d --no-deps api
+          args:
+            chdir: '{{ compose_dir }}'
+        - name: Verify API health
+          ansible.builtin.command:
+            argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, exec, '-T', api, node, '-e', "fetch('http://127.0.0.1:8080/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+          args:
+            chdir: '{{ compose_dir }}'
+          register: health
+          until: health.rc == 0
+          retries: 12
+          delay: 3
+          changed_when: false
+        - name: Install validated routing
+          ansible.builtin.copy:
+            src: /etc/kamailio/.olamide-did-staged.cfg
+            dest: /etc/kamailio/kamailio.cfg
+            remote_src: true
+            owner: root
+            group: kamailio
+            mode: '0640'
+          register: routes
+        - name: Restart changed routing
+          ansible.builtin.systemd:
+            name: kamailio
+            state: restarted
+          when: routes.changed
+        - name: Verify switch RPC
+          ansible.builtin.command: kamcmd -s unix:/run/kamailio/olamide_carrier_ctl core.uptime
+          register: rpc
+          until: rpc.rc == 0
+          retries: 6
+          delay: 2
+          changed_when: false
+        - name: Restore commissioned Flowroute routing lost on restart
+          ansible.builtin.command: python3 /opt/olamide/repo/tools/restore_kamailio_carrier.py
+          no_log: true
+          when: routes.changed
+      rescue:
+        - name: Restore previous policy
+          ansible.builtin.copy:
+            src: '{{ backup.path }}/outbound-dids.json'
+            dest: '{{ policy_path }}'
+            remote_src: true
+            owner: '{{ original_policy.stat.uid }}'
+            group: '{{ original_policy.stat.gid }}'
+            mode: '{{ original_policy.stat.mode }}'
+          when: original_policy.stat.exists
+          no_log: true
+        - name: Remove new policy if none previously existed
+          ansible.builtin.file:
+            path: '{{ policy_path }}'
+            state: absent
+          when: not original_policy.stat.exists
+        - name: Restore previous API image tag
+          ansible.builtin.command:
+            argv: [docker, image, tag, '{{ previous_image.stdout }}', 'olamide-api:local']
+        - name: Restart previous API
+          ansible.builtin.command: docker compose --env-file /etc/olamide/secrets.env up -d --no-deps api
+          args:
+            chdir: '{{ compose_dir }}'
+        - name: Restore previous routing
+          ansible.builtin.copy:
+            src: '{{ backup.path }}/kamailio.cfg'
+            dest: /etc/kamailio/kamailio.cfg
+            remote_src: true
+            owner: root
+            group: kamailio
+            mode: '0640'
+        - name: Restart restored switch
+          ansible.builtin.systemd:
+            name: kamailio
+            state: restarted
+        - name: Restore carrier state after rollback restart
+          ansible.builtin.command: python3 /opt/olamide/repo/tools/restore_kamailio_carrier.py
+          no_log: true
+        - name: Report rollback
+          ansible.builtin.fail:
+            msg: Cutover failed; previous API, policy and SIP configuration restored. Additive database columns retained.
+    - name: Report commissioning requirements
+      ansible.builtin.debug:
+        msg: Installed DID passthrough. Without a private assignment policy existing Flowroute behavior remains. DIDWW requires support-approved IP-only authentication without Tech Prefix, provider-side IP/CLI permission, active DIDWW rates and funded subscribed users. No provider account settings were changed. Test Caller ID, billing, DTMF and two-way audio before offering service.

@@ -1,3 +1,4 @@
+import {loadPolicy,assignedIdentity} from './outboundDids.js';
 import {flowrouteTrunk,adapterTrunk} from './flowrouteTrunk.js';
 
 export function callCharge(rate,seconds,first,step){
@@ -15,6 +16,10 @@ export async function migratePstnBilling(pool){
  status VARCHAR(16) NOT NULL DEFAULT 'reserved',answered_epoch BIGINT NULL,ended_epoch BIGINT NULL,
  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),settled_at DATETIME(3) NULL,
  INDEX pstn_active(tenant_id,status),FOREIGN KEY(user_id) REFERENCES users(id),FOREIGN KEY(tenant_id) REFERENCES tenants(id)) ENGINE=InnoDB`);
+ for(const [name,ddl] of [['caller_id','VARCHAR(16) NULL'],['provider',"VARCHAR(16) NOT NULL DEFAULT 'flowroute'"],['carrier_host','VARCHAR(80) NULL']]){
+  const found=await pool.query('SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=\'pstn_calls\' AND column_name=$1',[name]);
+  if(!found.rowCount)await pool.query(`ALTER TABLE pstn_calls ADD COLUMN ${name} ${ddl}`);
+ }
  await pool.query(`CREATE TABLE IF NOT EXISTS pstn_wallet_entries (
  call_key CHAR(64) NOT NULL,event VARCHAR(16) NOT NULL,user_id CHAR(36) NOT NULL,tenant_id CHAR(36) NOT NULL,
  delta_cents BIGINT NOT NULL,balance_after_cents BIGINT NOT NULL,created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -33,32 +38,36 @@ export async function reservePstn(pool,data){
   tenantLock='pstn-'+actor.tenant_id;
   if(Number((await db.query('SELECT GET_LOCK($1,5) AS acquired',[tenantLock])).rows[0]?.acquired)!==1)throw Error('Billing busy');
   await db.query('START TRANSACTION');
+  const identity=assignedIdentity(loadPolicy(),actor.tenant_id,actor.user_id);
+  const provider=identity?.provider||'flowroute';
   const wallet=(await db.query('SELECT balance_cents,currency FROM wallet_accounts WHERE user_id=$1 AND tenant_id=$2 FOR UPDATE',[actor.user_id,actor.tenant_id])).rows[0];
   const existing=(await db.query('SELECT * FROM pstn_calls WHERE call_key=$1 FOR UPDATE',[data.callKey])).rows[0];
   if(existing){
    if(existing.user_id!==actor.user_id||existing.tenant_id!==actor.tenant_id||existing.destination!==destination||existing.status==='settled')throw Error('Call key reuse rejected');
-   const config=adapterTrunk(await flowrouteTrunk(pool,actor.tenant_id));
-   await db.query('COMMIT');return [200,{route:'pstn',tenantId:actor.tenant_id,maxSeconds:existing.max_seconds,callerId:config.callerId}];
+   const callerId=existing.caller_id||adapterTrunk(await flowrouteTrunk(pool,actor.tenant_id)).callerId;
+   if(identity&&(identity.callerId!==callerId||identity.provider!==existing.provider||identity.carrierHost!==(existing.carrier_host||undefined)))throw Error('Call identity changed; start a new call');
+   await db.query('COMMIT');return [200,{route:'pstn',tenantId:actor.tenant_id,maxSeconds:existing.max_seconds,callerId,provider:existing.provider||'flowroute',carrierHost:existing.carrier_host||''}];
   }
   if(!wallet||wallet.currency!=='USD')throw Error('USD wallet required');
-  const profile=(await db.query("SELECT max_concurrent_calls FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider='flowroute' AND status='active' AND routing_mode<>'disabled'",[actor.tenant_id])).rows[0];
+  const profile=provider==='didww'?{max_concurrent_calls:identity.maxConcurrentCalls}:(await db.query("SELECT max_concurrent_calls FROM carrier_provider_profiles WHERE tenant_id=$1 AND provider='flowroute' AND status='active' AND routing_mode<>'disabled'",[actor.tenant_id])).rows[0];
   if(!profile)throw Error('Activate Flowroute first');
   const count=Number((await db.query("SELECT COUNT(*) AS n FROM pstn_calls WHERE tenant_id=$1 AND status<>'settled'",[actor.tenant_id])).rows[0].n);
   if(count>=Number(profile.max_concurrent_calls))throw Error('Carrier concurrency limit reached');
   const blocked=await db.query('SELECT 1 FROM operator_fraud_rules WHERE tenant_id=$1 AND enabled=TRUE AND $2 LIKE CONCAT(prefix,\'%\') LIMIT 1',[actor.tenant_id,destination]);
   if(blocked.rowCount)throw Error('Destination blocked by fraud policy');
-  const rate=(await db.query("SELECT r.* FROM carrier_rate_rows r JOIN carrier_rate_decks d ON d.id=r.deck_id WHERE d.tenant_id=$1 AND d.provider='flowroute' AND d.active=TRUE AND r.effective_at<=UTC_TIMESTAMP() AND $2 LIKE CONCAT(r.prefix,'%') ORDER BY CHAR_LENGTH(r.prefix) DESC LIMIT 1",[actor.tenant_id,destination])).rows[0];
-  if(!rate)throw Error('Active Flowroute rate required for destination');
+  const rate=(await db.query("SELECT r.* FROM carrier_rate_rows r JOIN carrier_rate_decks d ON d.id=r.deck_id WHERE d.tenant_id=$1 AND d.provider=$3 AND d.active=TRUE AND r.effective_at<=UTC_TIMESTAMP() AND $2 LIKE CONCAT(r.prefix,'%') ORDER BY CHAR_LENGTH(r.prefix) DESC LIMIT 1",[actor.tenant_id,destination,provider])).rows[0];
+  if(!rate)throw Error('Active carrier rate required for destination');
   let maxSeconds=3600;const balance=Number(wallet.balance_cents);
   while(maxSeconds>=60&&callCharge(rate.price_usd_per_minute,maxSeconds,rate.first_interval,rate.sub_interval)>balance)maxSeconds-=60;
   if(maxSeconds<60)throw Error('Insufficient credit for one minute');
   const reserved=callCharge(rate.price_usd_per_minute,maxSeconds,rate.first_interval,rate.sub_interval);
-  const config=adapterTrunk(await flowrouteTrunk(pool,actor.tenant_id));
+  const config=provider==='flowroute'?adapterTrunk(await flowrouteTrunk(pool,actor.tenant_id)):{authenticationMode:'ip'};
+  const callerId=identity?.callerId||config.callerId;
   if(config.authenticationMode!=='ip')throw Error('Kamailio paid route requires IP authentication');
-  await db.query('INSERT INTO pstn_calls(call_key,tenant_id,user_id,destination,rate,first_interval,sub_interval,reserved_cents,max_seconds) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',[data.callKey,actor.tenant_id,actor.user_id,destination,rate.price_usd_per_minute,rate.first_interval,rate.sub_interval,reserved,maxSeconds]);
+  await db.query('INSERT INTO pstn_calls(call_key,tenant_id,user_id,destination,rate,first_interval,sub_interval,reserved_cents,max_seconds,caller_id,provider,carrier_host) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',[data.callKey,actor.tenant_id,actor.user_id,destination,rate.price_usd_per_minute,rate.first_interval,rate.sub_interval,reserved,maxSeconds,callerId,provider,identity?.carrierHost||null]);
   await db.query('UPDATE wallet_accounts SET balance_cents=balance_cents-$1 WHERE user_id=$2 AND tenant_id=$3',[reserved,actor.user_id,actor.tenant_id]);
   await db.query("INSERT INTO pstn_wallet_entries(call_key,event,user_id,tenant_id,delta_cents,balance_after_cents) VALUES($1,'reserve',$2,$3,$4,$5)",[data.callKey,actor.user_id,actor.tenant_id,-reserved,balance-reserved]);
-  await db.query('COMMIT');return [200,{route:'pstn',tenantId:actor.tenant_id,maxSeconds,callerId:config.callerId}];
+  await db.query('COMMIT');return [200,{route:'pstn',tenantId:actor.tenant_id,maxSeconds,callerId,provider,carrierHost:identity?.carrierHost||''}];
  }catch(e){await db.query('ROLLBACK');return [403,{error:e.code?'Billing unavailable':e.message}];}
  finally{if(tenantLock)await db.query('SELECT RELEASE_LOCK($1)',[tenantLock]);db.release();}
 }
