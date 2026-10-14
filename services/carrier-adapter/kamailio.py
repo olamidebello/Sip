@@ -12,7 +12,7 @@ class KamailioAdapter(Adapter):
         tenant=str(uuid.UUID(b['tenantId']))
         if tenant!=self.config['tenantId'] or b.get('provider')!='flowroute':raise ValueError('Tenant/provider unavailable')
         self.health();action=b.get('action')
-        if action=='health':return {'status':'healthy'}
+        if action=='health':return {'status':'healthy','backend':'kamailio','routingCommissioned':bool(self.config.get('routingCommissioned'))}
         if not self.config.get('routingCommissioned'):raise ValueError('Authenticated paid route not commissioned')
         if action=='verify':return {'status':'verified'}
         if action not in ('activate','deactivate'):raise ValueError('Unsupported action')
