@@ -1,10 +1,42 @@
 ---
-- name: Install CI-approved social publishing implementation and database
-  ansible.builtin.import_playbook: messenger-features.yml
-- name: Report external publishing setup requirements
+- name: Configure official social login applications
   hosts: switch_nodes
   become: true
+  vars:
+    social_oauth_apps: {}
   tasks:
-    - name: Report supported account authorization
+    - name: Validate provider credentials
+      ansible.builtin.assert:
+        that:
+          - item.key in ['facebook', 'x', 'linkedin']
+          - item.value.client_id is match('^[A-Za-z0-9_.-]+$')
+          - item.value.client_secret is match('^[A-Za-z0-9_.~+/-]+$')
+      loop: '{{ social_oauth_apps | dict2items }}'
+      no_log: true
+    - name: Inspect existing deployment environments
+      ansible.builtin.stat:
+        path: '{{ item }}'
+      loop: ['/etc/olamide/secrets.env', '/opt/olamide/repo/deployment/docker/.env']
+      register: social_env_files
+    - name: Require bootstrapped environment
+      ansible.builtin.assert:
+        that: item.stat.exists
+      loop: '{{ social_env_files.results }}'
+    - name: Configure protected provider credentials
+      ansible.builtin.lineinfile:
+        path: '{{ item.1 }}'
+        regexp: '^SOCIAL_{{ item.0.key | upper }}_CLIENT_{{ item.2 }}='
+        line: 'SOCIAL_{{ item.0.key | upper }}_CLIENT_{{ item.2 }}={{ item.0.value.client_id if item.2 == "ID" else item.0.value.client_secret }}'
+        owner: root
+        group: root
+        mode: '0600'
+      loop: '{{ (social_oauth_apps | dict2items) | product(["/etc/olamide/secrets.env", "/opt/olamide/repo/deployment/docker/.env"], ["ID", "SECRET"]) | list }}'
+      no_log: true
+- name: Install CI-approved social publishing implementation and database
+  ansible.builtin.import_playbook: messenger-features.yml
+- name: Report login setup
+  hosts: switch_nodes
+  tasks:
+    - name: Explain user authorization
       ansible.builtin.debug:
-        msg: 'Installed Facebook Page and X text publishing. Existing PROVIDER_CREDENTIAL_KEY is required. Users must connect authorized Page/user tokens in Social. Provider access, permissions and account approval cannot be created by Ansible. OAuth, other platforms and media uploads are not included. No posts are published by the installer.'
+        msg: 'Open Social and sign in with Facebook, X or LinkedIn. Facebook users choose a Page. Register https://sip.dobhrap.com/social-oauth-callback.html in each provider developer app. Provider app credentials and approval are required. Installation sends no posts.'
