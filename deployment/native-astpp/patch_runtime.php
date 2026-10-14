@@ -16,3 +16,17 @@ $source=file_get_contents($path);
 $target='index.php?q=$1';
 if(strpos($source,$target)===false)throw new RuntimeException('Native front controller rule changed');
 file_put_contents($path,str_replace($target,'index.php/$1',$source));
+
+// Legacy framework errors can exit without throwing a PHP exception.
+$path='/var/www/html/system/core/Exceptions.php';
+$source=file_get_contents($path);
+$logging=<<<'TRACE'
+    error_log('Native ASTPP framework error');
+    foreach(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS,6) as $frame){
+        error_log('Native ASTPP caller '.($frame['file']??'unknown').':'.($frame['line']??0));
+    }
+TRACE;
+$count=0;
+$source=preg_replace('/(function\s+show_error\s*\([^)]*\)\s*\{)/','$1'."\n".$logging,$source,1,$count);
+if($count!==1)throw new RuntimeException('Native framework error function changed');
+file_put_contents($path,$source);
