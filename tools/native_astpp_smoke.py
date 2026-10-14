@@ -12,7 +12,10 @@ def check(directory,origin='http://localhost:8089'):
         raise AssertionError('Native login form missing: '+re.sub(r'\s+', ' ', diagnostic)[:600])
     payload=urllib.parse.urlencode({'username':'admin','password':config['operatorPassword']}).encode()
     login=client.open(urllib.request.Request(origin+'/login',data=payload),timeout=45).read().decode(errors='replace')
-    assert 'logout' in login.lower(), 'Native operator login did not succeed'
+    if 'logout' not in login.lower():
+        diagnostic=re.sub(r'<[^>]+>', ' ', login)
+        for value in config.values():diagnostic=diagnostic.replace(str(value),'[private]')
+        raise AssertionError('Native operator login did not succeed: '+re.sub(r'\s+', ' ', diagnostic)[:600])
     print('Native ASTPP login and operator session: PASS')
 if __name__=='__main__':
     a=argparse.ArgumentParser();a.add_argument('--directory',required=True);args=a.parse_args();check(args.directory)
