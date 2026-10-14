@@ -8,7 +8,7 @@ async function providerJson(url, headers) {
     redirect: "error",
     signal: AbortSignal.timeout(8000)
   });
-  if (!response.ok) throw new Error("Provider inventory unavailable");
+  if (!response.ok) {const error=new Error("Provider inventory unavailable");error.providerStatus=response.status;throw error;}
   return response.json();
 }
 
@@ -74,4 +74,18 @@ export async function availableNumbers(provider, options={}) {
     });
   }
   throw new Error("Unknown provider");
+}
+
+// Never expose upstream response bodies, URLs or credentials in administrator errors.
+export function inventoryFailure(error){
+  const status=error?.providerStatus;
+  if(status===401||status===403)return {error:'Provider inventory authentication rejected. Check the API access key, secret and account permissions; SIP credentials are separate.',reason:'authentication',providerStatus:status};
+  if(status===429)return {error:'Provider inventory rate limit reached. Retry later.',reason:'rate_limit',providerStatus:status};
+  if(status===404)return {error:'Provider inventory endpoint was not found.',reason:'endpoint',providerStatus:status};
+  if(Number.isInteger(status))return {error:'Provider inventory returned HTTP '+status+'.',reason:'upstream',providerStatus:status};
+  if(error?.name==='TimeoutError'||error?.name==='AbortError')return {error:'Provider inventory request timed out. Check server outbound connectivity.',reason:'timeout'};
+  const code=error?.cause?.code;
+  if(['ENOTFOUND','EAI_AGAIN'].includes(code))return {error:'Provider inventory DNS lookup failed.',reason:'dns'};
+  if(['CERT_HAS_EXPIRED','UNABLE_TO_VERIFY_LEAF_SIGNATURE','DEPTH_ZERO_SELF_SIGNED_CERT','ERR_TLS_CERT_ALTNAME_INVALID'].includes(code))return {error:'Provider inventory TLS certificate validation failed.',reason:'tls'};
+  return {error:'Provider inventory check failed. Check API configuration and server connectivity.',reason:'unavailable'};
 }
