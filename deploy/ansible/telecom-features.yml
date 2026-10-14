@@ -13,6 +13,10 @@
       ansible.builtin.command:
         argv: [python3, '-c', "import json,pathlib; rows=json.loads(pathlib.Path('/opt/olamide/repo/services/api/telecomFeatureCatalog.json').read_text()); assert len(rows)>=42 and len({r['id'] for r in rows})==len(rows); assert all(r['implementation'] in ['implemented','partial','not_implemented','external_dependency'] for r in rows)"]
       changed_when: false
+    - name: Install optional PBX engine from complete operator-supplied reviewed inputs
+      ansible.builtin.include_role:
+        name: pbx_node
+      when: telecom_install_pbx | default(false) | bool
     - name: Inventory provider, certificate and media prerequisites safely
       ansible.builtin.command:
         argv: [python3, /opt/olamide/repo/tools/telecom_requirements.py]
