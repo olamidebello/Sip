@@ -31,7 +31,7 @@ Open `http://localhost:8089` on that computer. A mobile SSH client with port for
 
 ## Verification and limits
 
-CI builds and starts the actual native GUI/database and verifies an operator login. The installer checks the native login page. Native and Olamide databases are separate: editing an ASTPP gateway does not automatically update an Olamide gateway. The integrated console retains Flowroute as the default outbound provider, with no automatic carrier fallback.
+CI builds and starts the actual native GUI/database and verifies an operator login and the trunk, gateway and termination-rate list/create pages. The installer checks the native login page. Native and Olamide databases are separate: editing an ASTPP gateway does not automatically update an Olamide gateway. The integrated console retains Flowroute as the default outbound provider, with no automatic carrier fallback.
 
 A successful page/login or adapter acknowledgment is not a two-way media, DTMF, live billing, credit-cutoff, emergency-calling or capacity acceptance test. Native switch/media commissioning and account reconciliation are outstanding integrations. Back up the native database and private key directory together before modifying the pinned version. Do not delete its database volume to upgrade.
 

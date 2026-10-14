@@ -16,6 +16,9 @@ def check(directory,origin='http://localhost:8089'):
         diagnostic=re.sub(r'<[^>]+>', ' ', login)
         for value in config.values():diagnostic=diagnostic.replace(str(value),'[private]')
         raise AssertionError('Native operator login did not succeed: '+re.sub(r'\s+', ' ', diagnostic)[:600])
-    print('Native ASTPP login and operator session: PASS')
+    for path,label in [('/trunk/trunk_list','Trunks'),('/trunk/trunk_add','Create Trunk'),('/freeswitch/fsgateway','Gateways'),('/freeswitch/fsgateway_add','Create Gateway'),('/rates/termination_rates_list','Termination Rates'),('/rates/termination_rate_add','Create Termination Rate')]:
+        body=client.open(origin+path,timeout=30).read().decode(errors='replace')
+        assert 'logout' in body.lower() and label.lower() in body.lower(), 'Native management page failed: '+path
+    print('Native ASTPP login, trunk, gateway and termination-rate pages: PASS')
 if __name__=='__main__':
     a=argparse.ArgumentParser();a.add_argument('--directory',required=True);args=a.parse_args();check(args.directory)
