@@ -1,0 +1,155 @@
+---
+- name: Install HTTPS Kamailio carrier adapter with stable credentials
+  hosts: switch_nodes
+  become: true
+  vars:
+    carrier_adapter_domain: sip.dobhrap.com
+    carrier_adapter_port: 18443
+    carrier_adapter_certificate: '/etc/letsencrypt/live/{{ carrier_adapter_domain }}/fullchain.pem'
+    carrier_adapter_private_key: '/etc/letsencrypt/live/{{ carrier_adapter_domain }}/privkey.pem'
+  tasks:
+    - name: Discover unique active administrator tenant when not supplied
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - '--env-file'
+          - /etc/olamide/secrets.env
+          - exec
+          - '-T'
+          - api
+          - node
+          - '--input-type=module'
+          - '-e'
+          - "import {createDatabase} from './db.js'; const p=createDatabase(process.env.MYSQL_URL); try {const r=await p.query(\"SELECT DISTINCT u.tenant_id FROM users u JOIN tenants t ON t.id=u.tenant_id WHERE u.role='super_admin' AND u.status='active' AND t.status='active'\"); if(r.rows.length!==1)process.exitCode=1; else console.log(r.rows[0].tenant_id);}finally{await p.end();}"
+        chdir: /opt/olamide/repo/deployment/docker
+      when: carrier_adapter_tenant_id is not defined
+      register: discovered_adapter_tenant
+      changed_when: false
+    - name: Use uniquely discovered tenant
+      ansible.builtin.set_fact:
+        carrier_adapter_tenant_id: '{{ discovered_adapter_tenant.stdout | trim }}'
+      when: carrier_adapter_tenant_id is not defined
+    - name: Require explicit tenant identity
+      ansible.builtin.assert:
+        that:
+          - carrier_adapter_tenant_id is defined
+          - carrier_adapter_tenant_id is match('^[0-9a-fA-F-]{36}$')
+        fail_msg: Set carrier_adapter_tenant_id to the tenant UUID. Existing Kamailio and a valid HTTPS certificate are required.
+    - name: Validate existing Kamailio and certificate paths
+      ansible.builtin.stat:
+        path: '{{ item }}'
+      loop: ['/etc/kamailio/kamailio.cfg', '{{ carrier_adapter_certificate }}', '{{ carrier_adapter_private_key }}']
+      register: adapter_paths
+    - name: Require existing configuration and TLS certificate
+      ansible.builtin.assert:
+        that: item.stat.exists
+      loop: '{{ adapter_paths.results }}'
+      no_log: true
+    - name: Stage carrier RPC and route definitions
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/prepare_kamailio_carrier.py]
+      changed_when: true
+    - name: Validate staged Kamailio configuration
+      ansible.builtin.command:
+        argv: [kamailio, '-c', '-f', /etc/kamailio/.olamide-carrier-staged.cfg]
+      changed_when: false
+      no_log: true
+    - name: Install validated configuration with service rollback
+      block:
+        - name: Back up live configuration
+          ansible.builtin.copy:
+            src: /etc/kamailio/kamailio.cfg
+            dest: /etc/kamailio/.pre-carrier-adapter.cfg
+            remote_src: true
+            mode: '0600'
+        - name: Install staged configuration
+          ansible.builtin.copy:
+            src: /etc/kamailio/.olamide-carrier-staged.cfg
+            dest: /etc/kamailio/kamailio.cfg
+            remote_src: true
+            owner: root
+            group: kamailio
+            mode: '0640'
+          register: kamailio_carrier_install
+        - name: Restart only when configuration changed
+          ansible.builtin.systemd:
+            name: kamailio
+            state: restarted
+          when: kamailio_carrier_install.changed
+        - name: Confirm dedicated carrier RPC socket works
+          ansible.builtin.command:
+            argv: [kamcmd, '-s', unix:/run/kamailio/olamide_carrier_ctl, core.uptime]
+          changed_when: false
+          register: carrier_rpc_check
+          until: carrier_rpc_check.rc == 0
+          retries: 6
+          delay: 2
+      rescue:
+        - name: Restore previous configuration
+          ansible.builtin.copy:
+            src: /etc/kamailio/.pre-carrier-adapter.cfg
+            dest: /etc/kamailio/kamailio.cfg
+            remote_src: true
+            owner: root
+            group: kamailio
+            mode: '0640'
+        - name: Restart restored Kamailio
+          ansible.builtin.systemd:
+            name: kamailio
+            state: restarted
+        - name: Stop unsuccessful deployment
+          ansible.builtin.fail:
+            msg: Kamailio carrier setup failed; previous configuration restored.
+    - name: Create private service directory
+      ansible.builtin.file:
+        path: /etc/olamide
+        state: directory
+        mode: '0700'
+    - name: Generate or reuse token and prepare matching GUI input
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/prepare_carrier_adapter.py]
+        stdin: "{{ {'tenantId': carrier_adapter_tenant_id, 'url': 'https://' + carrier_adapter_domain + ':' + (carrier_adapter_port | string) + '/provision', 'port': carrier_adapter_port | int, 'backend': 'kamailio', 'rpcSocket': 'unix:/run/kamailio/olamide_carrier_ctl', 'stateFile': '/etc/olamide/kamailio-carrier-state.json', 'certificate': carrier_adapter_certificate, 'privateKey': carrier_adapter_private_key, 'routingCommissioned': carrier_adapter_routing_commissioned | default(false) | bool} | to_json }}"
+      no_log: true
+      changed_when: true
+    - name: Install adapter service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/olamide-carrier-adapter.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Olamide HTTPS carrier adapter
+          After=network.target kamailio.service
+          [Service]
+          ExecStart=/usr/bin/python3 /opt/olamide/repo/services/carrier-adapter/adapter.py --config /etc/olamide/carrier-adapter.json
+          Restart=on-failure
+          RestartSec=3
+          UMask=0077
+          NoNewPrivileges=true
+          PrivateTmp=true
+          ProtectHome=true
+          ProtectSystem=strict
+          ReadWritePaths=/etc/olamide
+          [Install]
+          WantedBy=multi-user.target
+    - name: Start adapter
+      ansible.builtin.systemd:
+        name: olamide-carrier-adapter
+        daemon_reload: true
+        enabled: true
+        state: restarted
+    - name: Wait for authenticated HTTPS service
+      ansible.builtin.uri:
+        url: 'https://{{ carrier_adapter_domain }}:{{ carrier_adapter_port }}/provision'
+        method: POST
+        body_format: json
+        body: {}
+        status_code: 401
+        validate_certs: true
+      register: adapter_ready
+      until: adapter_ready is succeeded
+      retries: 6
+      delay: 3
+- import_playbook: carrier-adapter.yml
+  vars:
+    carrier_adapter_config: /root/carrier-adapter.json
