@@ -3,11 +3,11 @@ import {providerCredentials} from './providerCredentials.js';
 import { randomUUID } from 'node:crypto';
 import { isAdmin } from './tenancy.js';
 import { availableNumbers } from './providers.js';
-import {adapterTargets,commissionCarrier} from './adapterRegistry.js';
+import {adapterTargetsFor,commissionCarrier} from './adapterRegistry.js';
 
 const providers=['flowroute','didww'];
 const slug=/^[a-z][a-z0-9-]{1,15}$/;
-const adapterReady=()=>Object.keys(adapterTargets()).length>0;
+
 async function catalog(pool,tenant){
   const rows=await pool.query('SELECT provider,display_name,enabled FROM carrier_provider_catalog WHERE tenant_id=$1 ORDER BY display_name',[tenant]);
   return rows.rows;
@@ -45,6 +45,10 @@ export async function carrierActive(pool,tenant,provider){
 
 export async function handleCarrierProviders({req,res,path,user,pool,send,readJson,flowrouteLocked=false}){
   if(!isAdmin(user)) return send(res,403,{error:'Administrator required'});
+  if(path.startsWith('/api/admin/carriers/flowroute/trunk')&&user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
+  const needsTargets=req.method==='GET'||/\/(provision|activate|deactivate|verify)$/.test(path);
+  const adapterConfigured=needsTargets?Object.keys(await adapterTargetsFor(pool,user.tenant_id)).length>0:false;
+  const adapterReady=()=>adapterConfigured;
   if(path.startsWith('/api/admin/carriers/flowroute/trunk')){
     if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
     if(path==='/api/admin/carriers/flowroute/trunk/status'&&req.method==='GET'){

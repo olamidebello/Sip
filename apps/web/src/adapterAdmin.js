@@ -1,5 +1,6 @@
 export function setupAdapterAdmin({get,request}){
   const root=document.querySelector('#carrier-adapter-admin');
+  const description=root.querySelector(':scope > p');if(description)description.textContent='Add private HTTPS adapter targets below, then check node health and enable them. Tokens are encrypted and hidden after saving.';
   const form=root.querySelector('#adapter-create');
   const status=root.querySelector('#adapter-status');
   const list=root.querySelector('#adapter-list');
@@ -10,12 +11,20 @@ export function setupAdapterAdmin({get,request}){
   configure.onclick=event=>{
     event.preventDefault();configuration.open=true;
     configure.setAttribute('aria-expanded','true');
-    configuration.querySelector('summary').focus();
-    configuration.scrollIntoView({behavior:'smooth',block:'nearest'});
+    targetForm.elements.key.focus();
+    holder.scrollIntoView({behavior:'smooth',block:'nearest'});
   };
+  configuration.replaceChildren();const summary=document.createElement('summary');summary.textContent='Manage private targets';configuration.append(summary);
+  const targetForm=document.createElement('form');targetForm.innerHTML='<label>Target key <input name="key" pattern="[a-z][a-z0-9-]{1,39}" maxlength="40" required placeholder="us-east"></label><label>Adapter HTTPS endpoint <input name="url" type="url" required placeholder="https://your-adapter.example/provision"></label><label>Authentication token <input name="token" type="password" autocomplete="new-password" placeholder="32 or more characters; blank retains saved token"></label><button>Save private target</button><p>Tokens are encrypted and write-only. This connects an existing adapter service. Check the adapter health before enabling it.</p>';const targetRows=document.createElement('div');
+  // Keep this form outside the adapter-create form; nested forms are invalid.
+  const holder=document.createElement('section');holder.className='adapter-target-editor';holder.append(targetForm,targetRows);root.insertBefore(holder,form);configuration.append(document.createTextNode('Use the private target editor above.'));
+  let targetMetadata=[];
+  async function refreshTargets(){const data=await get('/api/admin/carrier-adapters/targets');targetMetadata=data.targets;targetRows.replaceChildren();for(const entry of data.targets){const row=document.createElement('p');row.append(document.createTextNode(entry.key+' · '+entry.url+' · '+entry.source+' '));const edit=document.createElement('button');edit.type='button';edit.textContent='Edit / rotate';edit.onclick=()=>{targetForm.elements.key.value=entry.key;targetForm.elements.url.value=entry.url;targetForm.elements.token.value='';targetForm.scrollIntoView({block:'nearest'});};row.append(edit);if(entry.source==='gui'){const remove=document.createElement('button');remove.type='button';remove.textContent='Remove';remove.onclick=async()=>{if(!window.confirm('Remove private target '+entry.key+'?'))return;try{await request('/api/admin/carrier-adapters/targets/'+entry.key,{expectedRevision:entry.revision},'DELETE');await refresh();}catch(e){status.textContent=e.message;}};row.append(remove);}targetRows.append(row);}targetForm.querySelector('button').disabled=!data.keyReady;if(!data.keyReady)status.textContent='Run the Flowroute gateway installer to prepare the encryption key.';}
+  targetForm.onsubmit=async event=>{event.preventDefault();const values=Object.fromEntries(new FormData(targetForm));const button=targetForm.querySelector('button');button.disabled=true;try{await request('/api/admin/carrier-adapters/targets/'+values.key,{url:values.url,token:values.token,expectedRevision:targetMetadata.find(t=>t.key===values.key)?.revision||0},'PUT');targetForm.elements.token.value='';await refresh();target.value=values.key;status.textContent='Private target saved. Add an adapter node, check health, then enable it.';}catch(e){status.textContent=e.message;}finally{button.disabled=false;}};
   configuration.addEventListener('toggle',()=>configure.setAttribute('aria-expanded',String(configuration.open)));
   async function refresh(){
     try{
+      await refreshTargets();
       const [registry,carriers]=await Promise.all([
         get('/api/admin/carrier-adapters'),get('/api/admin/carriers')]);
       const previous={provider:provider.value,target:target.value};
@@ -24,12 +33,13 @@ export function setupAdapterAdmin({get,request}){
         const option=document.createElement('option');option.value=entry.provider;option.textContent=entry.displayName;
         provider.append(option);
       }
+      if(!registry.targets.length){const empty=document.createElement('option');empty.value='';empty.textContent='Add a private target above';empty.disabled=true;empty.selected=true;target.append(empty);}
       for(const key of registry.targets){
         const option=document.createElement('option');option.value=key;option.textContent=key;target.append(option);
       }
       if([...provider.options].some(item=>item.value===previous.provider))provider.value=previous.provider;
       if([...target.options].some(item=>item.value===previous.target))target.value=previous.target;
-      form.querySelector('button[type="submit"]').disabled=!provider.options.length||!target.options.length;
+      form.querySelector('button[type="submit"]').disabled=!provider.options.length||!registry.targets.length;
       list.replaceChildren();
       for(const node of registry.nodes){
         const assigned=registry.assignments.find(item=>item.provider===node.provider&&item.adapter_id===node.id);

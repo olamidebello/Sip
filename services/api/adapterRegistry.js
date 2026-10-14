@@ -1,3 +1,4 @@
+import {savedTargets,migrateAdapterTargets,handleAdapterTargets} from './adapterTargets.js';
 import {flowrouteTrunk,adapterTrunk,acknowledgedTrunk} from './flowrouteTrunk.js';
 import {randomUUID} from 'node:crypto';
 import {terminationPolicy} from './operatorControl.js';
@@ -22,7 +23,10 @@ export function adapterTargets(){
   return raw;
 }
 
+export async function adapterTargetsFor(pool,tenant){return {...adapterTargets(),...await savedTargets(pool,tenant)};}
+
 export async function migrateAdapterRegistry(pool){
+  await migrateAdapterTargets(pool);
   await pool.query(`CREATE TABLE IF NOT EXISTS carrier_adapter_nodes (
     id CHAR(36) PRIMARY KEY,tenant_id CHAR(36) NOT NULL,provider VARCHAR(16) NOT NULL,
     name VARCHAR(80) NOT NULL,target_key VARCHAR(40) NOT NULL,region VARCHAR(40) NOT NULL,
@@ -58,8 +62,8 @@ export async function adapterFor(pool,tenant,provider,capacity,assigned=false){
   return found.rows[0]||null;
 }
 
-export async function invokeAdapter(node,action,body){
-  const target=adapterTargets()[node.target_key];
+export async function invokeAdapter(node,action,body,pool){
+  const target=(await adapterTargetsFor(pool,body.tenantId))[node.target_key];
   if(!target)throw Error('Adapter target is not configured');
   const response=await fetch(target.url,{method:'POST',signal:AbortSignal.timeout(10000),
     headers:{Authorization:`Bearer ${target.token}`,'Content-Type':'application/json',
@@ -85,7 +89,7 @@ export async function commissionCarrier(pool,user,provider,action,details){
   if(node){
     if(action!=='deactivate'&&(!node.enabled||node.health!=='healthy'))throw Error('No healthy enabled adapter');
     try{
-      await invokeAdapter(node,action,{tenantId:user.tenant_id,provider,adapterId:node.id,...details,terminationPolicy});
+      await invokeAdapter(node,action,{tenantId:user.tenant_id,provider,adapterId:node.id,...details,terminationPolicy},pool);
       await recordAdapterOperation(pool,{tenant:user.tenant_id,provider,adapterId:node.id,action,outcome:'success',actor:user.id});
       if(action==='activate')await pool.query('INSERT INTO carrier_adapter_assignments(tenant_id,provider,adapter_id) VALUES($1,$2,$3) ON DUPLICATE KEY UPDATE adapter_id=VALUES(adapter_id),assigned_at=UTC_TIMESTAMP(3)',
         [user.tenant_id,provider,node.id]);
@@ -100,7 +104,7 @@ export async function commissionCarrier(pool,user,provider,action,details){
   const registered=await pool.query('SELECT 1 FROM carrier_adapter_nodes WHERE tenant_id=$1 AND provider=$2 LIMIT 1',
     [user.tenant_id,provider]);
   if(registered.rowCount&&action!=='deactivate')throw Error('No healthy adapter with sufficient capacity');
-  const legacy=adapterTargets().legacy;
+  const legacy=(await adapterTargetsFor(pool,user.tenant_id)).legacy;
   if(!legacy)throw Error('Carrier adapter unavailable');
   const response=await fetch(legacy.url,{method:'POST',signal:AbortSignal.timeout(10000),
     headers:{Authorization:`Bearer ${legacy.token}`,'Content-Type':'application/json',
@@ -114,7 +118,8 @@ export async function commissionCarrier(pool,user,provider,action,details){
 
 export async function handleAdapterRegistry({req,res,path,user,pool,send,readJson}){
   if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
-  const tenant=user.tenant_id,targets=adapterTargets();
+  if(path.startsWith('/api/admin/carrier-adapters/targets'))return handleAdapterTargets({req,res,path,user,pool,send,readJson,environmentTargets:adapterTargets()});
+  const tenant=user.tenant_id,targets=await adapterTargetsFor(pool,tenant);
   if(path==='/api/admin/carrier-adapters'&&req.method==='GET'){
     const [nodes,assignments,operations]=await Promise.all([
       pool.query('SELECT id,provider,name,target_key,region,priority,max_concurrent_calls,enabled,health,last_check_at,last_error,updated_at FROM carrier_adapter_nodes WHERE tenant_id=$1 ORDER BY provider,priority,name',[tenant]),
@@ -145,7 +150,7 @@ export async function handleAdapterRegistry({req,res,path,user,pool,send,readJso
   if(!node)return send(res,404,{error:'Adapter unavailable'});
   if(match[2]==='check'&&req.method==='POST'){
     try{
-      await invokeAdapter(node,'health',{tenantId:tenant,provider:node.provider,adapterId:node.id});
+      await invokeAdapter(node,'health',{tenantId:tenant,provider:node.provider,adapterId:node.id},pool);
       await pool.query("UPDATE carrier_adapter_nodes SET health='healthy',last_error=NULL,last_check_at=UTC_TIMESTAMP(3) WHERE id=$1 AND tenant_id=$2",[node.id,tenant]);
       await recordAdapterOperation(pool,{tenant,provider:node.provider,adapterId:node.id,action:'health',outcome:'success',actor:user.id});
       return send(res,200,{health:'healthy'});
