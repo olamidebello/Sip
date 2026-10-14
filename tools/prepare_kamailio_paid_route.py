@@ -57,10 +57,10 @@ route[OLAMIDE_PAID_CALL] {
     route(OLAMIDE_FLOWROUTE);
     consume_credentials();
     $var(paid_from) = "sip:" + $var(paid_caller_id) + "@" + $var(realm);
+    record_route();
     if (!uac_replace_from("", "$var(paid_from)")) {
         route(OLAMIDE_PAID_FAILED); sl_send_reply("503", "Caller ID unavailable"); exit;
     }
-    record_route();
     $avp(olamide_timeout) = $var(paid_seconds);
     $dlg_ctx(timeout_bye) = 1;
     dlg_manage();
