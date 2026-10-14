@@ -1,0 +1,338 @@
+[
+  {
+    "id": "account-range",
+    "name": "Account Range",
+    "group": "Accounts & security",
+    "target": null,
+    "implementation": "not_implemented",
+    "detail": "Custom account-number allocation has not been implemented."
+  },
+  {
+    "id": "alarms",
+    "name": "Alarms",
+    "group": "Monitoring & reports",
+    "target": "fleet-admin",
+    "implementation": "partial",
+    "detail": "Server monitoring exists; trunk and call-event alarms are incomplete."
+  },
+  {
+    "id": "automated-report",
+    "name": "Automated Report",
+    "group": "Monitoring & reports",
+    "target": "report-admin",
+    "implementation": "partial",
+    "detail": "Interactive reports and exports exist; automated generation needs a worker."
+  },
+  {
+    "id": "access-control",
+    "name": "Access Control",
+    "group": "Accounts & security",
+    "target": "navigation-policy-admin",
+    "implementation": "partial",
+    "detail": "Role and navigation permissions exist; portal/API IP rules need implementation."
+  },
+  {
+    "id": "advanced-sip-routing",
+    "name": "Advanced SIP Routing",
+    "group": "Routing & numbers",
+    "target": "operator-admin",
+    "implementation": "partial",
+    "detail": "Route preview and fraud rules exist; cause-based extension failover is not installed."
+  },
+  {
+    "id": "automated-cdrs",
+    "name": "Automated CDRs",
+    "group": "Monitoring & reports",
+    "target": "cdr-admin",
+    "implementation": "partial",
+    "detail": "CDR records exist; scheduled summaries are incomplete."
+  },
+  {
+    "id": "acl-management",
+    "name": "ACL Management",
+    "group": "Accounts & security",
+    "target": "fleet-admin",
+    "implementation": "partial",
+    "detail": "Network controls exist; a unified SIP ACL module is incomplete."
+  },
+  {
+    "id": "country-reports",
+    "name": "Country Reports",
+    "group": "Monitoring & reports",
+    "target": "report-admin",
+    "implementation": "not_implemented",
+    "detail": "Country-level usage and revenue reporting has not been implemented."
+  },
+  {
+    "id": "demand-routing",
+    "name": "Demand-Based Routing",
+    "group": "Routing & numbers",
+    "target": "operator-admin",
+    "implementation": "partial",
+    "detail": "Effective-date rate scheduling exists; time-window live routing is incomplete."
+  },
+  {
+    "id": "did-transfer",
+    "name": "DID Call Transfer",
+    "group": "Routing & numbers",
+    "target": "inhouse-admin",
+    "implementation": "not_implemented",
+    "detail": "Disposition-based DID failover is not installed."
+  },
+  {
+    "id": "fax",
+    "name": "Fax over IP",
+    "group": "Communications & PBX",
+    "target": null,
+    "implementation": "external_dependency",
+    "detail": "Requires a fax engine, storage and provider/media integration."
+  },
+  {
+    "id": "fraud-detection",
+    "name": "Fraud Detection",
+    "group": "Accounts & security",
+    "target": "operator-admin",
+    "implementation": "partial",
+    "detail": "Destination blocks and prepaid concurrency checks exist; anomaly detection is incomplete."
+  },
+  {
+    "id": "international-credit",
+    "name": "International Credit Management",
+    "group": "Billing & payments",
+    "target": "charging-admin",
+    "implementation": "not_implemented",
+    "detail": "Separate international spending limits are not implemented."
+  },
+  {
+    "id": "local-number",
+    "name": "Local Number",
+    "group": "Routing & numbers",
+    "target": "inhouse-admin",
+    "implementation": "partial",
+    "detail": "DID inventory exists; shared-DID service routing is incomplete."
+  },
+  {
+    "id": "logs",
+    "name": "Logs",
+    "group": "Monitoring & reports",
+    "target": "fleet-admin",
+    "implementation": "partial",
+    "detail": "Operations controls exist; redacted live service-log streaming is incomplete."
+  },
+  {
+    "id": "languages",
+    "name": "Languages",
+    "group": "Account experience",
+    "target": "locale-admin",
+    "implementation": "partial",
+    "detail": "Language/locale settings exist; full interface translation coverage is incomplete."
+  },
+  {
+    "id": "mailchimp",
+    "name": "Mailchimp",
+    "group": "External integrations",
+    "target": null,
+    "implementation": "external_dependency",
+    "detail": "Requires an integration implementation and authorized Mailchimp credentials."
+  },
+  {
+    "id": "multi-tenant-pbx",
+    "name": "Multi-Tenant IP PBX",
+    "group": "Communications & PBX",
+    "target": "pbx-admin",
+    "implementation": "partial",
+    "detail": "Tenant-scoped PBX records exist; live IVR, queues and voicemail need a media/PBX engine."
+  },
+  {
+    "id": "portability",
+    "name": "Number Portability Service",
+    "group": "Routing & numbers",
+    "target": "inhouse-admin",
+    "implementation": "partial",
+    "detail": "Port-request records exist; global portability lookup requires a data provider."
+  },
+  {
+    "id": "ported-sa",
+    "name": "Ported Number—South Africa",
+    "group": "External integrations",
+    "target": null,
+    "implementation": "external_dependency",
+    "detail": "Requires a South African portability dataset/API and implementation."
+  },
+  {
+    "id": "personalized-rates",
+    "name": "Personalized Rates",
+    "group": "Billing & payments",
+    "target": "operator-admin",
+    "implementation": "not_implemented",
+    "detail": "Account-specific live tariff overrides are not implemented."
+  },
+  {
+    "id": "payfast",
+    "name": "Payfast",
+    "group": "External integrations",
+    "target": null,
+    "implementation": "external_dependency",
+    "detail": "Requires a signed webhook/payment integration and merchant credentials."
+  },
+  {
+    "id": "rate-simulator",
+    "name": "Rate Simulator",
+    "group": "Routing & numbers",
+    "target": "operator-admin",
+    "implementation": "partial",
+    "detail": "A tariff route preview exists; it does not prove live switch rating."
+  },
+  {
+    "id": "stripe",
+    "name": "Stripe Payment Gateway",
+    "group": "Billing & payments",
+    "target": "payment-admin",
+    "implementation": "partial",
+    "detail": "Stripe management exists; every advertised payment flow is not implemented."
+  },
+  {
+    "id": "support-ticket",
+    "name": "Support Ticket",
+    "group": "Account experience",
+    "target": "support",
+    "implementation": "implemented",
+    "detail": "Existing tenant-scoped tickets, replies and status actions are available."
+  },
+  {
+    "id": "schedule-reports",
+    "name": "Schedule Reports",
+    "group": "Monitoring & reports",
+    "target": null,
+    "implementation": "not_implemented",
+    "detail": "Scheduled emailed reports need durable scheduling, recipients and SMTP."
+  },
+  {
+    "id": "shadow-billing",
+    "name": "Shadow Billing",
+    "group": "Billing & payments",
+    "target": null,
+    "implementation": "not_implemented",
+    "detail": "A separate shadow-rating ledger is not implemented."
+  },
+  {
+    "id": "switch-monitoring",
+    "name": "Switch Monitoring",
+    "group": "Monitoring & reports",
+    "target": "switch-admin",
+    "implementation": "partial",
+    "detail": "Kamailio readiness exists. Native FreeSWITCH monitoring is outside the selected architecture."
+  },
+  {
+    "id": "two-factor",
+    "name": "Two-Factor Authentication",
+    "group": "Accounts & security",
+    "target": "passkey-policy-admin",
+    "implementation": "partial",
+    "detail": "Passkeys and OTP flows exist; exact vendor MFA parity is not established."
+  },
+  {
+    "id": "whmcs",
+    "name": "WHMCS integration",
+    "group": "External integrations",
+    "target": null,
+    "implementation": "external_dependency",
+    "detail": "Requires a WHMCS connector and authorized API account."
+  },
+  {
+    "id": "zoho",
+    "name": "Zoho CRM integration",
+    "group": "External integrations",
+    "target": null,
+    "implementation": "external_dependency",
+    "detail": "Requires CRM connector implementation and OAuth authorization."
+  },
+  {
+    "id": "salesforce",
+    "name": "Salesforce integration",
+    "group": "External integrations",
+    "target": null,
+    "implementation": "external_dependency",
+    "detail": "Requires CRM connector implementation and OAuth authorization."
+  },
+  {
+    "id": "stir-shaken",
+    "name": "STIR/SHAKEN",
+    "group": "External integrations",
+    "target": null,
+    "implementation": "external_dependency",
+    "detail": "Requires approved signing credentials, certificate lifecycle and SIP integration."
+  },
+  {
+    "id": "mobile-dialer",
+    "name": "Mobile Dialer",
+    "group": "Account experience",
+    "target": "downloads",
+    "implementation": "partial",
+    "detail": "App download controls exist; native background-calling acceptance remains separate."
+  },
+  {
+    "id": "pc-dialer",
+    "name": "PC Dialer",
+    "group": "Account experience",
+    "target": "downloads",
+    "implementation": "partial",
+    "detail": "Web calling exists; full desktop dialer parity is not established."
+  },
+  {
+    "id": "live-charging",
+    "name": "Prepaid & postpaid charging",
+    "group": "Billing & payments",
+    "target": "charging-admin",
+    "implementation": "partial",
+    "detail": "Kamailio prepaid deployment exists. Postpaid, prorating, bundles and surcharge rules remain incomplete."
+  },
+  {
+    "id": "did-lifecycle",
+    "name": "DID lifecycle",
+    "group": "Routing & numbers",
+    "target": "inhouse-admin",
+    "implementation": "partial",
+    "detail": "Inventory/provider controls exist; full purchase/release/recurring lifecycle depends on integrations."
+  },
+  {
+    "id": "call-center",
+    "name": "Call center & autodialer",
+    "group": "Communications & PBX",
+    "target": "pbx-admin",
+    "implementation": "partial",
+    "detail": "PBX/call-center controls exist; live AMD, IVR, conferencing and interception need compatible engines."
+  },
+  {
+    "id": "sms",
+    "name": "SMS delivery & billing",
+    "group": "Communications & PBX",
+    "target": "messaging-webhooks",
+    "implementation": "partial",
+    "detail": "SMS endpoints exist; provider acceptance and full SMS rating remain incomplete."
+  },
+  {
+    "id": "resellers",
+    "name": "Resellers & commissions",
+    "group": "Accounts & security",
+    "target": "tenant-admin",
+    "implementation": "not_implemented",
+    "detail": "Tenant roles exist; hierarchical reseller rating, commissions and provider portals are incomplete."
+  },
+  {
+    "id": "archive",
+    "name": "Archive, purge & cron",
+    "group": "Monitoring & reports",
+    "target": null,
+    "implementation": "not_implemented",
+    "detail": "Retention/archive workers and scheduled job administration are incomplete."
+  },
+  {
+    "id": "n8n",
+    "name": "n8n integration",
+    "group": "External integrations",
+    "target": null,
+    "implementation": "external_dependency",
+    "detail": "Requires authenticated workflow connectors and an n8n instance."
+  }
+]

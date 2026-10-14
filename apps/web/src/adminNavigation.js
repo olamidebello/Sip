@@ -1,7 +1,7 @@
 const admins=['admin','super_admin'];
 const superOnly=['super_admin'];
 export const adminNavigationGroups=[
- {label:'Overview & reports',roles:admins,items:[['admin','Overview & SIP server'],['report-admin','Reports'],['cdr-admin','Call records']]},
+ {label:'Overview & reports',roles:admins,items:[['admin','Overview & SIP server'],['telecom-features-admin','Telecom feature catalog'],['report-admin','Reports'],['cdr-admin','Call records']]},
  {label:'Users & access',roles:admins,items:[['group-admin','Users & groups'],['tenant-admin','Tenants & roles',superOnly],['user-session-admin','User sessions',superOnly],['navigation-policy-admin','End-user navigation',superOnly],['sip-profile-admin','SIP profile access',superOnly]]},
  {label:'SIP & carriers',roles:admins,items:[['carrier-console','Carriers & termination'],['native-astpp-admin','Native ASTPP Community'],['switch-admin','Kamailio services'],['pbx-admin','PBX'],['inhouse-admin','DID inventory'],['carrier-admin','Carrier providers'],['provider-credentials-admin','Carrier credentials',superOnly],['carrier-adapter-admin','Carrier adapters',superOnly],['didww-admin','DIDWW API',superOnly],['nigeria-admin','Nigeria interconnect']]},
  {label:'Rates & billing',roles:admins,items:[['operator-admin','Wholesale tariffs'],['flowroute-rate-admin','Carrier rate deck'],['pricing-admin','Pricing'],['charging-admin','Charging operations'],['catalog-controls','Plans & access'],['product-store-admin','Product catalog & orders']]},

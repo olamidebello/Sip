@@ -42,7 +42,9 @@ jobs:
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/native-astpp-gui.yml
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/optional-native-astpp.yml
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/astpp-features.yml
-          bash -n deployment/deploy-astpp-features.sh
+          bash -n deployment/deploy-astpp-features.sh deployment/deploy-telecom-features.sh
+          ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/telecom-features.yml
+          python3 -m unittest tools/test_telecom_requirements.py
           bash -n deployment/deploy-native-astpp.sh deployment/deploy-kamailio-paid-calls.sh
           ansible-playbook --syntax-check -i 'localhost,' deploy/ansible/kamailio-paid-calls.yml
           python3 tools/test_prepare_kamailio_paid_route.py

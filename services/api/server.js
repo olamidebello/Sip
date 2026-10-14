@@ -1,3 +1,4 @@
+import {handleTelecomFeatures} from './telecomFeatures.js';
 import {handleContactCards} from './contactCards.js';
 import {handleLanguageTools} from './languageTools.js';
 import {handleSocial} from './social.js';
@@ -315,6 +316,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/servers')) return await handleServerFleetAdmin({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/carriers/credentials')) return await handleProviderCredentials({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/carriers')) return await handleCarrierProviders({req,res,path,user,pool,send,readJson});
+      if(path==='/api/admin/telecom/features')return await handleTelecomFeatures({req,res,user,send});
       if(path==='/api/admin/charging/overview') return await handleCharging({req,res,user,pool,send});
       if (path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales")
         return await handleLocales({req,res,path,user,pool,send,readJson});

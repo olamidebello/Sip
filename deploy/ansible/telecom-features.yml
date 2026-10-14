@@ -1,0 +1,26 @@
+---
+- import_playbook: flowroute-gateway-gui.yml
+- name: Verify feature catalog and install standard certificate utilities
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Install certificate validation utilities
+      ansible.builtin.apt:
+        name: [openssl, ca-certificates]
+        state: present
+        update_cache: true
+    - name: Verify all requested catalog items have explicit implementation status
+      ansible.builtin.command:
+        argv: [python3, '-c', "import json,pathlib; rows=json.loads(pathlib.Path('/opt/olamide/repo/services/api/telecomFeatureCatalog.json').read_text()); assert len(rows)>=42 and len({r['id'] for r in rows})==len(rows); assert all(r['implementation'] in ['implemented','partial','not_implemented','external_dependency'] for r in rows)"]
+      changed_when: false
+    - name: Inventory provider, certificate and media prerequisites safely
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/telecom_requirements.py]
+      changed_when: false
+      register: telecom_requirements
+    - name: Report actual prerequisites and external dependencies
+      ansible.builtin.debug:
+        msg: '{{ telecom_requirements.stdout | from_json }}'
+    - name: Report grouped feature controls
+      ansible.builtin.debug:
+        msg: Administration → Overview & reports → Telecom feature catalog groups the requested add-ons and links existing controls. Pending features are not marked installed. Community GUI stages and Kamailio paid-call deployment remain separate commands. Configure approved provider credentials through existing super-admin forms.
