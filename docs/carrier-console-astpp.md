@@ -15,7 +15,7 @@ git pull --ff-only origin main &&
 bash deployment/deploy-carrier-console.sh
 ```
 
-The installer imports the existing full application deployment, database backup, schema migrations and exact-commit CI gate. It prepares provider encryption and deploys the carrier console. It then builds the pinned ASTPP web application and starts a separate MySQL database in Docker project `olamide-native-astpp`. Native services publish only HTTP `127.0.0.1:8089`; no database or SIP ports are published. Existing SIP registration and carrier adapters are not replaced.
+The installer imports the existing full application deployment, database backup, schema migrations and exact-commit CI gate. It prepares provider encryption and deploys the carrier console. The native GUI is optional and is installed only by the separate `deploy/ansible/native-astpp-gui.yml` playbook, which builds the pinned ASTPP web application and starts a separate MySQL database in Docker project `olamide-native-astpp`. Native services publish only HTTP `127.0.0.1:8089`; no database or SIP ports are published. Existing SIP registration and carrier adapters are not replaced.
 
 Native keys and passwords are generated once in `/etc/olamide/native-astpp`, mode 0700, with private files mode 0600. ASTPP's seeded admin password is replaced with a random strong password, seeded non-admin accounts are disabled, and sample session rows are removed. Future starts preserve operator account changes and the existing encryption keys.
 
