@@ -2,7 +2,7 @@ import {flowrouteTrunk,publicTrunk,saveFlowrouteTrunk,adapterTrunk,withFlowroute
 import {providerCredentials} from './providerCredentials.js';
 import { randomUUID } from 'node:crypto';
 import { isAdmin } from './tenancy.js';
-import { availableNumbers } from './providers.js';
+import { availableNumbers,inventoryFailure } from './providers.js';
 import {adapterTargetsFor,commissionCarrier} from './adapterRegistry.js';
 
 const providers=['flowroute','didww'];
@@ -209,7 +209,7 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
     try {const inventory=await availableNumbers(provider,{pool,tenant:user.tenant_id});
       return send(res,200,{provider,credentialsValid:true,sampleCount:inventory.length,
         note:'Inventory API responded. This does not authorize or activate a SIP trunk.'});
-    }catch(error){return send(res,502,{error:'Provider inventory check failed'});}
+    }catch(error){return send(res,502,inventoryFailure(error));}
   }
   if(action==='activate' && req.method==='POST'){
     await loadCredentials();
