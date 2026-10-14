@@ -104,7 +104,11 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     p=argparse.ArgumentParser();p.add_argument('--config',required=True);args=p.parse_args();cfg=json.loads(pathlib.Path(args.config).read_text())
     uuid.UUID(cfg['tenantId'])
-    if not re.fullmatch(r'[a-zA-Z0-9_-]+',cfg['profile']) or len(cfg['token'])<32:raise ValueError('Invalid private configuration')
+    if len(cfg['token'])<32:raise ValueError('Invalid private configuration')
+    if cfg.get('backend')!='kamailio' and not re.fullmatch(r'[a-zA-Z0-9_-]+',cfg['profile']):raise ValueError('Invalid profile')
     server=ThreadingHTTPServer((cfg.get('bind','0.0.0.0'),cfg.get('port',18443)),Handler);server.adapter=Adapter(cfg)
+    if cfg.get('backend')=='kamailio':
+        from kamailio import KamailioAdapter
+        server.adapter=KamailioAdapter(cfg)
     ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);ctx.minimum_version=ssl.TLSVersion.TLSv1_2;ctx.load_cert_chain(cfg['certificate'],cfg['privateKey']);server.socket=ctx.wrap_socket(server.socket,server_side=True);server.serve_forever()
 if __name__=='__main__':main()
