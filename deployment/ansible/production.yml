@@ -84,6 +84,21 @@
       - ansible_distribution == 'Debian'
       - ansible_distribution_major_version == '12'
       - ansible_architecture in ['x86_64', 'aarch64']
+  - name: Verify existing Kamailio service before application changes
+    ansible.builtin.command:
+      argv: [systemctl, is-active, '--quiet', kamailio]
+    changed_when: false
+    when:
+    - production_require_sip | default(true) | bool
+    - not (commission_same_server | default(false) | bool)
+  - name: Validate existing Kamailio configuration without restarting the SIP service
+    ansible.builtin.command:
+      argv: [kamailio, '-c', '-f', /etc/kamailio/kamailio.cfg]
+    changed_when: false
+    no_log: true
+    when:
+    - production_require_sip | default(true) | bool
+    - not (commission_same_server | default(false) | bool)
   - name: Verify acceptance program is already present on server
     ansible.builtin.stat:
       path: '{{ production_acceptance_argv[0] }}'
