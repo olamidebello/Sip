@@ -1,0 +1,48 @@
+---
+- name: Commission a private carrier adapter and populate administrator GUI
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Require an existing adapter and private server input
+      ansible.builtin.assert:
+        that:
+          - carrier_adapter_config is defined
+          - carrier_adapter_config is match('^/root/[^\n]+\.json$')
+        fail_msg: Supply carrier_adapter_config pointing to a root-owned JSON file with tenantId, url and the existing adapter token.
+    - name: Protect private input
+      ansible.builtin.file:
+        path: '{{ carrier_adapter_config }}'
+        owner: root
+        group: root
+        mode: '0600'
+    - name: Preserve or create provider encryption key
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/prepare_flowroute_key.py]
+      no_log: true
+      changed_when: false
+    - name: Build API containing commissioning command
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, build, api]
+        chdir: /opt/olamide/repo/deployment/docker
+      changed_when: true
+    - name: Load private adapter configuration
+      ansible.builtin.slurp:
+        src: '{{ carrier_adapter_config }}'
+      register: private_adapter_input
+      no_log: true
+    - name: Encrypt target, check actual adapter and enable healthy node
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, run, '--rm', '--no-deps', '-T', api, node, commissionAdapter.js]
+        chdir: /opt/olamide/repo/deployment/docker
+        stdin: '{{ private_adapter_input.content | b64decode }}'
+      no_log: true
+      changed_when: true
+    - name: Load stable provider key into running API
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, up, '-d', '--no-deps', api]
+        chdir: /opt/olamide/repo/deployment/docker
+      no_log: true
+      changed_when: true
+    - name: Report result
+      ansible.builtin.debug:
+        msg: Private target and healthy carrier node are available in Super admin → Carrier adapters. Gateway activation remains a separate operation.
