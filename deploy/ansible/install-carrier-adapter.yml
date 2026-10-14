@@ -1,0 +1,110 @@
+---
+- name: Install HTTPS FreeSWITCH carrier adapter with stable credentials
+  hosts: switch_nodes
+  become: true
+  vars:
+    carrier_adapter_domain: sip.dobhrap.com
+    carrier_adapter_port: 18443
+    carrier_adapter_fs_cli: /usr/bin/fs_cli
+    carrier_adapter_gateway_dir: /etc/freeswitch/sip_profiles/external
+    carrier_adapter_dialplan_dir: /etc/freeswitch/dialplan
+    carrier_adapter_profile: external
+    carrier_adapter_certificate: '/etc/letsencrypt/live/{{ carrier_adapter_domain }}/fullchain.pem'
+    carrier_adapter_private_key: '/etc/letsencrypt/live/{{ carrier_adapter_domain }}/privkey.pem'
+  tasks:
+    - name: Discover unique active administrator tenant when not supplied
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - '--env-file'
+          - /etc/olamide/secrets.env
+          - exec
+          - '-T'
+          - api
+          - node
+          - '--input-type=module'
+          - '-e'
+          - "import {createDatabase} from './db.js'; const p=createDatabase(process.env.MYSQL_URL); try {const r=await p.query(\"SELECT DISTINCT u.tenant_id FROM users u JOIN tenants t ON t.id=u.tenant_id WHERE u.role='super_admin' AND u.status='active' AND t.status='active'\"); if(r.rows.length!==1)process.exitCode=1; else console.log(r.rows[0].tenant_id);}finally{await p.end();}"
+        chdir: /opt/olamide/repo/deployment/docker
+      when: carrier_adapter_tenant_id is not defined
+      register: discovered_adapter_tenant
+      changed_when: false
+    - name: Use uniquely discovered tenant
+      ansible.builtin.set_fact:
+        carrier_adapter_tenant_id: '{{ discovered_adapter_tenant.stdout | trim }}'
+      when: carrier_adapter_tenant_id is not defined
+    - name: Require explicit tenant identity
+      ansible.builtin.assert:
+        that:
+          - carrier_adapter_tenant_id is defined
+          - carrier_adapter_tenant_id is match('^[0-9a-fA-F-]{36}$')
+        fail_msg: Set carrier_adapter_tenant_id to the tenant UUID. Existing FreeSWITCH and a valid HTTPS certificate are required.
+    - name: Validate existing switch and TLS paths
+      ansible.builtin.stat:
+        path: '{{ item }}'
+      loop: ['{{ carrier_adapter_fs_cli }}', '{{ carrier_adapter_gateway_dir }}', '{{ carrier_adapter_dialplan_dir }}', '{{ carrier_adapter_certificate }}', '{{ carrier_adapter_private_key }}']
+      register: adapter_paths
+    - name: Require installed switch and certificate
+      ansible.builtin.assert:
+        that: item.stat.exists
+      loop: '{{ adapter_paths.results }}'
+      no_log: true
+    - name: Validate switch connection
+      ansible.builtin.command:
+        argv: ['{{ carrier_adapter_fs_cli }}', '-x', status]
+      register: adapter_switch
+      changed_when: false
+      failed_when: adapter_switch.rc != 0 or 'UP' not in adapter_switch.stdout
+    - name: Create private service directory
+      ansible.builtin.file:
+        path: /etc/olamide
+        state: directory
+        mode: '0700'
+    - name: Generate or reuse token and prepare matching GUI input
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/prepare_carrier_adapter.py]
+        stdin: "{{ {'tenantId': carrier_adapter_tenant_id, 'url': 'https://' + carrier_adapter_domain + ':' + (carrier_adapter_port | string) + '/provision', 'port': carrier_adapter_port | int, 'fs_cli': carrier_adapter_fs_cli, 'gatewayDir': carrier_adapter_gateway_dir, 'dialplanDir': carrier_adapter_dialplan_dir, 'profile': carrier_adapter_profile, 'certificate': carrier_adapter_certificate, 'privateKey': carrier_adapter_private_key, 'routingCommissioned': carrier_adapter_routing_commissioned | default(false) | bool} | to_json }}"
+      no_log: true
+      changed_when: true
+    - name: Install adapter service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/olamide-carrier-adapter.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Olamide HTTPS carrier adapter
+          After=network.target freeswitch.service
+          [Service]
+          ExecStart=/usr/bin/python3 /opt/olamide/repo/services/carrier-adapter/adapter.py --config /etc/olamide/carrier-adapter.json
+          Restart=on-failure
+          RestartSec=3
+          UMask=0077
+          NoNewPrivileges=true
+          PrivateTmp=true
+          ProtectHome=true
+          ProtectSystem=strict
+          ReadWritePaths={{ carrier_adapter_gateway_dir }} {{ carrier_adapter_dialplan_dir }}
+          [Install]
+          WantedBy=multi-user.target
+    - name: Start adapter
+      ansible.builtin.systemd:
+        name: olamide-carrier-adapter
+        daemon_reload: true
+        enabled: true
+        state: restarted
+    - name: Wait for authenticated HTTPS service
+      ansible.builtin.uri:
+        url: 'https://{{ carrier_adapter_domain }}:{{ carrier_adapter_port }}/provision'
+        method: POST
+        body_format: json
+        body: {}
+        status_code: 401
+        validate_certs: true
+      register: adapter_ready
+      until: adapter_ready is succeeded
+      retries: 6
+      delay: 3
+- import_playbook: carrier-adapter.yml
+  vars:
+    carrier_adapter_config: /root/carrier-adapter.json
