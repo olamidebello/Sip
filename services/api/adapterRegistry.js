@@ -85,10 +85,30 @@ export async function recordAdapterOperation(pool,{tenant,provider,adapterId,act
 export async function commissionCarrier(pool,user,provider,action,details){
   if(provider==='flowroute'&&action==='activate'){const c=await flowrouteTrunk(pool,user.tenant_id);if(c)details={...details,flowrouteTrunk:adapterTrunk(c)};}
   const assigned=action==='deactivate';
-  const node=await adapterFor(pool,user.tenant_id,provider,details.maxConcurrentCalls||0,assigned);
+  let node=await adapterFor(pool,user.tenant_id,provider,details.maxConcurrentCalls||0,assigned);
+  if(!node&&!assigned){
+    const candidates=await pool.query('SELECT * FROM carrier_adapter_nodes WHERE tenant_id=$1 AND provider=$2 AND enabled=TRUE ORDER BY priority,id',[user.tenant_id,provider]);
+    node=candidates.rows.find(n=>Number(n.max_concurrent_calls)>=Number(details.maxConcurrentCalls||0));
+    if(!node&&candidates.rows.length){
+      const error=Error('Carrier capacity exceeds the enabled adapter capacity. Reduce the provider profile capacity or commission a larger adapter.');
+      error.publicCode='adapter_capacity';throw error;
+    }
+    if(node){
+      await invokeAdapter(node,'health',{tenantId:user.tenant_id,provider,adapterId:node.id},pool);
+      await pool.query("UPDATE carrier_adapter_nodes SET health='healthy',last_check_at=UTC_TIMESTAMP(3),last_error=NULL WHERE id=$1 AND tenant_id=$2",[node.id,user.tenant_id]);
+      node.health='healthy';
+    }
+  }
   if(node){
     if(action!=='deactivate'&&(!node.enabled||node.health!=='healthy'))throw Error('No healthy enabled adapter');
     try{
+      if(action==='activate'||action==='verify'){
+        const health=await invokeAdapter(node,'health',{tenantId:user.tenant_id,provider,adapterId:node.id},pool);
+        if(health.routingCommissioned===false){
+          const error=Error('Kamailio paid-call routing and billing are not connected. Adapter health is ready; carrier activation remains blocked.');
+          error.publicCode='routing_incomplete';throw error;
+        }
+      }
       await invokeAdapter(node,action,{tenantId:user.tenant_id,provider,adapterId:node.id,...details,terminationPolicy},pool);
       await recordAdapterOperation(pool,{tenant:user.tenant_id,provider,adapterId:node.id,action,outcome:'success',actor:user.id});
       if(action==='activate')await pool.query('INSERT INTO carrier_adapter_assignments(tenant_id,provider,adapter_id) VALUES($1,$2,$3) ON DUPLICATE KEY UPDATE adapter_id=VALUES(adapter_id),assigned_at=UTC_TIMESTAMP(3)',
