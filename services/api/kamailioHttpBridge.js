@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {reservePstn,settlePstn} from './pstnBilling.js';
 import {timingSafeEqual} from 'node:crypto';
 export function bridgeAuthorized(header,token){
  if(!/^[0-9a-f]{64}$/.test(token||''))return false;
@@ -7,6 +8,8 @@ export function bridgeAuthorized(header,token){
 }
 export async function bridgeLookup(pool,path,data){
  const identity=/^[a-zA-Z0-9]{2,64}$/;
+ if(path==='/api/switch/kamailio/billing-event')return settlePstn(pool,data);
+
  if(typeof data.domain!=='string'||!/^[-a-zA-Z0-9.]{1,253}$/.test(data.domain))return [400,{error:'Invalid domain'}];
  if(path==='/api/switch/kamailio/auth'){
   if(!identity.test(data.username||''))return [400,{error:'Invalid username'}];
@@ -14,11 +17,14 @@ export async function bridgeLookup(pool,path,data){
   return row?[200,{ha1:row.ha1}]:[403,{error:'Account unavailable'}];
  }
  if(path==='/api/switch/kamailio/route'){
-  if(!identity.test(data.caller||'')||!identity.test(data.destination||''))return [403,{error:'Internal SIP identities required'}];
+  if(String(data.destination||'').startsWith('+')&&(process.env.KAMAILIO_PSTN_ENABLED!=='true'||!data.callKey))return [403,{error:'Paid route not authorized'}];
+  if(!identity.test(data.caller||'')||!(identity.test(data.destination||'')||/^\+?[1-9][0-9]{7,14}$/.test(data.destination||'')))return [403,{error:'Internal SIP identities required'}];
   const rows=(await pool.query(`SELECT target.username FROM olamide_sip_call_access caller
    JOIN olamide_sip_call_access target ON target.tenant_id=caller.tenant_id AND target.domain=caller.domain
    WHERE caller.username=$1 AND caller.domain=$2 AND target.username=$3`,[data.caller,data.domain,data.destination])).rows;
-  return rows.length===1?[200,{route:'extension',username:rows[0].username}]:[403,{error:'Destination unavailable in workspace'}];
+  if(rows.length===1)return [200,{route:'extension',username:rows[0].username}];
+  if(process.env.KAMAILIO_PSTN_ENABLED==='true'&&data.callKey)return reservePstn(pool,data);
+  return [403,{error:'Destination unavailable in workspace'}];
  }
  return [404,{error:'Not found'}];
 }
