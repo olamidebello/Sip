@@ -1,0 +1,158 @@
+---
+- name: Deploy prepaid billing and Kamailio Flowroute routing
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Require installed adapter configuration
+      ansible.builtin.stat:
+        path: /etc/olamide/carrier-adapter.json
+      register: installed_adapter
+    - name: Require commissioned HTTPS adapter installation
+      ansible.builtin.assert:
+        that: installed_adapter.stat.exists
+    - name: Stage recognized paid route and durable queue configuration
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/prepare_kamailio_paid_route.py]
+      changed_when: true
+      no_log: true
+    - name: Validate whole staged Kamailio configuration
+      ansible.builtin.command:
+        argv: [kamailio, '-c', '-f', /etc/kamailio/.olamide-paid-staged.cfg]
+      changed_when: false
+      no_log: true
+    - name: Install local durable settlement queue
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/olamide-billing-queue.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Olamide durable SIP billing event queue
+          After=network.target docker.service
+          [Service]
+          ExecStart=/usr/bin/python3 /opt/olamide/repo/services/carrier-adapter/billing_queue.py --config /etc/olamide/billing-queue.json
+          Restart=on-failure
+          RestartSec=3
+          UMask=0077
+          NoNewPrivileges=true
+          PrivateTmp=true
+          ProtectHome=true
+          ProtectSystem=strict
+          ReadWritePaths=/etc/olamide
+          [Install]
+          WantedBy=multi-user.target
+    - name: Start durable queue
+      ansible.builtin.systemd:
+        name: olamide-billing-queue
+        daemon_reload: true
+        enabled: true
+        state: restarted
+    - name: Check queue authentication gate
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18444/event
+        method: POST
+        status_code: 401
+      register: queue_ready
+      until: queue_ready is succeeded
+      retries: 6
+      delay: 2
+    - name: Build API containing billing backend
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, build, api]
+        chdir: /opt/olamide/repo/deployment/docker
+      changed_when: true
+    - name: Deploy validated route with rollback
+      block:
+        - name: Save previous Kamailio configuration
+          ansible.builtin.copy:
+            src: /etc/kamailio/kamailio.cfg
+            dest: /etc/kamailio/.pre-paid-calls.cfg
+            remote_src: true
+            mode: '0600'
+        - name: Enable backend in both private deployment environments
+          ansible.builtin.lineinfile:
+            path: '{{ item }}'
+            regexp: '^KAMAILIO_PSTN_ENABLED='
+            line: KAMAILIO_PSTN_ENABLED=true
+            mode: '0600'
+          loop: [/etc/olamide/secrets.env, /opt/olamide/repo/deployment/docker/.env]
+          no_log: true
+        - name: Start updated API and create billing tables
+          ansible.builtin.command:
+            argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, up, '-d', '--no-deps', api]
+            chdir: /opt/olamide/repo/deployment/docker
+          changed_when: true
+        - name: Check API health from inside container
+          ansible.builtin.command:
+            argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, exec, '-T', api, node, '-e', "fetch('http://127.0.0.1:8080/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+            chdir: /opt/olamide/repo/deployment/docker
+          register: paid_api_ready
+          until: paid_api_ready.rc == 0
+          retries: 12
+          delay: 3
+          changed_when: false
+        - name: Install validated paid routing configuration
+          ansible.builtin.copy:
+            src: /etc/kamailio/.olamide-paid-staged.cfg
+            dest: /etc/kamailio/kamailio.cfg
+            remote_src: true
+            owner: root
+            group: kamailio
+            mode: '0640'
+          register: paid_config
+        - name: Restart Kamailio only on route change
+          ansible.builtin.systemd:
+            name: kamailio
+            state: restarted
+          when: paid_config.changed
+        - name: Verify dialog module RPC is available
+          ansible.builtin.command:
+            argv: [kamcmd, '-s', unix:/run/kamailio/olamide_carrier_ctl, dlg.list]
+          changed_when: false
+          register: paid_rpc
+          until: paid_rpc.rc == 0
+          retries: 6
+          delay: 2
+        - name: Mark successfully deployed routing backend commissioned
+          ansible.builtin.command:
+            argv: [python3, '-c', "import json,pathlib; p=pathlib.Path('/etc/olamide/carrier-adapter.json'); c=json.loads(p.read_text()); c['routingCommissioned']=True; t=p.with_suffix('.tmp'); t.write_text(json.dumps(c)); t.chmod(0o600); t.replace(p)"]
+          no_log: true
+          changed_when: true
+        - name: Refresh adapter commissioning capabilities
+          ansible.builtin.systemd:
+            name: olamide-carrier-adapter
+            state: restarted
+      rescue:
+        - name: Disable paid backend on unsuccessful cutover
+          ansible.builtin.lineinfile:
+            path: '{{ item }}'
+            regexp: '^KAMAILIO_PSTN_ENABLED='
+            line: KAMAILIO_PSTN_ENABLED=false
+          loop: [/etc/olamide/secrets.env, /opt/olamide/repo/deployment/docker/.env]
+          no_log: true
+        - name: Restore prior SIP routes
+          ansible.builtin.copy:
+            src: /etc/kamailio/.pre-paid-calls.cfg
+            dest: /etc/kamailio/kamailio.cfg
+            remote_src: true
+            owner: root
+            group: kamailio
+            mode: '0640'
+        - name: Restart restored Kamailio
+          ansible.builtin.systemd:
+            name: kamailio
+            state: restarted
+        - name: Reload disabled API backend
+          ansible.builtin.command:
+            argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, up, '-d', '--no-deps', api]
+            chdir: /opt/olamide/repo/deployment/docker
+        - name: Stop unsuccessful cutover
+          ansible.builtin.fail:
+            msg: Paid-call cutover failed; prior SIP routes restored and paid backend disabled.
+    - name: Commission saved Flowroute gateway and align capacity without prompts
+      ansible.builtin.command:
+        argv: [docker, compose, '--env-file', /etc/olamide/secrets.env, run, '--rm', '--no-deps', '-T', api, node, commissionPaidCalls.js]
+        chdir: /opt/olamide/repo/deployment/docker
+      changed_when: true
+    - name: Report deployment result and account prerequisites
+      ansible.builtin.debug:
+        msg: Paid routing backend deployed. Save Flowroute IP settings and authorized caller ID, use capacity within adapter limits, activate an imported rate deck and fund subscribed users' USD wallets. Provision the Flowroute gateway in the GUI, then validate a billed call and two-way audio. Missing prerequisites deny calls.
