@@ -99,17 +99,9 @@ A single host cannot provide host-level high availability; failover requires a
 second failure domain. This automation does not establish complete carrier-grade
 or ASTPP feature parity. The readiness GUI deliberately lists outstanding work.
 
-## Two additional FreeSWITCH backends
-
-The GUI profile `same-server-freeswitch-cluster` queues the same reviewed controller deployment. Populate the private profile with a digest-pinned FreeSWITCH image using `/usr/local/freeswitch`, two complete private configuration bundles, independent ESL passwords, and maintenance approval. The standalone playbook is `deploy/ansible/freeswitch-cluster.yml`; use the same private inventory with these variables.
-
-Instances fs2 and fs3 use loopback SIP 5092/5093, loopback ESL 8092/8093, and separate public RTP ranges 40000–44999 / 45000–49999. The validator rejects default credentials, public management listeners, conflicting profile ports and malformed XML. Reviewed configurations must persist recordings, voicemail and databases under `/usr/local/freeswitch/storage`; the image must support this layout. Drain calls before replacement. Take a host snapshot and preserve configuration/storage for rollback.
-
-Configure Kamailio dispatcher destinations `sip:127.0.0.1:5092` and `sip:127.0.0.1:5093` with OPTIONS probing, authenticated routing, accounting, capacity limits and tested failure handling. This deployment does not invent dialplans or enable traffic to untested destinations. CLI status checks establish process health only. Registration, two-way media, DTMF, transfers, voicemail, IVR, queues, conferences, recording, carrier calls, billing, fraud controls, overload, restart and backup restoration remain pending until exercised. Three processes on one host do not provide host-level high availability.
-
 ## Make deployed services visible in the GUI
 
-Run `ansible-playbook -i /etc/olamide/same-server.yml /opt/olamide/repo/deploy/ansible/service-gui.yml` after populating the private inventory. The same-server playbook also imports this step. It installs a once-per-minute systemd collector and mounts only its sanitized output read-only into the API. Super administrators see Kamailio, RTPengine, both FreeSWITCH backends, PBX, SMTP, IMAP and email filtering in the switch commissioning panel, with links to existing carrier and provisioning controls. Evidence expires after three minutes. Missing services remain visible as pending.
+Run `ansible-playbook -i /etc/olamide/same-server.yml /opt/olamide/repo/deploy/ansible/service-gui.yml` after populating the private inventory. The same-server playbook also imports this step. It installs a once-per-minute systemd collector and mounts only its sanitized output read-only into the API. Super administrators see Kamailio, RTPengine, PBX, SMTP, IMAP and email filtering in the switch commissioning panel, with links to existing carrier and provisioning controls. Evidence expires after three minutes. Missing services remain visible as pending.
 
 This inventory is monitoring and commissioning visibility, not a SIP provisioning or termination adapter. Process health does not activate routes, create accounts, authorize calls or mark full services tested. Private adapters, reviewed routes and real end-to-end acceptance remain required. No ESL password or server credential is sent to the browser.
 
@@ -117,7 +109,7 @@ This inventory is monitoring and commissioning visibility, not a SIP provisionin
 
 Flowroute is the sole default outbound PSTN provider. Application quote selection excludes every other provider and fails closed when Flowroute is inactive or lacks a matching rate. Carrier adapter commissioning requests carry the same `terminationPolicy` contract. Other providers remain available for inbound DID services. Local extension calls stay local.
 
-`flowroute-policy.yml` publishes the private switch policy file. Reviewed Kamailio and FreeSWITCH adapters must consume and enforce it; this file alone does not modify a running dialplan. Configure Flowroute authentication, approved PoP, caller ID, rates, capacity and billing controls; test outbound calls on each switch before traffic activation. The retired XML HTTP endpoint is not re-enabled by this change.
+`flowroute-policy.yml` publishes the private switch policy file. Reviewed Kamailio adapters must consume and enforce it; this file alone does not modify a running dialplan. Configure Flowroute authentication, approved PoP, caller ID, rates, capacity and billing controls; test outbound calls on each switch before traffic activation. The retired XML HTTP endpoint is not re-enabled by this change.
 
 ## Automatic Flowroute rate checks and 30% selling markup
 

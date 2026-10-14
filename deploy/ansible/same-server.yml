@@ -152,9 +152,5 @@
       ansible.builtin.include_role:
         name: mail_node
       when: mail_enabled | default(false) | bool
-    - name: Commission optional two-instance FreeSWITCH cluster
-      ansible.builtin.include_role:
-        name: freeswitch_cluster
-      when: freeswitch_cluster_enabled | default(false) | bool
 - import_playbook: service-gui.yml
 - import_playbook: audit.yml

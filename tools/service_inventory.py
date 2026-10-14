@@ -2,7 +2,7 @@
 """Publish sanitized same-host readiness; process checks never imply call acceptance."""
 import argparse, datetime, json, pathlib, socket, subprocess
 
-SERVICES = [('kamailio','SIP edge','kamailio',8088),('rtpengine','Media relay','rtpengine-daemon',None),('fs2','FreeSWITCH backend 2',None,5092),('fs3','FreeSWITCH backend 3',None,5093),('pbx','Asterisk PBX','olamide-pbx',5062),('postfix','SMTP','postfix',587),('dovecot','IMAP','dovecot',993),('rspamd','Email filtering','rspamd',None)]
+SERVICES = [('kamailio','SIP edge','kamailio',8088),('rtpengine','Media relay','rtpengine-daemon',None),('pbx','Asterisk PBX','olamide-pbx',5062),('postfix','SMTP','postfix',587),('dovecot','IMAP','dovecot',993),('rspamd','Email filtering','rspamd',None)]
 CAPABILITIES = ['sip','routing','provisioning','commissioning','termination','full_services']
 
 def collect(host):
@@ -11,9 +11,6 @@ def collect(host):
         active=False
         if unit:
             active=subprocess.run(['systemctl','is-active','--quiet',unit],capture_output=True).returncode==0
-        elif key in ('fs2','fs3'):
-            check=subprocess.run(['docker','compose','-p','olamide-switches','-f','/opt/olamide/freeswitch/compose.yml','ps','--status','running','-q',key],capture_output=True,text=True)
-            active=check.returncode==0 and bool(check.stdout.strip())
         connected=False
         if port:
             try:

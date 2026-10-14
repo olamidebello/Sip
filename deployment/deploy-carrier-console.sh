@@ -8,7 +8,7 @@ flock -n 9 || { echo 'Another deployment is running' >&2; exit 1; }
 command -v ansible-playbook >/dev/null
 run_dir=$(mktemp -d /tmp/olamide-carrier-console.XXXXXXXX)
 trap 'rm -rf -- "$run_dir"' EXIT
-for play in "$play_name" flowroute-gateway-gui native-astpp-gui messenger-features; do cp "$repo_dir/deploy/ansible/$play.yml" "$run_dir/$play.yml"; done
+for play in "$play_name" flowroute-gateway-gui messenger-features; do cp "$repo_dir/deploy/ansible/$play.yml" "$run_dir/$play.yml"; done
 cp "$repo_dir/deploy/ansible/user-login.local.yml" "$run_dir/inventory.yml"
 printf '[defaults]\ninterpreter_python=auto_silent\nretry_files_enabled=False\n' > "$run_dir/ansible.cfg"
 cd "$run_dir"

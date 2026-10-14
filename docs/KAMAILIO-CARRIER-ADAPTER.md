@@ -1,6 +1,6 @@
 # Kamailio carrier adapter
 
-Use `deploy/ansible/install-kamailio-carrier-adapter.yml` for the reported Kamailio 5.6.3 server. Do not run the FreeSWITCH installer. This installer stages `ctl` and `htable` modules, a private Unix RPC socket and an unused carrier route definition. It validates the entire staged config with `kamailio -c`, saves a backup, restarts Kamailio only if the config changed, and restores the backup if startup/RPC checks fail. Schedule installation between calls because the initial configuration restart interrupts Kamailio processing.
+Use `deploy/ansible/install-kamailio-carrier-adapter.yml` for the reported Kamailio 5.6.3 server. The legacy alternate-switch installer has been removed. This installer stages `ctl` and `htable` modules, a private Unix RPC socket and an unused carrier route definition. It validates the entire staged config with `kamailio -c`, saves a backup, restarts Kamailio only if the config changed, and restores the backup if startup/RPC checks fail. Schedule installation between calls because the initial configuration restart interrupts Kamailio processing.
 
 ```sh
 cd /opt/olamide/repo

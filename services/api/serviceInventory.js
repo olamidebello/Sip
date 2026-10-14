@@ -1,5 +1,5 @@
 import fs from 'node:fs/promises';
-const ids=new Set(['kamailio','rtpengine','fs2','fs3','pbx','postfix','dovecot','rspamd']);
+const ids=new Set(['kamailio','rtpengine','pbx','postfix','dovecot','rspamd']);
 const capabilities=['sip','routing','provisioning','commissioning','termination','full_services'];
 export function sanitizeInventory(input,now=Date.now()){
   if(input?.schemaVersion!==1||!Array.isArray(input.services)||input.services.length>8)throw Error('Invalid inventory');

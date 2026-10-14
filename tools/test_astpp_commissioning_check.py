@@ -13,3 +13,13 @@ class CommissioningCheck(unittest.TestCase):
    def unavailable():raise OSError('password=never-print-this')
    r=check(d,pathlib.Path(d)/'missing',lambda _:self.fail('no database command expected'),unavailable)
    self.assertEqual(r['stage'],'gui_install_needed');self.assertNotIn('never-print-this',json.dumps(r))
+
+ def test_kamailio_mode_does_not_require_native_gui_and_checks_actual_rpc(self):
+  with tempfile.TemporaryDirectory() as d:
+   p=pathlib.Path(d);(p/'adapter.json').write_text(json.dumps({'backend':'kamailio','rpcSocket':'unix:/run/kamailio/olamide_carrier_ctl','routingCommissioned':True}))
+   calls=[]
+   def run(argv):calls.append(argv);return 0,'uptime: 300' if argv[-1]=='core.uptime' else 'name: olamide_carrier'
+   r=check(p,p/'adapter.json',run,lambda:'',production_backend='kamailio')
+   self.assertEqual(r['stage'],'kamailio_adapter_ready');self.assertEqual(r['nativeCallAcceptance'],'unverified');self.assertNotIn('FreeSWITCH',' '.join(r['nextSteps']));self.assertEqual(len(calls),2)
+   r=check(p,p/'adapter.json',lambda _: (1,'error: private error'),lambda:'',production_backend='kamailio')
+   self.assertEqual(r['stage'],'kamailio_adapter_check_needed');self.assertNotIn('private error',json.dumps(r))

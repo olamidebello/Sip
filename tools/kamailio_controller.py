@@ -27,7 +27,7 @@ def validate_profile(plan, profiles):
     if profile.get('sameServer'):
         settings=profile.get('sameServerSettings',{})
         required={'sip_domain','sip_public_ip','sip_public_interface','sip_bridge_ip','sip_bridge_interface','sip_docker_subnet','sip_rtp_min','sip_rtp_max','rtpengine_config_source','rtpengine_service','rtpengine_package','sip_carrier_cidrs'}
-        if not required <= set(settings) or set(settings)-required-{'mail_enabled','mail_hostname','mail_config_source','mail_certificate','mail_key','mail_domain','pbx_enabled','pbx_source_archive','pbx_source_sha256','pbx_config_source','pbx_version','freeswitch_cluster_enabled','freeswitch_instances','freeswitch_image','freeswitch_maintenance_approved'}: raise ValueError('Complete private same-server settings required')
+        if not required <= set(settings) or set(settings)-required-{'mail_enabled','mail_hostname','mail_config_source','mail_certificate','mail_key','mail_domain','pbx_enabled','pbx_source_archive','pbx_source_sha256','pbx_config_source','pbx_version'}: raise ValueError('Complete private same-server settings required')
         addresses=json.loads(subprocess.check_output(['ip','-j','-4','address'],text=True))
         local={a['local'] for interface in addresses for a in interface.get('addr_info',[])}
         if plan['host'] not in local or settings['sip_public_ip']!=plan['host']:
