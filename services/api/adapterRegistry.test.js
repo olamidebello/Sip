@@ -27,6 +27,7 @@ test('healthy adapter acknowledges activation and pins the assignment',async()=>
   process.env.CARRIER_ADAPTER_TARGETS_JSON=JSON.stringify({'us-east':{
     url:'https://adapter.example.com/provision',token:'x'.repeat(32)}});
   globalThis.fetch=async(_url,request)=>{
+    if(JSON.parse(request.body).action==='health')return new Response(JSON.stringify({status:'healthy'}));
     assert.equal(JSON.parse(request.body).action,'activate');
     return new Response(JSON.stringify({status:'active'}),{status:200});
   };
@@ -48,4 +49,14 @@ test('healthy adapter acknowledges activation and pins the assignment',async()=>
     if(old.targets===undefined)delete process.env.CARRIER_ADAPTER_TARGETS_JSON;
     else process.env.CARRIER_ADAPTER_TARGETS_JSON=old.targets;
   }
+});
+
+test('uncommissioned routing reports a specific blocker without activating',async()=>{
+ const prior={targets:process.env.CARRIER_ADAPTER_TARGETS_JSON,fetch:globalThis.fetch};
+ process.env.CARRIER_ADAPTER_TARGETS_JSON=JSON.stringify({primary:{url:'https://adapter.example/provision',token:'x'.repeat(32)}});
+ const actions=[];globalThis.fetch=async(_url,req)=>{actions.push(JSON.parse(req.body).action);return new Response(JSON.stringify({status:'healthy',routingCommissioned:false}));};
+ const node={id:'node',target_key:'primary',enabled:1,health:'healthy'};
+ const pool={query:async(sql)=>({rows:sql.includes('FROM carrier_adapter_nodes WHERE tenant_id=')?[node]:[],rowCount:sql.includes('FROM carrier_adapter_nodes WHERE tenant_id=')?1:0})};
+ try{await assert.rejects(commissionCarrier(pool,{id:'user',tenant_id:'tenant'},'flowroute','activate',{maxConcurrentCalls:10}),e=>e.publicCode==='routing_incomplete');assert.deepEqual(actions,['health']);}
+ finally{globalThis.fetch=prior.fetch;if(prior.targets===undefined)delete process.env.CARRIER_ADAPTER_TARGETS_JSON;else process.env.CARRIER_ADAPTER_TARGETS_JSON=prior.targets;}
 });
