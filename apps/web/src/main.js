@@ -1780,7 +1780,7 @@ const languageTools=setupLanguageTools({document,get:apiGet,request:accountReque
 const conversations=setupConversations({get:apiGet,request:accountRequest,isSignedIn:()=>!!activeRole,
   preferencesChanged:()=>loadContacts(),
   isVisible:()=>!$('#chat').hidden&&!$('#chat').classList.contains('workspace-inactive')&&(!window.matchMedia('(max-width:900px)').matches||$('#chat').classList.contains('thread-open')),
-  callContact:address=>{dialForm.elements.target.value=address;showWorkspace('calling-workspace');status('Contact selected. Connect your SIP account, then press Call.');}});
+  callContact:address=>{dialForm.elements.target.value=address;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));callsScreen.open('keypad');status(sipRegistered&&phone?.isConnected()?'Contact selected. Ready to call.':'Contact selected. SIP is connecting; you can edit the number while you wait.');if(!sipRegistered)autoSip.wake();}});
 const contactDiscovery=setupContactDiscovery({document,get:apiGet,request:accountRequest});
 const subscriberDelivery=setupSubscriberDelivery({document,get:apiGet,request:accountRequest,isRegistered:()=>sipRegistered&&!!phone?.isConnected()});
 chatComposer=setupChatComposerShortcuts({document,moneyAllowed:()=>navigationAllowed('money')&&!$('#money').hidden,getCurrency:()=>localeSettings.currency(),payContact:(email,mode)=>moneyWorkspace.payContact(email,mode),shareCard:async()=>{const owner=softphoneUserId,recipient=$('#contact-list').value;const card=await apiGet('/api/wallet/payment-card');if(owner!==softphoneUserId||recipient!==$('#contact-list').value||!navigationAllowed('money'))return;const body=$('#send-message [name=body]');const cardText='Olamide payment card\n'+card.name+'\nPay or request by email: '+card.email+'\nWallet currency: '+card.currency;body.value=[body.value.trim(),cardText].filter(Boolean).join('\n\n');body.dispatchEvent(new Event('input'));body.focus();}});
@@ -2496,7 +2496,7 @@ const autoSip=createAutoSipRegistration({
     const data=new FormData();for(const [key,value] of Object.entries({aor:`sip:${account.username}@${account.domain}`,username:account.username,password:account.password,server:account.wssUrl}))data.set(key,value);
     await registerSip(data,valid);
   },
-  async disconnect(){sipConnectionGeneration++;if(phone){const current=phone;phone=undefined;sipRegistered=false;if(onCall)await current.hangup().catch(()=>{});await current.unregister().catch(()=>{});await current.disconnect().catch(()=>{});callState(false);connectForm.hidden=connectForm.dataset.canEdit!=='true';dialForm.hidden=true;$('#disconnect').hidden=true;}}
+  async disconnect(){sipConnectionGeneration++;if(phone){const current=phone;phone=undefined;sipRegistered=false;if(onCall)await current.hangup().catch(()=>{});await current.unregister().catch(()=>{});await current.disconnect().catch(()=>{});callState(false);connectForm.hidden=connectForm.dataset.canEdit!=='true';dialForm.hidden=false;$('#disconnect').hidden=true;}}
 });
 const nativeCalls=createNativeCallClient({plugin:()=>window.Capacitor?.Plugins?.NativePush,wake:()=>autoSip.wake(),currentCall:()=>({callId:currentCall?.sipCallId}),answer:()=>{if(!phone)throw new Error('SIP connection pending');return phone.answer();},end:()=>onCall?phone?.hangup():phone?.decline(),onError:report});
 window.addEventListener('online',()=>{autoSip.wake();if(softphoneUserId)void nativePush.start();});
@@ -2655,7 +2655,7 @@ $("#disconnect").onclick = async () => {
     phone = undefined;
     connectForm.reset();
     connectForm.hidden = connectForm.dataset.canEdit!=='true';
-    dialForm.hidden = true;
+    dialForm.hidden = false;
     $("#disconnect").hidden = true;
     callState(false);
     status("Disconnected");
