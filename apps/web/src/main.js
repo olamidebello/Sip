@@ -1154,8 +1154,8 @@ root.innerHTML = `
   <form id="dial" hidden>
     <label>Number, extension or SIP address <input name="target" placeholder="Extension, +15551234567 or sip:user@domain" autocomplete="off" required></label>
     <div id="dialpad" class="dialpad" role="group" aria-label="Telephone dialpad"></div>
-    <p class="dialpad-hint">During a connected call, tap the keypad to send menu tones.</p>
-    <div class="dialpad-actions"><button type="button" id="dialpad-video" aria-label="Create video invitation">Video</button><button class="dialpad-call" aria-label="Place voice call">Call</button></div>
+    <p class="dialpad-hint">Hold 0 for +. During a connected call, tap the keypad or type digits to send menu tones.</p>
+    <button type="button" id="dialpad-redial">Redial last number</button><div class="dialpad-actions"><button type="button" id="dialpad-video" aria-label="Create video invitation">Video</button><button class="dialpad-call" aria-label="Place voice call">Call</button></div>
   </form>
   <section id="softphone-tools">
     <h2>Calling tools</h2>
@@ -1183,7 +1183,7 @@ root.innerHTML = `
     <button id="answer">Answer</button><button id="reject">Reject</button>
   </section>
   <section id="active" hidden>
-    <button id="hold">Hold</button><button id="mute">Mute</button><button id="hangup">Hang up</button>
+    <label>Call volume <input id="call-volume" type="range" min="0" max="1" step="0.05" value="1"></label><button id="hold">Hold</button><button id="mute">Mute</button><button id="hangup">Hang up</button>
     <label>DTMF <input id="tone" maxlength="1" pattern="[0-9*#]"></label><button id="send-tone">Send tone</button>
   </section>
   <button id="disconnect" hidden>Disconnect</button>
@@ -2491,6 +2491,7 @@ $("#logout").onclick = async () => {
       await phone.disconnect().catch(()=>{});
       phone=undefined;connectForm.hidden=connectForm.dataset.canEdit!=='true';dialForm.hidden=true;$("#disconnect").hidden=true;callState(false);
     }
+    lastDialedTarget='';
     await accountRequest("/api/logout", {});
     softphoneLoad++;softphoneUserId=null;favorites.clear();recentCalls=[];$("#dnd").checked=false;renderSoftphoneLists();
     geofenceGeneration++;geoPolicyLoaded=false;geoPolicy={enabled:true,maxAccuracyMeters:0,zones:[]};$("#geo-policy").textContent="Sign in to load calling area policy.";
@@ -2655,6 +2656,9 @@ $('#connect-assigned-sip').addEventListener('click',()=>{
 connectForm.querySelector('button').addEventListener('click',()=>{if(connectForm.dataset.canEdit!=='true')autoSip.wake();});
 connectForm.addEventListener("submit",async event=>{event.preventDefault();if(connectForm.dataset.canEdit!=='true'){autoSip.wake();return;}try{await registerSip(new FormData(connectForm));}catch(error){report(error);}});
 
+let lastDialedTarget='';
+$('#dialpad-redial').onclick=()=>{if(onCall)return status('Finish the active call before redialing.');if(!lastDialedTarget)return status('No number dialed in this session.');dialForm.elements.target.value=lastDialedTarget;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));dialForm.requestSubmit();};
+$('#call-volume').oninput=event=>{$('#remote').volume=Number(event.target.value);};
 setupDialpad({root:$('#dialpad'),input:dialForm.elements.target,openContact:c=>void contactCard.open(c),inCall:()=>onCall,
   sendTone:digit=>phone.sendDTMF(digit),onError:report});
 dialForm.addEventListener("submit", async (event) => {
@@ -2672,6 +2676,7 @@ dialForm.addEventListener("submit", async (event) => {
   if (!location.allowed) { status("Call blocked: " + location.reason); return; }
   let authorizedTarget=target;
   try {const access=await accountRequest('/api/softphone/authorize',{target});authorizedTarget=access.target||target;}catch(error){status(error.message);return;}
+  lastDialedTarget=target;
   currentCall = { direction: "outgoing", address: target };
   callGui.identity(await registeredCallLabel(target));
   try { callGui.pending();status("Calling…"); await phone.call(authorizedTarget); }
