@@ -233,7 +233,7 @@ export async function handleCarrierProviders({req,res,path,user,pool,send,readJs
       await pool.query("UPDATE carrier_provider_profiles SET status='active',last_error=NULL,provisioned_at=UTC_TIMESTAMP(3),updated_by=$1 WHERE tenant_id=$2 AND provider=$3",[user.id,user.tenant_id,provider]);
       return send(res,200,{provider,status:'active',adapterId:result.adapterId});
     }catch(error){
-      if(['adapter_capacity','routing_incomplete'].includes(error.publicCode)){
+      if(['adapter_capacity','routing_incomplete','adapter_disabled','adapter_missing'].includes(error.publicCode)){
         await pool.query("UPDATE carrier_provider_profiles SET status='draft',last_error=$1,updated_by=$2 WHERE tenant_id=$3 AND provider=$4",[error.message,user.id,user.tenant_id,provider]);
         return send(res,409,{error:error.message,reason:error.publicCode});
       }

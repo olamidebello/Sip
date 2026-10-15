@@ -60,3 +60,17 @@ test('uncommissioned routing reports a specific blocker without activating',asyn
  try{await assert.rejects(commissionCarrier(pool,{id:'user',tenant_id:'tenant'},'flowroute','activate',{maxConcurrentCalls:10}),e=>e.publicCode==='routing_incomplete');assert.deepEqual(actions,['health']);}
  finally{globalThis.fetch=prior.fetch;if(prior.targets===undefined)delete process.env.CARRIER_ADAPTER_TARGETS_JSON;else process.env.CARRIER_ADAPTER_TARGETS_JSON=prior.targets;}
 });
+
+test('disabled managed nodes block activation with an actionable reason',async()=>{
+ const pool={query:async sql=>({rows:[],rowCount:sql.startsWith('SELECT 1 FROM carrier_adapter_nodes')?1:0})};
+ await assert.rejects(commissionCarrier(pool,{id:'user',tenant_id:'tenant'},'flowroute','activate',{maxConcurrentCalls:5000}),e=>e.publicCode==='adapter_disabled');
+});
+
+test('missing nodes and legacy target identify the setup required',async()=>{
+ const before={url:process.env.CARRIER_PROVISION_URL,token:process.env.CARRIER_PROVISION_TOKEN};
+ delete process.env.CARRIER_PROVISION_URL;delete process.env.CARRIER_PROVISION_TOKEN;
+ try{
+  const pool={query:async()=>({rows:[],rowCount:0})};
+  await assert.rejects(commissionCarrier(pool,{id:'user',tenant_id:'tenant'},'flowroute','activate',{maxConcurrentCalls:5000}),e=>e.publicCode==='adapter_missing');
+ }finally{for(const [key,value] of [['CARRIER_PROVISION_URL',before.url],['CARRIER_PROVISION_TOKEN',before.token]]){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
+});

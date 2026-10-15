@@ -123,9 +123,15 @@ export async function commissionCarrier(pool,user,provider,action,details){
   }
   const registered=await pool.query('SELECT 1 FROM carrier_adapter_nodes WHERE tenant_id=$1 AND provider=$2 LIMIT 1',
     [user.tenant_id,provider]);
-  if(registered.rowCount&&action!=='deactivate')throw Error('No healthy adapter with sufficient capacity');
+  if(registered.rowCount&&action!=='deactivate'){
+    const error=Error('No enabled carrier node is available. Open Carrier adapters, check the node health, then enable it before provisioning.');
+    error.publicCode='adapter_disabled';throw error;
+  }
   const legacy=(await adapterTargetsFor(pool,user.tenant_id)).legacy;
-  if(!legacy)throw Error('Carrier adapter unavailable');
+  if(!legacy){
+    const error=Error('No carrier node is configured. Add a Flowroute node in Carrier adapters, select its configured target, check health, and enable it.');
+    error.publicCode='adapter_missing';throw error;
+  }
   const response=await fetch(legacy.url,{method:'POST',signal:AbortSignal.timeout(10000),
     headers:{Authorization:`Bearer ${legacy.token}`,'Content-Type':'application/json',
       'Idempotency-Key':`${user.tenant_id}:${provider}:${action}:${details.flowrouteTrunk?.configurationRevision||0}`},
