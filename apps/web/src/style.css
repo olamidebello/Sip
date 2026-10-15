@@ -362,3 +362,10 @@ body.admin-mode #app-nav .operator-menu-groups{padding-left:12px;border-left:2px
 body.admin-mode #app-nav .menu-parent:not([open])>.operator-menu-groups{display:none}
 
 .dialpad-number,.call-number{display:block;text-align:center;font-size:clamp(1.3rem,5vw,2rem);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;color:inherit;margin:.6rem 0;min-height:1.6em}.call-number[hidden]{display:none}
+
+/* Keep the typed destination visible above the mobile keypad. */
+.calls-dialog[data-mode=keypad] #dial>label{flex:0 0 auto;min-height:0;margin:12px 0 0}
+.calls-dialog[data-mode=keypad] #dial input{box-sizing:border-box;min-height:52px;font-size:20px;color:#f5f5f5;caret-color:#21d4bd}
+.calls-dialog[data-mode=keypad] .dialpad{flex:1 0 auto;display:flex;flex-direction:column;justify-content:flex-end}
+.calls-dialog[data-mode=keypad] .dialpad-number{position:sticky;top:0;z-index:1;display:block;flex:0 0 auto;box-sizing:border-box;width:100%;min-height:64px;margin:12px 0;padding:12px 8px;background:#1d1d1d;color:#fff;font-size:clamp(26px,7vw,40px);font-weight:500;line-height:1.25;overflow-wrap:anywhere;unicode-bidi:plaintext}
+.calls-dialog[data-mode=keypad] .dialpad-grid{flex-shrink:0}
