@@ -327,6 +327,16 @@ async function handler(req, res) {
       if (path==="/api/search") return await handleSearch({req,res,user,pool,send});
       if (path.startsWith("/api/support/")) return await handleSupport({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/native-push/'))return await handleNativePush({req,res,path,user,pool,send,readJson,sessionHash:tokenHash(currentToken(req))});
+
+      if(path==='/api/softphone/identity'&&req.method==='GET'){
+        const address=new URL(req.url,origin).searchParams.get('address')||'';
+        const match=/^sips?:([^@\s]+)@([^@\s;>]+)$/i.exec(address);
+        if(!match||address.length>255)return send(res,200,{label:'Unknown caller'});
+        const result=await pool.query("SELECT u.display_name AS name,p.phone_e164 AS phone FROM sip_accounts a JOIN users u ON u.id=a.user_id AND u.tenant_id=a.tenant_id LEFT JOIN user_profiles p ON p.user_id=u.id WHERE a.tenant_id=$1 AND a.username=$2 AND a.domain=$3 AND a.status='active' AND u.status='active' LIMIT 1",[user.tenant_id,match[1],match[2]]);
+        const person=result.rows[0];
+        const number=/^\+?[0-9*#]+$/.test(match[1])?match[1]:'';
+        return send(res,200,{label:person?(person.name?.trim()||person.phone||'Registered SIP user'):(number||'Unknown caller')});
+      }
       if(path==='/api/softphone/access'||path==='/api/softphone/authorize')return await handleCallAccess({req,res,path,user,pool,send,readJson});
       if (path.startsWith("/api/softphone/"))
         return await handleSoftphoneState({req,res,path,user,pool,send,readJson});

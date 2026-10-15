@@ -1405,6 +1405,24 @@ $('#menu-account').onclick=()=>showWorkspace('account');
 $('#menu-logout').onclick=()=>$('#logout').click();
 const connectForm = $("#connect");
 const dialForm = $("#dial");
+
+const dialIdentity=document.createElement('p');dialIdentity.className='dial-contact-identity';dialIdentity.hidden=true;dialForm.elements.target.after(dialIdentity);
+let identityGeneration=0;
+async function registeredCallLabel(address){
+ try{return (await apiGet('/api/softphone/identity?address='+encodeURIComponent(address))).label||'Unknown caller';}
+ catch{return /^sip:\+?[0-9*#]+@/i.test(address)?address.replace(/^sip:/i,'').split('@')[0]:'Unknown caller';}
+}
+async function refreshDialIdentity(){
+ const input=dialForm.elements.target,address=input.value,version=++identityGeneration;
+ const internal=/^sips?:/i.test(address);
+ input.hidden=internal;dialIdentity.hidden=!internal;
+ if(!internal){dialIdentity.textContent='';return;}
+ dialIdentity.textContent='Registered SIP user';
+ const label=await registeredCallLabel(address);
+ if(version===identityGeneration&&input.value===address)dialIdentity.textContent=label;
+}
+dialForm.elements.target.addEventListener('input',()=>void refreshDialIdentity());
+
 const contactCard=setupContactCard({document,get:apiGet,request:accountRequest,call:c=>{callsScreen.stop();dialForm.elements.target.value=c.target;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));callsScreen.open('keypad');},message:async c=>{callsScreen.stop();if(c.contactId){await loadContacts();$('#contact-list').value=c.contactId;$('#contact-list').dispatchEvent(new Event('change',{bubbles:true}));showWorkspace('chat');$('#chat').classList.add('thread-open');}else{if(!showWorkspace('external-sms'))throw Error('SMS is not enabled for your account');$('#sms-send').elements.to.value=c.target;$('#sms-send').elements.body.focus();}},video:c=>{callsScreen.stop();if(!showWorkspace('meetings'))throw Error('Video meetings are not enabled');$('#meeting-create input').value='Video call with '+c.name;$('#meeting-create input').focus();}});
 const dialerContacts=setupDialerContacts({document,get:apiGet,input:dialForm.elements.target,openContact:c=>void contactCard.open(c),inCall:()=>onCall,onStatus:message=>status(message)});
 $('#dialpad-video').innerHTML=icon('video');$('#dial .dialpad-call').innerHTML=icon('calls');
@@ -2581,14 +2599,14 @@ async function registerSip(data,shouldContinue=()=>true) {
       onCallReceived: async () => {
         if(!current()){await candidate.decline().catch(()=>{});return;}
         // SIP.js 0.21.2 SimpleUser keeps the Invitation internally; require its exact Call-ID.
-        currentCall = { direction: "incoming", address: "Unknown caller", sipCallId:candidate.session?.request?.callId };
+        currentCall = { direction: "incoming", address: candidate.session?.remoteIdentity?.uri?.toString()||"Unknown caller", sipCallId:candidate.session?.request?.callId };
         if ($("#dnd").checked) {
           try { await candidate.decline(); } catch (error) { report(error); }
           finishCall("declined (do not disturb)");
           return;
         }
         void nativeCalls.incoming(currentCall.sipCallId).catch(report);
-        callGui.identity(currentCall.address);$("#incoming").hidden = false; showWorkspace("calling-workspace"); status("Incoming call");
+        const incomingCall=currentCall;callGui.identity('Registered SIP user');void registeredCallLabel(incomingCall.address).then(label=>{if(currentCall===incomingCall)callGui.identity(label);});$("#incoming").hidden = false; showWorkspace("calling-workspace"); status("Incoming call");
       },
       onCallAnswered: () => { void nativeCalls.connected(currentCall?.sipCallId).catch(report); if (currentCall) currentCall.answered = true; showWorkspace("calling-workspace"); callState(true); status("Call connected"); },
       onCallHangup: () => { void nativeCalls.ended(currentCall?.sipCallId).catch(report); finishCall(currentCall?.answered ? "completed" : "missed or unanswered"); callState(false); status("Call ended"); },
@@ -2629,6 +2647,7 @@ dialForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!phone||!sipRegistered){status("Calls are unavailable while SIP is reconnecting. Try again when connected.");autoSip.wake();return;}
   if(onCall){status("Finish the active call before starting another.");return;}
+  void refreshDialIdentity();
   let target;
   try{target=dialTarget(String(new FormData(dialForm).get('target')),connectForm.elements.aor.value.split('@')[1]);}
   catch(error){report(error);return;}
@@ -2640,7 +2659,7 @@ dialForm.addEventListener("submit", async (event) => {
   let authorizedTarget=target;
   try {const access=await accountRequest('/api/softphone/authorize',{target});authorizedTarget=access.target||target;}catch(error){status(error.message);return;}
   currentCall = { direction: "outgoing", address: target };
-  callGui.identity(target);
+  callGui.identity(await registeredCallLabel(target));
   try { callGui.pending();status("Calling…"); await phone.call(authorizedTarget); }
   catch (error) { finishCall("failed");callState(false); report(error); }
 });

@@ -27,6 +27,7 @@ export function setupCallsScreen({document,get,request,show,dial,retryConnection
  }else{moved=document.getElementById({contacts:'dialer-contacts',keypad:'dial',favorites:'softphone-tools',settings:'softphone-tools'}[mode]||'softphone-tools');if(mode==='favorites'||mode==='settings')moved=moved.closest('details')||moved;original=moved.parentNode;next=moved.nextSibling;content.append(moved);if(moved.tagName==='DETAILS')moved.open=true;if(mode==='keypad'){if(moved.hidden){dialog.querySelector('[role=status]').textContent='Waiting for SIP connection. You can enter a number now; calling requires an active connection.';}moved.hidden=false;}}
  callSelected.hidden=mode!=='contacts';refreshCall();
  retry.hidden=!['keypad','contacts'].includes(mode);if(!retry.hidden)connectionStatus(document.getElementById('status')?.textContent||'Waiting for SIP connection');
+ if(mode==='keypad')document.getElementById('dial').elements.target.dispatchEvent(new document.defaultView.Event('input',{bubbles:true}));
  if(!dialog.open)dialog.showModal();
  }
  document.addEventListener('messenger:navigate',event=>{if(event.detail!=='calling-workspace'&&dialog.open)dialog.close();});
