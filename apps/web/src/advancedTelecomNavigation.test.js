@@ -10,3 +10,6 @@ test('native ASTPP menus open their exact private-console routes and remain supe
   await app.signIn('admin');for(const menu of menus)assert.equal(app.window.audit.showWorkspace('telecom-feature-'+menu.id),false);
  }finally{app.close();}
 });
+test('Operator setup link opens server management without executing an install',async()=>{
+ const app=await appFixture();try{await app.signIn('super_admin');app.window.audit.showWorkspace('telecom-feature-shadow-billing');app.document.querySelector('#telecom-feature-shadow-billing .operator-requirements-open').click();assert.equal(app.window.location.hash,'#fleet-admin');}finally{app.close();}
+});
