@@ -20,7 +20,7 @@ test('keypad edits destination before calls and sends tones during calls',async(
     input.setSelectionRange(0,1);root.querySelector('[data-digit="9"]').click();assert.equal(input.value,'92');
     active=true;root.querySelector('[data-digit="#"]').click();await Promise.resolve();assert.deepEqual(tones,['#']);assert.equal(input.value,'92');
     active=false;input.setSelectionRange(2,2);root.querySelectorAll('button')[12].click();assert.equal(input.value,'9');
-    root.querySelectorAll('button')[13].click();assert.equal(input.value,'');assert.equal(root.querySelector('output').textContent,'Enter a number');
+    root.querySelectorAll('button')[13].click();assert.equal(input.value,'');assert.equal(root.querySelector('output').textContent,'Enter a number');root.querySelector('.dialpad-plus').click();assert.equal(input.value,'+');
   }finally{dom.window.close();}
 });
 

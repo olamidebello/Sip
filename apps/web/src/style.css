@@ -400,3 +400,19 @@ body .call-screen.call-keypad-open .call-controls{margin-top:16px;gap:10px}
 .call-keypad button[data-digit]:active,.dialpad-grid button:active{background:#128471;color:#fff;transform:scale(.96)}
 .call-keypad button:focus-visible{outline:3px solid #128471;outline-offset:3px}
 @media(max-height:700px){body #active.call-screen.call-keypad-open{padding-top:16px}body .call-screen.call-keypad-open .call-controls button{width:64px;height:64px}.call-keypad:not([hidden]){margin-top:10px;gap:5px}.call-keypad button[data-digit]{height:48px;min-height:48px}}
+
+/* Calling accessibility: no long-press-only controls, readable focus and device preferences. */
+.calls-dialog[data-mode=keypad] .dialpad-clear,.calls-dialog[data-mode=keypad] .dialpad-plus{display:inline-block;min-height:44px;padding:8px 12px;margin:4px;font-size:16px}
+.call-screen button,.dialpad button,.calls-dialog button{min-height:44px;min-width:44px}
+.call-screen button:focus-visible,.calls-dialog button:focus-visible,.dialpad button:focus-visible{outline:3px solid #ffd23f;outline-offset:3px}
+body.calling-large-controls .dialpad-grid button,body.calling-large-controls .call-keypad button[data-digit]{min-height:80px;height:auto;font-size:30px}
+body.calling-large-controls .call-screen .call-controls button{width:96px;height:96px;font-size:16px}
+body.calling-large-controls .dialpad-grid button span{font-size:36px}
+body.calling-large-controls .call-controls{grid-template-columns:repeat(2,minmax(96px,1fr))}
+body.messenger-high-contrast .calls-dialog,body.messenger-high-contrast .call-screen:not([hidden]){background:#000!important;color:#fff!important}
+body.messenger-high-contrast .call-screen .call-hero p,body.messenger-high-contrast .call-screen .call-keypad-number,body.messenger-high-contrast .call-keypad-note,body.messenger-high-contrast .calls-dialog h2{color:#fff!important}
+body.messenger-high-contrast .call-screen button,body.messenger-high-contrast .calls-dialog button{background:#000!important;color:#fff!important;border:2px solid #fff!important}
+body.messenger-high-contrast button[aria-pressed=true]{outline:3px solid #ffdf00}
+@media(prefers-reduced-motion:reduce){.dialpad-grid button,.call-keypad button,.call-screen{animation:none!important;transition:none!important;transform:none!important;scroll-behavior:auto!important}}
+body.messenger-reduce-motion .dialpad-grid button:active,body.messenger-reduce-motion .call-keypad button:active{transform:none}
+@media(forced-colors:active){.call-screen,.calls-dialog{background:Canvas!important;color:CanvasText!important}.call-screen button,.calls-dialog button{border:2px solid ButtonText!important}.call-screen button[aria-pressed=true]{outline:3px solid Highlight}.call-screen .call-hero p,.call-keypad-number,.call-keypad-note{color:CanvasText!important}}

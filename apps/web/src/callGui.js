@@ -9,11 +9,11 @@ export function setupCallGui({document,openVideo,openAudio=()=>{}}) {
   const names=[];
   const numbers=[];
   for(const [panel,label] of [[incoming,'Incoming audio call'],[active,'Audio call']]) {
-    panel.classList.add('call-screen');
+    panel.classList.add('call-screen');panel.setAttribute('role','region');panel.setAttribute('aria-label',label);panel.tabIndex=-1;
     const hero=document.createElement('div');hero.className='call-hero';
     const avatar=document.createElement('div');avatar.className='call-avatar';avatar.textContent='☎';avatar.setAttribute('aria-hidden','true');
     const name=document.createElement('h3');name.textContent='Olamide call';names.push(name);
-    const caption=document.createElement('p');caption.textContent=label;captions.push(caption);
+    const caption=document.createElement('p');caption.textContent=label;caption.setAttribute('role','status');caption.setAttribute('aria-live','polite');captions.push(caption);
     const number=document.createElement('p');number.className='call-number';number.hidden=true;numbers.push(number);
     hero.append(avatar,name,number,caption);panel.prepend(hero);
     const controls=document.createElement('div');controls.className='call-controls';
@@ -22,9 +22,17 @@ export function setupCallGui({document,openVideo,openAudio=()=>{}}) {
     const minimize=document.createElement('button');minimize.type='button';minimize.className='call-minimize';minimize.textContent='Minimize';minimize.setAttribute('aria-expanded','true');
     minimize.onclick=()=>{const small=panel.classList.toggle('call-minimized');minimize.textContent=small?'Expand call':'Minimize';minimize.setAttribute('aria-expanded',String(!small));};panel.append(minimize);
   }
+  const accessibility=document.getElementById('messenger-accessibility-form');
+  if(accessibility){
+    const label=document.createElement('label'),large=document.createElement('input');large.type='checkbox';large.name='largeCallControls';
+    const apply=enabled=>{large.checked=enabled;document.body.classList.toggle('calling-large-controls',enabled);};
+    try{apply(document.defaultView.localStorage.getItem('calling-large-controls')==='true');}catch{apply(false);}
+    large.onchange=()=>{apply(large.checked);try{document.defaultView.localStorage.setItem('calling-large-controls',String(large.checked));}catch{}};
+    label.append(large,' Larger calling controls (this device)');accessibility.append(label);
+  }
   incoming.querySelector('strong')?.remove();
   document.body.append(incoming,active);
-  const duration=document.createElement('p');duration.className='call-duration';duration.setAttribute('aria-label','Call duration');active.querySelector('.call-hero').append(duration);
+  const duration=document.createElement('p');duration.className='call-duration';duration.setAttribute('aria-label','Call duration');duration.setAttribute('aria-live','off');active.querySelector('.call-hero').append(duration);
   for(const id of ['answer','reject','hangup']) {
     const button=document.getElementById(id);const label=button.textContent;
     button.innerHTML=icon('calls')+`<span>${label}</span>`;button.setAttribute('aria-label',label+' audio call');
@@ -57,7 +65,8 @@ export function setupCallGui({document,openVideo,openAudio=()=>{}}) {
   }
   return {
     number(address){const value=callAddressLabel(address);addressLabel=value;for(const name of names)name.textContent=value;for(const node of numbers){node.textContent=value;node.hidden=!value;}},
-    pending(){resetTones();incoming.hidden=true;active.hidden=false;duration.textContent='';captions[1].textContent='Calling…';controls(false);},
+    incoming(){incoming.hidden=false;captions[0].textContent='Incoming call';document.getElementById('answer').focus();},
+    pending(){resetTones();incoming.hidden=true;active.hidden=false;active.focus();duration.textContent='';captions[1].textContent='Calling…';controls(false);},
     identity(value){for(const name of names)name.textContent=callIdentityLabel(addressLabel,value);},
     held(value){captions[1].textContent=value?'On hold':'Connected';},
     active(value){

@@ -51,4 +51,7 @@ export function setupDialpad({root,input,inCall,sendTone,onError}){
     }
     button.addEventListener('click',()=>{if(!inCall()){action();input.focus();input.dispatchEvent(new input.ownerDocument.defaultView.Event("input",{bubbles:true}));}});root.append(button);
   }
+  const plus=root.ownerDocument.createElement('button');plus.type='button';plus.className='dialpad-plus';plus.textContent='Insert +';plus.setAttribute('aria-label','Insert international plus prefix');
+  plus.onclick=()=>{if(inCall())return;const start=input.selectionStart??input.value.length;input.setRangeText('+',start,input.selectionEnd??start,'end');input.dispatchEvent(new input.ownerDocument.defaultView.Event('input',{bubbles:true}));};root.append(plus);
+
 }

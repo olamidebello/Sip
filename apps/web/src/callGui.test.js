@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
 import {setupCallGui} from './callGui.js';
 test('overlays retain SIP handlers and minimize without ending media',()=>{
-  const dom=new JSDOM('<div class="chat-thread-header"><button aria-label="Conversation menu"></button></div><section id="incoming" hidden><strong>Incoming</strong><button id="answer">Answer</button><button id="reject">Reject</button></section><section id="active" hidden><button id="hangup">Hang up</button></section><div id="meeting-live" hidden></div>');
+  const dom=new JSDOM('<form id="messenger-accessibility-form"></form><div class="chat-thread-header"><button aria-label="Conversation menu"></button></div><section id="incoming" hidden><strong>Incoming</strong><button id="answer">Answer</button><button id="reject">Reject</button></section><section id="active" hidden><button id="hangup">Hang up</button></section><div id="meeting-live" hidden></div>');
   const document=dom.window.document;let answered=0,video=0;document.getElementById('answer').onclick=()=>answered++;
   const ui=setupCallGui({document,openVideo:()=>video++});
   try{
     ui.number('sip:+15551234567@example.com');ui.identity('Alice');assert.equal(document.querySelector('.call-number').textContent,'+15551234567');assert.equal(document.querySelector('.call-hero h3').textContent,'Alice');
-    document.getElementById('answer').click();assert.equal(answered,1);document.querySelector('.chat-video-call').click();assert.equal(video,1);
+    ui.incoming();assert.equal(document.activeElement.id,'answer');assert.equal(document.getElementById('incoming').getAttribute('role'),'region');assert.equal(document.querySelector('#incoming [role=status]').getAttribute('aria-live'),'polite');const large=document.querySelector('[name=largeCallControls]');large.checked=true;large.dispatchEvent(new dom.window.Event('change'));assert.equal(document.body.classList.contains('calling-large-controls'),true);document.getElementById('answer').click();assert.equal(answered,1);document.querySelector('.chat-video-call').click();assert.equal(video,1);
     document.getElementById('incoming').hidden=false;ui.active(true);assert.equal(document.getElementById('incoming').hidden,true);
     assert.equal(document.querySelector('.call-duration').textContent,'00:00');ui.held(true);assert.equal(document.querySelector('#active .call-hero>p:not(.call-number):not(.call-duration)').textContent,'On hold');ui.held(false);
     document.querySelector('#active .call-minimize').click();assert.ok(document.getElementById('active').classList.contains('call-minimized'));
