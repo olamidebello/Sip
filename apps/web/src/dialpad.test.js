@@ -19,7 +19,17 @@ test('keypad edits destination before calls and sends tones during calls',async(
     root.querySelector('[data-digit="1"]').click();root.querySelector('[data-digit="2"]').click();assert.equal(input.value,'12');
     input.setSelectionRange(0,1);root.querySelector('[data-digit="9"]').click();assert.equal(input.value,'92');
     active=true;root.querySelector('[data-digit="#"]').click();await Promise.resolve();assert.deepEqual(tones,['#']);assert.equal(input.value,'92');
-    active=false;root.querySelectorAll('button')[12].click();assert.equal(input.value,'9');
+    active=false;input.setSelectionRange(2,2);root.querySelectorAll('button')[12].click();assert.equal(input.value,'9');
     root.querySelectorAll('button')[13].click();assert.equal(input.value,'');
   }finally{dom.window.close();}
+});
+
+test('backspace respects selection and keyboard digits send tones without editing the destination',async()=>{
+ const dom=new JSDOM('<input value="12345"><div></div>');
+ try{
+  const input=dom.window.document.querySelector('input'),root=dom.window.document.querySelector('div');let active=false;const tones=[];
+  setupDialpad({root,input,inCall:()=>active,sendTone:async digit=>tones.push(digit),onError:assert.fail});
+  input.setSelectionRange(1,4);root.querySelector('.dialpad-backspace').click();assert.equal(input.value,'15');
+  active=true;const event=new dom.window.KeyboardEvent('keydown',{key:'#',cancelable:true});input.dispatchEvent(event);await Promise.resolve();assert.equal(event.defaultPrevented,true);assert.deepEqual(tones,['#']);assert.equal(input.value,'15');
+ }finally{dom.window.close();}
 });
