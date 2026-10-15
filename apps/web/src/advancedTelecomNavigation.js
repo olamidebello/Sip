@@ -1,8 +1,8 @@
 import backendCatalog from './advancedTelecomCatalog.json' with {type:'json'};
 import nativeMenus from './nativeAstppMenus.json' with {type:'json'};
-const catalog=[...backendCatalog,...nativeMenus.map(menu=>({id:menu.id,name:menu.label,group:'Native ASTPP · '+menu.group+(menu.subtitle?' / '+menu.subtitle:''),nativePath:menu.path}))];
-const labels={'Accounts & security':'ASTPP · Accounts & security','Monitoring & reports':'ASTPP · Monitoring & reports','Routing & numbers':'ASTPP · Routing & numbers','Communications & PBX':'ASTPP · Communications & PBX','Billing & payments':'ASTPP · Billing & payments','External integrations':'ASTPP · External integrations','Account experience':'ASTPP · Portals & experience'};
-export const advancedTelecomGroups=[...new Set(catalog.map(f=>f.group))].map(group=>({label:labels[group]||(group.startsWith('Native ASTPP · ')?group:('ASTPP · '+group.replace('Core · ',''))),roles:['super_admin'],items:catalog.filter(f=>f.group===group).map(f=>['telecom-feature-'+f.id,f.name])}));
+const catalog=[...backendCatalog,...nativeMenus.map(menu=>({id:menu.id,name:menu.label,group:'Native · '+menu.group+(menu.subtitle?' / '+menu.subtitle:''),nativePath:menu.path}))];
+const labels={'Accounts & security':'Accounts & security','Monitoring & reports':'Monitoring & reports','Routing & numbers':'Routing & numbers','Communications & PBX':'Communications & PBX','Billing & payments':'Billing & payments','External integrations':'External integrations','Account experience':'Portals & experience'};
+export const advancedTelecomGroups=[...new Set(catalog.map(f=>f.group))].map(group=>({label:labels[group]||(group.startsWith('Native · ')?group:(''+group.replace('Core · ',''))),roles:['super_admin'],items:catalog.filter(f=>f.group===group).map(f=>['telecom-feature-'+f.id,f.name])}));
 export const advancedTelecomIds=new Set(catalog.map(f=>'telecom-feature-'+f.id));
 export function createAdvancedTelecomPanels(document,root){
  for(const feature of catalog){const panel=document.createElement('section');panel.id='telecom-feature-'+feature.id;panel.hidden=true;panel.className='advanced-telecom-panel';
