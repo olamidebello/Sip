@@ -9,6 +9,7 @@ export function createAdvancedTelecomPanels(document,root){
   const title=document.createElement('h2');title.textContent=feature.name;const group=document.createElement('p');group.className='advanced-feature-group';group.textContent=feature.group;
   const status=document.createElement('p');status.setAttribute('role','status');status.className='advanced-feature-status';const detail=document.createElement('p');detail.className='advanced-feature-detail';
   const actions=document.createElement('div');actions.className='advanced-feature-actions';const refresh=document.createElement('button');refresh.type='button';refresh.className='advanced-feature-refresh';refresh.textContent='Refresh status';actions.append(refresh);const related=document.createElement('div');related.className='advanced-feature-related';
+  const setup=document.createElement('button');setup.type='button';setup.textContent='Install Operator server requirements';setup.className='operator-requirements-open';actions.append(setup);
   const back=document.createElement('a');back.href='/admin#telecom-features-admin';back.textContent='View all feature coverage';const records=document.createElement('div');records.className='advanced-feature-records';panel.append(group,title,status,detail,actions,related,records,back);root.append(panel);
  }
 }
@@ -31,6 +32,6 @@ export function setupAdvancedTelecomNavigation({document,get,show}){
    if(feature.implementation!=='implemented'){const note=document.createElement('p');note.className='feature-dependency-note';note.textContent='This menu does not activate or install unfinished functionality. Complete the stated implementation and prerequisites before live use.';related.append(note);}
   }catch(error){if(owner===generation&&tokens.get(target)===serial)status.textContent=error.message;}
  }
- for(const id of advancedTelecomIds)document.getElementById(id).querySelector('.advanced-feature-refresh').onclick=()=>void refresh(id);
+ for(const id of advancedTelecomIds){document.getElementById(id).querySelector('.advanced-feature-refresh').onclick=()=>void refresh(id);document.getElementById(id).querySelector('.operator-requirements-open').onclick=()=>show('fleet-admin');}
  return {refresh,visibility(role){generation++;for(const id of advancedTelecomIds){const panel=document.getElementById(id);panel.hidden=role!=='super_admin';panel.querySelector('[role=status]').textContent='';panel.querySelector('.advanced-feature-detail').textContent='';panel.querySelector('.advanced-feature-related').replaceChildren();panel.querySelector('.advanced-feature-records').replaceChildren();}},stop(){this.visibility(null);}};
 }
