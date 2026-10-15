@@ -14,8 +14,8 @@ test('keypad remains usable through disconnect and reconnect and restores on clo
  window.HTMLDialogElement.prototype.close=function(){this.open=false;this.dispatchEvent(new window.Event('close'));};
  const form=doc.getElementById('dial'),input=form.elements.target;
  setupDialpad({root:doc.getElementById('dialpad'),input,inCall:()=>false,sendTone(){},onError:assert.fail});
- let connected=false,retries=0;
- const screen=setupCallsScreen({document:doc,get:async()=>({calls:[]}),request:async()=>{},show(){},dial(){},connected:()=>connected,retryConnection:()=>{retries++;}});
+ let connected=false,retries=0,lastNumber=false;
+ const screen=setupCallsScreen({document:doc,get:async()=>({calls:[]}),request:async()=>{},show(){},dial(){},connected:()=>connected,canRedial:()=>lastNumber,retryConnection:()=>{retries++;}});
  screen.open('keypad');assert.equal(form.hidden,false);
  assert.equal(doc.querySelectorAll('.calls-dialog [data-digit]').length,12);
  doc.querySelector('[data-digit="2"]').click();assert.equal(input.value,'2');
@@ -25,6 +25,7 @@ test('keypad remains usable through disconnect and reconnect and restores on clo
  assert.equal(doc.querySelector('[role=status]').textContent,'Connection lost');
  connected=true;screen.connectionStatus('Registered');assert.equal(form.querySelector('.dialpad-call').disabled,false);
  assert.equal(doc.querySelector('.calls-sip-retry').hidden,true);
+ input.value='';input.dispatchEvent(new window.Event('input'));assert.equal(form.querySelector('.dialpad-call').disabled,true);lastNumber=true;input.dispatchEvent(new window.Event('input'));assert.equal(form.querySelector('.dialpad-call').disabled,false);assert.equal(form.querySelector('.dialpad-call').getAttribute('aria-label'),'Load last dialed number');input.value='2';input.dispatchEvent(new window.Event('input'));
  connected=false;form.hidden=true;screen.connectionStatus('Reconnecting');
  assert.equal(form.hidden,false);assert.equal(form.querySelector('.dialpad-call').disabled,true);
  screen.stop();assert.equal(form.closest('.calls-tools-source')!==null,true);

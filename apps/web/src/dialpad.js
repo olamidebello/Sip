@@ -8,7 +8,7 @@ export function dialTarget(value,domain){
 
 export function setupDialpad({root,input,inCall,sendTone,onError}){
   const display=root.ownerDocument.createElement('output');display.className='dialpad-number';display.setAttribute('aria-label','Number to call');display.setAttribute('aria-live','polite');
-  const updateNumber=()=>{display.textContent=input.value||'Enter a number';};
+  const updateNumber=()=>{display.textContent=input.value||(input.dataset.routeTarget?'Name unavailable':'Enter a number');};
   input.addEventListener('input',updateNumber);updateNumber();root.append(display);
   const keys=[['1',''],['2','ABC'],['3','DEF'],['4','GHI'],['5','JKL'],['6','MNO'],['7','PQRS'],['8','TUV'],['9','WXYZ'],['*',''],['0','+'],['#','']];
   const grid=root.ownerDocument.createElement('div');grid.className='dialpad-grid';
@@ -38,8 +38,20 @@ export function setupDialpad({root,input,inCall,sendTone,onError}){
   });
   root.append(grid);
   input.inputMode="tel";
-  for(const [label,action] of [['Delete last digit',()=>{const start=input.selectionStart??input.value.length,end=input.selectionEnd??start;input.setRangeText('',start===end?Math.max(0,start-1):start,end,'end');}],['Clear number',()=>{input.value='';}]]){
+  input.setAttribute("aria-label","Number, extension or SIP address");
+  input.setAttribute("autocapitalize","none");input.spellcheck=false;
+  for(const [label,action] of [['Delete last digit',()=>{if(!input.value)delete input.dataset.routeTarget;const start=input.selectionStart??input.value.length,end=input.selectionEnd??start;input.setRangeText('',start===end?Math.max(0,start-1):start,end,'end');}],['Clear number',()=>{delete input.dataset.routeTarget;input.value='';}]]){
     const button=root.ownerDocument.createElement('button');button.type='button';button.textContent=label;button.className=label==='Delete last digit'?'dialpad-backspace':'dialpad-clear';button.setAttribute('aria-label',label);
+    if(label==='Delete last digit'){
+      let timer,cleared=false;
+      button.addEventListener('pointerdown',()=>{cleared=false;timer=setTimeout(()=>{if(!inCall()){delete input.dataset.routeTarget;input.value='';input.dispatchEvent(new input.ownerDocument.defaultView.Event('input',{bubbles:true}));cleared=true;}},600);});
+      for(const event of ['pointerup','pointerleave','pointercancel'])button.addEventListener(event,()=>clearTimeout(timer));
+      button.addEventListener('contextmenu',event=>event.preventDefault());
+      button.addEventListener('click',event=>{if(cleared){cleared=false;event.stopImmediatePropagation();}});
+    }
     button.addEventListener('click',()=>{if(!inCall()){action();input.focus();input.dispatchEvent(new input.ownerDocument.defaultView.Event("input",{bubbles:true}));}});root.append(button);
   }
+  const plus=root.ownerDocument.createElement('button');plus.type='button';plus.className='dialpad-plus';plus.textContent='Insert +';plus.setAttribute('aria-label','Insert international plus prefix');
+  plus.onclick=()=>{if(inCall())return;const start=input.selectionStart??input.value.length;input.setRangeText('+',start,input.selectionEnd??start,'end');input.dispatchEvent(new input.ownerDocument.defaultView.Event('input',{bubbles:true}));};root.append(plus);
+
 }

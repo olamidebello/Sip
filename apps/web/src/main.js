@@ -1,3 +1,5 @@
+import {setupDialIdentityInput,dialInputTarget} from './dialIdentityInput.js';
+import {callAddressLabel,callIdentityLabel} from './callIdentity.js';
 import {syncCarrierProfileForm} from './carrierProfileForm.js';
 import {setupTelecomRefills} from './telecomRefills.js';
 import {setupTelecomPolicies} from './telecomPolicies.js';
@@ -1417,21 +1419,12 @@ const connectForm = $("#connect");
 const dialForm = $("#dial");
 
 const dialIdentity=document.createElement('p');dialIdentity.className='dial-contact-identity';dialIdentity.hidden=true;dialForm.elements.target.after(dialIdentity);
-let identityGeneration=0;
 async function registeredCallLabel(address){
- try{return (await apiGet('/api/softphone/identity?address='+encodeURIComponent(address))).label||'Unknown caller';}
- catch{return /^sip:\+?[0-9*#]+@/i.test(address)?address.replace(/^sip:/i,'').split('@')[0]:'Unknown caller';}
+ try{return callIdentityLabel(address,(await apiGet('/api/softphone/identity?address='+encodeURIComponent(address))).label);}
+ catch{return callAddressLabel(address)||'Name unavailable';}
 }
-async function refreshDialIdentity(){
- const input=dialForm.elements.target,address=input.value,version=++identityGeneration;
- const internal=/^sips?:/i.test(address);
- input.hidden=internal;dialIdentity.hidden=!internal;
- if(!internal){dialIdentity.textContent='';return;}
- dialIdentity.textContent='Registered SIP user';
- const label=await registeredCallLabel(address);
- if(version===identityGeneration&&input.value===address)dialIdentity.textContent=label;
-}
-dialForm.elements.target.addEventListener('input',()=>void refreshDialIdentity());
+const dialIdentityInput=setupDialIdentityInput({input:dialForm.elements.target,lookup:registeredCallLabel,changed:()=>{dialIdentity.hidden=true;const output=$('#dialpad .dialpad-number');if(output)output.textContent=dialForm.elements.target.value||dialForm.elements.target.placeholder;}});
+function refreshDialIdentity(){return dialIdentityInput.refresh();}
 
 const contactCard=setupContactCard({document,get:apiGet,request:accountRequest,call:c=>{callsScreen.stop();dialForm.elements.target.value=c.target;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));callsScreen.open('keypad');},message:async c=>{callsScreen.stop();if(c.contactId){await loadContacts();$('#contact-list').value=c.contactId;$('#contact-list').dispatchEvent(new Event('change',{bubbles:true}));showWorkspace('chat');$('#chat').classList.add('thread-open');}else{if(!showWorkspace('external-sms'))throw Error('SMS is not enabled for your account');$('#sms-send').elements.to.value=c.target;$('#sms-send').elements.body.focus();}},video:c=>{callsScreen.stop();if(!showWorkspace('meetings'))throw Error('Video meetings are not enabled');$('#meeting-create input').value='Video call with '+c.name;$('#meeting-create input').focus();}});
 const dialerContacts=setupDialerContacts({document,get:apiGet,input:dialForm.elements.target,openContact:c=>void contactCard.open(c),inCall:()=>onCall,onStatus:message=>status(message)});
@@ -1477,7 +1470,7 @@ const operatorAdmin=setupOperatorControl();
 const switchAdmin=setupKamailioAdmin();
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
-const callsScreen=setupCallsScreen({document,get:apiGet,request:accountRequest,show:showWorkspace,retryConnection:()=>autoSip.wake(),connected:()=>sipRegistered&&!!phone?.isConnected(),dial:address=>{dialForm.elements.target.value=address;dialForm.requestSubmit();}});
+const callsScreen=setupCallsScreen({document,get:apiGet,request:accountRequest,show:showWorkspace,retryConnection:()=>autoSip.wake(),canRedial:()=>!!lastDialedTarget,connected:()=>sipRegistered&&!!phone?.isConnected(),dial:address=>{dialForm.elements.target.value=address;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));dialForm.requestSubmit();}});
 const messengerPreferences=setupMessengerPreferences({document,get:apiGet,request:accountRequest});
 const sessionAdmin=setupSessionAdmin(document);
 navigationPolicy=setupNavigationPolicy({document,get:apiGet,request:accountRequest,changed:()=>{updateNavigation();chatComposer?.refresh();if(activeRole&&!adminTarget(activeView)&&!navigationAllowed(activeView))showWorkspace(userHome(),{historyMode:'replace'});}});
@@ -1528,8 +1521,8 @@ async function saveSoftphonePreferences() {
 $("#dnd").onchange = () => saveSoftphonePreferences().catch(report);
 function resolveCallListIdentity(address, name, button, avatar) {
   const userId=softphoneUserId, generation=softphoneLoad;
-  name.textContent='Registered SIP user';
-  button.setAttribute('aria-label','Call registered SIP user');
+  name.textContent=callAddressLabel(address);
+  button.setAttribute('aria-label','Call '+name.textContent);
   if(avatar)avatar.textContent='☎';
   void registeredCallLabel(address).then(label=>{
     if(!name.isConnected || userId!==softphoneUserId || generation!==softphoneLoad)return;
@@ -2606,9 +2599,9 @@ function callState(active) {
     advancedCalling.reset();
     $("#incoming").hidden = true;
     onHold = false;
-    $("#hold").textContent = "Hold";
+    $("#hold").textContent = "Hold";$("#hold").setAttribute("aria-pressed","false");
     muted = false;
-    $("#mute").textContent = "Mute";
+    $("#mute").textContent = "Mute";$("#mute").setAttribute("aria-pressed","false");
   }
 }
 function report(error) {
@@ -2648,7 +2641,7 @@ async function registerSip(data,shouldContinue=()=>true) {
           return;
         }
         void nativeCalls.incoming(currentCall.sipCallId).catch(report);
-        const incomingCall=currentCall;callGui.number(incomingCall.address);callGui.identity('Registered SIP user');void registeredCallLabel(incomingCall.address).then(label=>{if(currentCall===incomingCall)callGui.identity(label);});$("#incoming").hidden = false; showWorkspace("calling-workspace"); status("Incoming call");
+        const incomingCall=currentCall;callGui.number(incomingCall.address);callGui.identity(callAddressLabel(incomingCall.address));void registeredCallLabel(incomingCall.address).then(label=>{if(currentCall===incomingCall)callGui.identity(label);});callsScreen.stop();callGui.incoming(); showWorkspace("calling-workspace"); status("Incoming call");
       },
       onCallAnswered: () => { void nativeCalls.connected(currentCall?.sipCallId).catch(report); if (currentCall) currentCall.answered = true; showWorkspace("calling-workspace"); callState(true); status("Call connected"); },
       onCallHangup: () => { void nativeCalls.ended(currentCall?.sipCallId).catch(report); finishCall(currentCall?.answered ? "completed" : "missed or unanswered"); callState(false); status("Call ended"); },
@@ -2684,18 +2677,23 @@ connectForm.querySelector('button').addEventListener('click',()=>{if(connectForm
 connectForm.addEventListener("submit",async event=>{event.preventDefault();if(connectForm.dataset.canEdit!=='true'){autoSip.wake();return;}try{await registerSip(new FormData(connectForm));}catch(error){report(error);}});
 
 const advancedCalling=setupAdvancedCalling({document,getPhone:()=>phone,isActive:()=>onCall,isRegistered:()=>sipRegistered,getCall:()=>currentCall});
-let lastDialedTarget='';
-$('#dialpad-redial').onclick=()=>{if(onCall)return status('Finish the active call before redialing.');if(!lastDialedTarget)return status('No number dialed in this session.');dialForm.elements.target.value=lastDialedTarget;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));dialForm.requestSubmit();};
+let lastDialedTarget='',dialing=false;
+dialForm.noValidate=true;
+$('#dialpad-redial').onclick=()=>{if(onCall)return status('Finish the active call before redialing.');if(!lastDialedTarget)return status('No number dialed in this session.');dialForm.elements.target.value=lastDialedTarget;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));dialForm.elements.target.focus();status('Last number loaded. Tap Call to dial.');};
 $('#call-volume').oninput=event=>{$('#remote').volume=Number(event.target.value);};
 setupDialpad({root:$('#dialpad'),input:dialForm.elements.target,openContact:c=>void contactCard.open(c),inCall:()=>onCall,
   sendTone:digit=>phone.sendDTMF(digit),onError:report});
 dialForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if(dialing||currentCall)return;
+  if(!dialInputTarget(dialForm.elements.target)&&lastDialedTarget){$('#dialpad-redial').click();return;}
+  dialing=true;
+  try {
   if (!phone||!sipRegistered){status("Calls are unavailable while SIP is reconnecting. Try again when connected.");autoSip.wake();return;}
   if(onCall){status("Finish the active call before starting another.");return;}
   void refreshDialIdentity();
   let target;
-  try{target=dialTarget(String(new FormData(dialForm).get('target')),connectForm.elements.aor.value.split('@')[1]);}
+  try{target=dialTarget(dialInputTarget(dialForm.elements.target),connectForm.elements.aor.value.split('@')[1]);}
   catch(error){report(error);return;}
   try {await loadGeofencePolicy();} catch {status("Location policy unavailable. Call blocked.");return;}
   if (!geoPolicyLoaded) {status("Location policy unavailable. Call blocked.");return;}
@@ -2707,9 +2705,11 @@ dialForm.addEventListener("submit", async (event) => {
   lastDialedTarget=target;
   currentCall = { direction: "outgoing", address: target };
   callGui.number(target);
-  callGui.identity(await registeredCallLabel(target));
-  try { callGui.pending();status("Calling…"); await phone.call(authorizedTarget); }
+  callGui.identity(callAddressLabel(target));
+  const outgoingCall=currentCall;void registeredCallLabel(target).then(label=>{if(currentCall===outgoingCall)callGui.identity(label);});
+  try { callsScreen.stop();callGui.pending();status("Calling…"); await phone.call(authorizedTarget); }
   catch (error) { finishCall("failed");callState(false); report(error); }
+  } finally {dialing=false;}
 });
 $("#check-location").onclick = async () => {
   try {await loadGeofencePolicy();} catch {$("#geo-result").textContent="Location policy unavailable";return;}
@@ -2724,7 +2724,7 @@ $("#hold").onclick = async () => {
   try {
     if (onHold) await phone.unhold(); else await phone.hold();
     onHold = !onHold;
-    $("#hold").textContent = onHold ? "Resume" : "Hold";
+    $("#hold").textContent = onHold ? "Resume" : "Hold";$("#hold").setAttribute("aria-pressed",String(onHold));callGui.held(onHold);
   } catch (error) { report(error); }
 };
 $("#mute").onclick = () => {
@@ -2732,7 +2732,7 @@ $("#mute").onclick = () => {
   try {
     if (muted) phone.unmute(); else phone.mute();
     muted = !muted;
-    $("#mute").textContent = muted ? "Unmute" : "Mute";
+    $("#mute").textContent = muted ? "Unmute" : "Mute";$("#mute").setAttribute("aria-pressed",String(muted));
   } catch (error) { report(error); }
 };
 $("#send-tone").onclick = async () => {

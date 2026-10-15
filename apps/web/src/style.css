@@ -369,3 +369,50 @@ body.admin-mode #app-nav .menu-parent:not([open])>.operator-menu-groups{display:
 .calls-dialog[data-mode=keypad] .dialpad{flex:1 0 auto;display:flex;flex-direction:column;justify-content:flex-end}
 .calls-dialog[data-mode=keypad] .dialpad-number{position:sticky;top:0;z-index:1;display:block;flex:0 0 auto;box-sizing:border-box;width:100%;min-height:64px;margin:12px 0;padding:12px 8px;background:#1d1d1d;color:#fff;font-size:clamp(26px,7vw,40px);font-weight:500;line-height:1.25;overflow-wrap:anywhere;unicode-bidi:plaintext}
 .calls-dialog[data-mode=keypad] .dialpad-grid{flex-shrink:0}
+
+/* Editable phone destination stays outside the key grid. */
+.calls-dialog[open][data-mode=keypad]{box-sizing:border-box}
+.calls-dialog[data-mode=keypad] #calls-dialog-content{flex:1 0 auto;min-height:0}
+.calls-dialog[data-mode=keypad] #dial>label{flex:0 0 auto;min-height:96px;justify-content:center;margin:16px 0 8px}
+.calls-dialog[data-mode=keypad] #dial input{display:block;flex:none;min-width:0;min-height:64px;font-size:clamp(24px,6vw,36px);line-height:1.3;color:#fff;-webkit-text-fill-color:#fff;opacity:1}
+.calls-dialog[data-mode=keypad] .dial-contact-identity{font-size:16px;line-height:1.4;text-align:center;color:#a7d4df;margin:4px 0;overflow-wrap:anywhere}
+.calls-dialog[data-mode=keypad] .dial-contact-identity[hidden]{display:none}
+.calls-dialog[data-mode=keypad] .dialpad{flex:0 0 auto;margin:auto auto 0}
+.calls-dialog[data-mode=keypad] .dialpad-number{display:none}
+.calls-dialog[data-mode=keypad] .dialpad-actions .dialpad-call{width:64px;min-width:64px;max-width:64px;min-height:64px}
+.calls-dialog[data-mode=keypad] .dialpad-grid button{touch-action:manipulation;user-select:none}
+@media(max-height:650px){.calls-dialog[data-mode=keypad] .dialpad-grid button{min-height:48px}.calls-dialog[data-mode=keypad] #dial>label{min-height:72px;margin:4px 0}}
+
+/* Shared visible keypad displays across inline, mobile, desktop and call GUIs. */
+#dial>label{min-width:0}#dial input[name=target]{box-sizing:border-box;min-height:56px;font-size:clamp(20px,4vw,32px);color:#fff;opacity:1}
+.dial-contact-identity{font-size:16px;line-height:1.4;overflow-wrap:anywhere}
+body .call-screen .call-number{font-size:clamp(22px,5vw,32px);line-height:1.3;color:#20252a;overflow-wrap:anywhere}
+.call-keypad-number{grid-column:1/-1;display:block;min-height:48px;font-size:28px;line-height:1.4;text-align:center;color:#20252a;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.call-keypad button[data-digit]{display:flex;flex-direction:column;align-items:center;justify-content:center;touch-action:manipulation;user-select:none}
+.call-keypad button small{font-size:10px;letter-spacing:.12em}
+.call-keypad .call-keypad-clear{grid-column:1/-1;border-radius:12px;font-size:15px;height:44px}
+.call-keypad-note{grid-column:1/-1;color:#515a60;font-size:12px;text-align:center}
+
+/* Familiar phone interaction states and compact call-menu layout. */
+body .call-screen .call-controls button[aria-pressed=true]{background:#128471;color:#fff;box-shadow:0 0 0 3px #8ce0cd}
+body .call-screen.call-keypad-open .call-avatar{display:none}
+body .call-screen.call-keypad-open .call-controls{margin-top:16px;gap:10px}
+.call-keypad button[data-digit]:active,.dialpad-grid button:active{background:#128471;color:#fff;transform:scale(.96)}
+.call-keypad button:focus-visible{outline:3px solid #128471;outline-offset:3px}
+@media(max-height:700px){body #active.call-screen.call-keypad-open{padding-top:16px}body .call-screen.call-keypad-open .call-controls button{width:64px;height:64px}.call-keypad:not([hidden]){margin-top:10px;gap:5px}.call-keypad button[data-digit]{height:48px;min-height:48px}}
+
+/* Calling accessibility: no long-press-only controls, readable focus and device preferences. */
+.calls-dialog[data-mode=keypad] .dialpad-clear,.calls-dialog[data-mode=keypad] .dialpad-plus{display:inline-block;min-height:44px;padding:8px 12px;margin:4px;font-size:16px}
+.call-screen button,.dialpad button,.calls-dialog button{min-height:44px;min-width:44px}
+.call-screen button:focus-visible,.calls-dialog button:focus-visible,.dialpad button:focus-visible{outline:3px solid #ffd23f;outline-offset:3px}
+body.calling-large-controls .dialpad-grid button,body.calling-large-controls .call-keypad button[data-digit]{min-height:80px;height:auto;font-size:30px}
+body.calling-large-controls .call-screen .call-controls button{width:96px;height:96px;font-size:16px}
+body.calling-large-controls .dialpad-grid button span{font-size:36px}
+body.calling-large-controls .call-controls{grid-template-columns:repeat(2,minmax(96px,1fr))}
+body.messenger-high-contrast .calls-dialog,body.messenger-high-contrast .call-screen:not([hidden]){background:#000!important;color:#fff!important}
+body.messenger-high-contrast .call-screen .call-hero p,body.messenger-high-contrast .call-screen .call-keypad-number,body.messenger-high-contrast .call-keypad-note,body.messenger-high-contrast .calls-dialog h2{color:#fff!important}
+body.messenger-high-contrast .call-screen button,body.messenger-high-contrast .calls-dialog button{background:#000!important;color:#fff!important;border:2px solid #fff!important}
+body.messenger-high-contrast button[aria-pressed=true]{outline:3px solid #ffdf00}
+@media(prefers-reduced-motion:reduce){.dialpad-grid button,.call-keypad button,.call-screen{animation:none!important;transition:none!important;transform:none!important;scroll-behavior:auto!important}}
+body.messenger-reduce-motion .dialpad-grid button:active,body.messenger-reduce-motion .call-keypad button:active{transform:none}
+@media(forced-colors:active){.call-screen,.calls-dialog{background:Canvas!important;color:CanvasText!important}.call-screen button,.calls-dialog button{border:2px solid ButtonText!important}.call-screen button[aria-pressed=true]{outline:3px solid Highlight}.call-screen .call-hero p,.call-keypad-number,.call-keypad-note{color:CanvasText!important}}

@@ -20,7 +20,7 @@ test('keypad edits destination before calls and sends tones during calls',async(
     input.setSelectionRange(0,1);root.querySelector('[data-digit="9"]').click();assert.equal(input.value,'92');
     active=true;root.querySelector('[data-digit="#"]').click();await Promise.resolve();assert.deepEqual(tones,['#']);assert.equal(input.value,'92');
     active=false;input.setSelectionRange(2,2);root.querySelectorAll('button')[12].click();assert.equal(input.value,'9');
-    root.querySelectorAll('button')[13].click();assert.equal(input.value,'');assert.equal(root.querySelector('output').textContent,'Enter a number');
+    root.querySelectorAll('button')[13].click();assert.equal(input.value,'');assert.equal(root.querySelector('output').textContent,'Enter a number');root.querySelector('.dialpad-plus').click();assert.equal(input.value,'+');
   }finally{dom.window.close();}
 });
 
@@ -31,5 +31,16 @@ test('backspace respects selection and keyboard digits send tones without editin
   setupDialpad({root,input,inCall:()=>active,sendTone:async digit=>tones.push(digit),onError:assert.fail});
   input.setSelectionRange(1,4);root.querySelector('.dialpad-backspace').click();assert.equal(input.value,'15');
   active=true;const event=new dom.window.KeyboardEvent('keydown',{key:'#',cancelable:true});input.dispatchEvent(event);await Promise.resolve();assert.equal(event.defaultPrevented,true);assert.deepEqual(tones,['#']);assert.equal(input.value,'15');
+ }finally{dom.window.close();}
+});
+
+test('holding delete clears the destination and holding zero inserts plus',async()=>{
+ const dom=new JSDOM('<input value="12345"><div></div>');try{
+  const input=dom.window.document.querySelector('input'),root=dom.window.document.querySelector('div');
+  setupDialpad({root,input,inCall:()=>false,sendTone:async()=>{},onError:assert.fail});
+  const remove=root.querySelector('.dialpad-backspace');remove.dispatchEvent(new dom.window.Event('pointerdown'));
+  await new Promise(resolve=>setTimeout(resolve,650));remove.dispatchEvent(new dom.window.Event('pointerup'));remove.click();assert.equal(input.value,'');
+  const zero=root.querySelector('[data-digit="0"]');zero.dispatchEvent(new dom.window.Event('pointerdown'));
+  await new Promise(resolve=>setTimeout(resolve,650));zero.dispatchEvent(new dom.window.Event('pointerup'));zero.click();assert.equal(input.value,'+');assert.equal(root.querySelector('output').textContent,'+');
  }finally{dom.window.close();}
 });

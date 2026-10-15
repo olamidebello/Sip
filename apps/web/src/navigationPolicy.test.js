@@ -23,3 +23,17 @@ test('Calls reference shortcuts open working dialogs and the call menu uses exis
 test('login with a hidden workspace hash falls back to Chats',async()=>{const app=await appFixture({url:'https://sip.example.com/#money',navigationExtras:{}});try{await app.signIn('user');assert.equal(app.window.location.hash,'#chat');assert.equal(app.document.getElementById('chat').closest('.workspace-inactive'),null);}finally{app.close();}});
 test('video invitation creation stays wired without adding the Meetings navigation tab',async()=>{const app=await appFixture({navigationExtras:{}});try{await app.signIn('user');app.document.querySelector('.chat-video-call').click();assert.equal(app.document.getElementById('meetings').closest('.workspace-inactive'),null);app.window.audit.showWorkspace('chat');assert.equal(app.window.audit.showWorkspace('meetings'),false);}finally{app.close();}});
 test('keypad keeps the actual SIP registration error visible instead of hiding it behind the dialog',async()=>{const app=await appFixture();try{await app.signIn('user');app.document.getElementById('status').textContent='SIP registration rejected (403): account denied by switch policy';[...app.document.querySelectorAll('.calls-shortcuts button')].find(b=>b.textContent==='Keypad').click();assert.match(app.document.querySelector('.calls-dialog [role=status]').textContent,/403/);assert.equal(app.document.querySelector('.calls-sip-retry').hidden,false);}finally{app.close();}});
+
+test('selected SIP destination stays editable and visible with a separate contact label',async()=>{
+ const app=await appFixture();try{
+  await app.signIn('user');
+  [...app.document.querySelectorAll('.calls-shortcuts button')].find(b=>b.textContent==='Keypad').click();
+  const input=app.document.querySelector('#dial input[name=target]');
+  input.value='sip:12025550123@sip.example.com';input.dispatchEvent(new app.window.Event('input',{bubbles:true}));
+  await new Promise(resolve=>setTimeout(resolve,10));
+  assert.equal(input.hidden,false);assert.equal(input.value,'12025550123');
+  assert.equal(app.document.querySelector('.dial-contact-identity').hidden,true);
+  input.setSelectionRange(input.value.length,input.value.length);
+  app.document.querySelector('[data-digit="4"]').click();assert.ok(input.value.endsWith('4'));
+ }finally{app.close();}
+});
