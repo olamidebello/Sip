@@ -14,7 +14,7 @@ import urllib.request
 import urllib.error
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-ALLOWED = {'health', 'install', 'upgrade', 'firewall'}
+ALLOWED = {'health', 'install', 'upgrade', 'firewall', 'operator_setup'}
 
 
 def secrets_file(path):
@@ -30,22 +30,25 @@ def request(base, token, route, body=None):
         return json.load(response)
 
 
-def probe(node):
+def probe(node, local_host=None):
     start = time.monotonic()
     target = node['ssh_user'] + '@' + node['host']
     cmd = ['ssh', '-p', str(node['ssh_port']), '-o', 'BatchMode=yes',
            '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8', target,
            *([] if node['ssh_user']=='root' else ['sudo','-n']), 'systemctl', 'is-active', 'kamailio']
+    local = local_host and node['host'] == local_host and os.geteuid() == 0
+    if local:
+        cmd = ['systemctl', 'is-active', 'kamailio']
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
         status = ('healthy' if result.returncode == 0 and result.stdout.strip() == 'active'
                   else 'unreachable' if result.returncode == 255 else 'degraded')
         version = None
         if status == 'healthy':
-            package = subprocess.run(['ssh', '-p', str(node['ssh_port']), '-o', 'BatchMode=yes',
+            package_cmd = ['dpkg-query', '-W', '-f=${Version}', 'kamailio'] if local else ['ssh', '-p', str(node['ssh_port']), '-o', 'BatchMode=yes',
                 '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8', target,
-                'dpkg-query', '-W', '-f=${Version}', 'kamailio'], capture_output=True,
-                text=True, timeout=15)
+                'dpkg-query', '-W', '-f=${Version}', 'kamailio']
+            package = subprocess.run(package_cmd, capture_output=True, text=True, timeout=15)
             if package.returncode == 0:
                 version = package.stdout.strip()[:80]
     except (subprocess.TimeoutExpired, OSError):
@@ -55,14 +58,40 @@ def probe(node):
     return {'nodeId': node['id'], 'status': status, 'latencyMs': latency, 'version': version}
 
 
+def operator_setup(node, local_host=None):
+    """Only the fixed CI-gated prerequisite installer may run for this action."""
+    host = str(ipaddress.IPv4Address(node['host']))
+    import re
+    if not re.fullmatch(r'[a-z_][a-z0-9_-]{0,31}', node['ssh_user']):
+        raise ValueError('Invalid SSH user')
+    port = int(node['ssh_port'])
+    if not 1 <= port <= 65535:
+        raise ValueError('Invalid SSH port')
+    command = ['bash', '/opt/olamide/repo/deployment/install-operator-requirements.sh']
+    if local_host and host == local_host and os.geteuid() == 0:
+        argv = command
+    else:
+        argv = ['ssh', '-p', str(port), '-o', 'BatchMode=yes',
+                '-o', 'StrictHostKeyChecking=yes', '-o', 'ConnectTimeout=8',
+                node['ssh_user'] + '@' + host,
+                *([] if node['ssh_user'] == 'root' else ['sudo', '-n']), *command]
+    # Keep raw installation output private; never send it back through the GUI.
+    log_dir = pathlib.Path('/var/log/olamide') if os.geteuid() == 0 else pathlib.Path.home() / '.local/state/olamide'
+    log_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with tempfile.NamedTemporaryFile(prefix='operator-', suffix='.log', dir=log_dir, delete=False) as log:
+        result = subprocess.run(argv, stdout=log, stderr=log, timeout=3600)
+    if result.returncode:
+        raise RuntimeError('Operator prerequisites failed; inspect the private controller log. CI validation or private configuration may be missing.')
+
+
 def deploy(node, inventory, vault_password):
     # Legacy fleet jobs cannot apply an unreviewed profile.
     raise RuntimeError('Use the Kamailio services capability plan and private profile controller')
 
-def run_once(base, token, runner_id, inventory, vault_password):
+def run_once(base, token, runner_id, inventory, vault_password, local_host=None):
     for node in request(base, token, 'nodes')['nodes']:
         try:
-            request(base, token, 'check', probe(node))
+            request(base, token, 'check', probe(node, local_host))
         except (urllib.error.URLError, OSError, ValueError) as error:
             print('Health report failed for ' + node['name'] + ': ' + type(error).__name__, flush=True)
     claimed = request(base, token, 'claim', {'runnerId': runner_id}).get('job')
@@ -84,17 +113,19 @@ def run_once(base, token, runner_id, inventory, vault_password):
     renewer.start()
     try:
         if claimed['action'] == 'health':
-            check = probe(claimed)
+            check = probe(claimed, local_host)
             request(base, token, 'check', check)
             if check['status'] != 'healthy':
                 raise RuntimeError('Switch health probe: ' + check['status'])
+        elif claimed['action'] == 'operator_setup':
+            operator_setup(claimed, local_host)
         else:
             deploy(claimed, inventory, vault_password)
-            check = probe(claimed)
+            check = probe(claimed, local_host)
             request(base, token, 'check', check)
             if check['status'] != 'healthy':
                 raise RuntimeError('Switch did not pass post-deployment health probe')
-        result = ('succeeded', 'Approved ' + claimed['action'] + ' job completed; switch active')
+        result = ('succeeded', 'Supported Operator prerequisites installed. Missing backend features and provider authentication still require implementation or configuration.' if claimed['action'] == 'operator_setup' else 'Approved ' + claimed['action'] + ' job completed; switch active')
     except (OSError, subprocess.TimeoutExpired, subprocess.CalledProcessError,
             RuntimeError, KeyError, IndexError, ValueError, urllib.error.URLError) as error:
         result = ('failed', str(error)[:900])
@@ -111,7 +142,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--secrets', default=str(ROOT / 'deployment/secrets.env'))
     parser.add_argument('--inventory', default=str(ROOT / 'deploy/ansible/inventory.yml'))
-    parser.add_argument('--vault-password-file', required=True)
+    parser.add_argument('--vault-password-file', default='')
+    parser.add_argument('--local-host', help='Private configuration: IPv4 of this application server')
     args = parser.parse_args()
     cfg = secrets_file(args.secrets)
     token = cfg.get('DEPLOY_RUNNER_TOKEN', '')
@@ -121,7 +153,7 @@ def main():
     if not domain or '/' in domain or ':' in domain:
         raise SystemExit('Invalid DOMAIN')
     runner_id = ('runner-' + socket.gethostname().lower().replace('_', '-'))[:39]
-    run_once('https://' + domain, token, runner_id, args.inventory, args.vault_password_file)
+    run_once('https://' + domain, token, runner_id, args.inventory, args.vault_password_file, args.local_host)
 
 
 if __name__ == '__main__':
