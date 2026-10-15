@@ -25,3 +25,18 @@ test('fleet rejects non-super-admin before database access',async()=>{
     pool:null,send:(_res,code,body)=>{runnerResult={code,body};}});
   assert.equal(runnerResult.code,401);
 });
+test('Operator setup rejects delegated deployment access and queues only for super-admin',async()=>{
+ const id='11111111-1111-4111-8111-111111111111';
+ const send=(_res,code,body)=>({code,body});
+ const base={req:{method:'POST'},path:`/api/admin/servers/${id}/jobs`,send,readJson:async()=>({action:'operator_setup'})};
+ const delegated=await handleServerFleetAdmin({...base,user:{id:'admin',role:'admin'},pool:{query:async()=>({rows:[{access_level:'deploy'}]})}});
+ assert.equal(delegated.code,403);
+ const previous=process.env.DEPLOY_RUNNER_TOKEN;process.env.DEPLOY_RUNNER_TOKEN='t'.repeat(48);
+ const writes=[];
+ const db={release(){},query:async(sql,values)=>{if(sql.startsWith('SELECT id,role'))return {rows:[{id,role:'switch',enabled:true}]};if(sql.startsWith('SELECT id FROM deployment_jobs'))return {rows:[],rowCount:0};writes.push([sql,values]);return {rows:[],rowCount:1};}};
+ try{
+  const result=await handleServerFleetAdmin({...base,user:{id:'super',role:'super_admin'},pool:{connect:async()=>db}});
+  assert.equal(result.code,202);assert.equal(result.body.status,'pending');
+  assert.equal(writes.find(([sql])=>sql.startsWith('INSERT INTO deployment_jobs'))[1][2],'operator_setup');
+ }finally{if(previous===undefined)delete process.env.DEPLOY_RUNNER_TOKEN;else process.env.DEPLOY_RUNNER_TOKEN=previous;}
+});
