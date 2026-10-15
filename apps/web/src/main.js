@@ -1,3 +1,4 @@
+import {setupAdvancedCalling} from './advancedCalling.js';
 import {setupAccountRanges} from './accountRanges.js';
 import {createAdvancedTelecomPanels,setupAdvancedTelecomNavigation,advancedTelecomIds} from './advancedTelecomNavigation.js';
 import {setupTelecomFeatures} from './telecomFeatures.js';
@@ -2491,6 +2492,7 @@ $("#logout").onclick = async () => {
       await phone.disconnect().catch(()=>{});
       phone=undefined;connectForm.hidden=connectForm.dataset.canEdit!=='true';dialForm.hidden=true;$("#disconnect").hidden=true;callState(false);
     }
+    advancedCalling.reset();
     lastDialedTarget='';
     await accountRequest("/api/logout", {});
     softphoneLoad++;softphoneUserId=null;favorites.clear();recentCalls=[];$("#dnd").checked=false;renderSoftphoneLists();
@@ -2577,6 +2579,7 @@ function callState(active) {
   if($("#return-to-call")) $("#return-to-call").hidden=!active;
   $("#active").hidden = !active;
   if (!active) {
+    advancedCalling.reset();
     $("#incoming").hidden = true;
     onHold = false;
     $("#hold").textContent = "Hold";
@@ -2656,6 +2659,7 @@ $('#connect-assigned-sip').addEventListener('click',()=>{
 connectForm.querySelector('button').addEventListener('click',()=>{if(connectForm.dataset.canEdit!=='true')autoSip.wake();});
 connectForm.addEventListener("submit",async event=>{event.preventDefault();if(connectForm.dataset.canEdit!=='true'){autoSip.wake();return;}try{await registerSip(new FormData(connectForm));}catch(error){report(error);}});
 
+const advancedCalling=setupAdvancedCalling({document,getPhone:()=>phone,isActive:()=>onCall,isRegistered:()=>sipRegistered,getCall:()=>currentCall});
 let lastDialedTarget='';
 $('#dialpad-redial').onclick=()=>{if(onCall)return status('Finish the active call before redialing.');if(!lastDialedTarget)return status('No number dialed in this session.');dialForm.elements.target.value=lastDialedTarget;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));dialForm.requestSubmit();};
 $('#call-volume').oninput=event=>{$('#remote').volume=Number(event.target.value);};
