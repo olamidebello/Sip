@@ -10,7 +10,11 @@ export function callCharge(rate,seconds,first,step){
  return Number((micros*BigInt(billed)+599999n)/600000n); // USD micro-units -> cents, rounded up.
 }
 export async function migratePstnBilling(pool){
- await pool.query(`CREATE TABLE IF NOT EXISTS pstn_calls (
+ const db=await pool.connect();let locked=false;
+ try{
+  locked=Number((await db.query("SELECT GET_LOCK('olamide_pstn_schema_migration',60) AS acquired")).rows[0]?.acquired)===1;
+  if(!locked)throw Error('Could not acquire billing migration lock');
+ await db.query(`CREATE TABLE IF NOT EXISTS pstn_calls (
  call_key CHAR(64) PRIMARY KEY,tenant_id CHAR(36) NOT NULL,user_id CHAR(36) NOT NULL,
  destination VARCHAR(16) NOT NULL,rate DECIMAL(12,6) NOT NULL,first_interval INT NOT NULL,sub_interval INT NOT NULL,
  reserved_cents BIGINT NOT NULL,charged_cents BIGINT NOT NULL DEFAULT 0,max_seconds INT NOT NULL,
@@ -18,16 +22,17 @@ export async function migratePstnBilling(pool){
  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),settled_at DATETIME(3) NULL,
  INDEX pstn_active(tenant_id,status),FOREIGN KEY(user_id) REFERENCES users(id),FOREIGN KEY(tenant_id) REFERENCES tenants(id)) ENGINE=InnoDB`);
  for(const [name,ddl] of [['caller_id','VARCHAR(16) NULL'],['provider',"VARCHAR(16) NOT NULL DEFAULT 'flowroute'"],['carrier_host','VARCHAR(80) NULL'],['shadow_policy_id','CHAR(36) NULL'],['shadow_rate','DECIMAL(12,6) NULL'],['shadow_first','INT NULL'],['shadow_step','INT NULL'],['call_type_id','CHAR(36) NULL']]){
-  const found=await pool.query('SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=\'pstn_calls\' AND column_name=$1',[name]);
-  if(!found.rowCount)await pool.query(`ALTER TABLE pstn_calls ADD COLUMN ${name} ${ddl}`);
+  const found=await db.query('SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=\'pstn_calls\' AND column_name=$1',[name]);
+  if(!found.rowCount)await db.query(`ALTER TABLE pstn_calls ADD COLUMN ${name} ${ddl}`);
  }
- await pool.query(`CREATE TABLE IF NOT EXISTS pstn_wallet_entries (
+ await db.query(`CREATE TABLE IF NOT EXISTS pstn_wallet_entries (
  call_key CHAR(64) NOT NULL,event VARCHAR(16) NOT NULL,user_id CHAR(36) NOT NULL,tenant_id CHAR(36) NOT NULL,
  delta_cents BIGINT NOT NULL,balance_after_cents BIGINT NOT NULL,created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
  PRIMARY KEY(call_key,event),FOREIGN KEY(call_key) REFERENCES pstn_calls(call_key)) ENGINE=InnoDB`);
- await pool.query(`CREATE TABLE IF NOT EXISTS pstn_call_events (
+ await db.query(`CREATE TABLE IF NOT EXISTS pstn_call_events (
  call_key CHAR(64) NOT NULL,event VARCHAR(16) NOT NULL,event_epoch BIGINT NOT NULL,
  PRIMARY KEY(call_key,event),FOREIGN KEY(call_key) REFERENCES pstn_calls(call_key)) ENGINE=InnoDB`);
+ }finally{if(locked)await db.query("SELECT RELEASE_LOCK('olamide_pstn_schema_migration')");db.release();}
 }
 export async function reservePstn(pool,data){
  if(process.env.KAMAILIO_PSTN_ENABLED!=='true')return [403,{error:'Paid route not deployed'}];

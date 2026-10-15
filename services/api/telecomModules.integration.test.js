@@ -2,7 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';import {ran
 test('MySQL policies, country analytics and concurrent refills use the installed schema',{skip:!process.env.TEST_MYSQL_URL},async()=>{
  const pool=createDatabase(process.env.TEST_MYSQL_URL),tenant=randomUUID(),other=randomUUID(),actor=randomUUID(),recipient=randomUUID(),user={id:actor,tenant_id:tenant,role:'super_admin'},send=(_r,status,body)=>({status,body});
  try{
-  await migrate(pool);await migratePstnBilling(pool);
+  await migrate(pool);await Promise.all([migratePstnBilling(pool),migratePstnBilling(pool)]);
   for(const id of [tenant,other])await pool.query('INSERT INTO tenants(id,name,slug) VALUES($1,$2,$3)',[id,'Telecom test',id]);
   for(const id of [actor,recipient])await pool.query("INSERT INTO users(id,tenant_id,display_name,email,password_salt,password_hash,role,status) VALUES($1,$2,'Telecom test',$3,'test','test','super_admin','active')",[id,tenant,id+'@example.test']);
   await pool.query("INSERT INTO wallet_accounts(user_id,tenant_id,currency,balance_cents) VALUES($1,$2,'USD',0)",[recipient,tenant]);
