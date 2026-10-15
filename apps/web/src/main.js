@@ -2648,7 +2648,7 @@ async function registerSip(data,shouldContinue=()=>true) {
           return;
         }
         void nativeCalls.incoming(currentCall.sipCallId).catch(report);
-        const incomingCall=currentCall;callGui.identity('Registered SIP user');void registeredCallLabel(incomingCall.address).then(label=>{if(currentCall===incomingCall)callGui.identity(label);});$("#incoming").hidden = false; showWorkspace("calling-workspace"); status("Incoming call");
+        const incomingCall=currentCall;callGui.number(incomingCall.address);callGui.identity('Registered SIP user');void registeredCallLabel(incomingCall.address).then(label=>{if(currentCall===incomingCall)callGui.identity(label);});$("#incoming").hidden = false; showWorkspace("calling-workspace"); status("Incoming call");
       },
       onCallAnswered: () => { void nativeCalls.connected(currentCall?.sipCallId).catch(report); if (currentCall) currentCall.answered = true; showWorkspace("calling-workspace"); callState(true); status("Call connected"); },
       onCallHangup: () => { void nativeCalls.ended(currentCall?.sipCallId).catch(report); finishCall(currentCall?.answered ? "completed" : "missed or unanswered"); callState(false); status("Call ended"); },
@@ -2706,6 +2706,7 @@ dialForm.addEventListener("submit", async (event) => {
   try {const access=await accountRequest('/api/softphone/authorize',{target});authorizedTarget=access.target||target;}catch(error){status(error.message);return;}
   lastDialedTarget=target;
   currentCall = { direction: "outgoing", address: target };
+  callGui.number(target);
   callGui.identity(await registeredCallLabel(target));
   try { callGui.pending();status("Calling…"); await phone.call(authorizedTarget); }
   catch (error) { finishCall("failed");callState(false); report(error); }

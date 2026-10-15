@@ -6,13 +6,15 @@ export function setupCallGui({document,openVideo,openAudio=()=>{}}) {
   let timer,started;
   const captions=[];
   const names=[];
+  const numbers=[];
   for(const [panel,label] of [[incoming,'Incoming audio call'],[active,'Audio call']]) {
     panel.classList.add('call-screen');
     const hero=document.createElement('div');hero.className='call-hero';
     const avatar=document.createElement('div');avatar.className='call-avatar';avatar.textContent='☎';avatar.setAttribute('aria-hidden','true');
     const name=document.createElement('h3');name.textContent='Olamide call';names.push(name);
     const caption=document.createElement('p');caption.textContent=label;captions.push(caption);
-    hero.append(avatar,name,caption);panel.prepend(hero);
+    const number=document.createElement('p');number.className='call-number';number.hidden=true;numbers.push(number);
+    hero.append(avatar,name,number,caption);panel.prepend(hero);
     const controls=document.createElement('div');controls.className='call-controls';
     for(const button of [...panel.children].filter(child=>child.tagName==='BUTTON'))controls.append(button);
     panel.append(controls);
@@ -42,6 +44,7 @@ export function setupCallGui({document,openVideo,openAudio=()=>{}}) {
     minimize.onclick=()=>{const small=live.classList.toggle('video-minimized');minimize.textContent=small?'Expand video':'Minimize video';minimize.setAttribute('aria-expanded',String(!small));};live.prepend(minimize);
   }
   return {
+    number(address){const value=String(address||'').replace(/^sips?:/i,'').split('@')[0].split(';')[0];for(const node of numbers){node.textContent=value;node.hidden=!value;}},
     pending(){incoming.hidden=true;active.hidden=false;duration.textContent='';captions[1].textContent='Calling…';controls(false);},
     identity(value){for(const name of names)name.textContent=value||'Unknown caller';},
     active(value){
