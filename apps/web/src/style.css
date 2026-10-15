@@ -357,3 +357,6 @@ body.messenger-mode #app-nav .user-tools-panel .locale-menu{margin:0}
 .advanced-feature-group{color:#9bc8bd;font-size:.85rem}.advanced-feature-status{display:inline-block;padding:8px 12px;border-radius:9px;background:#19443f;color:#b2f5df}.advanced-feature-detail{line-height:1.7;max-width:75ch}.advanced-feature-actions,.advanced-feature-related{display:flex;align-items:center;flex-wrap:wrap;gap:14px;margin:18px 0}.feature-dependency-note{flex-basis:100%;padding:16px;border:1px solid #516273;border-radius:10px;color:#c3d5de;line-height:1.6}
 
 .advanced-feature-records{overflow:auto;max-height:65vh;margin:18px 0}.advanced-feature-records table{border-collapse:collapse;width:100%}.advanced-feature-records th,.advanced-feature-records td{padding:10px;border-bottom:1px solid #516273;text-align:left;vertical-align:top}.advanced-feature-records pre{white-space:pre-wrap;overflow-wrap:anywhere}
+body.admin-mode #app-nav .menu-parent>summary{padding:12px 4px;cursor:pointer;font-size:1rem;font-weight:700;color:#7de4d5}
+body.admin-mode #app-nav .operator-menu-groups{padding-left:12px;border-left:2px solid #365465}
+body.admin-mode #app-nav .menu-parent:not([open])>.operator-menu-groups{display:none}

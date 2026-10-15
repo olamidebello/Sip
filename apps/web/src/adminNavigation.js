@@ -10,7 +10,7 @@ export const adminNavigationGroups=[
  {label:'Security & integrations',roles:admins,items:[['auth-providers-admin','Authentication'],['ldap-admin','LDAP groups'],['passkey-policy-admin','Passkey requirements'],['geofence-admin','Geofencing'],['google-oauth-admin','Google Contacts OAuth',superOnly],['provider-webhook-admin','Provider callbacks',superOnly],['messaging-webhooks','Messaging webhooks']]},
  {label:'Appearance & communication',roles:admins,items:[['background-admin','Tenant appearance'],['locale-admin','Locale defaults'],['dashboard-admin','Dashboard defaults'],['campaign-admin','Campaigns & alerts'],['mobile-admin','App releases']]},
  {label:'System & operations',roles:admins,items:[['cluster-admin','API capacity'],['fleet-admin','Server & network operations']]},
- ...advancedTelecomGroups
+ ...advancedTelecomGroups.map(group=>({...group,parent:'Operator'}))
 ];
 export function syncAdminNavigation(nav,target){
  if(nav.dataset.groupedAdmin!=='true')return;
@@ -20,7 +20,7 @@ export function syncAdminNavigation(nav,target){
   if(selected){link.setAttribute('aria-current','page');current=link;}else link.removeAttribute('aria-current');
  }
  const crumb=nav.querySelector('.admin-location');
- if(current){current.closest('details').open=true;crumb.textContent=`${current.closest('details').querySelector('summary').textContent} / ${current.textContent}`;}
+ if(current){for(let parent=current.parentElement;parent&&parent!==nav;parent=parent.parentElement){if(parent.tagName==='DETAILS')parent.open=true;}const operator=current.closest('.menu-parent');crumb.textContent=(operator?'Operator / ':'')+`${current.closest('details').querySelector('summary').textContent} / ${current.textContent}`;}
 }
 export function renderAdminNavigation({document,nav,role,target,allowed,logout}){
  nav.dataset.groupedAdmin='true';nav.setAttribute('aria-label','Administration navigation');
@@ -29,6 +29,7 @@ export function renderAdminNavigation({document,nav,role,target,allowed,logout})
  const content=document.createElement('div');content.id='admin-menu-content';content.className='admin-menu-content';nav.append(content);
  const search=document.createElement('input');search.type='search';search.className='menu-search';search.placeholder='Search admin menus…';search.setAttribute('aria-label','Search admin menus');content.append(search);
  const groups=document.createElement('div');groups.className='menu-groups';content.append(groups);
+ const parents=new Map();
  for(const group of adminNavigationGroups){
   if(!group.roles.includes(role))continue;
   const items=group.items.filter(([id,,roles])=>(!roles||roles.includes(role))&&allowed(id)&&document.getElementById(id)&&!document.getElementById(id).closest('[hidden]'));
@@ -37,7 +38,10 @@ export function renderAdminNavigation({document,nav,role,target,allowed,logout})
   const summary=document.createElement('summary');summary.textContent=group.label;details.append(summary);
   const links=document.createElement('div');links.className='menu-links';
   for(const [id,label] of items){const link=document.createElement('a');link.href=`/admin#${id}`;link.textContent=label;links.append(link);}
-  details.append(links);groups.append(details);
+  details.append(links);
+  let container=groups;
+  if(group.parent){if(!parents.has(group.parent)){const parent=document.createElement('details');parent.className='menu-parent';const heading=document.createElement('summary');heading.textContent=group.parent;parent.append(heading);const children=document.createElement('div');children.className='operator-menu-groups';parent.append(children);groups.append(parent);parents.set(group.parent,{parent,children});}container=parents.get(group.parent).children;}
+  container.append(details);
  }
  const empty=document.createElement('p');empty.className='menu-empty';empty.hidden=true;empty.textContent='No admin menus found.';empty.setAttribute('role','status');content.append(empty);
  const footer=document.createElement('div');footer.className='admin-nav-footer';const back=document.createElement('a');back.href='/#chat';back.textContent='Back to chats';const signout=document.createElement('button');signout.type='button';signout.className='nav-signout';signout.textContent='Sign out';signout.onclick=logout;footer.append(back,signout);content.append(footer);
@@ -46,10 +50,10 @@ export function renderAdminNavigation({document,nav,role,target,allowed,logout})
  const openBeforeSearch=new Map();
  search.oninput=()=>{
   const query=search.value.trim().toLocaleLowerCase();let visible=0;
-  for(const group of groups.children){if(query&&!openBeforeSearch.has(group))openBeforeSearch.set(group,group.open);let count=0;const label=group.querySelector('summary').textContent.toLocaleLowerCase();
+  for(const group of groups.querySelectorAll('.menu-group')){if(query&&!openBeforeSearch.has(group))openBeforeSearch.set(group,group.open);let count=0;const label=((group.closest('.menu-parent')?.querySelector('summary').textContent||'')+' '+group.querySelector('summary').textContent).toLocaleLowerCase();
    for(const link of group.querySelectorAll('a')){link.hidden=!!query&&!`${label} ${link.textContent}`.toLocaleLowerCase().includes(query);if(!link.hidden)count++;}
    group.hidden=!count;visible+=count;if(query&&count)group.open=true;else if(!query&&openBeforeSearch.has(group)){group.open=openBeforeSearch.get(group);openBeforeSearch.delete(group);}
-  }empty.hidden=!query||visible>0;
+  }for(const {parent,children} of parents.values()){if(query&&!openBeforeSearch.has(parent))openBeforeSearch.set(parent,parent.open);parent.hidden=![...children.children].some(child=>!child.hidden);if(query&&!parent.hidden)parent.open=true;else if(!query&&openBeforeSearch.has(parent)){parent.open=openBeforeSearch.get(parent);openBeforeSearch.delete(parent);}}empty.hidden=!query||visible>0;
  };
  nav.onclick=event=>{if(event.target.closest('.menu-links>a,.admin-nav-footer>a')){nav.classList.remove('admin-menu-open');toggle.setAttribute('aria-expanded','false');}};
  syncAdminNavigation(nav,target);
