@@ -1,8 +1,8 @@
 import {icon} from './messengerIcons.js';
-export function setupCallsScreen({document,get,request,show,dial,retryConnection=()=>{},connected=()=>true}){
+export function setupCallsScreen({document,get,request,show,dial,retryConnection=()=>{},connected=()=>true,canRedial=()=>false}){
  const panel=document.getElementById('calling-workspace'),dialog=document.createElement('dialog');dialog.className='calls-dialog';dialog.innerHTML='<button type="button" class="calls-close" aria-label="Close">×</button><h2 id="calls-dialog-title"></h2><div id="calls-dialog-content"></div><p id="scheduled-call-status" role="status"></p>';panel.append(dialog);
  const callSelected=document.createElement('button');callSelected.type='button';callSelected.className='calls-contact-call';callSelected.textContent='Call selected contact';callSelected.hidden=true;dialog.append(callSelected);
- function refreshCall(){const submit=document.querySelector('#dial .dialpad-call');if(submit)submit.disabled=!connected()||!document.getElementById('dial')?.elements?.target?.value?.trim();callSelected.disabled=!connected()||!document.getElementById('dial')?.elements?.target?.value?.trim();}
+ function refreshCall(){const submit=document.querySelector('#dial .dialpad-call');if(submit){const entered=!!document.getElementById('dial')?.elements?.target?.value?.trim();submit.disabled=!connected()||(!entered&&!canRedial());submit.setAttribute('aria-label',entered?'Place voice call':'Load last dialed number');}callSelected.disabled=!connected()||!document.getElementById('dial')?.elements?.target?.value?.trim();}
  document.getElementById('dial')?.elements?.target?.addEventListener('input',refreshCall);
  callSelected.onclick=()=>{const address=document.getElementById('dial')?.elements?.target?.value?.trim();if(!address||!connected())return;dialog.close();dial(address);};
  const retry=document.createElement('button');retry.type='button';retry.textContent='Retry SIP connection';retry.className='calls-sip-retry';retry.onclick=()=>retryConnection();dialog.append(retry);

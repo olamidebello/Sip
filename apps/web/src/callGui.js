@@ -44,7 +44,7 @@ export function setupCallGui({document,openVideo,openAudio=()=>{}}) {
   const note=document.createElement('small');note.className='call-keypad-note';note.textContent='Call menu digits. Clearing this display does not undo tones already sent.';keypad.append(note);active.append(keypad);
   const keyboardTones=event=>{if(keypad.hidden||active.hidden||event.ctrlKey||event.metaKey||event.altKey||event.target.closest?.('input,textarea,select,[contenteditable=true]'))return;if(/^[0-9*#]$/.test(event.key)){event.preventDefault();if(!event.repeat)keypad.querySelector('[data-digit="'+event.key+'"]').click();}};
   document.addEventListener('keydown',keyboardTones);
-  const toggle=document.createElement('button');toggle.type='button';toggle.className='call-keypad-toggle';toggle.textContent='Keypad';toggle.setAttribute('aria-expanded','false');toggle.onclick=()=>{keypad.hidden=!keypad.hidden;toggle.setAttribute('aria-expanded',String(!keypad.hidden));};active.querySelector('.call-controls').prepend(toggle);
+  const toggle=document.createElement('button');toggle.type='button';toggle.className='call-keypad-toggle';toggle.textContent='Keypad';toggle.setAttribute('aria-expanded','false');toggle.onclick=()=>{keypad.hidden=!keypad.hidden;toggle.setAttribute('aria-expanded',String(!keypad.hidden));active.classList.toggle('call-keypad-open',!keypad.hidden);};active.querySelector('.call-controls').prepend(toggle);
   const audio=document.createElement('button');audio.type='button';audio.className='call-audio-output';audio.textContent='Audio output';audio.onclick=openAudio;active.querySelector('.call-controls').prepend(audio);
   function controls(connected){for(const b of [document.getElementById('hold'),document.getElementById('mute'),toggle,...keypad.querySelectorAll('button')])if(b)b.disabled=!connected;}
   controls(false);
@@ -59,9 +59,10 @@ export function setupCallGui({document,openVideo,openAudio=()=>{}}) {
     number(address){const value=callAddressLabel(address);addressLabel=value;for(const name of names)name.textContent=value;for(const node of numbers){node.textContent=value;node.hidden=!value;}},
     pending(){resetTones();incoming.hidden=true;active.hidden=false;duration.textContent='';captions[1].textContent='Calling…';controls(false);},
     identity(value){for(const name of names)name.textContent=callIdentityLabel(addressLabel,value);},
+    held(value){captions[1].textContent=value?'On hold':'Connected';},
     active(value){
       clearInterval(timer);timer=undefined;active.classList.remove('call-minimized');incoming.classList.remove('call-minimized');
-      controls(value);resetTones();keypad.hidden=true;toggle.setAttribute('aria-expanded','false');
+      controls(value);resetTones();keypad.hidden=true;active.classList.remove('call-keypad-open');toggle.setAttribute('aria-expanded','false');
       if(value){captions[1].textContent='Connected';incoming.hidden=true;started=Date.now();const tick=()=>{const seconds=Math.floor((Date.now()-started)/1000);duration.textContent=`${Math.floor(seconds/60).toString().padStart(2,'0')}:${(seconds%60).toString().padStart(2,'0')}`;};tick();timer=setInterval(tick,1000);}
       else duration.textContent='';
     },

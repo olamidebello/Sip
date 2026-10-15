@@ -1478,7 +1478,7 @@ const operatorAdmin=setupOperatorControl();
 const switchAdmin=setupKamailioAdmin();
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
-const callsScreen=setupCallsScreen({document,get:apiGet,request:accountRequest,show:showWorkspace,retryConnection:()=>autoSip.wake(),connected:()=>sipRegistered&&!!phone?.isConnected(),dial:address=>{dialForm.elements.target.value=address;dialForm.requestSubmit();}});
+const callsScreen=setupCallsScreen({document,get:apiGet,request:accountRequest,show:showWorkspace,retryConnection:()=>autoSip.wake(),canRedial:()=>!!lastDialedTarget,connected:()=>sipRegistered&&!!phone?.isConnected(),dial:address=>{dialForm.elements.target.value=address;dialForm.requestSubmit();}});
 const messengerPreferences=setupMessengerPreferences({document,get:apiGet,request:accountRequest});
 const sessionAdmin=setupSessionAdmin(document);
 navigationPolicy=setupNavigationPolicy({document,get:apiGet,request:accountRequest,changed:()=>{updateNavigation();chatComposer?.refresh();if(activeRole&&!adminTarget(activeView)&&!navigationAllowed(activeView))showWorkspace(userHome(),{historyMode:'replace'});}});
@@ -2607,9 +2607,9 @@ function callState(active) {
     advancedCalling.reset();
     $("#incoming").hidden = true;
     onHold = false;
-    $("#hold").textContent = "Hold";
+    $("#hold").textContent = "Hold";$("#hold").setAttribute("aria-pressed","false");
     muted = false;
-    $("#mute").textContent = "Mute";
+    $("#mute").textContent = "Mute";$("#mute").setAttribute("aria-pressed","false");
   }
 }
 function report(error) {
@@ -2649,7 +2649,7 @@ async function registerSip(data,shouldContinue=()=>true) {
           return;
         }
         void nativeCalls.incoming(currentCall.sipCallId).catch(report);
-        const incomingCall=currentCall;callGui.number(incomingCall.address);callGui.identity(callAddressLabel(incomingCall.address));void registeredCallLabel(incomingCall.address).then(label=>{if(currentCall===incomingCall)callGui.identity(label);});$("#incoming").hidden = false; showWorkspace("calling-workspace"); status("Incoming call");
+        const incomingCall=currentCall;callGui.number(incomingCall.address);callGui.identity(callAddressLabel(incomingCall.address));void registeredCallLabel(incomingCall.address).then(label=>{if(currentCall===incomingCall)callGui.identity(label);});callsScreen.stop();$("#incoming").hidden = false; showWorkspace("calling-workspace"); status("Incoming call");
       },
       onCallAnswered: () => { void nativeCalls.connected(currentCall?.sipCallId).catch(report); if (currentCall) currentCall.answered = true; showWorkspace("calling-workspace"); callState(true); status("Call connected"); },
       onCallHangup: () => { void nativeCalls.ended(currentCall?.sipCallId).catch(report); finishCall(currentCall?.answered ? "completed" : "missed or unanswered"); callState(false); status("Call ended"); },
@@ -2685,13 +2685,18 @@ connectForm.querySelector('button').addEventListener('click',()=>{if(connectForm
 connectForm.addEventListener("submit",async event=>{event.preventDefault();if(connectForm.dataset.canEdit!=='true'){autoSip.wake();return;}try{await registerSip(new FormData(connectForm));}catch(error){report(error);}});
 
 const advancedCalling=setupAdvancedCalling({document,getPhone:()=>phone,isActive:()=>onCall,isRegistered:()=>sipRegistered,getCall:()=>currentCall});
-let lastDialedTarget='';
+let lastDialedTarget='',dialing=false;
+dialForm.noValidate=true;
 $('#dialpad-redial').onclick=()=>{if(onCall)return status('Finish the active call before redialing.');if(!lastDialedTarget)return status('No number dialed in this session.');dialForm.elements.target.value=lastDialedTarget;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));dialForm.elements.target.focus();status('Last number loaded. Tap Call to dial.');};
 $('#call-volume').oninput=event=>{$('#remote').volume=Number(event.target.value);};
 setupDialpad({root:$('#dialpad'),input:dialForm.elements.target,openContact:c=>void contactCard.open(c),inCall:()=>onCall,
   sendTone:digit=>phone.sendDTMF(digit),onError:report});
 dialForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if(dialing||currentCall)return;
+  if(!dialForm.elements.target.value.trim()&&lastDialedTarget){$('#dialpad-redial').click();return;}
+  dialing=true;
+  try {
   if (!phone||!sipRegistered){status("Calls are unavailable while SIP is reconnecting. Try again when connected.");autoSip.wake();return;}
   if(onCall){status("Finish the active call before starting another.");return;}
   void refreshDialIdentity();
@@ -2710,8 +2715,9 @@ dialForm.addEventListener("submit", async (event) => {
   callGui.number(target);
   callGui.identity(callAddressLabel(target));
   const outgoingCall=currentCall;void registeredCallLabel(target).then(label=>{if(currentCall===outgoingCall)callGui.identity(label);});
-  try { callGui.pending();status("Calling…"); await phone.call(authorizedTarget); }
+  try { callsScreen.stop();callGui.pending();status("Calling…"); await phone.call(authorizedTarget); }
   catch (error) { finishCall("failed");callState(false); report(error); }
+  } finally {dialing=false;}
 });
 $("#check-location").onclick = async () => {
   try {await loadGeofencePolicy();} catch {$("#geo-result").textContent="Location policy unavailable";return;}
@@ -2726,7 +2732,7 @@ $("#hold").onclick = async () => {
   try {
     if (onHold) await phone.unhold(); else await phone.hold();
     onHold = !onHold;
-    $("#hold").textContent = onHold ? "Resume" : "Hold";
+    $("#hold").textContent = onHold ? "Resume" : "Hold";$("#hold").setAttribute("aria-pressed",String(onHold));callGui.held(onHold);
   } catch (error) { report(error); }
 };
 $("#mute").onclick = () => {
@@ -2734,7 +2740,7 @@ $("#mute").onclick = () => {
   try {
     if (muted) phone.unmute(); else phone.mute();
     muted = !muted;
-    $("#mute").textContent = muted ? "Unmute" : "Mute";
+    $("#mute").textContent = muted ? "Unmute" : "Mute";$("#mute").setAttribute("aria-pressed",String(muted));
   } catch (error) { report(error); }
 };
 $("#send-tone").onclick = async () => {

@@ -10,7 +10,7 @@ test('overlays retain SIP handlers and minimize without ending media',()=>{
     ui.number('sip:+15551234567@example.com');ui.identity('Alice');assert.equal(document.querySelector('.call-number').textContent,'+15551234567');assert.equal(document.querySelector('.call-hero h3').textContent,'Alice');
     document.getElementById('answer').click();assert.equal(answered,1);document.querySelector('.chat-video-call').click();assert.equal(video,1);
     document.getElementById('incoming').hidden=false;ui.active(true);assert.equal(document.getElementById('incoming').hidden,true);
-    assert.equal(document.querySelector('.call-duration').textContent,'00:00');
+    assert.equal(document.querySelector('.call-duration').textContent,'00:00');ui.held(true);assert.equal(document.querySelector('#active .call-hero>p:not(.call-number):not(.call-duration)').textContent,'On hold');ui.held(false);
     document.querySelector('#active .call-minimize').click();assert.ok(document.getElementById('active').classList.contains('call-minimized'));
     document.querySelector('.video-minimize').click();assert.ok(document.getElementById('meeting-live').classList.contains('video-minimized'));
     ui.active(false);assert.equal(document.querySelector('.call-duration').textContent,'');
