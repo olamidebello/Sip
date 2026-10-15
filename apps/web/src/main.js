@@ -1,3 +1,4 @@
+import {syncCarrierProfileForm} from './carrierProfileForm.js';
 import {setupTelecomRefills} from './telecomRefills.js';
 import {setupTelecomPolicies} from './telecomPolicies.js';
 import {setupTelecomReports} from './telecomReports.js';
@@ -692,6 +693,7 @@ root.innerHTML = `
         <label>Maximum concurrent calls <input name="maxConcurrentCalls" type="number" min="1" max="100000" value="10" required></label>
         <label>Routing intent <select name="routingMode"><option value="manual">Manual</option><option value="least_cost">Least cost</option><option value="priority">Priority</option></select></label>
         <button type="submit">Set up Flowroute trunk</button>
+        <button type="submit" name="activate" value="yes">Set up and provision Flowroute</button>
         <p>The trunk is staged with traffic disabled. Activating calls requires the switch adapter and matching Flowroute route settings.</p>
       </form><form id="carrier-profile-form">
         <label>Provider <select name="provider"><option value="flowroute">Flowroute</option><option value="didww">DIDWW</option></select></label>
@@ -2349,6 +2351,9 @@ async function refreshCarriers(){
   for(const trunk of trunks.trunks){const option=document.createElement('option');option.value=trunk.id;
     option.textContent=`${trunk.name} (${trunk.host})`;selection.append(option);}
   if(trunks.trunks.some(trunk=>trunk.id===priorTrunk)) selection.value=priorTrunk;
+  const profileForm=$("#carrier-profile-form");
+  const syncProfile=()=>syncCarrierProfileForm(profileForm,data.providers);
+  profileForm.elements.provider.onchange=syncProfile;syncProfile();
   const list=$("#carrier-profiles");list.replaceChildren();
   for(const profile of data.providers){const card=document.createElement('article');
     const title=document.createElement('h4');title.textContent=`${profile.displayName}: ${profile.enabled?profile.status:'disabled'}`;
@@ -2371,6 +2376,7 @@ async function refreshCarriers(){
       $("#carrier-admin-status").textContent=`${result.provider}: ${result.status}`;await refreshCarriers();}
       catch(error){$("#carrier-admin-status").textContent=error.message;await refreshCarriers();}};
     card.append(title,details,target,verify,activate);
+    if(profile.last_error){const failure=document.createElement('p');failure.setAttribute('role','alert');failure.textContent=`Last provisioning error: ${profile.last_error}`;card.append(failure);}
     if(profile.status==='active'){
       const deactivate=document.createElement('button');deactivate.type='button';
       deactivate.textContent='Deactivate with switch adapter';
@@ -2405,18 +2411,21 @@ $("#carrier-catalog-form").onsubmit=async event=>{
   finally{button.disabled=false;}
 };
 $("#flowroute-auto-form").onsubmit=async event=>{
-  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button[type="submit"]');
-  button.disabled=true;
+  event.preventDefault();const form=event.currentTarget;
+  const provision=event.submitter?.name==='activate';
+  const buttons=[...form.querySelectorAll('button')];buttons.forEach(item=>item.disabled=true);
   try{
     const data=Object.fromEntries(new FormData(form));
     const result=await accountRequest('/api/admin/carriers/flowroute/auto-provision',{
       pop:data.pop,maxConcurrentCalls:Number(data.maxConcurrentCalls),routingMode:data.routingMode});
+    if(provision)await accountRequest('/api/admin/carriers/flowroute/activate',{});
     await refreshCarriers();
     $("#carrier-profile-form").elements.provider.value='flowroute';
-    $("#carrier-profile-form").elements.trunkId.value=result.trunkId;
-    $("#carrier-admin-status").textContent=`Flowroute ${result.pop} trunk staged at ${result.host}:5060. Activate with the switch adapter when ready.`;
+    $("#carrier-profile-form").elements.provider.onchange();
+    if(provision)$("#carrier-admin-status").textContent=`Flowroute ${result.pop}: switch adapter acknowledged activation.`;
+    else $("#carrier-admin-status").textContent=`Flowroute ${result.pop} trunk staged at ${result.host}:5060. Activate with the switch adapter when ready.`;
   }catch(error){$("#carrier-admin-status").textContent=error.message;}
-  finally{button.disabled=false;}
+  finally{buttons.forEach(item=>item.disabled=false);}
 };
 $("#carrier-profile-form").onsubmit=async event=>{
   event.preventDefault();const form=event.currentTarget;const data=Object.fromEntries(new FormData(form));
