@@ -1512,13 +1512,25 @@ async function saveSoftphonePreferences() {
   await softphoneRequest("/api/softphone/preferences","PUT",{dnd:$("#dnd").checked,favorites:[...favorites]});
 }
 $("#dnd").onchange = () => saveSoftphonePreferences().catch(report);
+function resolveCallListIdentity(address, name, button, avatar) {
+  const userId=softphoneUserId, generation=softphoneLoad;
+  name.textContent='Registered SIP user';
+  button.setAttribute('aria-label','Call registered SIP user');
+  if(avatar)avatar.textContent='☎';
+  void registeredCallLabel(address).then(label=>{
+    if(!name.isConnected || userId!==softphoneUserId || generation!==softphoneLoad)return;
+    name.textContent=label;
+    button.setAttribute('aria-label','Call '+label);
+    if(avatar)avatar.textContent=label==='Unknown caller'?'☎':label.slice(0,2).toUpperCase();
+  });
+}
 function renderSoftphoneLists() {
   const favoriteList = $("#favorites");
   favoriteList.replaceChildren();
   for (const address of favorites) {
     const item = document.createElement("li");
     const dial = document.createElement("button");
-    dial.textContent = address;
+    dial.textContent = "Registered SIP user";
     dial.onclick = () => { dialForm.elements.target.value = address; dialForm.requestSubmit(); };
     const remove = document.createElement("button");
     remove.textContent = "Remove";
@@ -1529,16 +1541,18 @@ function renderSoftphoneLists() {
     };
     item.append(dial, " ", remove);
     favoriteList.append(item);
+    resolveCallListIdentity(address,dial,dial);
   }
   const history = $("#recent-calls");
   history.replaceChildren();
   for (const call of recentCalls.slice(0, 50)) {
     if (!call || typeof call.address !== "string") continue;
     const item = document.createElement("li");
-    const avatar=document.createElement('span');avatar.className='chat-avatar';avatar.textContent=call.address.replace(/^sip:/,'').slice(0,2).toUpperCase();
-    const copy=document.createElement('div');copy.className='call-row-copy';const name=document.createElement('strong');name.textContent=call.address.replace(/^sip:/,'').split('@')[0];const detail=document.createElement('small');detail.textContent=(call.direction==='incoming'?'↙ ':'↗ ')+new Date(call.at).toLocaleString();copy.append(name,detail);if(call.result!=='completed')item.classList.add('call-missed');
+    const avatar=document.createElement('span');avatar.className='chat-avatar';avatar.textContent='☎';
+    const copy=document.createElement('div');copy.className='call-row-copy';const name=document.createElement('strong');name.textContent='Registered SIP user';const detail=document.createElement('small');detail.textContent=(call.direction==='incoming'?'↙ ':'↗ ')+new Date(call.at).toLocaleString();copy.append(name,detail);if(call.result!=='completed')item.classList.add('call-missed');
     const redial=document.createElement('button');redial.type='button';redial.innerHTML=icon('calls');redial.setAttribute('aria-label','Call '+name.textContent);redial.onclick=()=>{dialForm.elements.target.value=call.address;dialForm.requestSubmit();};item.append(avatar,copy,redial);
     history.append(item);
+    resolveCallListIdentity(call.address,name,redial,avatar);
   }
 }
 renderSoftphoneLists();
