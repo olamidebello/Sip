@@ -1,9 +1,10 @@
+import {callAddressLabel,callIdentityLabel} from './callIdentity.js';
 import {icon} from './messengerIcons.js';
 
 export function setupCallGui({document,openVideo,openAudio=()=>{}}) {
   const incoming=document.getElementById('incoming');
   const active=document.getElementById('active');
-  let timer,started;
+  let timer,started,addressLabel='';
   const captions=[];
   const names=[];
   const numbers=[];
@@ -55,9 +56,9 @@ export function setupCallGui({document,openVideo,openAudio=()=>{}}) {
     minimize.onclick=()=>{const small=live.classList.toggle('video-minimized');minimize.textContent=small?'Expand video':'Minimize video';minimize.setAttribute('aria-expanded',String(!small));};live.prepend(minimize);
   }
   return {
-    number(address){const value=String(address||'').replace(/^sips?:/i,'').split('@')[0].split(';')[0];for(const node of numbers){node.textContent=value;node.hidden=!value;}},
+    number(address){const value=callAddressLabel(address);addressLabel=value;for(const name of names)name.textContent=value;for(const node of numbers){node.textContent=value;node.hidden=!value;}},
     pending(){resetTones();incoming.hidden=true;active.hidden=false;duration.textContent='';captions[1].textContent='Calling…';controls(false);},
-    identity(value){for(const name of names)name.textContent=value||'Unknown caller';},
+    identity(value){for(const name of names)name.textContent=callIdentityLabel(addressLabel,value);},
     active(value){
       clearInterval(timer);timer=undefined;active.classList.remove('call-minimized');incoming.classList.remove('call-minimized');
       controls(value);resetTones();keypad.hidden=true;toggle.setAttribute('aria-expanded','false');

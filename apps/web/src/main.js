@@ -1,3 +1,4 @@
+import {callAddressLabel,callIdentityLabel} from './callIdentity.js';
 import {syncCarrierProfileForm} from './carrierProfileForm.js';
 import {setupTelecomRefills} from './telecomRefills.js';
 import {setupTelecomPolicies} from './telecomPolicies.js';
@@ -1419,15 +1420,15 @@ const dialForm = $("#dial");
 const dialIdentity=document.createElement('p');dialIdentity.className='dial-contact-identity';dialIdentity.hidden=true;dialForm.elements.target.after(dialIdentity);
 let identityGeneration=0;
 async function registeredCallLabel(address){
- try{return (await apiGet('/api/softphone/identity?address='+encodeURIComponent(address))).label||'Unknown caller';}
- catch{return /^sip:\+?[0-9*#]+@/i.test(address)?address.replace(/^sip:/i,'').split('@')[0]:'Unknown caller';}
+ try{return callIdentityLabel(address,(await apiGet('/api/softphone/identity?address='+encodeURIComponent(address))).label);}
+ catch{return callAddressLabel(address);}
 }
 async function refreshDialIdentity(){
  const input=dialForm.elements.target,address=input.value,version=++identityGeneration;
  const internal=/^sips?:/i.test(address);
  input.hidden=false;dialIdentity.hidden=!internal;
  if(!internal){dialIdentity.textContent='';return;}
- dialIdentity.textContent='Registered SIP user';
+ dialIdentity.textContent=callAddressLabel(address);
  const label=await registeredCallLabel(address);
  if(version===identityGeneration&&input.value===address)dialIdentity.textContent=label;
 }
@@ -1528,8 +1529,8 @@ async function saveSoftphonePreferences() {
 $("#dnd").onchange = () => saveSoftphonePreferences().catch(report);
 function resolveCallListIdentity(address, name, button, avatar) {
   const userId=softphoneUserId, generation=softphoneLoad;
-  name.textContent='Registered SIP user';
-  button.setAttribute('aria-label','Call registered SIP user');
+  name.textContent=callAddressLabel(address);
+  button.setAttribute('aria-label','Call '+name.textContent);
   if(avatar)avatar.textContent='☎';
   void registeredCallLabel(address).then(label=>{
     if(!name.isConnected || userId!==softphoneUserId || generation!==softphoneLoad)return;
@@ -2648,7 +2649,7 @@ async function registerSip(data,shouldContinue=()=>true) {
           return;
         }
         void nativeCalls.incoming(currentCall.sipCallId).catch(report);
-        const incomingCall=currentCall;callGui.number(incomingCall.address);callGui.identity('Registered SIP user');void registeredCallLabel(incomingCall.address).then(label=>{if(currentCall===incomingCall)callGui.identity(label);});$("#incoming").hidden = false; showWorkspace("calling-workspace"); status("Incoming call");
+        const incomingCall=currentCall;callGui.number(incomingCall.address);callGui.identity(callAddressLabel(incomingCall.address));void registeredCallLabel(incomingCall.address).then(label=>{if(currentCall===incomingCall)callGui.identity(label);});$("#incoming").hidden = false; showWorkspace("calling-workspace"); status("Incoming call");
       },
       onCallAnswered: () => { void nativeCalls.connected(currentCall?.sipCallId).catch(report); if (currentCall) currentCall.answered = true; showWorkspace("calling-workspace"); callState(true); status("Call connected"); },
       onCallHangup: () => { void nativeCalls.ended(currentCall?.sipCallId).catch(report); finishCall(currentCall?.answered ? "completed" : "missed or unanswered"); callState(false); status("Call ended"); },
@@ -2707,7 +2708,8 @@ dialForm.addEventListener("submit", async (event) => {
   lastDialedTarget=target;
   currentCall = { direction: "outgoing", address: target };
   callGui.number(target);
-  callGui.identity(await registeredCallLabel(target));
+  callGui.identity(callAddressLabel(target));
+  const outgoingCall=currentCall;void registeredCallLabel(target).then(label=>{if(currentCall===outgoingCall)callGui.identity(label);});
   try { callGui.pending();status("Calling…"); await phone.call(authorizedTarget); }
   catch (error) { finishCall("failed");callState(false); report(error); }
 });
