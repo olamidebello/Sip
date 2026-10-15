@@ -3,8 +3,24 @@
 import json,pathlib,re,shlex
 MARKER='# OLAMIDE_PAID_ROUTE_V1'
 
+def patch_policy_destination(text):
+    marker='# OLAMIDE_NORMALIZED_DESTINATION_V1'
+    if marker in text:return text
+    response=re.search(r'jansson_get\("callerId", "(\$var\([A-Za-z0-9_]+\))"',text)
+    if not response:raise ValueError('Paid route response variable missing')
+    target='    route(OLAMIDE_FLOWROUTE);'
+    if text.count(target)!=1:raise ValueError('Expected one paid carrier handoff')
+    code='''    # OLAMIDE_NORMALIZED_DESTINATION_V1
+    if (!jansson_get("normalizedDestination", "RESPONSE", "$var(paid_destination)") ||
+        !($var(paid_destination) =~ "^[1-9][0-9]{7,14}$")) {
+        route(OLAMIDE_PAID_FAILED); sl_send_reply("503", "Invalid normalized destination"); exit;
+    }
+    $rU = $var(paid_destination);
+'''.replace('RESPONSE',response[1])
+    return text.replace(target,code+target,1)
+
 def patch(text,token):
-    if MARKER in text:return text
+    if MARKER in text:return patch_policy_destination(text)
     if 'OLAMIDE_CARRIER_ADAPTER_V1' not in text:raise ValueError('Install Kamailio carrier adapter first')
     if re.search(r'loadmodule\s+"(?:.*/)?(?:dialog|uac)\.so"',text):raise ValueError('Existing dialog/uac settings require review')
     # Add the stable reservation key to the existing authenticated route lookup.
@@ -93,7 +109,7 @@ event_route[dialog:EVENT] {
     }
 }
 '''.replace('EVENT',event).replace('NAME',name).replace('HEADERS',headers)
-    return text+'\n'+route
+    return patch_policy_destination(text+'\n'+route)
 
 def main():
     env=pathlib.Path('/etc/olamide/secrets.env').read_text();rows=re.findall(r'^KAMAILIO_HTTP_BRIDGE_TOKEN=(.*)$',env,re.M)

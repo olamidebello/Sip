@@ -5,7 +5,7 @@
     "group": "Accounts & security",
     "target": "telecom-feature-account-range",
     "implementation": "implemented",
-    "detail": "Tenant-scoped customer account-number ranges with stable allocation, range exhaustion checks and audit records. Separate from SIP usernames and native ASTPP account IDs."
+    "detail": "Tenant-scoped customer account-number ranges with stable allocation, range exhaustion checks and audit records. Separate from SIP usernames and native Olamide SIP account IDs."
   },
   {
     "id": "alarms",
@@ -19,9 +19,10 @@
     "id": "automated-report",
     "name": "Automated Report",
     "group": "Monitoring & reports",
-    "target": "report-admin",
-    "implementation": "partial",
-    "detail": "Interactive reports and exports exist; automated generation needs a worker."
+    "target": "telecom-feature-automated-report",
+    "implementation": "implemented",
+    "detail": "Scheduled usage and invoice summaries persist generated results and support authenticated retrieval. Mail retries are durable and tenant scoped. Authorized mail credentials and inbox acceptance testing are required.",
+    "endpoint": "/api/admin/telecom/reports"
   },
   {
     "id": "access-control",
@@ -43,9 +44,10 @@
     "id": "automated-cdrs",
     "name": "Automated CDRs",
     "group": "Monitoring & reports",
-    "target": "cdr-admin",
+    "target": "telecom-feature-automated-cdrs",
     "implementation": "partial",
-    "detail": "CDR records exist; scheduled summaries are incomplete."
+    "detail": "Durable scheduled CDR summaries are implemented. Complete scheduled raw CDR exports and archive pipelines remain pending.",
+    "endpoint": "/api/admin/telecom/reports"
   },
   {
     "id": "acl-management",
@@ -59,17 +61,19 @@
     "id": "country-reports",
     "name": "Country Reports",
     "group": "Monitoring & reports",
-    "target": "report-admin",
-    "implementation": "not_implemented",
-    "detail": "Country-level usage and revenue reporting has not been implemented."
+    "target": "telecom-feature-country-reports",
+    "implementation": "implemented",
+    "detail": "Settled paid-call usage and USD revenue are grouped by configured longest country or numbering-region prefixes. Unmapped destinations remain Unclassified.",
+    "endpoint": "/api/admin/telecom/analytics/countries"
   },
   {
     "id": "demand-routing",
     "name": "Demand-Based Routing",
     "group": "Routing & numbers",
-    "target": "operator-admin",
+    "target": "telecom-feature-demand-routing",
     "implementation": "partial",
-    "detail": "Effective-date rate scheduling exists; time-window live routing is incomplete."
+    "detail": "UTC weekday calling-window policies are enforced in paid-call authorization. Carrier selection by time window remains pending.",
+    "endpoint": "/api/admin/telecom/policies/time-windows"
   },
   {
     "id": "did-transfer",
@@ -99,9 +103,10 @@
     "id": "international-credit",
     "name": "International Credit Management",
     "group": "Billing & payments",
-    "target": "charging-admin",
-    "implementation": "not_implemented",
-    "detail": "Separate international spending limits are not implemented."
+    "target": "telecom-feature-international-credit",
+    "implementation": "implemented",
+    "detail": "Per-user monthly international USD budgets include outstanding reservations and current-month settled charges under the tenant billing lock. Home-prefix calls use the normal wallet budget. Live call acceptance is unverified.",
+    "endpoint": "/api/admin/telecom/policies/international-credit"
   },
   {
     "id": "local-number",
@@ -163,9 +168,10 @@
     "id": "personalized-rates",
     "name": "Personalized Rates",
     "group": "Billing & payments",
-    "target": "operator-admin",
-    "implementation": "not_implemented",
-    "detail": "Account-specific live tariff overrides are not implemented."
+    "target": "telecom-feature-personalized-rates",
+    "implementation": "implemented",
+    "detail": "Account-specific longest-prefix USD rates and billing intervals are applied to prepaid reservations and settlement. Active carrier coverage remains required. Live call acceptance is unverified.",
+    "endpoint": "/api/admin/telecom/policies/personal-rates"
   },
   {
     "id": "payfast",
@@ -203,17 +209,19 @@
     "id": "schedule-reports",
     "name": "Schedule Reports",
     "group": "Monitoring & reports",
-    "target": null,
-    "implementation": "not_implemented",
-    "detail": "Scheduled emailed reports need durable scheduling, recipients and SMTP."
+    "target": "telecom-feature-schedule-reports",
+    "implementation": "implemented",
+    "detail": "Durable per-administrator report schedules, row-locked job claims, persisted snapshots, bounded retries, provider idempotency and mail-attempt history are implemented. Authorized mail credentials and inbox acceptance testing are required.",
+    "endpoint": "/api/admin/telecom/reports"
   },
   {
     "id": "shadow-billing",
     "name": "Shadow Billing",
     "group": "Billing & payments",
-    "target": null,
-    "implementation": "not_implemented",
-    "detail": "A separate shadow-rating ledger is not implemented."
+    "target": "telecom-feature-shadow-billing",
+    "implementation": "implemented",
+    "detail": "An independent, idempotent comparison ledger snapshots configured shadow rates at reservation and records actual versus shadow charges at settlement without changing wallets. Live event acceptance is unverified.",
+    "endpoint": "/api/admin/telecom/analytics/shadow"
   },
   {
     "id": "switch-monitoring",
@@ -342,7 +350,7 @@
     "target": "admin",
     "endpoint": "/api/admin/overview",
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-customers",
@@ -351,7 +359,7 @@
     "target": "group-admin",
     "endpoint": "/api/admin/users",
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-providers",
@@ -360,7 +368,7 @@
     "target": "carrier-admin",
     "endpoint": "/api/admin/carriers",
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-roles",
@@ -369,7 +377,7 @@
     "target": "tenant-admin",
     "endpoint": null,
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-sip-devices",
@@ -378,7 +386,7 @@
     "target": "pbx-admin",
     "endpoint": "/api/pbx/extensions",
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-ip-settings",
@@ -387,7 +395,7 @@
     "target": "sip-profile-admin",
     "endpoint": null,
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-callerids",
@@ -396,7 +404,7 @@
     "target": "carrier-console",
     "endpoint": null,
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-servers",
@@ -405,7 +413,7 @@
     "target": "switch-admin",
     "endpoint": null,
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-call-barring",
@@ -414,25 +422,25 @@
     "target": "operator-admin",
     "endpoint": "/api/pbx/outbound-policies",
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-localizations",
     "name": "Number localization",
     "group": "Core \u00b7 Switch",
-    "target": "operator-admin",
-    "endpoint": null,
-    "implementation": "not_implemented",
-    "detail": "Unified number-normalization editing is not implemented."
+    "target": "telecom-feature-core-localizations",
+    "endpoint": "/api/admin/telecom/policies/normalization",
+    "implementation": "implemented",
+    "detail": "Numeric prefix normalization is enforced once at paid-call authorization and passed to the validated carrier handoff. Configure destination rules and deploy the updated paid-call route; live call acceptance remains unverified."
   },
   {
     "id": "core-rate-groups",
     "name": "Rate groups",
     "group": "Core \u00b7 Tariffs",
-    "target": "operator-admin",
-    "endpoint": null,
-    "implementation": "not_implemented",
-    "detail": "Independent rate-group CRUD and live assignment require implementation."
+    "target": "telecom-feature-core-rate-groups",
+    "endpoint": "/api/admin/tariff-catalog/rate-groups",
+    "implementation": "implemented",
+    "detail": "Manage enabled rate groups, tenant-scoped user assignments and destination rates. The paid-call engine applies group rates alongside account and caller-ID policies. Native-console synchronization is separate; live call acceptance is unverified."
   },
   {
     "id": "core-origination-rates",
@@ -441,7 +449,7 @@
     "target": "pbx-admin",
     "endpoint": "/api/pbx/rates",
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-rate-decks",
@@ -450,16 +458,16 @@
     "target": "flowroute-rate-admin",
     "endpoint": null,
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-call-types",
     "name": "Call types",
     "group": "Core \u00b7 Tariffs",
-    "target": "operator-admin",
-    "endpoint": null,
-    "implementation": "not_implemented",
-    "detail": "Independent call-type management is not implemented."
+    "target": "telecom-feature-core-call-types",
+    "endpoint": "/api/admin/telecom/analytics/call-types",
+    "implementation": "implemented",
+    "detail": "Manage call types and destination classification rules; paid-call records snapshot the matched type for usage and charge reports. Native-console synchronization is separate."
   },
   {
     "id": "core-gateways",
@@ -468,7 +476,7 @@
     "target": "carrier-console",
     "endpoint": "/api/admin/carriers",
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-trunks",
@@ -477,7 +485,7 @@
     "target": "pbx-admin",
     "endpoint": "/api/pbx/trunks",
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-termination-rates",
@@ -486,7 +494,7 @@
     "target": "flowroute-rate-admin",
     "endpoint": null,
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-routing-strategy",
@@ -495,7 +503,7 @@
     "target": "operator-admin",
     "endpoint": "/api/pbx/outbound-policies",
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-invoices",
@@ -504,16 +512,16 @@
     "target": "charging-admin",
     "endpoint": "/api/admin/telecom/resources/invoices",
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-callerid-billing",
     "name": "Caller ID based billing",
     "group": "Core \u00b7 Billing",
-    "target": "charging-admin",
-    "endpoint": null,
-    "implementation": "not_implemented",
-    "detail": "Caller-ID-specific live charging is not implemented."
+    "target": "telecom-feature-core-callerid-billing",
+    "endpoint": "/api/admin/telecom/policies/callerid-rates",
+    "implementation": "implemented",
+    "detail": "Authorized outbound caller-ID rate overrides are applied to prepaid reservations and settlement. Longest prefix wins; account overrides win ties. Live call acceptance is unverified."
   },
   {
     "id": "core-charge-history",
@@ -522,16 +530,16 @@
     "target": "charging-admin",
     "endpoint": "/api/admin/telecom/resources/charges",
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-refills",
     "name": "Refill history",
     "group": "Core \u00b7 Billing",
-    "target": "charging-admin",
-    "endpoint": null,
-    "implementation": "not_implemented",
-    "detail": "Dedicated refill ledger and reporting require implementation."
+    "target": "telecom-feature-core-refills",
+    "endpoint": "/api/admin/telecom/refills",
+    "implementation": "implemented",
+    "detail": "Administrator-funded USD wallet refills have an immutable ledger, stable retry IDs, locked balance updates, tenant checks and audit events. An administrator must separately verify the funding; external settlement is not inferred."
   },
   {
     "id": "core-packages",
@@ -540,7 +548,7 @@
     "target": "catalog-controls",
     "endpoint": "/api/admin/plans",
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-products",
@@ -549,7 +557,7 @@
     "target": "product-store-admin",
     "endpoint": null,
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-inbound",
@@ -558,7 +566,7 @@
     "target": "pbx-admin",
     "endpoint": "/api/pbx/inbound-routes",
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-dids",
@@ -567,7 +575,7 @@
     "target": "inhouse-admin",
     "endpoint": null,
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-vanity",
@@ -585,7 +593,7 @@
     "target": "inhouse-admin",
     "endpoint": null,
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-cdr",
@@ -594,7 +602,7 @@
     "target": "cdr-admin",
     "endpoint": "/api/admin/cdr",
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-summary",
@@ -603,7 +611,7 @@
     "target": "report-admin",
     "endpoint": "/api/admin/reports",
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-audit",
@@ -612,7 +620,7 @@
     "target": "user-session-admin",
     "endpoint": "/api/admin/telecom/resources/audit",
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-payments",
@@ -621,7 +629,7 @@
     "target": "payment-admin",
     "endpoint": null,
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-commissions",
@@ -639,16 +647,16 @@
     "target": "charging-admin",
     "endpoint": "/api/admin/telecom/resources/low-balances",
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-email-history",
     "name": "Email history",
     "group": "Core \u00b7 Reports",
-    "target": "campaign-admin",
-    "endpoint": null,
-    "implementation": "not_implemented",
-    "detail": "Delivery history integration requires implementation."
+    "target": "telecom-feature-core-email-history",
+    "endpoint": "/api/admin/telecom/reports",
+    "implementation": "partial",
+    "detail": "Report mail attempts, retries and provider acceptance are visible. A unified delivery history across account verification, subscriber forwarding and all external mail remains pending."
   },
   {
     "id": "core-live-calls",
@@ -666,7 +674,7 @@
     "target": "admin",
     "endpoint": null,
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-company",
@@ -675,7 +683,7 @@
     "target": "background-admin",
     "endpoint": null,
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-templates",
@@ -702,7 +710,7 @@
     "target": "locale-admin",
     "endpoint": "/api/locales/catalog",
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   },
   {
     "id": "core-backups",
@@ -717,10 +725,10 @@
     "id": "core-calling-cards",
     "name": "Calling cards",
     "group": "Core \u00b7 Communication",
-    "target": "native-astpp-admin",
+    "target": "native-console-admin",
     "endpoint": null,
     "implementation": "not_implemented",
-    "detail": "Requires the native ASTPP calling-card application and supported switch integration."
+    "detail": "Requires the native Olamide SIP calling-card application and supported switch integration."
   },
   {
     "id": "core-mass-email",
@@ -729,6 +737,6 @@
     "target": "campaign-admin",
     "endpoint": null,
     "implementation": "partial",
-    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact ASTPP parity depend on the configured engine and provider."
+    "detail": "Connected to existing tenant-scoped controls. Live service acceptance and exact Olamide SIP parity depend on the configured engine and provider."
   }
 ]

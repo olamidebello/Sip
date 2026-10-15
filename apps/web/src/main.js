@@ -1,3 +1,7 @@
+import {setupTelecomRefills} from './telecomRefills.js';
+import {setupTelecomPolicies} from './telecomPolicies.js';
+import {setupTelecomReports} from './telecomReports.js';
+import {setupTariffCatalog} from './tariffCatalog.js';
 import {setupAdvancedCalling} from './advancedCalling.js';
 import {setupAccountRanges} from './accountRanges.js';
 import {createAdvancedTelecomPanels,setupAdvancedTelecomNavigation,advancedTelecomIds} from './advancedTelecomNavigation.js';
@@ -741,7 +745,7 @@ root.innerHTML = `
       <button id="kamailio-refresh" type="button">Refresh status</button><button id="kamailio-export" type="button">Export inventory and evidence</button>
       <p id="kamailio-status" role="status"></p>
       <div style="overflow:auto"><table><thead><tr><th>Capability</th><th>Maturity</th><th>Install</th><th>Enable</th><th>Installed</th><th>Status</th><th>Evidence</th><th>Guide</th></tr></thead><tbody id="kamailio-features"></tbody></table></div>
-      <h4>Switch and server commissioning</h4><p>Live process and transport checks are separate from call acceptance. Inventory refreshes each minute.</p><ul id="service-inventory"></ul><p><a href="#carrier-admin">Carrier commissioning</a> · <a href="#carrier-adapter-admin">Routing adapters</a> · <a href="#sip-profile-admin">SIP provisioning policies</a></p><h4>Production commissioning</h4><p>Same-server plans install Kamailio and RTPengine using a private reviewed profile. Successful deployment verifies media control, WebSocket transport and public DNS. SIP authentication, two-way audio, carrier calls, billing, backups and capacity tests remain separate acceptance requirements.</p><h4>Carrier and ASTPP-style feature readiness</h4><p>Application integration is separate from live-service acceptance. Pending features require implementation or commissioning; this is not an ASTPP installation.</p><ul id="carrier-readiness"></ul><h4>Automatic account provisioning</h4><p id="sip-provisioning-status" role="status"></p><button type="button" id="sip-provisioning-retry">Retry pending accounts</button><ul id="sip-provisioning-accounts"></ul><h4>Deployment history</h4><ul id="kamailio-history"></ul>
+      <h4>Switch and server commissioning</h4><p>Live process and transport checks are separate from call acceptance. Inventory refreshes each minute.</p><ul id="service-inventory"></ul><p><a href="#carrier-admin">Carrier commissioning</a> · <a href="#carrier-adapter-admin">Routing adapters</a> · <a href="#sip-profile-admin">SIP provisioning policies</a></p><h4>Production commissioning</h4><p>Same-server plans install Kamailio and RTPengine using a private reviewed profile. Successful deployment verifies media control, WebSocket transport and public DNS. SIP authentication, two-way audio, carrier calls, billing, backups and capacity tests remain separate acceptance requirements.</p><h4>Carrier and platform feature readiness</h4><p>Application integration is separate from live-service acceptance. Pending features require implementation or commissioning before live use.</p><ul id="carrier-readiness"></ul><h4>Automatic account provisioning</h4><p id="sip-provisioning-status" role="status"></p><button type="button" id="sip-provisioning-retry">Retry pending accounts</button><ul id="sip-provisioning-accounts"></ul><h4>Deployment history</h4><ul id="kamailio-history"></ul>
     </section>
     <section id="carrier-adapter-admin" hidden>
       <h3>Carrier adapter nodes</h3>
@@ -1197,7 +1201,7 @@ root.innerHTML = `
 root.insertAdjacentHTML('beforeend',messengerPanels());
 createAdvancedTelecomPanels(document,root);
 root.insertAdjacentHTML('beforeend','<section id="telecom-features-admin" hidden><h2>Telecom feature catalog</h2><p>Review current implementation and prerequisites. Pending features cannot be activated from this inventory.</p><input type="search" aria-label="Search telecom features" placeholder="Find a feature or category…"><button type="button" class="telecom-refresh">Refresh inventory</button><p role="status"></p><div class="telecom-feature-list"></div></section>');
-root.insertAdjacentHTML('beforeend',`<section id="native-astpp-admin" hidden><h2>Native ASTPP Community</h2><p>The optional native GUI uses its original menus, backend and separate database. Open an SSH tunnel to port 8089 before opening the private console.</p><a class="native-astpp-open" href="http://localhost:8089/" target="_blank" rel="noopener noreferrer">Open native ASTPP console</a><div class="native-feature-groups"><article><h3>Accounts & access</h3><p>Customers, resellers, SIP devices and roles.</p></article><article><h3>Carriers & rates</h3><p>Trunks, gateways, routes and rate decks.</p></article><article><h3>Billing & services</h3><p>Invoices, taxes, DIDs, products and orders.</p></article><article><h3>Reports & settings</h3><p>Call records, provider reports, languages and currencies.</p></article></div><p>Kamailio paid calls use the separate Olamide charging integration. Installing this native GUI does not connect its routing or balances to Kamailio. Native switch-dependent controls require their own supported integration.</p></section>`);
+root.insertAdjacentHTML('beforeend',`<section id="native-console-admin" hidden><h2>Native Olamide SIP Community</h2><p>The optional native GUI uses its original menus, backend and separate database. Open an SSH tunnel to port 8089 before opening the private console.</p><a class="native-console-open" href="http://localhost:8089/" target="_blank" rel="noopener noreferrer">Open native Olamide SIP console</a><div class="native-feature-groups"><article><h3>Accounts & access</h3><p>Customers, resellers, SIP devices and roles.</p></article><article><h3>Carriers & rates</h3><p>Trunks, gateways, routes and rate decks.</p></article><article><h3>Billing & services</h3><p>Invoices, taxes, DIDs, products and orders.</p></article><article><h3>Reports & settings</h3><p>Call records, provider reports, languages and currencies.</p></article></div><p>Kamailio paid calls use the separate Olamide charging integration. Installing this native GUI does not connect its routing or balances to Kamailio. Native switch-dependent controls require their own supported integration.</p></section>`);
 root.insertAdjacentHTML('beforeend','<section id="messenger-accessibility" hidden><h2>Accessibility</h2><form id="messenger-accessibility-form"><label><input name="highContrast" type="checkbox"> Increase contrast</label><label><input name="reduceMotion" type="checkbox"> Reduce animation</label><button type="submit">Save preferences</button></form><p id="messenger-accessibility-status" role="status"></p></section>');
 styleMessengerSettings(document);
 const $ = (selector) => document.querySelector(selector);
@@ -1257,7 +1261,9 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   if(target==='money')void moneyWorkspace.refresh();
   if(target==='carrier-console')void carrierConsole.refresh();
   if(target==='telecom-features-admin')void telecomFeatureWorkspace.refresh();
-  if(advancedTelecomIds.has(target))void advancedTelecomWorkspace.refresh(target);
+  if(advancedTelecomIds.has(target)){void advancedTelecomWorkspace.refresh(target);void telecomPoliciesWorkspace.refresh(target);void telecomReportsWorkspace.refresh(target);}
+  if(target==='telecom-feature-core-refills')void telecomRefillsWorkspace.refresh();
+  if(target==='telecom-feature-core-call-types'||target==='telecom-feature-core-rate-groups')void tariffCatalogWorkspace.refresh(target);
   if(target==='telecom-feature-account-range')void accountRangesWorkspace.refresh();
   if(modeChanged)updateNavigation();
   const requested=document.getElementById(target);
@@ -1455,6 +1461,10 @@ const providerCredentialsAdmin=setupProviderCredentialsAdmin({get:apiGet,request
 configurationLinks=setupConfigurationLinks({show:showWorkspace,allowed:navigationAllowed});
 userActivity=setupUserActivity({get:apiGet,request:accountRequest});
 const didwwAdmin=setupDidwwAdmin({get:apiGet,request:accountRequest});
+const telecomRefillsWorkspace=setupTelecomRefills({document,get:apiGet,request:accountRequest});
+const telecomPoliciesWorkspace=setupTelecomPolicies({document,get:apiGet,request:accountRequest});
+const telecomReportsWorkspace=setupTelecomReports({document,get:apiGet,request:accountRequest});
+const tariffCatalogWorkspace=setupTariffCatalog({document,get:apiGet,request:accountRequest});
 const accountRangesWorkspace=setupAccountRanges({document,get:apiGet,request:accountRequest});
 const advancedTelecomWorkspace=setupAdvancedTelecomNavigation({document,get:apiGet,show:showWorkspace});
 const telecomFeatureWorkspace=setupTelecomFeatures({document,get:apiGet,show:showWorkspace});
@@ -1967,7 +1977,7 @@ function signedIn(user) {
   $("#agent-panel").hidden = !user.features?.call_center;
   pbx.refreshSelf(user).catch((error) => { $("#agent-status-result").textContent = error.message; });
   $("#admin").hidden = !(["admin","super_admin"].includes(user.role));
-  $("#native-astpp-admin").hidden = $("#admin").hidden;
+  $("#native-console-admin").hidden = $("#admin").hidden;
   $("#telecom-features-admin").hidden = $("#admin").hidden;
   advancedTelecomWorkspace.visibility(activeRole);
   updateNavigation();
@@ -2525,10 +2535,14 @@ $("#logout").onclick = async () => {
     meetings.hide();
     $("#agent-panel").hidden = true;
     $("#admin").hidden = true;
-    $("#native-astpp-admin").hidden = true;
+    $("#native-console-admin").hidden = true;
     $("#telecom-features-admin").hidden = true;
     telecomFeatureWorkspace.stop();
     advancedTelecomWorkspace.stop();
+    telecomRefillsWorkspace.stop();
+    telecomPoliciesWorkspace.stop();
+    telecomReportsWorkspace.stop();
+    tariffCatalogWorkspace.stop();
     accountRangesWorkspace.stop();
     $("#message-list").replaceChildren();
     $("#account-status").textContent = "Signed out";

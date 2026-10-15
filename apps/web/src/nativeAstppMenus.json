@@ -1,6 +1,6 @@
 [
   {
-    "id": "native-astpp-menu-93",
+    "id": "native-console-menu-93",
     "label": "Customers",
     "group": "Accounts",
     "subtitle": "Customers",
@@ -8,7 +8,7 @@
     "priority": 10.1
   },
   {
-    "id": "native-astpp-menu-149",
+    "id": "native-console-menu-149",
     "label": "SIP Devices",
     "group": "Accounts",
     "subtitle": "Customers",
@@ -16,7 +16,7 @@
     "priority": 10.2
   },
   {
-    "id": "native-astpp-menu-150",
+    "id": "native-console-menu-150",
     "label": "IP Settings",
     "group": "Accounts",
     "subtitle": "Customers",
@@ -24,7 +24,7 @@
     "priority": 10.3
   },
   {
-    "id": "native-astpp-menu-151",
+    "id": "native-console-menu-151",
     "label": "Caller IDs",
     "group": "Accounts",
     "subtitle": "Customers",
@@ -32,7 +32,7 @@
     "priority": 10.4
   },
   {
-    "id": "native-astpp-menu-152",
+    "id": "native-console-menu-152",
     "label": "Resellers",
     "group": "Accounts",
     "subtitle": "",
@@ -40,7 +40,7 @@
     "priority": 10.4
   },
   {
-    "id": "native-astpp-menu-153",
+    "id": "native-console-menu-153",
     "label": "Admins",
     "group": "Accounts",
     "subtitle": "",
@@ -48,7 +48,7 @@
     "priority": 10.5
   },
   {
-    "id": "native-astpp-menu-154",
+    "id": "native-console-menu-154",
     "label": "Roles & Permission",
     "group": "Accounts",
     "subtitle": "",
@@ -56,7 +56,7 @@
     "priority": 10.6
   },
   {
-    "id": "native-astpp-menu-8",
+    "id": "native-console-menu-8",
     "label": "Invoices",
     "group": "Billing",
     "subtitle": "",
@@ -64,7 +64,7 @@
     "priority": 20.1
   },
   {
-    "id": "native-astpp-menu-40",
+    "id": "native-console-menu-40",
     "label": "Refill Report",
     "group": "Billing",
     "subtitle": "",
@@ -72,7 +72,7 @@
     "priority": 20.2
   },
   {
-    "id": "native-astpp-menu-13",
+    "id": "native-console-menu-13",
     "label": "DIDs",
     "group": "Inbound",
     "subtitle": "",
@@ -80,7 +80,7 @@
     "priority": 30.1
   },
   {
-    "id": "native-astpp-menu-89",
+    "id": "native-console-menu-89",
     "label": "Access Numbers",
     "group": "Inbound",
     "subtitle": "",
@@ -88,7 +88,7 @@
     "priority": 30.3
   },
   {
-    "id": "native-astpp-menu-16",
+    "id": "native-console-menu-16",
     "label": "Rate Groups",
     "group": "Tariff",
     "subtitle": "",
@@ -96,7 +96,7 @@
     "priority": 40.1
   },
   {
-    "id": "native-astpp-menu-17",
+    "id": "native-console-menu-17",
     "label": "Origination Rates",
     "group": "Tariff",
     "subtitle": "",
@@ -104,7 +104,7 @@
     "priority": 40.2
   },
   {
-    "id": "native-astpp-menu-79",
+    "id": "native-console-menu-79",
     "label": "Ratedeck",
     "group": "Tariff",
     "subtitle": "",
@@ -112,7 +112,7 @@
     "priority": 40.3
   },
   {
-    "id": "native-astpp-menu-41",
+    "id": "native-console-menu-41",
     "label": "Gateways",
     "group": "Carriers",
     "subtitle": "",
@@ -120,7 +120,7 @@
     "priority": 50.1
   },
   {
-    "id": "native-astpp-menu-14",
+    "id": "native-console-menu-14",
     "label": "Trunks",
     "group": "Carriers",
     "subtitle": "",
@@ -128,7 +128,7 @@
     "priority": 50.2
   },
   {
-    "id": "native-astpp-menu-15",
+    "id": "native-console-menu-15",
     "label": "Termination Rates",
     "group": "Carriers",
     "subtitle": "",
@@ -136,7 +136,7 @@
     "priority": 50.3
   },
   {
-    "id": "native-astpp-menu-88",
+    "id": "native-console-menu-88",
     "label": "Call Types",
     "group": "Tariff",
     "subtitle": "",
@@ -144,7 +144,7 @@
     "priority": 55.0
   },
   {
-    "id": "native-astpp-menu-91",
+    "id": "native-console-menu-91",
     "label": "Products",
     "group": "Services",
     "subtitle": "",
@@ -152,7 +152,7 @@
     "priority": 60.1
   },
   {
-    "id": "native-astpp-menu-92",
+    "id": "native-console-menu-92",
     "label": "Orders",
     "group": "Services",
     "subtitle": "",
@@ -160,7 +160,7 @@
     "priority": 60.2
   },
   {
-    "id": "native-astpp-menu-66",
+    "id": "native-console-menu-66",
     "label": "Refill Coupons",
     "group": "Services",
     "subtitle": "",
@@ -168,7 +168,7 @@
     "priority": 60.3
   },
   {
-    "id": "native-astpp-menu-42",
+    "id": "native-console-menu-42",
     "label": "SIP Profiles",
     "group": "Switch",
     "subtitle": "",
@@ -176,7 +176,7 @@
     "priority": 70.1
   },
   {
-    "id": "native-astpp-menu-20",
+    "id": "native-console-menu-20",
     "label": "Live Calls",
     "group": "Switch",
     "subtitle": "",
@@ -184,7 +184,7 @@
     "priority": 70.3
   },
   {
-    "id": "native-astpp-menu-121",
+    "id": "native-console-menu-121",
     "label": "Localizations",
     "group": "Switch",
     "subtitle": "",
@@ -192,7 +192,7 @@
     "priority": 70.4
   },
   {
-    "id": "native-astpp-menu-77",
+    "id": "native-console-menu-77",
     "label": "Addons",
     "group": "Addons",
     "subtitle": "",
@@ -200,7 +200,7 @@
     "priority": 74.0
   },
   {
-    "id": "native-astpp-menu-165",
+    "id": "native-console-menu-165",
     "label": "Customer",
     "group": "Reports",
     "subtitle": "Call Detail Reports",
@@ -208,7 +208,7 @@
     "priority": 80.1
   },
   {
-    "id": "native-astpp-menu-166",
+    "id": "native-console-menu-166",
     "label": "Reseller",
     "group": "Reports",
     "subtitle": "Call Detail Reports",
@@ -216,7 +216,7 @@
     "priority": 80.2
   },
   {
-    "id": "native-astpp-menu-167",
+    "id": "native-console-menu-167",
     "label": "Provider Outbound",
     "group": "Reports",
     "subtitle": "Call Detail Reports",
@@ -224,7 +224,7 @@
     "priority": 80.3
   },
   {
-    "id": "native-astpp-menu-84",
+    "id": "native-console-menu-84",
     "label": "Localizations",
     "group": "Configuration",
     "subtitle": "",
@@ -232,7 +232,7 @@
     "priority": 80.6
   },
   {
-    "id": "native-astpp-menu-168",
+    "id": "native-console-menu-168",
     "label": "Customer Summary",
     "group": "Reports",
     "subtitle": "Call Summary Reports",
@@ -240,7 +240,7 @@
     "priority": 81.1
   },
   {
-    "id": "native-astpp-menu-169",
+    "id": "native-console-menu-169",
     "label": "Reseller Summary",
     "group": "Reports",
     "subtitle": "Call Summary Reports",
@@ -248,7 +248,7 @@
     "priority": 81.2
   },
   {
-    "id": "native-astpp-menu-170",
+    "id": "native-console-menu-170",
     "label": "Provider",
     "group": "Reports",
     "subtitle": "Call Summary Reports",
@@ -256,7 +256,7 @@
     "priority": 81.3
   },
   {
-    "id": "native-astpp-menu-171",
+    "id": "native-console-menu-171",
     "label": "Email History",
     "group": "Reports",
     "subtitle": "",
@@ -264,7 +264,7 @@
     "priority": 82.1
   },
   {
-    "id": "native-astpp-menu-activity",
+    "id": "native-console-menu-activity",
     "label": "Activity Report",
     "group": "Reports",
     "subtitle": "",
@@ -272,7 +272,7 @@
     "priority": 82.1
   },
   {
-    "id": "native-astpp-menu-172",
+    "id": "native-console-menu-172",
     "label": "Audit Log",
     "group": "Reports",
     "subtitle": "",
@@ -280,7 +280,7 @@
     "priority": 82.2
   },
   {
-    "id": "native-astpp-menu-556",
+    "id": "native-console-menu-556",
     "label": "Product Summary Reports",
     "group": "Reports",
     "subtitle": "",
@@ -288,7 +288,7 @@
     "priority": 82.4
   },
   {
-    "id": "native-astpp-menu-559",
+    "id": "native-console-menu-559",
     "label": "Commission Report",
     "group": "Billing",
     "subtitle": "",
@@ -296,7 +296,7 @@
     "priority": 83.1
   },
   {
-    "id": "native-astpp-menu-561",
+    "id": "native-console-menu-561",
     "label": "Low Balance",
     "group": "Reports",
     "subtitle": "",
@@ -304,7 +304,7 @@
     "priority": 89.3
   },
   {
-    "id": "native-astpp-menu-9",
+    "id": "native-console-menu-9",
     "label": "Company Profiles",
     "group": "Configuration",
     "subtitle": "",
@@ -312,7 +312,7 @@
     "priority": 90.1
   },
   {
-    "id": "native-astpp-menu-26",
+    "id": "native-console-menu-26",
     "label": "Configuration",
     "group": "System Configuration",
     "subtitle": "System",
@@ -320,7 +320,7 @@
     "priority": 90.1
   },
   {
-    "id": "native-astpp-menu-27",
+    "id": "native-console-menu-27",
     "label": "Taxes",
     "group": "Configuration",
     "subtitle": "",
@@ -328,15 +328,16 @@
     "priority": 90.2
   },
   {
-    "id": "native-astpp-menu-29",
+    "id": "native-console-menu-29",
     "label": "Opensips devices",
     "group": "Switch",
     "subtitle": "",
     "path": "opensips/opensips_list/",
-    "priority": 90.2
+    "priority": 90.2,
+    "unavailableReason": "The pinned Olamide SIP Community release does not contain the OpenSIPS controller. A supported switch adapter must be implemented before this menu can operate."
   },
   {
-    "id": "native-astpp-menu-28",
+    "id": "native-console-menu-28",
     "label": "Templates",
     "group": "Configuration",
     "subtitle": "",
@@ -344,7 +345,7 @@
     "priority": 90.3
   },
   {
-    "id": "native-astpp-menu-48",
+    "id": "native-console-menu-48",
     "label": "Countries",
     "group": "Configuration",
     "subtitle": "",
@@ -352,7 +353,7 @@
     "priority": 90.4
   },
   {
-    "id": "native-astpp-menu-49",
+    "id": "native-console-menu-49",
     "label": "Currencies",
     "group": "Configuration",
     "subtitle": "",
@@ -360,7 +361,7 @@
     "priority": 90.5
   },
   {
-    "id": "native-astpp-menu-177",
+    "id": "native-console-menu-177",
     "label": "Database Backup",
     "group": "Configuration",
     "subtitle": "",
@@ -368,7 +369,7 @@
     "priority": 90.6
   },
   {
-    "id": "native-astpp-menu-560",
+    "id": "native-console-menu-560",
     "label": "Timezone",
     "group": "Configuration",
     "subtitle": "",
@@ -376,7 +377,7 @@
     "priority": 90.7
   },
   {
-    "id": "native-astpp-menu-179",
+    "id": "native-console-menu-179",
     "label": "Crons",
     "group": "Configuration",
     "subtitle": "",
@@ -384,7 +385,7 @@
     "priority": 90.8
   },
   {
-    "id": "native-astpp-menu-180",
+    "id": "native-console-menu-180",
     "label": "Settings",
     "group": "Configuration",
     "subtitle": "",
@@ -392,7 +393,7 @@
     "priority": 90.9
   },
   {
-    "id": "native-astpp-menu-557",
+    "id": "native-console-menu-557",
     "label": "Languages",
     "group": "Configuration",
     "subtitle": "Languages",
@@ -400,7 +401,7 @@
     "priority": 91.1
   },
   {
-    "id": "native-astpp-menu-558",
+    "id": "native-console-menu-558",
     "label": "Translations",
     "group": "Configuration",
     "subtitle": "Languages",

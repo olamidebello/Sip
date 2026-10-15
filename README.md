@@ -113,7 +113,7 @@ The administrator can set an enabled calling area policy, maximum location uncer
 
 Favorites, recent calls, and do-not-disturb are stored in this browser's local storage, with no cross-device synchronization. Incoming caller identity is not available through the current SimpleUser delegate and appears as “Unknown caller” in recent calls. Recent calls are a convenience list, not carrier CDRs or billing evidence. This page does not provide Acrobits' native push wakeup, CallKit/Android Telecom integration, native contacts, SIP video calls, attended transfer, conferencing, voicemail provisioning, SIP SIMPLE messaging, or mobile background operation. Those require additional SIP client and server development and platform-specific integration.
 
-ASTPP includes carrier-grade softswitch, online charging, reseller billing, routing, DID management, and fraud controls; 3CX includes a live PBX and queue engine. The Olamide control plane is **not** a substitute for either complete product. Do not advertise or rely on prepaid charging, automatic call recording, emergency calling, lawful intercept, carrier routing, or live queue service until those components have been separately implemented and verified.
+A production telecom service needs a softswitch, online charging, reseller billing, routing, DID management, fraud controls, and a compatible PBX and queue engine. Olamide SIP provides the controls and integrations documented here; each live service needs its own acceptance checks. Do not advertise or rely on prepaid charging, automatic call recording, emergency calling, lawful intercept, carrier routing, or live queue service until those components have been separately implemented and verified.
 
 PortaOne's PortaSwitch also provides SIP call processing, media applications, phone provisioning, customer and reseller self-care, real-time authorization, and rating. The Olamide administrator can save per-tenant outbound prefix rules under **PBX and call center configuration → Outbound call barring policy**. Save a `block` rule for a broad prefix and an `allow` rule for a more specific exception; the longest matching prefix wins in the route preview. Removing a rule immediately changes preview results. This policy is stored in MySQL but **does not block calls on a SIP switch**. Olamide also accepts normalized signed CDR legs from an external switch, as described below. There is no live PortaOne integration, charging engine, automated CDR reconciliation, or reseller settlement. Before going live, provision the exact same policy on an authoritative switch and test fail-closed behavior there.
 
@@ -307,7 +307,7 @@ To regenerate packages, use the workflow's **Run workflow** button or push packa
 - Add contacts in the same tenant, send server-stored messages, and use meeting rooms with up to four participants. Meeting chat is temporary; screen sharing uses the browser's screen capture. Pointer assistance is an overlay and cannot operate the remote desktop. Configure TURN for cross-network calls. Messages have no end-to-end encryption or push delivery.
 - Android/iOS release administration records app identifiers, artifact references, tracks, internal approval, and audit history. It does not build native clients or submit to Google/Apple stores.
 
-## Integration work required for a live PBX or ASTPP-class service
+## Integration work required for a live telecom or PBX service
 
 # Form pages and account registration
 
@@ -400,7 +400,7 @@ dialplan, recurring charge or payment confirmation. The server still needs
 switch activation, billing authorization, fraud controls and reconciliation
 before the offer can route calls.
 
-## Carrier provider commissioning and ASTPP-style controls
+## Carrier provider commissioning and Olamide SIP-style controls
 
 In **Administration → Carrier providers**, an administrator selects an existing
 tenant trunk, a concurrent call capacity, and a routing intent for Flowroute
@@ -425,8 +425,8 @@ excluded from the USD totals.
 
 The existing PBX rate deck, outbound policy preview, DID price rules, tenant
 management, normalized CDR ingestion, wallet transfer ledger, invoices and
-reports provide parts of an ASTPP-style administrative control plane. They
-are not an ASTPP deployment or a carrier-grade charging engine. Live LCR,
+reports provide the Olamide SIP administrative control plane. These records
+alone do not establish a commissioned carrier charging service. Live LCR,
 rating, prepaid reservation and cutoff, tax, settlement, reseller accounting,
 fraud detection and reconciliation require authoritative switch events and
 carrier agreements. Do not turn on paid traffic based on preview data.
@@ -446,7 +446,7 @@ The private token is generated into `/etc/olamide/secrets.env` on bootstrap or f
 
 For external text messaging, enter Flowroute API access and secret keys privately as `FLOWROUTE_ACCESS_KEY` and `FLOWROUTE_SECRET_KEY` in `/etc/olamide/secrets.env`, then rerun bootstrap or synchronize the private Compose environment and restart. In **Administration → Messaging webhooks**, confirm that a phone number belongs to this Flowroute account and is SMS enabled; assign its E.164 number to an active tenant user, set a daily send limit, and enable it. The user opens **Communications → Text messages**, chooses the assigned sender, and enters an external E.164 mobile number and SMS text. Incoming SMS and MMS callbacks for an assigned number appear in that user's inbox; outgoing SMS shows carrier acceptance or an unknown state if the provider response could not be confirmed. Delivery receipts are recorded in the administrator event log. Quota limits guard sends, but carrier usage charges are billed by Flowroute and no prepaid SMS wallet debit or settlement is implemented. A daily quota of zero blocks sending. Carrier messaging must be provisioned and funded with Flowroute before use. The existing **Account messages** page is separate server-based chat between Olamide users.
 
-These controls cover number assignment, SMS inbox/outbox, callback monitoring, provider setup and tenant scoped administration. Other ASTPP billing, switch, reseller and carrier features require their own authoritative integrations and are not implied by these screens.
+These controls cover number assignment, SMS inbox/outbox, callback monitoring, provider setup and tenant scoped administration. Other Olamide SIP billing, switch, reseller and carrier features require their own authoritative integrations and are not implied by these screens.
 
 ### Bootstrap the `olamidebello` super administrator
 

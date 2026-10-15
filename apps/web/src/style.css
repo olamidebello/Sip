@@ -350,7 +350,7 @@ body.messenger-mode #app-nav .user-tools-panel .locale-menu .quick-locale{positi
 body.messenger-mode #app-nav .user-tools-panel .locale-menu{margin:0}
 @media(max-width:620px){body.messenger-mode #app-nav .user-tools-panel{top:72px;right:12px;width:calc(100vw - 24px);max-height:calc(100dvh - 165px)}}
 
-.native-feature-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;margin:24px 0}.native-feature-groups article{padding:18px;background:#132e40;border:1px solid #365465;border-radius:12px}.native-astpp-open{display:inline-block;padding:12px 18px;background:#19443f;color:#b2f5df;border-radius:9px;text-decoration:none}
+.native-feature-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;margin:24px 0}.native-feature-groups article{padding:18px;background:#132e40;border:1px solid #365465;border-radius:12px}.native-console-open{display:inline-block;padding:12px 18px;background:#19443f;color:#b2f5df;border-radius:9px;text-decoration:none}
 
 .telecom-feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}.telecom-feature-grid article{border:1px solid #365465;background:#132e40;padding:18px;border-radius:12px}.telecom-feature-grid h4{margin-top:0}.telecom-feature-grid p{font-size:.9rem;line-height:1.6;color:#b8cfde}.feature-state{font-size:.8rem;color:#a8e7d2;background:#19443f;padding:5px 9px;border-radius:8px;display:inline-block}
 

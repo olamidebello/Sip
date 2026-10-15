@@ -1,3 +1,8 @@
+import {handleTelecomRefills} from './telecomRefills.js';
+import {handleTelecomAnalytics} from './telecomAnalytics.js';
+import {handleTelecomReports,startTelecomReports} from './telecomReports.js';
+import {handleTelecomPolicies} from './telecomPolicies.js';
+import {handleTariffCatalog} from './tariffCatalog.js';
 import {handleTelecomResources} from './telecomResources.js';
 import {handleAccountRanges} from './accountRanges.js';
 import {handleTelecomFeatures} from './telecomFeatures.js';
@@ -319,6 +324,11 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/carriers/credentials')) return await handleProviderCredentials({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/carriers')) return await handleCarrierProviders({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/account-range'||path==='/api/admin/account-range/assign')return await handleAccountRanges({req,res,path,user,pool,send,readJson});
+      if(path==='/api/admin/telecom/refills')return await handleTelecomRefills({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/admin/telecom/analytics/'))return await handleTelecomAnalytics({req,res,path,user,pool,send});
+      if(path==='/api/admin/telecom/reports'||path.startsWith('/api/admin/telecom/reports/'))return await handleTelecomReports({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/admin/telecom/policies/'))return await handleTelecomPolicies({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/admin/tariff-catalog/'))return await handleTariffCatalog({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/telecom/resources/'))return await handleTelecomResources({req,res,path,user,pool,send});
       if(path==='/api/admin/telecom/features')return await handleTelecomFeatures({req,res,user,send});
       if(path==='/api/admin/charging/overview') return await handleCharging({req,res,user,pool,send});
@@ -810,6 +820,7 @@ async function handler(req, res) {
 await migrate(pool);
 await migratePstnBilling(pool);
 const kamailioHttpBridge=startKamailioHttpBridge(pool);
+const stopTelecomReports=startTelecomReports(pool);
 const stopSipProvisioning=startSipProvisioning(pool,origin);
 const stopMessageExpiry=startMessageExpiry(pool);
 const stopSubscriberEmail=startSubscriberEmail(pool);
@@ -821,6 +832,7 @@ const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
 server.on("close",stopSubscriberEmail);
+server.on("close",stopTelecomReports);
 server.on("close",stopSipProvisioning);
 server.on("close",()=>kamailioHttpBridge?.close());
 server.on("close",stopNativePush);

@@ -1,0 +1,1369 @@
+{
+  "upstreamCommit": "9479778d1c9a325fc28b0265575f256703626077",
+  "scope": "Community source wiring; literal table references are not exhaustive. Runtime and live switch acceptance require separate checks.",
+  "menus": [
+    {
+      "id": "native-console-menu-93",
+      "label": "Customers",
+      "group": "Accounts",
+      "subtitle": "Customers",
+      "path": "accounts/customer_list/",
+      "priority": 10.1,
+      "controller": "modules/accounts/controllers/accounts.php",
+      "method": "customer_list",
+      "models": [
+        "modules/accounts/models/accounts_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "ani_map",
+        "block_patterns",
+        "category",
+        "cdrs",
+        "currency",
+        "dids",
+        "invoice_conf",
+        "invoices",
+        "ip_map",
+        "localization",
+        "order_items",
+        "orders",
+        "payment_transaction",
+        "pricelists",
+        "products",
+        "reseller_products",
+        "routes",
+        "sip_devices",
+        "speed_dial",
+        "taxes_to_accounts"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-149",
+      "label": "SIP Devices",
+      "group": "Accounts",
+      "subtitle": "Customers",
+      "path": "freeswitch/fssipdevices/",
+      "priority": 10.2,
+      "controller": "modules/freeswitch/controllers/freeswitch.php",
+      "method": "fssipdevices",
+      "models": [
+        "modules/freeswitch/models/freeswitch_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "addons",
+        "freeswich_servers",
+        "gateways",
+        "sip_devices",
+        "sip_profiles",
+        "trunks"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-150",
+      "label": "IP Settings",
+      "group": "Accounts",
+      "subtitle": "Customers",
+      "path": "ipmap/ipmap_detail/",
+      "priority": 10.3,
+      "controller": "modules/ipmap/controllers/ipmap.php",
+      "method": "ipmap_detail",
+      "models": [
+        "modules/ipmap/models/ipmap_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "ip_map"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-151",
+      "label": "Caller IDs",
+      "group": "Accounts",
+      "subtitle": "Customers",
+      "path": "animap/animap_detail/",
+      "priority": 10.4,
+      "controller": "modules/animap/controllers/animap.php",
+      "method": "animap_detail",
+      "models": [
+        "modules/animap/models/animap_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "ani_map"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-152",
+      "label": "Resellers",
+      "group": "Accounts",
+      "subtitle": "",
+      "path": "accounts/reseller_list/",
+      "priority": 10.4,
+      "controller": "modules/accounts/controllers/accounts.php",
+      "method": "reseller_list",
+      "models": [
+        "modules/accounts/models/accounts_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "ani_map",
+        "block_patterns",
+        "category",
+        "cdrs",
+        "currency",
+        "dids",
+        "invoice_conf",
+        "invoices",
+        "ip_map",
+        "localization",
+        "order_items",
+        "orders",
+        "payment_transaction",
+        "pricelists",
+        "products",
+        "reseller_products",
+        "routes",
+        "sip_devices",
+        "speed_dial",
+        "taxes_to_accounts"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-153",
+      "label": "Admins",
+      "group": "Accounts",
+      "subtitle": "",
+      "path": "accounts/admin_list/",
+      "priority": 10.5,
+      "controller": "modules/accounts/controllers/accounts.php",
+      "method": "admin_list",
+      "models": [
+        "modules/accounts/models/accounts_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "ani_map",
+        "block_patterns",
+        "category",
+        "cdrs",
+        "currency",
+        "dids",
+        "invoice_conf",
+        "invoices",
+        "ip_map",
+        "localization",
+        "order_items",
+        "orders",
+        "payment_transaction",
+        "pricelists",
+        "products",
+        "reseller_products",
+        "routes",
+        "sip_devices",
+        "speed_dial",
+        "taxes_to_accounts"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-154",
+      "label": "Roles & Permission",
+      "group": "Accounts",
+      "subtitle": "",
+      "path": "permissions/permissions_list/",
+      "priority": 10.6,
+      "controller": "modules/permissions/controllers/permissions.php",
+      "method": "permissions_list",
+      "models": [
+        "modules/permissions/models/permissions_model.php"
+      ],
+      "tables": [
+        "permissions",
+        "roles_and_permission"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-8",
+      "label": "Invoices",
+      "group": "Billing",
+      "subtitle": "",
+      "path": "invoices/invoice_list/",
+      "priority": 20.1,
+      "controller": "modules/invoices/controllers/invoices.php",
+      "method": "invoice_list",
+      "models": [
+        "modules/invoices/models/invoices_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "cdrs",
+        "countrycode",
+        "currency",
+        "invoice_conf",
+        "invoice_details",
+        "invoices",
+        "payment_transaction",
+        "system",
+        "taxes",
+        "taxes_to_accounts"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-40",
+      "label": "Refill Report",
+      "group": "Billing",
+      "subtitle": "",
+      "path": "reports/refillreport/",
+      "priority": 20.2,
+      "controller": "modules/reports/controllers/reports.php",
+      "method": "refillreport",
+      "models": [
+        "modules/reports/models/reports_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "calltype",
+        "cdrs",
+        "commission",
+        "currency",
+        "invoice_details",
+        "orders",
+        "payment_transaction",
+        "pricelists",
+        "products",
+        "reseller_cdrs",
+        "trunks"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-13",
+      "label": "DIDs",
+      "group": "Inbound",
+      "subtitle": "",
+      "path": "did/did_list/",
+      "priority": 30.1,
+      "controller": "modules/did/controllers/did.php",
+      "method": "did_list",
+      "models": [
+        "modules/did/models/did_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "addons",
+        "category",
+        "commission",
+        "countrycode",
+        "currency",
+        "did_call_types",
+        "dids",
+        "order_items",
+        "orders",
+        "products",
+        "reseller_products",
+        "routes",
+        "sip_devices"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-89",
+      "label": "Access Numbers",
+      "group": "Inbound",
+      "subtitle": "",
+      "path": "accessnumber/accessnumber_list/",
+      "priority": 30.3,
+      "controller": "modules/accessnumber/controllers/accessnumber.php",
+      "method": "accessnumber_list",
+      "models": [
+        "modules/accessnumber/models/accessnumber_model.php"
+      ],
+      "tables": [
+        "accessnumber",
+        "accounts",
+        "countrycode"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-16",
+      "label": "Rate Groups",
+      "group": "Tariff",
+      "subtitle": "",
+      "path": "pricing/price_list/",
+      "priority": 40.1,
+      "controller": "modules/pricing/controllers/pricing.php",
+      "method": "price_list",
+      "models": [
+        "modules/pricing/models/pricing_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "pricelists",
+        "routes",
+        "routing"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-17",
+      "label": "Origination Rates",
+      "group": "Tariff",
+      "subtitle": "",
+      "path": "rates/origination_rates_list/",
+      "priority": 40.2,
+      "controller": "modules/rates/controllers/rates.php",
+      "method": "origination_rates_list",
+      "models": [
+        "modules/rates/models/rates_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "block_patterns",
+        "countrycode",
+        "currency",
+        "outbound_routes",
+        "pricelists",
+        "ratedeck",
+        "routes",
+        "routing",
+        "trunks"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-79",
+      "label": "Ratedeck",
+      "group": "Tariff",
+      "subtitle": "",
+      "path": "ratedeck/ratedeck_list/",
+      "priority": 40.3,
+      "controller": "modules/ratedeck/controllers/ratedeck.php",
+      "method": "ratedeck_list",
+      "models": [
+        "modules/ratedeck/models/ratedeck_model.php"
+      ],
+      "tables": [
+        "calltype",
+        "countrycode",
+        "ratedeck",
+        "taxes"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-41",
+      "label": "Gateways",
+      "group": "Carriers",
+      "subtitle": "",
+      "path": "freeswitch/fsgateway/",
+      "priority": 50.1,
+      "controller": "modules/freeswitch/controllers/freeswitch.php",
+      "method": "fsgateway",
+      "models": [
+        "modules/freeswitch/models/freeswitch_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "addons",
+        "freeswich_servers",
+        "gateways",
+        "sip_devices",
+        "sip_profiles",
+        "trunks"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-14",
+      "label": "Trunks",
+      "group": "Carriers",
+      "subtitle": "",
+      "path": "trunk/trunk_list/",
+      "priority": 50.2,
+      "controller": "modules/trunk/controllers/trunk.php",
+      "method": "trunk_list",
+      "models": [
+        "modules/trunk/models/trunk_model.php"
+      ],
+      "tables": [
+        "outbound_routes",
+        "routing",
+        "trunks"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-15",
+      "label": "Termination Rates",
+      "group": "Carriers",
+      "subtitle": "",
+      "path": "rates/termination_rates_list/",
+      "priority": 50.3,
+      "controller": "modules/rates/controllers/rates.php",
+      "method": "termination_rates_list",
+      "models": [
+        "modules/rates/models/rates_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "block_patterns",
+        "countrycode",
+        "currency",
+        "outbound_routes",
+        "pricelists",
+        "ratedeck",
+        "routes",
+        "routing",
+        "trunks"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-88",
+      "label": "Call Types",
+      "group": "Tariff",
+      "subtitle": "",
+      "path": "calltype/calltype_list/",
+      "priority": 55.0,
+      "controller": "modules/calltype/controllers/calltype.php",
+      "method": "calltype_list",
+      "models": [
+        "modules/calltype/models/calltype_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "calltype",
+        "counters",
+        "routes"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-91",
+      "label": "Products",
+      "group": "Services",
+      "subtitle": "",
+      "path": "products/products_list/",
+      "priority": 60.1,
+      "controller": "modules/products/controllers/products.php",
+      "method": "products_list",
+      "models": [
+        "modules/products/models/product_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "category",
+        "commission",
+        "currency",
+        "dids",
+        "order_items",
+        "package_patterns",
+        "pricelists",
+        "products",
+        "reseller_products",
+        "routes"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-92",
+      "label": "Orders",
+      "group": "Services",
+      "subtitle": "",
+      "path": "orders/orders_list/",
+      "priority": 60.2,
+      "controller": "modules/orders/controllers/orders.php",
+      "method": "orders_list",
+      "models": [
+        "modules/orders/models/orders_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "category",
+        "commission",
+        "currency",
+        "dids",
+        "invoice_details",
+        "invoices",
+        "order_items",
+        "orders",
+        "products",
+        "reseller_products"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-66",
+      "label": "Refill Coupons",
+      "group": "Services",
+      "subtitle": "",
+      "path": "refill_coupon/refill_coupon_list/",
+      "priority": 60.3,
+      "controller": "modules/refill_coupon/controllers/refill_coupon.php",
+      "method": "refill_coupon_list",
+      "models": [
+        "modules/refill_coupon/models/refill_coupon_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "currency",
+        "refill_coupon"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-42",
+      "label": "SIP Profiles",
+      "group": "Switch",
+      "subtitle": "",
+      "path": "freeswitch/fssipprofile/",
+      "priority": 70.1,
+      "controller": "modules/freeswitch/controllers/freeswitch.php",
+      "method": "fssipprofile",
+      "models": [
+        "modules/freeswitch/models/freeswitch_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "addons",
+        "freeswich_servers",
+        "gateways",
+        "sip_devices",
+        "sip_profiles",
+        "trunks"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-20",
+      "label": "Live Calls",
+      "group": "Switch",
+      "subtitle": "",
+      "path": "freeswitch/livecall_report/",
+      "priority": 70.3,
+      "controller": "modules/freeswitch/controllers/freeswitch.php",
+      "method": "livecall_report",
+      "models": [
+        "modules/freeswitch/models/freeswitch_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "addons",
+        "freeswich_servers",
+        "gateways",
+        "sip_devices",
+        "sip_profiles",
+        "trunks"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-121",
+      "label": "Localizations",
+      "group": "Switch",
+      "subtitle": "",
+      "path": "localization/localization_list/",
+      "priority": 70.4,
+      "controller": "modules/localization/controllers/localization.php",
+      "method": "localization_list",
+      "models": [
+        "modules/localization/models/localization_model.php"
+      ],
+      "tables": [
+        "countrycode",
+        "localization"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-77",
+      "label": "Addons",
+      "group": "Addons",
+      "subtitle": "",
+      "path": "addons/addons_list/",
+      "priority": 74.0,
+      "controller": "modules/addons/controllers/addons.php",
+      "method": "addons_list",
+      "models": [],
+      "tables": [
+        "addons",
+        "language",
+        "license"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "skip_upstream_get_changes_permissions",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-165",
+      "label": "Customer",
+      "group": "Reports",
+      "subtitle": "Call Detail Reports",
+      "path": "reports/customerReport/",
+      "priority": 80.1,
+      "controller": "modules/reports/controllers/reports.php",
+      "method": "customerReport",
+      "models": [
+        "modules/reports/models/reports_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "calltype",
+        "cdrs",
+        "commission",
+        "currency",
+        "invoice_details",
+        "orders",
+        "payment_transaction",
+        "pricelists",
+        "products",
+        "reseller_cdrs",
+        "trunks"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-166",
+      "label": "Reseller",
+      "group": "Reports",
+      "subtitle": "Call Detail Reports",
+      "path": "reports/resellerReport/",
+      "priority": 80.2,
+      "controller": "modules/reports/controllers/reports.php",
+      "method": "resellerReport",
+      "models": [
+        "modules/reports/models/reports_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "calltype",
+        "cdrs",
+        "commission",
+        "currency",
+        "invoice_details",
+        "orders",
+        "payment_transaction",
+        "pricelists",
+        "products",
+        "reseller_cdrs",
+        "trunks"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-167",
+      "label": "Provider Outbound",
+      "group": "Reports",
+      "subtitle": "Call Detail Reports",
+      "path": "reports/providerReport/",
+      "priority": 80.3,
+      "controller": "modules/reports/controllers/reports.php",
+      "method": "providerReport",
+      "models": [
+        "modules/reports/models/reports_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "calltype",
+        "cdrs",
+        "commission",
+        "currency",
+        "invoice_details",
+        "orders",
+        "payment_transaction",
+        "pricelists",
+        "products",
+        "reseller_cdrs",
+        "trunks"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-84",
+      "label": "Localizations",
+      "group": "Configuration",
+      "subtitle": "",
+      "path": "localization/localization_list/",
+      "priority": 80.6,
+      "controller": "modules/localization/controllers/localization.php",
+      "method": "localization_list",
+      "models": [
+        "modules/localization/models/localization_model.php"
+      ],
+      "tables": [
+        "countrycode",
+        "localization"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-168",
+      "label": "Customer Summary",
+      "group": "Reports",
+      "subtitle": "Call Summary Reports",
+      "path": "summary/customer/",
+      "priority": 81.1,
+      "controller": "modules/summary/controllers/summary.php",
+      "method": "customer",
+      "models": [
+        "modules/summary/models/summary_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "calltype",
+        "category",
+        "cdrs",
+        "counters",
+        "currency",
+        "order_items",
+        "orders",
+        "products",
+        "reseller_cdrs",
+        "reseller_products",
+        "timezone",
+        "trunks"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-169",
+      "label": "Reseller Summary",
+      "group": "Reports",
+      "subtitle": "Call Summary Reports",
+      "path": "summary/reseller/",
+      "priority": 81.2,
+      "controller": "modules/summary/controllers/summary.php",
+      "method": "reseller",
+      "models": [
+        "modules/summary/models/summary_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "calltype",
+        "category",
+        "cdrs",
+        "counters",
+        "currency",
+        "order_items",
+        "orders",
+        "products",
+        "reseller_cdrs",
+        "reseller_products",
+        "timezone",
+        "trunks"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-170",
+      "label": "Provider",
+      "group": "Reports",
+      "subtitle": "Call Summary Reports",
+      "path": "summary/provider/",
+      "priority": 81.3,
+      "controller": "modules/summary/controllers/summary.php",
+      "method": "provider",
+      "models": [
+        "modules/summary/models/summary_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "calltype",
+        "category",
+        "cdrs",
+        "counters",
+        "currency",
+        "order_items",
+        "orders",
+        "products",
+        "reseller_cdrs",
+        "reseller_products",
+        "timezone",
+        "trunks"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-171",
+      "label": "Email History",
+      "group": "Reports",
+      "subtitle": "",
+      "path": "email/email_history_list/",
+      "priority": 82.1,
+      "controller": "modules/email/controllers/email.php",
+      "method": "email_history_list",
+      "models": [
+        "modules/email/models/email_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "mail_details"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-activity",
+      "label": "Activity Report",
+      "group": "Reports",
+      "subtitle": "",
+      "path": "activity_report/activityReport/",
+      "priority": 82.1,
+      "controller": "modules/activity_report/controllers/activity_report.php",
+      "method": "activityReport",
+      "models": [
+        "modules/activity_report/models/activity_report_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "activity_reports"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-172",
+      "label": "Audit Log",
+      "group": "Reports",
+      "subtitle": "",
+      "path": "audit/audit_list/",
+      "priority": 82.2,
+      "controller": "modules/audit/controllers/audit.php",
+      "method": "audit_list",
+      "models": [
+        "modules/audit/models/audit_model.php"
+      ],
+      "tables": [
+        "usertracking"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-556",
+      "label": "Product Summary Reports",
+      "group": "Reports",
+      "subtitle": "",
+      "path": "summary/product/",
+      "priority": 82.4,
+      "controller": "modules/summary/controllers/summary.php",
+      "method": "product",
+      "models": [
+        "modules/summary/models/summary_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "calltype",
+        "category",
+        "cdrs",
+        "counters",
+        "currency",
+        "order_items",
+        "orders",
+        "products",
+        "reseller_cdrs",
+        "reseller_products",
+        "timezone",
+        "trunks"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-559",
+      "label": "Commission Report",
+      "group": "Billing",
+      "subtitle": "",
+      "path": "reports/commission_report_list/",
+      "priority": 83.1,
+      "controller": "modules/reports/controllers/reports.php",
+      "method": "commission_report_list",
+      "models": [
+        "modules/reports/models/reports_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "calltype",
+        "cdrs",
+        "commission",
+        "currency",
+        "invoice_details",
+        "orders",
+        "payment_transaction",
+        "pricelists",
+        "products",
+        "reseller_cdrs",
+        "trunks"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-561",
+      "label": "Low Balance",
+      "group": "Reports",
+      "subtitle": "",
+      "path": "low_balance/low_balance_list/",
+      "priority": 89.3,
+      "controller": "modules/low_balance/controllers/low_balance.php",
+      "method": "low_balance_list",
+      "models": [
+        "modules/low_balance/models/low_balance_model.php"
+      ],
+      "tables": [
+        "accounts"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-9",
+      "label": "Company Profiles",
+      "group": "Configuration",
+      "subtitle": "",
+      "path": "invoices/invoice_conf_list/",
+      "priority": 90.1,
+      "controller": "modules/invoices/controllers/invoices.php",
+      "method": "invoice_conf_list",
+      "models": [
+        "modules/invoices/models/invoices_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "cdrs",
+        "countrycode",
+        "currency",
+        "invoice_conf",
+        "invoice_details",
+        "invoices",
+        "payment_transaction",
+        "system",
+        "taxes",
+        "taxes_to_accounts"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-26",
+      "label": "Configuration",
+      "group": "System Configuration",
+      "subtitle": "System",
+      "path": "systems/configuration/",
+      "priority": 90.1,
+      "controller": "modules/systems/controllers/systems.php",
+      "method": "configuration",
+      "models": [
+        "modules/systems/models/system_model.php"
+      ],
+      "tables": [
+        "backup_database",
+        "countrycode",
+        "currency",
+        "default_templates",
+        "languages",
+        "system",
+        "timezone",
+        "translations"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-27",
+      "label": "Taxes",
+      "group": "Configuration",
+      "subtitle": "",
+      "path": "taxes/taxes_list/",
+      "priority": 90.2,
+      "controller": "modules/taxes/controllers/taxes.php",
+      "method": "taxes_list",
+      "models": [
+        "modules/taxes/models/taxes_model.php"
+      ],
+      "tables": [
+        "accounts",
+        "system",
+        "taxes",
+        "taxes_to_accounts"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-29",
+      "label": "Opensips devices",
+      "group": "Switch",
+      "subtitle": "",
+      "path": "opensips/opensips_list/",
+      "priority": 90.2,
+      "unavailableReason": "The pinned Olamide SIP Community release does not contain the OpenSIPS controller. A supported switch adapter must be implemented before this menu can operate.",
+      "controller": "modules/opensips/controllers/opensips.php",
+      "method": "opensips_list",
+      "models": [],
+      "tables": [],
+      "codeAvailable": false,
+      "httpCheck": "enabled",
+      "runtime": "missing_upstream_module",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-28",
+      "label": "Templates",
+      "group": "Configuration",
+      "subtitle": "",
+      "path": "systems/template/",
+      "priority": 90.3,
+      "controller": "modules/systems/controllers/systems.php",
+      "method": "template",
+      "models": [
+        "modules/systems/models/system_model.php"
+      ],
+      "tables": [
+        "backup_database",
+        "countrycode",
+        "currency",
+        "default_templates",
+        "languages",
+        "system",
+        "timezone",
+        "translations"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-48",
+      "label": "Countries",
+      "group": "Configuration",
+      "subtitle": "",
+      "path": "systems/country_list/",
+      "priority": 90.4,
+      "controller": "modules/systems/controllers/systems.php",
+      "method": "country_list",
+      "models": [
+        "modules/systems/models/system_model.php"
+      ],
+      "tables": [
+        "backup_database",
+        "countrycode",
+        "currency",
+        "default_templates",
+        "languages",
+        "system",
+        "timezone",
+        "translations"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-49",
+      "label": "Currencies",
+      "group": "Configuration",
+      "subtitle": "",
+      "path": "systems/currency_list/",
+      "priority": 90.5,
+      "controller": "modules/systems/controllers/systems.php",
+      "method": "currency_list",
+      "models": [
+        "modules/systems/models/system_model.php"
+      ],
+      "tables": [
+        "backup_database",
+        "countrycode",
+        "currency",
+        "default_templates",
+        "languages",
+        "system",
+        "timezone",
+        "translations"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-177",
+      "label": "Database Backup",
+      "group": "Configuration",
+      "subtitle": "",
+      "path": "systems/database_restore/",
+      "priority": 90.6,
+      "controller": "modules/systems/controllers/systems.php",
+      "method": "database_restore",
+      "models": [
+        "modules/systems/models/system_model.php"
+      ],
+      "tables": [
+        "backup_database",
+        "countrycode",
+        "currency",
+        "default_templates",
+        "languages",
+        "system",
+        "timezone",
+        "translations"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-560",
+      "label": "Timezone",
+      "group": "Configuration",
+      "subtitle": "",
+      "path": "systems/timezone_list/",
+      "priority": 90.7,
+      "controller": "modules/systems/controllers/systems.php",
+      "method": "timezone_list",
+      "models": [
+        "modules/systems/models/system_model.php"
+      ],
+      "tables": [
+        "backup_database",
+        "countrycode",
+        "currency",
+        "default_templates",
+        "languages",
+        "system",
+        "timezone",
+        "translations"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-179",
+      "label": "Crons",
+      "group": "Configuration",
+      "subtitle": "",
+      "path": "cronsettings/cronsettings_list/",
+      "priority": 90.8,
+      "controller": "modules/cronsettings/controllers/cronsettings.php",
+      "method": "cronsettings_list",
+      "models": [
+        "modules/cronsettings/models/cronsettings_model.php"
+      ],
+      "tables": [
+        "cron_settings"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-180",
+      "label": "Settings",
+      "group": "Configuration",
+      "subtitle": "",
+      "path": "systems/configuration/global",
+      "priority": 90.9,
+      "controller": "modules/systems/controllers/systems.php",
+      "method": "configuration",
+      "models": [
+        "modules/systems/models/system_model.php"
+      ],
+      "tables": [
+        "backup_database",
+        "countrycode",
+        "currency",
+        "default_templates",
+        "languages",
+        "system",
+        "timezone",
+        "translations"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-557",
+      "label": "Languages",
+      "group": "Configuration",
+      "subtitle": "Languages",
+      "path": "systems/languages_list/",
+      "priority": 91.1,
+      "controller": "modules/systems/controllers/systems.php",
+      "method": "languages_list",
+      "models": [
+        "modules/systems/models/system_model.php"
+      ],
+      "tables": [
+        "backup_database",
+        "countrycode",
+        "currency",
+        "default_templates",
+        "languages",
+        "system",
+        "timezone",
+        "translations"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    },
+    {
+      "id": "native-console-menu-558",
+      "label": "Translations",
+      "group": "Configuration",
+      "subtitle": "Languages",
+      "path": "systems/translation_list/",
+      "priority": 91.2,
+      "controller": "modules/systems/controllers/systems.php",
+      "method": "translation_list",
+      "models": [
+        "modules/systems/models/system_model.php"
+      ],
+      "tables": [
+        "backup_database",
+        "countrycode",
+        "currency",
+        "default_templates",
+        "languages",
+        "system",
+        "timezone",
+        "translations"
+      ],
+      "codeAvailable": true,
+      "httpCheck": "enabled",
+      "runtime": "unverified",
+      "switchAcceptance": "unverified"
+    }
+  ]
+}

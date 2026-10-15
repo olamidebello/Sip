@@ -18,7 +18,10 @@ RUN printf 'deb https://deb.debian.org/debian bullseye main\ndeb [check-valid-un
  && mkdir -p /var/lib/astpp && chown -R www-data:www-data /var/www/html/application/cache /var/www/html/application/logs /var/lib/astpp \
  && sed -i 's|AllowOverride None|AllowOverride All|g' /etc/apache2/apache2.conf \
  && printf 'output_buffering=4096\nshort_open_tag=On\ndisplay_errors=Off\nlog_errors=On\nexpose_php=Off\nupload_max_filesize=32M\npost_max_size=40M\n' > /usr/local/etc/php/conf.d/astpp-production.ini
-COPY Dockerfile compose.yml NOTICE.md entrypoint.sh bootstrap.php sanitize_sql.py patch_runtime.php verify_menus.php /usr/local/lib/native-astpp/
+COPY brand_runtime.php /usr/local/lib/native-astpp/brand_runtime.php
+COPY olamide-logo.svg /var/www/html/olamide-logo.svg
+RUN printf 'auto_prepend_file=/usr/local/lib/native-astpp/brand_runtime.php\n' > /usr/local/etc/php/conf.d/olamide-brand.ini
+COPY Dockerfile compose.yml NOTICE.md entrypoint.sh bootstrap.php sanitize_sql.py patch_runtime.php verify_menus.php verify_menu_wiring.php menu-wiring.json brand_runtime.php olamide-logo.svg /usr/local/lib/native-astpp/
 RUN tar --exclude=.git -czf /var/www/html/astpp-source.tar.gz -C /usr/src astpp -C /usr/local/lib native-astpp
 HEALTHCHECK --interval=15s --timeout=5s --retries=12 CMD curl -fsS http://127.0.0.1/ | grep -qi 'password'
 ENTRYPOINT ["/bin/sh","/usr/local/lib/native-astpp/entrypoint.sh"]

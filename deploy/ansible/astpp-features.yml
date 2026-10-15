@@ -93,3 +93,36 @@
       ansible.builtin.debug:
         msg: '{{ native_feature_stage.stdout | from_json }}'
       tags: [native_settings]
+
+    - name: Load exact Community menu wiring manifest
+      ansible.builtin.set_fact:
+        native_menu_manifest: "{{ lookup('file', '/opt/olamide/repo/deployment/native-astpp/menu-wiring.json') | from_json }}"
+      tags: [native_menu_wiring]
+    - name: Verify each exact menu controller, model and database dependency in order
+      ansible.builtin.command:
+        argv: [docker, compose, '-p', olamide-native-astpp, '--env-file', /etc/olamide/native-astpp/runtime.env, exec, '-T', native-web, php, /usr/local/lib/native-astpp/verify_menu_wiring.php, '{{ item.id }}']
+        chdir: /opt/olamide/repo/deployment/native-astpp
+      loop: '{{ native_menu_manifest.menus }}'
+      loop_control:
+        label: '{{ item.group }} / {{ item.label }} / {{ item.path }}'
+      register: native_wiring_results
+      changed_when: false
+      tags: [native_menu_wiring]
+    - name: Report each menu without claiming live switch commissioning
+      ansible.builtin.debug:
+        msg: '{{ item.stdout | from_json }}'
+      loop: '{{ native_wiring_results.results }}'
+      loop_control:
+        label: '{{ item.item.label }}'
+      tags: [native_menu_wiring]
+
+    - name: Check every available native menu with an authenticated read-only request
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/native_astpp_smoke.py, '--directory', /etc/olamide/native-astpp, '--all-menus']
+      register: native_menu_http
+      changed_when: false
+      tags: [native_menu_http]
+    - name: Report authenticated menu page results
+      ansible.builtin.debug:
+        msg: '{{ native_menu_http.stdout }}'
+      tags: [native_menu_http]

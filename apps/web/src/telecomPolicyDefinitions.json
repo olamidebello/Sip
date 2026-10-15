@@ -1,0 +1,232 @@
+{
+  "group-assignments": {
+    "feature": "core-rate-groups",
+    "label": "Assign workspace user to rate group",
+    "fields": [
+      {
+        "name": "userId",
+        "type": "text",
+        "label": "Workspace user ID"
+      },
+      {
+        "name": "groupId",
+        "type": "text",
+        "label": "Rate group ID"
+      }
+    ]
+  },
+  "group-rates": {
+    "feature": "core-rate-groups",
+    "label": "Live rate group destination rate",
+    "fields": [
+      {
+        "name": "groupId",
+        "type": "text",
+        "label": "Rate group ID"
+      },
+      {
+        "name": "prefix",
+        "type": "text",
+        "label": "Destination prefix"
+      },
+      {
+        "name": "rate",
+        "type": "text",
+        "label": "USD per minute"
+      },
+      {
+        "name": "first",
+        "type": "number",
+        "label": "First interval seconds"
+      },
+      {
+        "name": "step",
+        "type": "number",
+        "label": "Next interval seconds"
+      }
+    ]
+  },
+  "calltype-rules": {
+    "feature": "core-call-types",
+    "label": "Classify paid calls by destination",
+    "fields": [
+      {
+        "name": "callTypeId",
+        "type": "text",
+        "label": "Call type ID"
+      },
+      {
+        "name": "prefix",
+        "type": "text",
+        "label": "Destination prefix"
+      }
+    ]
+  },
+  "normalization": {
+    "feature": "core-localizations",
+    "label": "Number normalization",
+    "fields": [
+      {
+        "name": "prefix",
+        "type": "text",
+        "label": "Dialed prefix"
+      },
+      {
+        "name": "replacement",
+        "type": "text",
+        "label": "Replace prefix with digits"
+      }
+    ]
+  },
+  "personal-rates": {
+    "feature": "personalized-rates",
+    "label": "Account rate override",
+    "fields": [
+      {
+        "name": "userId",
+        "type": "text",
+        "label": "Workspace user ID"
+      },
+      {
+        "name": "prefix",
+        "type": "text",
+        "label": "Destination prefix"
+      },
+      {
+        "name": "rate",
+        "type": "text",
+        "label": "USD per minute"
+      },
+      {
+        "name": "first",
+        "type": "number",
+        "label": "First interval seconds"
+      },
+      {
+        "name": "step",
+        "type": "number",
+        "label": "Next interval seconds"
+      }
+    ]
+  },
+  "callerid-rates": {
+    "feature": "core-callerid-billing",
+    "label": "Caller ID rate override",
+    "fields": [
+      {
+        "name": "callerId",
+        "type": "text",
+        "label": "Caller ID in E.164"
+      },
+      {
+        "name": "prefix",
+        "type": "text",
+        "label": "Destination prefix"
+      },
+      {
+        "name": "rate",
+        "type": "text",
+        "label": "USD per minute"
+      },
+      {
+        "name": "first",
+        "type": "number",
+        "label": "First interval seconds"
+      },
+      {
+        "name": "step",
+        "type": "number",
+        "label": "Next interval seconds"
+      }
+    ]
+  },
+  "international-credit": {
+    "feature": "international-credit",
+    "label": "International monthly budget",
+    "fields": [
+      {
+        "name": "userId",
+        "type": "text",
+        "label": "Workspace user ID"
+      },
+      {
+        "name": "homePrefix",
+        "type": "text",
+        "label": "Domestic destination prefix"
+      },
+      {
+        "name": "limitCents",
+        "type": "number",
+        "label": "Monthly international limit in USD cents"
+      }
+    ]
+  },
+  "country-prefixes": {
+    "feature": "country-reports",
+    "label": "Country reporting prefix",
+    "fields": [
+      {
+        "name": "prefix",
+        "type": "text",
+        "label": "Destination prefix"
+      },
+      {
+        "name": "country",
+        "type": "text",
+        "label": "Country or numbering region label"
+      }
+    ]
+  },
+  "shadow-rates": {
+    "feature": "shadow-billing",
+    "label": "Shadow rate (no wallet charge)",
+    "fields": [
+      {
+        "name": "prefix",
+        "type": "text",
+        "label": "Destination prefix"
+      },
+      {
+        "name": "rate",
+        "type": "text",
+        "label": "USD per minute"
+      },
+      {
+        "name": "first",
+        "type": "number",
+        "label": "First interval seconds"
+      },
+      {
+        "name": "step",
+        "type": "number",
+        "label": "Next interval seconds"
+      }
+    ]
+  },
+  "time-windows": {
+    "feature": "demand-routing",
+    "label": "Allowed call window in UTC",
+    "fields": [
+      {
+        "name": "prefix",
+        "type": "text",
+        "label": "Destination prefix"
+      },
+      {
+        "name": "days",
+        "type": "text",
+        "label": "UTC weekdays, 0 Sunday to 6 Saturday, comma separated"
+      },
+      {
+        "name": "startMinute",
+        "type": "number",
+        "label": "Start minute of day (0–1439)"
+      },
+      {
+        "name": "endMinute",
+        "type": "number",
+        "label": "End minute of day (1–1440)"
+      }
+    ]
+  }
+}

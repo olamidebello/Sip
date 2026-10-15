@@ -1,0 +1,10 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {handleTelecomRefills} from './telecomRefills.js';
+const id='00000000-0000-4000-8000-000000000001',target='00000000-0000-4000-8000-000000000002',user={id,tenant_id:'tenant',role:'super_admin'},body={requestId:id,userId:target,amountCents:1000,reference:'Verified funding record'};
+function fake({existing=null,member=true}={}){const calls=[];const db={release(){},async query(sql,args){calls.push({sql,args});if(sql.startsWith('SELECT id FROM users'))return {rows:member?[{id:target}]:[]};if(sql.startsWith('SELECT balance_cents'))return {rows:[{balance_cents:500,currency:'USD'}]};if(sql.startsWith('SELECT tenant_id'))return {rows:existing?[existing]:[]};return {rows:[],rowCount:1};}};return {calls,pool:{connect:async()=>db}};}
+const call=(f,actor=user)=>handleTelecomRefills({req:{method:'POST'},path:'/api/admin/telecom/refills',user:actor,pool:f.pool,send:(_r,status,body)=>({status,body}),readJson:async()=>body});
+test('refill changes wallet and writes ledger/audit within one transaction',async()=>{const f=fake(),r=await call(f);assert.equal(r.status,201);assert.equal(r.body.balanceAfterCents,1500);assert.match(f.calls.find(c=>c.sql.startsWith('SELECT balance')).sql,/FOR UPDATE/);assert.deepEqual(f.calls.find(c=>c.sql.startsWith('UPDATE wallet')).args,[1500,target,'tenant']);assert.ok(f.calls.some(c=>c.sql.startsWith('INSERT INTO security_events')));assert.equal(f.calls.at(-1).sql,'COMMIT');});
+test('identical refill retries never credit twice; reused IDs and foreign users cannot change wallets',async()=>{
+ const f=fake({existing:{tenant_id:'tenant',user_id:target,amount_cents:1000,reference:body.reference,balance_after_cents:1500}});assert.equal((await call(f)).body.existing,true);assert.ok(!f.calls.some(c=>c.sql.startsWith('UPDATE wallet')));
+ for(const options of [{member:false},{existing:{tenant_id:'other'}}]){const x=fake(options);assert.ok([404,409].includes((await call(x)).status));assert.ok(!x.calls.some(c=>c.sql.startsWith('UPDATE wallet')));}
+ assert.equal((await call(fake(),{role:'admin'})).status,403);
+});

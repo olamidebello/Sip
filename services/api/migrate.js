@@ -1,3 +1,7 @@
+import {migrateTelecomRefills} from './telecomRefills.js';
+import {migrateTelecomReports} from './telecomReports.js';
+import {migrateTelecomPolicies} from './telecomPolicies.js';
+import {migrateTariffCatalog} from './tariffCatalog.js';
 import {migrateAccountRanges} from './accountRanges.js';
 import {migrateContactCards} from './contactCards.js';
 import {migrateSocial} from './social.js';
@@ -77,6 +81,10 @@ export async function migrate(pool) {
       ['core', () => pool.initialize(awaitSql.core)],
       ['tenancy', () => migrateTenancy(pool)],
       ['access', () => migrateAccess(pool)],
+      ['telecom_refills', () => migrateTelecomRefills(pool)],
+      ['telecom_reports', () => migrateTelecomReports(pool)],
+      ['telecom_policies', () => migrateTelecomPolicies(pool)],
+      ['tariff_catalog', () => migrateTariffCatalog(pool)],
       ['account_ranges', () => migrateAccountRanges(pool)],
       ['onboarding', () => migrateOnboarding(pool)],
       ['sip_marketplace', () => migrateSipMarketplace(pool)],
