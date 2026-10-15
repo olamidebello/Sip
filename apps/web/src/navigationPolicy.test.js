@@ -31,8 +31,8 @@ test('selected SIP destination stays editable and visible with a separate contac
   const input=app.document.querySelector('#dial input[name=target]');
   input.value='sip:12025550123@sip.example.com';input.dispatchEvent(new app.window.Event('input',{bubbles:true}));
   await new Promise(resolve=>setTimeout(resolve,10));
-  assert.equal(input.hidden,false);assert.equal(input.value,'sip:12025550123@sip.example.com');
-  assert.equal(app.document.querySelector('.dial-contact-identity').hidden,false);
+  assert.equal(input.hidden,false);assert.equal(input.value,'12025550123');
+  assert.equal(app.document.querySelector('.dial-contact-identity').hidden,true);
   input.setSelectionRange(input.value.length,input.value.length);
   app.document.querySelector('[data-digit="4"]').click();assert.ok(input.value.endsWith('4'));
  }finally{app.close();}

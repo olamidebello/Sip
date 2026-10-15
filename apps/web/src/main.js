@@ -1,3 +1,4 @@
+import {setupDialIdentityInput,dialInputTarget} from './dialIdentityInput.js';
 import {callAddressLabel,callIdentityLabel} from './callIdentity.js';
 import {syncCarrierProfileForm} from './carrierProfileForm.js';
 import {setupTelecomRefills} from './telecomRefills.js';
@@ -1418,21 +1419,12 @@ const connectForm = $("#connect");
 const dialForm = $("#dial");
 
 const dialIdentity=document.createElement('p');dialIdentity.className='dial-contact-identity';dialIdentity.hidden=true;dialForm.elements.target.after(dialIdentity);
-let identityGeneration=0;
 async function registeredCallLabel(address){
  try{return callIdentityLabel(address,(await apiGet('/api/softphone/identity?address='+encodeURIComponent(address))).label);}
- catch{return callAddressLabel(address);}
+ catch{return callAddressLabel(address)||'Name unavailable';}
 }
-async function refreshDialIdentity(){
- const input=dialForm.elements.target,address=input.value,version=++identityGeneration;
- const internal=/^sips?:/i.test(address);
- input.hidden=false;dialIdentity.hidden=!internal;
- if(!internal){dialIdentity.textContent='';return;}
- dialIdentity.textContent=callAddressLabel(address);
- const label=await registeredCallLabel(address);
- if(version===identityGeneration&&input.value===address)dialIdentity.textContent=label;
-}
-dialForm.elements.target.addEventListener('input',()=>void refreshDialIdentity());
+const dialIdentityInput=setupDialIdentityInput({input:dialForm.elements.target,lookup:registeredCallLabel,changed:()=>{dialIdentity.hidden=true;const output=$('#dialpad .dialpad-number');if(output)output.textContent=dialForm.elements.target.value||dialForm.elements.target.placeholder;}});
+function refreshDialIdentity(){return dialIdentityInput.refresh();}
 
 const contactCard=setupContactCard({document,get:apiGet,request:accountRequest,call:c=>{callsScreen.stop();dialForm.elements.target.value=c.target;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));callsScreen.open('keypad');},message:async c=>{callsScreen.stop();if(c.contactId){await loadContacts();$('#contact-list').value=c.contactId;$('#contact-list').dispatchEvent(new Event('change',{bubbles:true}));showWorkspace('chat');$('#chat').classList.add('thread-open');}else{if(!showWorkspace('external-sms'))throw Error('SMS is not enabled for your account');$('#sms-send').elements.to.value=c.target;$('#sms-send').elements.body.focus();}},video:c=>{callsScreen.stop();if(!showWorkspace('meetings'))throw Error('Video meetings are not enabled');$('#meeting-create input').value='Video call with '+c.name;$('#meeting-create input').focus();}});
 const dialerContacts=setupDialerContacts({document,get:apiGet,input:dialForm.elements.target,openContact:c=>void contactCard.open(c),inCall:()=>onCall,onStatus:message=>status(message)});
@@ -1478,7 +1470,7 @@ const operatorAdmin=setupOperatorControl();
 const switchAdmin=setupKamailioAdmin();
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
-const callsScreen=setupCallsScreen({document,get:apiGet,request:accountRequest,show:showWorkspace,retryConnection:()=>autoSip.wake(),canRedial:()=>!!lastDialedTarget,connected:()=>sipRegistered&&!!phone?.isConnected(),dial:address=>{dialForm.elements.target.value=address;dialForm.requestSubmit();}});
+const callsScreen=setupCallsScreen({document,get:apiGet,request:accountRequest,show:showWorkspace,retryConnection:()=>autoSip.wake(),canRedial:()=>!!lastDialedTarget,connected:()=>sipRegistered&&!!phone?.isConnected(),dial:address=>{dialForm.elements.target.value=address;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));dialForm.requestSubmit();}});
 const messengerPreferences=setupMessengerPreferences({document,get:apiGet,request:accountRequest});
 const sessionAdmin=setupSessionAdmin(document);
 navigationPolicy=setupNavigationPolicy({document,get:apiGet,request:accountRequest,changed:()=>{updateNavigation();chatComposer?.refresh();if(activeRole&&!adminTarget(activeView)&&!navigationAllowed(activeView))showWorkspace(userHome(),{historyMode:'replace'});}});
@@ -2694,14 +2686,14 @@ setupDialpad({root:$('#dialpad'),input:dialForm.elements.target,openContact:c=>v
 dialForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if(dialing||currentCall)return;
-  if(!dialForm.elements.target.value.trim()&&lastDialedTarget){$('#dialpad-redial').click();return;}
+  if(!dialInputTarget(dialForm.elements.target)&&lastDialedTarget){$('#dialpad-redial').click();return;}
   dialing=true;
   try {
   if (!phone||!sipRegistered){status("Calls are unavailable while SIP is reconnecting. Try again when connected.");autoSip.wake();return;}
   if(onCall){status("Finish the active call before starting another.");return;}
   void refreshDialIdentity();
   let target;
-  try{target=dialTarget(String(new FormData(dialForm).get('target')),connectForm.elements.aor.value.split('@')[1]);}
+  try{target=dialTarget(dialInputTarget(dialForm.elements.target),connectForm.elements.aor.value.split('@')[1]);}
   catch(error){report(error);return;}
   try {await loadGeofencePolicy();} catch {status("Location policy unavailable. Call blocked.");return;}
   if (!geoPolicyLoaded) {status("Location policy unavailable. Call blocked.");return;}
