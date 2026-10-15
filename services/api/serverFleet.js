@@ -110,7 +110,7 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
       pool.query('SELECT id,node_id,action,interval_minutes,enabled,next_run_at FROM deployment_schedules ORDER BY next_run_at LIMIT 200'),
       pool.query('SELECT e.id,e.node_id,n.name AS node_name,e.category,e.detail,e.created_at FROM deployment_events e LEFT JOIN deployment_nodes n ON n.id=e.node_id ORDER BY e.created_at DESC LIMIT 100')]);
     return send(res,200,{nodes:nodes.rows,jobs:jobs.rows,settings:settings.rows[0],schedules:schedules.rows,events:events.rows,accessLevel:level,
-      runnerConfigured:!!process.env.DEPLOY_RUNNER_TOKEN,scope:'Switch jobs require the private Ansible runner. App capacity remains on the existing Compose cluster control.'});
+      operatorSetupAllowed:user.role==='super_admin',runnerConfigured:!!process.env.DEPLOY_RUNNER_TOKEN,scope:'Switch jobs require the private Ansible runner. App capacity remains on the existing Compose cluster control.'});
   }
   if(path==='/api/admin/servers'&&req.method==='POST'){
     if(!granted('manage'))return send(res,403,{error:'Fleet management access required'});
@@ -223,7 +223,8 @@ export async function handleServerFleetAdmin({req,res,path,user,pool,send,readJs
   if(job&&uuid.test(job[1])&&req.method==='POST'){
     if(!granted('deploy'))return send(res,403,{error:'Fleet deployment access required'});
     const {action}=await readJson(req);
-    if(!['install','upgrade','health'].includes(action))return send(res,400,{error:'Approved job action required'});
+    if(action==='operator_setup'&&user.role!=='super_admin')return send(res,403,{error:'Super administrator required for Operator setup'});
+    if(!['install','upgrade','health','operator_setup'].includes(action))return send(res,400,{error:'Approved job action required'});
     if(!process.env.DEPLOY_RUNNER_TOKEN)return send(res,409,{error:'Private deployment runner is not configured'});
     const outcome=await queue(pool,job[1],action,user.id);
     return send(res,outcome.code,outcome.error?{error:outcome.error}:outcome);
