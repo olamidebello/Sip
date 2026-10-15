@@ -1,0 +1,91 @@
+---
+- name: Install supported Operator prerequisites and GUI job runner
+  hosts: switch_nodes
+  become: true
+  vars:
+    operator_repo: /opt/olamide/repo
+  tasks:
+    - name: Require supported application host
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == 'Debian'
+          - ansible_distribution_major_version | int >= 12
+          - operator_repo == '/opt/olamide/repo'
+    - name: Install management and certificate dependencies
+      ansible.builtin.apt:
+        name: [ansible-core, python3, git, curl, jq, openssl, ca-certificates, openssh-client]
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+    - name: Verify frontend and backend feature inventory
+      ansible.builtin.command:
+        argv: [python3, '{{ operator_repo }}/tools/operator_requirements.py']
+      register: operator_coverage
+      changed_when: false
+    - name: Preserve private installation logs
+      ansible.builtin.file:
+        path: /var/log/olamide
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+    - name: Prepare GUI runner credentials and local host binding
+      ansible.builtin.command:
+        argv: [python3, '{{ operator_repo }}/tools/prepare_operator_runner.py']
+      when: operator_enable_gui_runner | default(false) | bool
+      register: operator_runner_prepared
+      changed_when: "'changed' in operator_runner_prepared.stdout"
+      no_log: true
+    - name: Load runner token into application API
+      ansible.builtin.command:
+        argv: [docker, compose, --env-file, /etc/olamide/secrets.env, up, '-d', --no-deps, api]
+        chdir: '{{ operator_repo }}/deployment/docker'
+      when: operator_enable_gui_runner | default(false) | bool
+      changed_when: true
+      no_log: true
+    - name: Install private local worker service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/olamide-operator-runner.service
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Olamide Operator prerequisites job worker
+          After=network-online.target docker.service
+          Wants=network-online.target
+          [Service]
+          Type=oneshot
+          User=root
+          WorkingDirectory=/opt/olamide/repo
+          EnvironmentFile=/etc/olamide/operator-runner.env
+          ExecStart=/usr/bin/python3 /opt/olamide/repo/deploy/ansible/runner.py --secrets /etc/olamide/operator-runner.conf --local-host ${OPERATOR_LOCAL_HOST}
+          TimeoutStartSec=3900
+          UMask=0077
+      when: operator_enable_gui_runner | default(false) | bool
+    - name: Install GUI job polling timer
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/olamide-operator-runner.timer
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Poll Operator setup jobs
+          [Timer]
+          OnBootSec=1min
+          OnUnitInactiveSec=1min
+          Persistent=true
+          [Install]
+          WantedBy=timers.target
+      when: operator_enable_gui_runner | default(false) | bool
+    - name: Enable GUI worker
+      ansible.builtin.systemd:
+        name: olamide-operator-runner.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+      when: operator_enable_gui_runner | default(false) | bool
+    - name: Report remaining feature requirements accurately
+      ansible.builtin.debug:
+        msg: '{{ operator_coverage.stdout | from_json }}'
