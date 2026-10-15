@@ -1,6 +1,8 @@
-import catalog from './advancedTelecomCatalog.json' with {type:'json'};
+import backendCatalog from './advancedTelecomCatalog.json' with {type:'json'};
+import nativeMenus from './nativeAstppMenus.json' with {type:'json'};
+const catalog=[...backendCatalog,...nativeMenus.map(menu=>({id:menu.id,name:menu.label,group:'Native ASTPP · '+menu.group+(menu.subtitle?' / '+menu.subtitle:''),nativePath:menu.path}))];
 const labels={'Accounts & security':'ASTPP · Accounts & security','Monitoring & reports':'ASTPP · Monitoring & reports','Routing & numbers':'ASTPP · Routing & numbers','Communications & PBX':'ASTPP · Communications & PBX','Billing & payments':'ASTPP · Billing & payments','External integrations':'ASTPP · External integrations','Account experience':'ASTPP · Portals & experience'};
-export const advancedTelecomGroups=[...new Set(catalog.map(f=>f.group))].map(group=>({label:labels[group]||('ASTPP · '+group.replace('Core · ','')),roles:['super_admin'],items:catalog.filter(f=>f.group===group).map(f=>['telecom-feature-'+f.id,f.name])}));
+export const advancedTelecomGroups=[...new Set(catalog.map(f=>f.group))].map(group=>({label:labels[group]||(group.startsWith('Native ASTPP · ')?group:('ASTPP · '+group.replace('Core · ',''))),roles:['super_admin'],items:catalog.filter(f=>f.group===group).map(f=>['telecom-feature-'+f.id,f.name])}));
 export const advancedTelecomIds=new Set(catalog.map(f=>'telecom-feature-'+f.id));
 export function createAdvancedTelecomPanels(document,root){
  for(const feature of catalog){const panel=document.createElement('section');panel.id='telecom-feature-'+feature.id;panel.hidden=true;panel.className='advanced-telecom-panel';
@@ -14,6 +16,8 @@ export function setupAdvancedTelecomNavigation({document,get,show}){
  let generation=0;const tokens=new Map();
  const names={implemented:'Implemented controls',partial:'Partial implementation',not_implemented:'Not implemented',external_dependency:'External dependency'};
  async function refresh(target){if(!advancedTelecomIds.has(target))return;const panel=document.getElementById(target),status=panel.querySelector('[role=status]'),detail=panel.querySelector('.advanced-feature-detail'),related=panel.querySelector('.advanced-feature-related');const serial=(tokens.get(target)||0)+1;tokens.set(target,serial);const owner=generation;status.textContent='Checking backend feature status…';detail.textContent='';related.replaceChildren();panel.querySelector('.advanced-feature-records').replaceChildren();
+  const nativeFeature=catalog.find(f=>'telecom-feature-'+f.id===target&&f.nativePath);
+  if(nativeFeature){status.textContent='Native ASTPP Community V6.0';detail.textContent='Open this menu in the private native console. Connect your SSH tunnel to port 8089 and sign in with your native ASTPP operator account. Native data and permissions are managed separately.';const link=document.createElement('a');link.href=new URL(nativeFeature.nativePath,'http://localhost:8089/').href;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Open '+nativeFeature.name+' in ASTPP';related.append(link);return;}
   try{const data=await get('/api/admin/telecom/features');if(owner!==generation||tokens.get(target)!==serial)return;const feature=data.features.find(f=>'telecom-feature-'+f.id===target);if(!feature)throw Error('Feature is not present in the backend catalog');status.textContent=names[feature.implementation]||'Unknown implementation status';detail.textContent=feature.detail;
    if(feature.target&&feature.target!==target&&document.getElementById(feature.target)&&!document.getElementById(feature.target).closest('[hidden]')){const button=document.createElement('button');button.type='button';button.textContent='Open related working controls';button.onclick=()=>show(feature.target);related.append(button);}
    if(feature.endpoint){
