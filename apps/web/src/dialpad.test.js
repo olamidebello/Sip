@@ -33,3 +33,14 @@ test('backspace respects selection and keyboard digits send tones without editin
   active=true;const event=new dom.window.KeyboardEvent('keydown',{key:'#',cancelable:true});input.dispatchEvent(event);await Promise.resolve();assert.equal(event.defaultPrevented,true);assert.deepEqual(tones,['#']);assert.equal(input.value,'15');
  }finally{dom.window.close();}
 });
+
+test('holding delete clears the destination and holding zero inserts plus',async()=>{
+ const dom=new JSDOM('<input value="12345"><div></div>');try{
+  const input=dom.window.document.querySelector('input'),root=dom.window.document.querySelector('div');
+  setupDialpad({root,input,inCall:()=>false,sendTone:async()=>{},onError:assert.fail});
+  const remove=root.querySelector('.dialpad-backspace');remove.dispatchEvent(new dom.window.Event('pointerdown'));
+  await new Promise(resolve=>setTimeout(resolve,650));remove.dispatchEvent(new dom.window.Event('pointerup'));remove.click();assert.equal(input.value,'');
+  const zero=root.querySelector('[data-digit="0"]');zero.dispatchEvent(new dom.window.Event('pointerdown'));
+  await new Promise(resolve=>setTimeout(resolve,650));zero.dispatchEvent(new dom.window.Event('pointerup'));zero.click();assert.equal(input.value,'+');assert.equal(root.querySelector('output').textContent,'+');
+ }finally{dom.window.close();}
+});

@@ -1425,7 +1425,7 @@ async function registeredCallLabel(address){
 async function refreshDialIdentity(){
  const input=dialForm.elements.target,address=input.value,version=++identityGeneration;
  const internal=/^sips?:/i.test(address);
- input.hidden=internal;dialIdentity.hidden=!internal;
+ input.hidden=false;dialIdentity.hidden=!internal;
  if(!internal){dialIdentity.textContent='';return;}
  dialIdentity.textContent='Registered SIP user';
  const label=await registeredCallLabel(address);
@@ -2685,7 +2685,7 @@ connectForm.addEventListener("submit",async event=>{event.preventDefault();if(co
 
 const advancedCalling=setupAdvancedCalling({document,getPhone:()=>phone,isActive:()=>onCall,isRegistered:()=>sipRegistered,getCall:()=>currentCall});
 let lastDialedTarget='';
-$('#dialpad-redial').onclick=()=>{if(onCall)return status('Finish the active call before redialing.');if(!lastDialedTarget)return status('No number dialed in this session.');dialForm.elements.target.value=lastDialedTarget;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));dialForm.requestSubmit();};
+$('#dialpad-redial').onclick=()=>{if(onCall)return status('Finish the active call before redialing.');if(!lastDialedTarget)return status('No number dialed in this session.');dialForm.elements.target.value=lastDialedTarget;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));dialForm.elements.target.focus();status('Last number loaded. Tap Call to dial.');};
 $('#call-volume').oninput=event=>{$('#remote').volume=Number(event.target.value);};
 setupDialpad({root:$('#dialpad'),input:dialForm.elements.target,openContact:c=>void contactCard.open(c),inCall:()=>onCall,
   sendTone:digit=>phone.sendDTMF(digit),onError:report});

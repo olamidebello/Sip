@@ -38,8 +38,17 @@ export function setupDialpad({root,input,inCall,sendTone,onError}){
   });
   root.append(grid);
   input.inputMode="tel";
+  input.setAttribute("aria-label","Number, extension or SIP address");
+  input.setAttribute("autocapitalize","none");input.spellcheck=false;
   for(const [label,action] of [['Delete last digit',()=>{const start=input.selectionStart??input.value.length,end=input.selectionEnd??start;input.setRangeText('',start===end?Math.max(0,start-1):start,end,'end');}],['Clear number',()=>{input.value='';}]]){
     const button=root.ownerDocument.createElement('button');button.type='button';button.textContent=label;button.className=label==='Delete last digit'?'dialpad-backspace':'dialpad-clear';button.setAttribute('aria-label',label);
+    if(label==='Delete last digit'){
+      let timer,cleared=false;
+      button.addEventListener('pointerdown',()=>{cleared=false;timer=setTimeout(()=>{if(!inCall()){input.value='';input.dispatchEvent(new input.ownerDocument.defaultView.Event('input',{bubbles:true}));cleared=true;}},600);});
+      for(const event of ['pointerup','pointerleave','pointercancel'])button.addEventListener(event,()=>clearTimeout(timer));
+      button.addEventListener('contextmenu',event=>event.preventDefault());
+      button.addEventListener('click',event=>{if(cleared){cleared=false;event.stopImmediatePropagation();}});
+    }
     button.addEventListener('click',()=>{if(!inCall()){action();input.focus();input.dispatchEvent(new input.ownerDocument.defaultView.Event("input",{bubbles:true}));}});root.append(button);
   }
 }
