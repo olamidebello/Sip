@@ -2,7 +2,7 @@ export function setupServerFleetAdmin({get,request}){
   const $=id=>document.getElementById(id);
   const status=$('fleet-status');
   const list=(id,rows,render)=>{const el=$(id);el.replaceChildren();for(const row of rows){const item=document.createElement('li');render(item,row);el.append(item);}};
-  const button=(parent,title,run)=>{const b=document.createElement('button');b.type='button';b.textContent=title;b.onclick=async()=>{b.disabled=true;try{await run();await refresh();status.textContent=title+' completed.';}catch(e){status.textContent=e.message;}finally{b.disabled=false;}};parent.append(b);};
+  const button=(parent,title,run)=>{const b=document.createElement('button');b.type='button';b.textContent=title;b.onclick=async()=>{b.disabled=true;try{await run();await refresh();status.textContent=title+(title==='Install Operator requirements'?' queued. Follow progress in deployment jobs.':' completed.');}catch(e){status.textContent=e.message;}finally{b.disabled=false;}};parent.append(b);};
   async function refresh(){
     const [data,topology]=await Promise.all([get('/api/admin/servers'),get('/api/admin/servers/topology')]);
     const can=level=>({none:0,view:1,manage:2,deploy:3})[data.accessLevel]>=({view:1,manage:2,deploy:3})[level];
@@ -35,6 +35,7 @@ export function setupServerFleetAdmin({get,request}){
       if(n.role==='switch'&&can('deploy')){
         const operations=document.createElement('div');li.append(operations);
         for(const action of ['health','install','upgrade'])button(operations,action,()=>request(`/api/admin/servers/${n.id}/jobs`,{action}));
+        if(data.operatorSetupAllowed)button(operations,'Install Operator requirements',()=>request(`/api/admin/servers/${n.id}/jobs`,{action:'operator_setup'}));
         const interval=document.createElement('input');interval.type='number';interval.min='5';interval.max='10080';interval.value='60';interval.setAttribute('aria-label',`${n.name} schedule interval minutes`);controls.append(interval);
         operations.append(interval);
         for(const action of ['health','upgrade'])button(operations,`Schedule ${action}`,()=>request(`/api/admin/servers/${n.id}/schedules`,{action,intervalMinutes:Number(interval.value)}));
