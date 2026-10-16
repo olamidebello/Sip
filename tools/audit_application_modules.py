@@ -4,7 +4,7 @@ import argparse,collections,json,pathlib,re,subprocess
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 def inventory(root=ROOT):
  api=root/'services/api';web=root/'apps/web/src';server=(api/'server.js').read_text();migration=(api/'migrate.js').read_text()
- tests=list(api.glob('*.test.js'));test_sources={p.name:p.read_text() for p in tests}
+ tests=sorted(api.glob('*.test.js'));test_sources={p.name:p.read_text() for p in tests}
  sources=sorted(p for p in api.glob('*.js') if not p.name.endswith('.test.js'))
  import_pattern=r"from\s*['\"]\./([^'\"]+)['\"]"
  imports=re.findall(import_pattern,server)
@@ -24,7 +24,7 @@ def inventory(root=ROOT):
    'exportedWorkers':workers,'serverStartedWorkers':[v for v in workers if re.search(r'\b'+re.escape(v)+r'\s*\(',server)],
    'reachableFromServer':p.name in reachable,'migrationImported':p.name in migrated,
    'tests':[name for name,code in test_sources.items() if "./"+p.name in code],
-   'guiReferences':[str(q.relative_to(root)) for q in web.glob('*.js') if not q.name.endswith('.test.js') and p.stem in q.read_text()],
+   'guiReferences':[str(q.relative_to(root)) for q in sorted(web.glob('*.js')) if not q.name.endswith('.test.js') and p.stem in q.read_text()],
    'liveAcceptance':'unverified'})
  clients=[]
  for family in ['web','mobile','desktop']:

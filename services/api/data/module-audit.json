@@ -717,23 +717,23 @@
         "access.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/main.js",
-        "apps/web/src/serverFleetAdmin.js",
-        "apps/web/src/fleetNetworkAdmin.js",
-        "apps/web/src/messengerSettings.js",
-        "apps/web/src/carrierConsole.js",
-        "apps/web/src/advancedCalling.js",
-        "apps/web/src/socialPublishing.js",
         "apps/web/src/adminNavigation.js",
-        "apps/web/src/messengerPreferences.js",
-        "apps/web/src/meetings.js",
+        "apps/web/src/advancedCalling.js",
+        "apps/web/src/callGui.js",
+        "apps/web/src/carrierConsole.js",
         "apps/web/src/chatComposerShortcuts.js",
         "apps/web/src/fleetAccessAdmin.js",
-        "apps/web/src/providerCredentialsAdmin.js",
-        "apps/web/src/userNavigation.js",
-        "apps/web/src/callGui.js",
+        "apps/web/src/fleetFirewallAdmin.js",
+        "apps/web/src/fleetNetworkAdmin.js",
         "apps/web/src/googleContacts.js",
-        "apps/web/src/fleetFirewallAdmin.js"
+        "apps/web/src/main.js",
+        "apps/web/src/meetings.js",
+        "apps/web/src/messengerPreferences.js",
+        "apps/web/src/messengerSettings.js",
+        "apps/web/src/providerCredentialsAdmin.js",
+        "apps/web/src/serverFleetAdmin.js",
+        "apps/web/src/socialPublishing.js",
+        "apps/web/src/userNavigation.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -775,8 +775,8 @@
       "reachableFromServer": true,
       "migrationImported": true,
       "tests": [
-        "adapterTargets.test.js",
-        "adapterRegistry.test.js"
+        "adapterRegistry.test.js",
+        "adapterTargets.test.js"
       ],
       "guiReferences": [],
       "liveAcceptance": "unverified"
@@ -856,14 +856,14 @@
         "background.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminNavigation.js",
+        "apps/web/src/background.js",
+        "apps/web/src/configurationLinks.js",
         "apps/web/src/main.js",
         "apps/web/src/messengerHub.js",
-        "apps/web/src/messengerSettings.js",
-        "apps/web/src/adminNavigation.js",
         "apps/web/src/messengerOverflow.js",
+        "apps/web/src/messengerSettings.js",
         "apps/web/src/userActivity.js",
-        "apps/web/src/configurationLinks.js",
-        "apps/web/src/background.js",
         "apps/web/src/userNavigation.js"
       ],
       "liveAcceptance": "unverified"
@@ -882,23 +882,23 @@
         "billing.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminNavigation.js",
+        "apps/web/src/configurationLinks.js",
+        "apps/web/src/dashboard.js",
+        "apps/web/src/formGroups.js",
         "apps/web/src/groups.js",
-        "apps/web/src/main.js",
         "apps/web/src/kamailioAdmin.js",
         "apps/web/src/localeSettings.js",
-        "apps/web/src/telecomReports.js",
-        "apps/web/src/navigationPolicy.js",
+        "apps/web/src/main.js",
         "apps/web/src/moneyWorkspace.js",
-        "apps/web/src/dashboard.js",
+        "apps/web/src/navigationPolicy.js",
         "apps/web/src/productImport.js",
-        "apps/web/src/adminNavigation.js",
-        "apps/web/src/userActivity.js",
-        "apps/web/src/configurationLinks.js",
+        "apps/web/src/productStore.js",
         "apps/web/src/reports.js",
-        "apps/web/src/formGroups.js",
-        "apps/web/src/userNavigation.js",
         "apps/web/src/support.js",
-        "apps/web/src/productStore.js"
+        "apps/web/src/telecomReports.js",
+        "apps/web/src/userActivity.js",
+        "apps/web/src/userNavigation.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -968,8 +968,8 @@
       "migrationImported": true,
       "tests": [],
       "guiReferences": [
-        "apps/web/src/main.js",
-        "apps/web/src/campaigns.js"
+        "apps/web/src/campaigns.js",
+        "apps/web/src/main.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -1035,10 +1035,10 @@
         "cdr.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminNavigation.js",
         "apps/web/src/main.js",
-        "apps/web/src/telecomReports.js",
         "apps/web/src/moduleReadiness.js",
-        "apps/web/src/adminNavigation.js"
+        "apps/web/src/telecomReports.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -1061,8 +1061,8 @@
       "reachableFromServer": true,
       "migrationImported": true,
       "tests": [
-        "moduleRollout.integration.test.js",
-        "cdrArchive.test.js"
+        "cdrArchive.test.js",
+        "moduleRollout.integration.test.js"
       ],
       "guiReferences": [],
       "liveAcceptance": "unverified"
@@ -1083,8 +1083,8 @@
       "migrationImported": false,
       "tests": [],
       "guiReferences": [
-        "apps/web/src/main.js",
-        "apps/web/src/adminNavigation.js"
+        "apps/web/src/adminNavigation.js",
+        "apps/web/src/main.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -1120,11 +1120,11 @@
         "cluster.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/main.js",
         "apps/web/src/adminNavigation.js",
-        "apps/web/src/userActivity.js",
+        "apps/web/src/commerceOps.js",
         "apps/web/src/configurationLinks.js",
-        "apps/web/src/commerceOps.js"
+        "apps/web/src/main.js",
+        "apps/web/src/userActivity.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -1233,12 +1233,12 @@
       "reachableFromServer": true,
       "migrationImported": true,
       "tests": [
-        "readAll.test.js",
-        "conversations.test.js"
+        "conversations.test.js",
+        "readAll.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/main.js",
-        "apps/web/src/chatLanding.js"
+        "apps/web/src/chatLanding.js",
+        "apps/web/src/main.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -1260,15 +1260,15 @@
         "dashboard.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/workspaceQuick.js",
+        "apps/web/src/adminNavigation.js",
+        "apps/web/src/configurationLinks.js",
+        "apps/web/src/dashboard.js",
         "apps/web/src/main.js",
         "apps/web/src/marketplaceControl.js",
         "apps/web/src/navigationPolicy.js",
-        "apps/web/src/dashboard.js",
-        "apps/web/src/adminNavigation.js",
         "apps/web/src/pageRoutes.js",
-        "apps/web/src/configurationLinks.js",
-        "apps/web/src/userNavigation.js"
+        "apps/web/src/userNavigation.js",
+        "apps/web/src/workspaceQuick.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -1283,18 +1283,18 @@
       "reachableFromServer": true,
       "migrationImported": true,
       "tests": [
-        "moduleRollout.integration.test.js",
-        "telecomModules.integration.test.js",
-        "tariffCatalog.integration.test.js",
+        "accountRanges.integration.test.js",
         "integration.test.js",
+        "moduleRollout.integration.test.js",
         "storeGateways.integration.test.js",
-        "accountRanges.integration.test.js"
+        "tariffCatalog.integration.test.js",
+        "telecomModules.integration.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/main.js",
-        "apps/web/src/messengerSettings.js",
         "apps/web/src/advancedCalling.js",
-        "apps/web/src/callsScreen.js"
+        "apps/web/src/callsScreen.js",
+        "apps/web/src/main.js",
+        "apps/web/src/messengerSettings.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -1580,8 +1580,8 @@
         "kamailio.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/main.js",
         "apps/web/src/kamailioAdmin.js",
+        "apps/web/src/main.js",
         "apps/web/src/moduleReadiness.js"
       ],
       "liveAcceptance": "unverified"
@@ -1662,13 +1662,13 @@
         "ldap.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/groups.js",
-        "apps/web/src/main.js",
-        "apps/web/src/authProviders.js",
         "apps/web/src/adminNavigation.js",
-        "apps/web/src/pageRoutes.js",
+        "apps/web/src/authProviders.js",
         "apps/web/src/formGroups.js",
-        "apps/web/src/ldapAdmin.js"
+        "apps/web/src/groups.js",
+        "apps/web/src/ldapAdmin.js",
+        "apps/web/src/main.js",
+        "apps/web/src/pageRoutes.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -1709,9 +1709,9 @@
       "reachableFromServer": true,
       "migrationImported": true,
       "tests": [
+        "marketplaceControl.test.js",
         "moduleRollout.integration.test.js",
-        "storeGateways.integration.test.js",
-        "marketplaceControl.test.js"
+        "storeGateways.integration.test.js"
       ],
       "guiReferences": [
         "apps/web/src/main.js"
@@ -1744,15 +1744,15 @@
       "migrationImported": false,
       "tests": [],
       "guiReferences": [
+        "apps/web/src/chatComposerShortcuts.js",
+        "apps/web/src/configurationLinks.js",
+        "apps/web/src/dashboard.js",
         "apps/web/src/groups.js",
         "apps/web/src/main.js",
-        "apps/web/src/navigationPolicy.js",
-        "apps/web/src/dashboard.js",
+        "apps/web/src/meetingInvite.js",
         "apps/web/src/meetings.js",
-        "apps/web/src/configurationLinks.js",
-        "apps/web/src/chatComposerShortcuts.js",
-        "apps/web/src/userNavigation.js",
-        "apps/web/src/meetingInvite.js"
+        "apps/web/src/navigationPolicy.js",
+        "apps/web/src/userNavigation.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -1778,8 +1778,8 @@
         "messagePrivacy.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/messengerMedia.js",
-        "apps/web/src/conversations.js"
+        "apps/web/src/conversations.js",
+        "apps/web/src/messengerMedia.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -1863,9 +1863,9 @@
       "migrationImported": false,
       "tests": [
         "moduleRollout.integration.test.js",
-        "telecomModules.integration.test.js",
+        "storeGateways.integration.test.js",
         "tariffCatalog.integration.test.js",
-        "storeGateways.integration.test.js"
+        "telecomModules.integration.test.js"
       ],
       "guiReferences": [],
       "liveAcceptance": "unverified"
@@ -2012,8 +2012,8 @@
         "nigeria.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/main.js",
-        "apps/web/src/adminNavigation.js"
+        "apps/web/src/adminNavigation.js",
+        "apps/web/src/main.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -2184,12 +2184,12 @@
         "payments.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminNavigation.js",
         "apps/web/src/advancedTelecomNavigation.js",
+        "apps/web/src/commerceOps.js",
         "apps/web/src/main.js",
         "apps/web/src/marketplaceControl.js",
-        "apps/web/src/moneyWorkspace.js",
-        "apps/web/src/adminNavigation.js",
-        "apps/web/src/commerceOps.js"
+        "apps/web/src/moneyWorkspace.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -2211,12 +2211,12 @@
         "pbx.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/main.js",
-        "apps/web/src/kamailioAdmin.js",
-        "apps/web/src/carrierConsole.js",
         "apps/web/src/adminNavigation.js",
+        "apps/web/src/carrierConsole.js",
         "apps/web/src/configurationLinks.js",
         "apps/web/src/formGroups.js",
+        "apps/web/src/kamailioAdmin.js",
+        "apps/web/src/main.js",
         "apps/web/src/pbx.js"
       ],
       "liveAcceptance": "unverified"
@@ -2235,8 +2235,8 @@
         "permissions.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/groups.js",
         "apps/web/src/advancedTelecomNavigation.js",
+        "apps/web/src/groups.js",
         "apps/web/src/main.js",
         "apps/web/src/sipProfiles.js"
       ],
@@ -2260,13 +2260,13 @@
         "pricing.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/main.js",
         "apps/web/src/adminNavigation.js",
-        "apps/web/src/userActivity.js",
-        "apps/web/src/pricing.js",
+        "apps/web/src/catalogControl.js",
         "apps/web/src/configurationLinks.js",
         "apps/web/src/formGroups.js",
-        "apps/web/src/catalogControl.js"
+        "apps/web/src/main.js",
+        "apps/web/src/pricing.js",
+        "apps/web/src/userActivity.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -2281,8 +2281,8 @@
       "reachableFromServer": false,
       "migrationImported": false,
       "tests": [
-        "productPublish.test.js",
-        "integration.test.js"
+        "integration.test.js",
+        "productPublish.test.js"
       ],
       "guiReferences": [],
       "liveAcceptance": "unverified"
@@ -2306,9 +2306,9 @@
       "reachableFromServer": true,
       "migrationImported": true,
       "tests": [
-        "moduleRollout.integration.test.js",
         "integration.test.js",
         "marketplaceControl.test.js",
+        "moduleRollout.integration.test.js",
         "productStore.test.js"
       ],
       "guiReferences": [
@@ -2345,10 +2345,10 @@
       "reachableFromServer": true,
       "migrationImported": true,
       "tests": [
-        "storeGateways.test.js",
+        "didwwProvisioning.test.js",
         "providerCredentials.test.js",
-        "walletProviders.test.js",
-        "didwwProvisioning.test.js"
+        "storeGateways.test.js",
+        "walletProviders.test.js"
       ],
       "guiReferences": [
         "apps/web/src/main.js"
@@ -2395,15 +2395,15 @@
         "providers.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/walletProvidersAdmin.js",
-        "apps/web/src/main.js",
         "apps/web/src/adapterAdmin.js",
-        "apps/web/src/carrierConsole.js",
-        "apps/web/src/socialPublishing.js",
-        "apps/web/src/authProviders.js",
         "apps/web/src/adminNavigation.js",
+        "apps/web/src/authProviders.js",
+        "apps/web/src/carrierConsole.js",
         "apps/web/src/configurationLinks.js",
-        "apps/web/src/ldapAdmin.js"
+        "apps/web/src/ldapAdmin.js",
+        "apps/web/src/main.js",
+        "apps/web/src/socialPublishing.js",
+        "apps/web/src/walletProvidersAdmin.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -2419,8 +2419,8 @@
       "migrationImported": false,
       "tests": [
         "outboundDids.test.js",
-        "telecomModules.integration.test.js",
-        "pstnBilling.test.js"
+        "pstnBilling.test.js",
+        "telecomModules.integration.test.js"
       ],
       "guiReferences": [],
       "liveAcceptance": "unverified"
@@ -2489,12 +2489,12 @@
         "reports.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/advancedTelecomNavigation.js",
-        "apps/web/src/main.js",
-        "apps/web/src/telecomReports.js",
-        "apps/web/src/dashboard.js",
         "apps/web/src/adminNavigation.js",
-        "apps/web/src/reports.js"
+        "apps/web/src/advancedTelecomNavigation.js",
+        "apps/web/src/dashboard.js",
+        "apps/web/src/main.js",
+        "apps/web/src/reports.js",
+        "apps/web/src/telecomReports.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -2555,25 +2555,25 @@
         "support.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/workspaceQuick.js",
-        "apps/web/src/messengerIcons.js",
-        "apps/web/src/telecomFeatures.js",
-        "apps/web/src/main.js",
-        "apps/web/src/kamailioAdmin.js",
-        "apps/web/src/navigationPolicy.js",
-        "apps/web/src/contactManagerLayout.js",
-        "apps/web/src/carrierConsole.js",
-        "apps/web/src/contactDirectory.js",
         "apps/web/src/adminNavigation.js",
-        "apps/web/src/dialerContacts.js",
-        "apps/web/src/userNavigation.js",
+        "apps/web/src/carrierConsole.js",
+        "apps/web/src/chatLanding.js",
+        "apps/web/src/contactDirectory.js",
+        "apps/web/src/contactManagerLayout.js",
         "apps/web/src/conversations.js",
-        "apps/web/src/support.js",
+        "apps/web/src/dialerContacts.js",
+        "apps/web/src/googleContacts.js",
+        "apps/web/src/kamailioAdmin.js",
+        "apps/web/src/main.js",
+        "apps/web/src/meetingInvite.js",
+        "apps/web/src/messengerIcons.js",
+        "apps/web/src/navigationPolicy.js",
         "apps/web/src/productStore.js",
         "apps/web/src/socialWorkspace.js",
-        "apps/web/src/googleContacts.js",
-        "apps/web/src/chatLanding.js",
-        "apps/web/src/meetingInvite.js"
+        "apps/web/src/support.js",
+        "apps/web/src/telecomFeatures.js",
+        "apps/web/src/userNavigation.js",
+        "apps/web/src/workspaceQuick.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -2592,8 +2592,8 @@
         "sessionPolicy.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/groups.js",
         "apps/web/src/advancedTelecomNavigation.js",
+        "apps/web/src/groups.js",
         "apps/web/src/main.js",
         "apps/web/src/messengerHub.js",
         "apps/web/src/userNavigation.js"
@@ -2614,34 +2614,34 @@
         "routeContracts.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/walletProvidersAdmin.js",
-        "apps/web/src/flowrouteTrunkAdmin.js",
-        "apps/web/src/advancedTelecomNavigation.js",
-        "apps/web/src/main.js",
-        "apps/web/src/kamailioAdmin.js",
-        "apps/web/src/marketplaceControl.js",
-        "apps/web/src/serverFleetAdmin.js",
-        "apps/web/src/telecomReports.js",
-        "apps/web/src/fleetNetworkAdmin.js",
-        "apps/web/src/carrierConsole.js",
-        "apps/web/src/moduleReadiness.js",
-        "apps/web/src/authProviders.js",
         "apps/web/src/adminNavigation.js",
-        "apps/web/src/userActivity.js",
-        "apps/web/src/didwwProvisionAdmin.js",
-        "apps/web/src/operationsAdmin.js",
+        "apps/web/src/advancedTelecomNavigation.js",
+        "apps/web/src/authProviders.js",
+        "apps/web/src/carrierConsole.js",
         "apps/web/src/chatComposerShortcuts.js",
-        "apps/web/src/messagePrivacy.js",
-        "apps/web/src/signupCaptcha.js",
-        "apps/web/src/fleetAccessAdmin.js",
-        "apps/web/src/providerCredentialsAdmin.js",
-        "apps/web/src/languageTools.js",
-        "apps/web/src/didwwAdmin.js",
-        "apps/web/src/ldapAdmin.js",
-        "apps/web/src/sipProfiles.js",
         "apps/web/src/chatLanding.js",
+        "apps/web/src/didwwAdmin.js",
+        "apps/web/src/didwwProvisionAdmin.js",
+        "apps/web/src/fleetAccessAdmin.js",
+        "apps/web/src/fleetFirewallAdmin.js",
+        "apps/web/src/fleetNetworkAdmin.js",
+        "apps/web/src/flowrouteTrunkAdmin.js",
+        "apps/web/src/kamailioAdmin.js",
+        "apps/web/src/languageTools.js",
+        "apps/web/src/ldapAdmin.js",
+        "apps/web/src/main.js",
+        "apps/web/src/marketplaceControl.js",
         "apps/web/src/meetingInvite.js",
-        "apps/web/src/fleetFirewallAdmin.js"
+        "apps/web/src/messagePrivacy.js",
+        "apps/web/src/moduleReadiness.js",
+        "apps/web/src/operationsAdmin.js",
+        "apps/web/src/providerCredentialsAdmin.js",
+        "apps/web/src/serverFleetAdmin.js",
+        "apps/web/src/signupCaptcha.js",
+        "apps/web/src/sipProfiles.js",
+        "apps/web/src/telecomReports.js",
+        "apps/web/src/userActivity.js",
+        "apps/web/src/walletProvidersAdmin.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -2718,9 +2718,9 @@
       "reachableFromServer": true,
       "migrationImported": false,
       "tests": [
-        "signupCaptcha.test.js",
         "integration.test.js",
-        "onboarding.test.js"
+        "onboarding.test.js",
+        "signupCaptcha.test.js"
       ],
       "guiReferences": [
         "apps/web/src/main.js"
@@ -2757,9 +2757,9 @@
       "migrationImported": true,
       "tests": [
         "automaticSipSession.test.js",
-        "sipProvisioning.test.js",
+        "refreshSipAuth.test.js",
         "repairSipDomain.test.js",
-        "refreshSipAuth.test.js"
+        "sipProvisioning.test.js"
       ],
       "guiReferences": [],
       "liveAcceptance": "unverified"
@@ -2860,13 +2860,13 @@
         "social.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/messengerIcons.js",
         "apps/web/src/main.js",
+        "apps/web/src/messengerIcons.js",
         "apps/web/src/navigationPolicy.js",
-        "apps/web/src/socialPublishing.js",
         "apps/web/src/socialLinks.js",
-        "apps/web/src/userNavigation.js",
-        "apps/web/src/socialWorkspace.js"
+        "apps/web/src/socialPublishing.js",
+        "apps/web/src/socialWorkspace.js",
+        "apps/web/src/userNavigation.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -2964,8 +2964,8 @@
       "reachableFromServer": true,
       "migrationImported": true,
       "tests": [
-        "storeGateways.test.js",
-        "storeGateways.integration.test.js"
+        "storeGateways.integration.test.js",
+        "storeGateways.test.js"
       ],
       "guiReferences": [],
       "liveAcceptance": "unverified"
@@ -3038,24 +3038,24 @@
         "support.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/messengerMedia.js",
-        "apps/web/src/main.js",
+        "apps/web/src/advancedCalling.js",
+        "apps/web/src/carrierControl.js",
+        "apps/web/src/configurationLinks.js",
+        "apps/web/src/dashboard.js",
+        "apps/web/src/formGroups.js",
+        "apps/web/src/geofence.js",
         "apps/web/src/kamailioAdmin.js",
+        "apps/web/src/languageTools.js",
+        "apps/web/src/main.js",
         "apps/web/src/marketplaceControl.js",
         "apps/web/src/messengerHub.js",
-        "apps/web/src/dashboard.js",
+        "apps/web/src/messengerMedia.js",
+        "apps/web/src/messengerOverflow.js",
         "apps/web/src/messengerSettings.js",
         "apps/web/src/moduleReadiness.js",
-        "apps/web/src/advancedCalling.js",
-        "apps/web/src/messengerOverflow.js",
+        "apps/web/src/support.js",
         "apps/web/src/userActivity.js",
-        "apps/web/src/configurationLinks.js",
-        "apps/web/src/formGroups.js",
-        "apps/web/src/carrierControl.js",
-        "apps/web/src/userNavigation.js",
-        "apps/web/src/languageTools.js",
-        "apps/web/src/geofence.js",
-        "apps/web/src/support.js"
+        "apps/web/src/userNavigation.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -3073,26 +3073,26 @@
         "switch.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminNavigation.js",
         "apps/web/src/autoSipRegistration.js",
+        "apps/web/src/carrierConsole.js",
+        "apps/web/src/configurationLinks.js",
+        "apps/web/src/contactCard.js",
+        "apps/web/src/dashboard.js",
+        "apps/web/src/didwwProvisionAdmin.js",
+        "apps/web/src/fleetFirewallAdmin.js",
+        "apps/web/src/fleetNetworkAdmin.js",
         "apps/web/src/flowrouteTrunkAdmin.js",
-        "apps/web/src/main.js",
         "apps/web/src/kamailioAdmin.js",
+        "apps/web/src/main.js",
         "apps/web/src/marketplaceControl.js",
+        "apps/web/src/operationsAdmin.js",
+        "apps/web/src/pbx.js",
         "apps/web/src/serverFleetAdmin.js",
         "apps/web/src/sipRegistration.js",
-        "apps/web/src/fleetNetworkAdmin.js",
-        "apps/web/src/dashboard.js",
-        "apps/web/src/carrierConsole.js",
-        "apps/web/src/adminNavigation.js",
-        "apps/web/src/userActivity.js",
-        "apps/web/src/configurationLinks.js",
-        "apps/web/src/didwwProvisionAdmin.js",
-        "apps/web/src/contactCard.js",
-        "apps/web/src/operationsAdmin.js",
-        "apps/web/src/tenants.js",
         "apps/web/src/tariffCatalog.js",
-        "apps/web/src/pbx.js",
-        "apps/web/src/fleetFirewallAdmin.js"
+        "apps/web/src/tenants.js",
+        "apps/web/src/userActivity.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -3226,8 +3226,8 @@
       "reachableFromServer": true,
       "migrationImported": true,
       "tests": [
-        "telecomReports.test.js",
-        "telecomModules.integration.test.js"
+        "telecomModules.integration.test.js",
+        "telecomReports.test.js"
       ],
       "guiReferences": [
         "apps/web/src/main.js"
@@ -3269,8 +3269,8 @@
       "reachableFromServer": true,
       "migrationImported": true,
       "tests": [
-        "tenancy.test.js",
-        "authProviders.test.js"
+        "authProviders.test.js",
+        "tenancy.test.js"
       ],
       "guiReferences": [],
       "liveAcceptance": "unverified"
@@ -3307,105 +3307,105 @@
         "turn.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/workspaceQuick.js",
-        "apps/web/src/messengerMedia.js",
-        "apps/web/src/walletProvidersAdmin.js",
         "apps/web/src/accountRanges.js",
-        "apps/web/src/messengerIcons.js",
-        "apps/web/src/phoneContacts.js",
-        "apps/web/src/telecomFeatures.js",
-        "apps/web/src/groups.js",
-        "apps/web/src/mobileAdmin.js",
-        "apps/web/src/autoSipRegistration.js",
-        "apps/web/src/flowrouteTrunkAdmin.js",
-        "apps/web/src/advancedTelecomNavigation.js",
-        "apps/web/src/operatorControl.js",
-        "apps/web/src/main.js",
-        "apps/web/src/kamailioAdmin.js",
-        "apps/web/src/localeSettings.js",
-        "apps/web/src/sessionWatch.js",
-        "apps/web/src/marketplaceControl.js",
-        "apps/web/src/serverFleetAdmin.js",
-        "apps/web/src/passkeyPolicy.js",
-        "apps/web/src/telecomReports.js",
-        "apps/web/src/telecomRefills.js",
-        "apps/web/src/addressBookImport.js",
-        "apps/web/src/navigationPolicy.js",
-        "apps/web/src/nativeCallClient.js",
-        "apps/web/src/moneyWorkspace.js",
         "apps/web/src/adapterAdmin.js",
-        "apps/web/src/nativePushClient.js",
-        "apps/web/src/sipRegistration.js",
-        "apps/web/src/contactDiscovery.js",
-        "apps/web/src/messengerHub.js",
-        "apps/web/src/contactManagerLayout.js",
-        "apps/web/src/sessionAdmin.js",
-        "apps/web/src/fleetNetworkAdmin.js",
-        "apps/web/src/dashboard.js",
-        "apps/web/src/carrierConsole.js",
-        "apps/web/src/moduleReadiness.js",
-        "apps/web/src/contactDirectory.js",
-        "apps/web/src/advancedCalling.js",
-        "apps/web/src/socialPublishing.js",
-        "apps/web/src/workPlanner.js",
-        "apps/web/src/authProviders.js",
-        "apps/web/src/socialLinks.js",
-        "apps/web/src/install.js",
-        "apps/web/src/productImport.js",
-        "apps/web/src/chatGestures.js",
+        "apps/web/src/addressBookImport.js",
         "apps/web/src/adminNavigation.js",
-        "apps/web/src/messengerOverflow.js",
-        "apps/web/src/pageRoutes.js",
-        "apps/web/src/userActivity.js",
-        "apps/web/src/subscriberDelivery.js",
-        "apps/web/src/pricing.js",
-        "apps/web/src/messengerPreferences.js",
-        "apps/web/src/contactsCsv.js",
-        "apps/web/src/meetings.js",
-        "apps/web/src/configurationLinks.js",
-        "apps/web/src/workspaceNavigation.js",
-        "apps/web/src/didwwProvisionAdmin.js",
-        "apps/web/src/dialIdentityInput.js",
-        "apps/web/src/contactCard.js",
-        "apps/web/src/operationsAdmin.js",
-        "apps/web/src/commerceOps.js",
-        "apps/web/src/dialerContacts.js",
-        "apps/web/src/reports.js",
-        "apps/web/src/chatComposerShortcuts.js",
-        "apps/web/src/messagePrivacy.js",
-        "apps/web/src/signupCaptcha.js",
-        "apps/web/src/fleetAccessAdmin.js",
-        "apps/web/src/formGroups.js",
+        "apps/web/src/advancedCalling.js",
+        "apps/web/src/advancedTelecomNavigation.js",
+        "apps/web/src/authProviders.js",
+        "apps/web/src/autoSipRegistration.js",
         "apps/web/src/background.js",
-        "apps/web/src/providerCredentialsAdmin.js",
-        "apps/web/src/carrierControl.js",
-        "apps/web/src/userNavigation.js",
-        "apps/web/src/conversations.js",
-        "apps/web/src/downloads.js",
-        "apps/web/src/languageTools.js",
-        "apps/web/src/tenants.js",
-        "apps/web/src/geofence.js",
-        "apps/web/src/callIdentity.js",
-        "apps/web/src/support.js",
-        "apps/web/src/chatPresentation.js",
-        "apps/web/src/productStore.js",
-        "apps/web/src/didwwAdmin.js",
-        "apps/web/src/providerWebhookAdmin.js",
-        "apps/web/src/campaigns.js",
-        "apps/web/src/ldapAdmin.js",
-        "apps/web/src/catalogControl.js",
-        "apps/web/src/socialWorkspace.js",
-        "apps/web/src/callsScreen.js",
-        "apps/web/src/sipProfiles.js",
         "apps/web/src/callGui.js",
-        "apps/web/src/googleContacts.js",
+        "apps/web/src/callIdentity.js",
+        "apps/web/src/callsScreen.js",
+        "apps/web/src/campaigns.js",
+        "apps/web/src/carrierConsole.js",
+        "apps/web/src/carrierControl.js",
+        "apps/web/src/catalogControl.js",
+        "apps/web/src/chatComposerShortcuts.js",
+        "apps/web/src/chatGestures.js",
         "apps/web/src/chatLanding.js",
-        "apps/web/src/tariffCatalog.js",
-        "apps/web/src/pbx.js",
-        "apps/web/src/meetingInvite.js",
+        "apps/web/src/chatPresentation.js",
+        "apps/web/src/commerceOps.js",
+        "apps/web/src/configurationLinks.js",
+        "apps/web/src/contactCard.js",
+        "apps/web/src/contactDirectory.js",
+        "apps/web/src/contactDiscovery.js",
+        "apps/web/src/contactManagerLayout.js",
+        "apps/web/src/contactsCsv.js",
+        "apps/web/src/conversations.js",
+        "apps/web/src/dashboard.js",
+        "apps/web/src/dialIdentityInput.js",
+        "apps/web/src/dialerContacts.js",
+        "apps/web/src/dialpad.js",
+        "apps/web/src/didwwAdmin.js",
+        "apps/web/src/didwwProvisionAdmin.js",
+        "apps/web/src/downloads.js",
+        "apps/web/src/fleetAccessAdmin.js",
         "apps/web/src/fleetFirewallAdmin.js",
+        "apps/web/src/fleetNetworkAdmin.js",
+        "apps/web/src/flowrouteTrunkAdmin.js",
+        "apps/web/src/formGroups.js",
+        "apps/web/src/geofence.js",
+        "apps/web/src/googleContacts.js",
+        "apps/web/src/groups.js",
+        "apps/web/src/install.js",
+        "apps/web/src/kamailioAdmin.js",
+        "apps/web/src/languageTools.js",
+        "apps/web/src/ldapAdmin.js",
+        "apps/web/src/localeSettings.js",
+        "apps/web/src/main.js",
+        "apps/web/src/marketplaceControl.js",
+        "apps/web/src/meetingInvite.js",
+        "apps/web/src/meetings.js",
+        "apps/web/src/messagePrivacy.js",
+        "apps/web/src/messengerHub.js",
+        "apps/web/src/messengerIcons.js",
+        "apps/web/src/messengerMedia.js",
+        "apps/web/src/messengerOverflow.js",
+        "apps/web/src/messengerPreferences.js",
+        "apps/web/src/mobileAdmin.js",
+        "apps/web/src/moduleReadiness.js",
+        "apps/web/src/moneyWorkspace.js",
+        "apps/web/src/nativeCallClient.js",
+        "apps/web/src/nativePushClient.js",
+        "apps/web/src/navigationPolicy.js",
+        "apps/web/src/operationsAdmin.js",
+        "apps/web/src/operatorControl.js",
+        "apps/web/src/pageRoutes.js",
+        "apps/web/src/passkeyPolicy.js",
+        "apps/web/src/pbx.js",
+        "apps/web/src/phoneContacts.js",
+        "apps/web/src/pricing.js",
+        "apps/web/src/productImport.js",
+        "apps/web/src/productStore.js",
+        "apps/web/src/providerCredentialsAdmin.js",
+        "apps/web/src/providerWebhookAdmin.js",
+        "apps/web/src/reports.js",
+        "apps/web/src/serverFleetAdmin.js",
+        "apps/web/src/sessionAdmin.js",
+        "apps/web/src/sessionWatch.js",
+        "apps/web/src/signupCaptcha.js",
+        "apps/web/src/sipProfiles.js",
+        "apps/web/src/sipRegistration.js",
+        "apps/web/src/socialLinks.js",
+        "apps/web/src/socialPublishing.js",
+        "apps/web/src/socialWorkspace.js",
+        "apps/web/src/subscriberDelivery.js",
+        "apps/web/src/support.js",
+        "apps/web/src/tariffCatalog.js",
+        "apps/web/src/telecomFeatures.js",
         "apps/web/src/telecomPolicies.js",
-        "apps/web/src/dialpad.js"
+        "apps/web/src/telecomRefills.js",
+        "apps/web/src/telecomReports.js",
+        "apps/web/src/tenants.js",
+        "apps/web/src/userActivity.js",
+        "apps/web/src/userNavigation.js",
+        "apps/web/src/walletProvidersAdmin.js",
+        "apps/web/src/workPlanner.js",
+        "apps/web/src/workspaceNavigation.js",
+        "apps/web/src/workspaceQuick.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -3446,16 +3446,16 @@
       "reachableFromServer": true,
       "migrationImported": true,
       "tests": [
-        "wallet.test.js",
-        "moneyRequests.test.js"
+        "moneyRequests.test.js",
+        "wallet.test.js"
       ],
       "guiReferences": [
-        "apps/web/src/walletProvidersAdmin.js",
-        "apps/web/src/main.js",
-        "apps/web/src/telecomRefills.js",
-        "apps/web/src/moneyWorkspace.js",
         "apps/web/src/adminNavigation.js",
-        "apps/web/src/commerceOps.js"
+        "apps/web/src/commerceOps.js",
+        "apps/web/src/main.js",
+        "apps/web/src/moneyWorkspace.js",
+        "apps/web/src/telecomRefills.js",
+        "apps/web/src/walletProvidersAdmin.js"
       ],
       "liveAcceptance": "unverified"
     },
