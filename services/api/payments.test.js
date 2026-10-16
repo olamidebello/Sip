@@ -33,6 +33,6 @@ test('Stripe check uses a read-only server request and hides provider data',asyn
 });
 test('ordinary administrator cannot change or verify Stripe credentials',async()=>{
  for(const path of ['/api/admin/payments/gateway','/api/admin/payments/gateway/verify']){
- const result=await handlePaymentAdmin({req:{method:'POST'},res:{},path,user:{...user,role:'admin'},pool:{query:()=>{throw Error('database accessed');}},send});assert.equal(result.status,403);
+ const result=await handlePaymentAdmin({req:{method:'POST'},res:{},path,user:{...user,role:'admin'},pool:{query:async()=>({rows:[],rowCount:0})},send});assert.equal(result.status,403);
  }
 });

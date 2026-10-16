@@ -1,3 +1,4 @@
+import {storePolicy} from './marketplaceControl.js';
 import fs from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {allowed,catalogPolicy} from './catalogControl.js';
@@ -29,6 +30,9 @@ export async function handleProductStore({req,res,path,user,pool,send,readJson})
  const admin=path.startsWith('/api/admin/store');
  if(!user.features?.billing)return send(res,403,{error:'Billing unavailable'});
  if(admin&&!['admin','super_admin'].includes(user.role))return send(res,403,{error:'Administrator required'});
+ const policy=await storePolicy(pool,user.tenant_id);
+ if(policy&&(!policy.authorized||!policy.enabled)&&user.role!=='super_admin')return send(res,403,{error:'Store disabled by super administrator'});
+
  if(req.method!=='GET'&&!allowed(await catalogPolicy(pool,user.tenant_id),user,admin?'adminPlans':'planRequests'))return send(res,403,{error:'Catalog action disabled by tenant policy'});
  const root=admin?'/api/admin/store':'/api/store';
  if(path===root+'/products'&&req.method==='GET'){

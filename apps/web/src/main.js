@@ -1,3 +1,4 @@
+import {setupMarketplaceControl} from './marketplaceControl.js';
 import {setupDialIdentityInput,dialInputTarget} from './dialIdentityInput.js';
 import {callAddressLabel,callIdentityLabel} from './callIdentity.js';
 import {syncCarrierProfileForm} from './carrierProfileForm.js';
@@ -872,7 +873,7 @@ root.innerHTML = `
         <label><input name="confirmLive" type="checkbox"> Confirm live Stripe payments and reconciliation responsibility</label>
         <button>Save Stripe settings</button></form>
       <button id="stripe-verify" type="button" hidden>Verify Stripe connection</button>
-      <p>Super administrators control credentials and payment availability. Card issuance, wallet funding and withdrawals are not enabled by these settings.</p>
+      <p>Super administrators and explicitly authorized reseller administrators control their own store credentials and payment availability. Card issuance, wallet funding and withdrawals are not enabled by these settings.</p>
       <p><a href="https://dashboard.stripe.com/" target="_blank" rel="noopener noreferrer">Open Stripe Dashboard</a> · <a href="https://docs.stripe.com/issuing" target="_blank" rel="noopener noreferrer">Card issuing setup</a></p>
       <button id="stripe-refresh" type="button">Refresh gateway and payment attempts</button>
       <p id="stripe-status" role="status"></p><h4>Recent payment attempts</h4><ul id="stripe-attempts"></ul>
@@ -1303,6 +1304,7 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   return true;
 }
 function resetWorkspace() {
+  marketplaceControl.reset();
   subscriberDelivery.stop();
   contactDiscovery.stop();
   userActivity?.stop();
@@ -1441,6 +1443,7 @@ const socialLinks=setupSocialLinks({document,get:apiGet,request:accountRequest})
 const socialWorkspace=setupSocialWorkspace({document,get:apiGet,request:accountRequest});
 const moneyWorkspace=setupMoneyWorkspace({document,get:apiGet,request:accountRequest,show:showWorkspace});
 const productStore=setupProductStore({get:apiGet,request:accountRequest,refreshBilling});
+const marketplaceControl=setupMarketplaceControl({get:apiGet,request:accountRequest});
 const commerceOps=setupCommerceOps({get:apiGet,request:accountRequest});
 const serverFleet=setupServerFleetAdmin({get:apiGet,request:accountRequest});
 const fleetNetwork=setupFleetNetworkAdmin({get:apiGet,request:accountRequest});
@@ -1920,7 +1923,7 @@ function signedIn(user) {
   if(["admin","super_admin"].includes(user.role)){
     switchAdmin.refresh(user.role==="super_admin");
   }
-  if(["admin","super_admin"].includes(user.role)){commerceOps.refreshPayment();commerceOps.refreshCluster();}
+  if(["admin","super_admin"].includes(user.role)){commerceOps.refreshPayment();marketplaceControl.refresh();commerceOps.refreshCluster();}
   if(user.role==="super_admin") sipProfiles.refreshAdmin();
   $("#dialplan-marketplace").hidden=!user.features?.billing;
   $("#dialplan-admin-create").hidden=!['admin','super_admin'].includes(user.role);
@@ -2067,6 +2070,7 @@ async function refreshBilling() {
   }));
   $("#subscription").textContent = subscription.subscription
     ? `${subscription.subscription.name}: ${subscription.subscription.status}` : "No plan requested";
+  const storePayments=await apiGet('/api/marketplace/gateways').catch(()=>({providers:[]}));
   $("#invoices").replaceChildren(...invoices.invoices.map((invoice) => {
     const li = document.createElement("li");
     li.textContent = `${invoice.description}: ${money(invoice.amount_cents)} — ${invoice.status} `;
@@ -2077,8 +2081,24 @@ async function refreshBilling() {
         location.assign(dest.href);
       }catch(error){$('#checkout-status').textContent=error.message;button.disabled=false;}};li.append(button);
     }
+    if(invoice.status==='unpaid'&&Number(invoice.amount_cents)>0){
+      for(const provider of storePayments.providers){
+        const button=document.createElement('button');button.type='button';button.textContent='Pay with '+provider;
+        button.onclick=async()=>{button.disabled=true;try{const result=await accountRequest('/api/marketplace/checkout',{invoiceId:invoice.id,provider});
+          const dest=new URL(result.url),hosts={paystack:'checkout.paystack.com',flutterwave:'checkout.flutterwave.com'};
+          if(dest.protocol!=='https:'||dest.hostname!==hosts[provider]||dest.username||dest.password)throw Error('Invalid checkout destination');
+          location.assign(dest.href);
+        }catch(e){$('#checkout-status').textContent=e.message;button.disabled=false;}};li.append(button);
+      }
+    }
     return li;
   }));
+  const attempts=await apiGet('/api/marketplace/payment-attempts').catch(()=>({attempts:[]}));
+  for(const a of attempts.attempts.filter(a=>a.status!=='paid')){
+    const li=document.createElement('li');li.textContent=`${a.provider} payment ${a.id}: ${a.status} `;
+    const verify=document.createElement('button');verify.type='button';verify.textContent='Verify payment';
+    verify.onclick=async()=>{verify.disabled=true;try{await accountRequest('/api/marketplace/verify',{attemptId:a.id});$('#checkout-status').textContent='Payment verified.';await refreshBilling();}catch(e){$('#checkout-status').textContent=e.message;}finally{verify.disabled=false;}};li.append(verify);$('#invoices').append(li);
+  }
   $("#ports").replaceChildren(...ports.requests.map((request) => {
     const li = document.createElement("li");
     li.textContent = `${request.number_e164} → ${request.provider}: ${request.status}`;
