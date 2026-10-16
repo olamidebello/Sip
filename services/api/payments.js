@@ -1,3 +1,4 @@
+import {canManageGateway,storePolicy} from './marketplaceControl.js';
 import {randomUUID,randomBytes,createCipheriv,createDecipheriv,createHmac,timingSafeEqual} from 'node:crypto';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -48,7 +49,8 @@ export async function verifyStripeConnection(secret,fetchImpl=fetch){
 }
 export async function handlePaymentAdmin({req,res,path,user,pool,send,readJson,fetchImpl=fetch}){
   if(!['admin','super_admin'].includes(user.role))return send(res,403,{error:'Administrator required'});
-  if(req.method!=='GET'&&user.role!=='super_admin')return send(res,403,{error:'Super administrator required for Stripe changes'});
+  const editable=await canManageGateway(pool,user);
+  if(req.method!=='GET'&&!editable)return send(res,403,{error:'Store gateway administration not authorized'});
   if(path==='/api/admin/payments/gateway/verify'){
     if(req.method!=='POST')return send(res,405,{error:'POST required'});
     const row=await config(pool,user.tenant_id);
@@ -57,7 +59,7 @@ export async function handlePaymentAdmin({req,res,path,user,pool,send,readJson,f
     catch{return send(res,502,{error:'Stripe verification failed. Check API key, account permissions and network access.'});}
   }
   if(path==='/api/admin/payments/gateway'){
-    if(req.method==='GET')return send(res,200,{gateway:publicConfig(await config(pool,user.tenant_id)),editable:user.role==='super_admin',encryptionReady:!!key(),webhookUrl:`${process.env.PUBLIC_ORIGIN}/api/webhooks/stripe/${user.tenant_id}`});
+    if(req.method==='GET')return send(res,200,{gateway:publicConfig(await config(pool,user.tenant_id)),editable,encryptionReady:!!key(),webhookUrl:`${process.env.PUBLIC_ORIGIN}/api/webhooks/stripe/${user.tenant_id}`});
     if(req.method==='PUT'){
       const body=await readJson(req),current=await config(pool,user.tenant_id);
       if(typeof body.enabled!=='boolean'||!key()||
@@ -87,6 +89,8 @@ export async function handlePaymentCheckout({req,res,user,pool,send,readJson,ori
   if(!user.features?.billing)return send(res,403,{error:'Billing unavailable'});
   const {invoiceId}=await readJson(req);
   if(!uuid.test(invoiceId||''))return send(res,400,{error:'Valid invoice ID required'});
+  const policy=await storePolicy(pool,user.tenant_id);
+  if(policy&&(!policy.authorized||!policy.enabled))return send(res,403,{error:'Store disabled'});
   const gateway=await config(pool,user.tenant_id);
   if(!gateway?.enabled||!key())return send(res,503,{error:'Online payment unavailable'});
   const db=await pool.connect();let attempt,invoice;
@@ -96,8 +100,9 @@ export async function handlePaymentCheckout({req,res,user,pool,send,readJson,ori
     if(!invoice||invoice.status!=='unpaid'||invoice.amount_cents<1||invoice.currency!=='USD'){
       await db.query('ROLLBACK');return send(res,409,{error:'Unpaid USD invoice required'});
     }
-    const active=(await db.query("SELECT id,status,checkout_url,expires_at,created_at FROM payment_attempts WHERE invoice_id=$1 AND tenant_id=$2 AND status IN ('creating','open') ORDER BY created_at DESC LIMIT 1 FOR UPDATE",[invoiceId,user.tenant_id])).rows[0];
+    const active=(await db.query("SELECT id,provider,status,checkout_url,expires_at,created_at FROM payment_attempts WHERE invoice_id=$1 AND tenant_id=$2 AND status IN ('creating','open') ORDER BY created_at DESC LIMIT 1 FOR UPDATE",[invoiceId,user.tenant_id])).rows[0];
     if(active){
+      if(active.provider&&active.provider!=='stripe'){await db.query('ROLLBACK');return send(res,409,{error:'Verify the pending payment with its original gateway first'});}
       const expired=active.status==='open'&&active.expires_at&&new Date(active.expires_at).getTime()<=Date.now();
       const stalled=active.status==='creating'&&Date.now()-new Date(active.created_at).getTime()>120000;
       if(expired||stalled)await db.query("UPDATE payment_attempts SET status=$1 WHERE id=$2",[expired?'expired':'failed',active.id]);

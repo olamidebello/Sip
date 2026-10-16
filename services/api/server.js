@@ -1,3 +1,5 @@
+import {handleStoreGateways} from './storeGateways.js';
+import {handleMarketplaceControl} from './marketplaceControl.js';
 import {handleTelecomRefills} from './telecomRefills.js';
 import {handleTelecomAnalytics} from './telecomAnalytics.js';
 import {handleTelecomReports,startTelecomReports} from './telecomReports.js';
@@ -268,7 +270,7 @@ async function handler(req, res) {
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
         path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") || path.startsWith("/api/native-push/") ||
         path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path==="/api/admin/google-contacts" || path.startsWith("/api/dashboard") || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
-        path === "/api/admin/cdr" || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
+        path === "/api/admin/cdr" || path.startsWith('/api/marketplace/') || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
       if(path.startsWith('/api/softphone/scheduled'))return await handleScheduledCalls({req,res,path,user,pool,send,readJson});
@@ -295,6 +297,8 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/passkey-policy'))return await handlePasskeyPolicy({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/operations'))return await handleOperationsPolicy({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/wallet-providers')) return await handleWalletProviderAdmin({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/marketplace/')||path==='/api/admin/marketplace/gateways') return await handleStoreGateways({req,res,path,user,pool,send,readJson,origin});
+      if(path.startsWith('/api/admin/marketplace/')) return await handleMarketplaceControl({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/payments/')) return await handlePaymentAdmin({req,res,path,user,pool,send,readJson});
       if(path==='/api/payments/checkout'&&req.method==='POST') return await handlePaymentCheckout({req,res,user,pool,send,readJson,origin});
       if(path.startsWith('/api/admin/provider-webhooks')) return await handleProviderWebhookAdmin({req,res,path,user,pool,send,readJson,origin});

@@ -1,3 +1,5 @@
+import {migrateStoreGateways} from './storeGateways.js';
+import {migrateMarketplaceControl} from './marketplaceControl.js';
 import {migrateTelecomRefills} from './telecomRefills.js';
 import {migrateTelecomReports} from './telecomReports.js';
 import {migrateTelecomPolicies} from './telecomPolicies.js';
@@ -92,7 +94,9 @@ export async function migrate(pool) {
       ['kamailio_accounts', () => migrateKamailioAccounts(pool)],
       ['sip_call_access', () => migrateCallAccessView(pool)],
       ['sip_profiles', () => migrateSipProfiles(pool)],
+      ['marketplace_control', () => migrateMarketplaceControl(pool)],
       ['payments', () => migratePayments(pool)],
+      ['store_gateways', () => migrateStoreGateways(pool)],
       ['product_store', () => migrateProductStore(pool)],
       ['cluster', () => migrateCluster(pool)],
       ['provider_webhooks', () => migrateProviderWebhooks(pool)],
