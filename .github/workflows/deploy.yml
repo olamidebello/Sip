@@ -33,7 +33,10 @@ jobs:
           python3 -m py_compile deployment/production/runtime-secrets.py deployment/production/release.py deployment/production/check-public.py
           sudo apt-get update
           sudo apt-get install -y ansible
-          bash -n deployment/deploy-marketplace.sh
+          bash -n deployment/deploy-marketplace.sh deployment/deploy-module-rollout.sh
+          python3 tools/audit_application_modules.py --check
+          python3 -m unittest tools/test_application_audit.py
+          ansible-playbook --syntax-check -i deploy/ansible/user-login.local.yml deploy/ansible/module-rollout.yml
           ansible-playbook --syntax-check -i deploy/ansible/user-login.local.yml deploy/ansible/marketplace.yml
           python3 -m unittest tools/test_astpp_commissioning_check.py tools/test_kamailio_cleanup.py
           python3 -m unittest discover -s services/carrier-adapter -p 'test_*.py'

@@ -1,3 +1,4 @@
+import {setupModuleReadiness} from './moduleReadiness.js';
 import {setupMarketplaceControl} from './marketplaceControl.js';
 import {setupDialIdentityInput,dialInputTarget} from './dialIdentityInput.js';
 import {callAddressLabel,callIdentityLabel} from './callIdentity.js';
@@ -400,12 +401,15 @@ root.innerHTML = `
     <form id="outbound-rate-search"><label>Destination digits <input name="prefix" inputmode="numeric" pattern="[0-9]{1,15}" placeholder="12065551234" required></label><button>Find rate</button></form>
     <p id="outbound-rate-result" role="status"></p>
   </section>
-  <section id="product-store" hidden><h2>Olamide products &amp; services</h2>
+  <section id="product-store" hidden><h2 id="marketplace-store-name">Olamide products &amp; services</h2><nav aria-label="Marketplace navigation"><a href="/#product-store">Shop products</a> · <a href="/#marketplace-my-orders">My orders and subscriptions</a> · <a href="/#billing">Invoices and payments</a> · <a href="/#support">Store support</a></nav>
     <p>Purchase products or subscribe to services. Subscriptions create monthly, quarterly or annual invoices payable through Billing; automatic card debits are not enabled. Payment and service delivery are tracked separately.</p>
     <label>Search <input id="store-search" type="search"></label><label>Category <select id="store-category"></select></label><button id="store-refresh" type="button">Refresh catalog</button>
-    <p id="store-status" role="status"></p><div id="store-products"></div><h3>My orders &amp; subscriptions</h3><ul id="store-orders"></ul>
+    <p id="store-status" role="status"></p><div id="store-products"></div><section id="marketplace-my-orders"><h3>My orders &amp; subscriptions</h3><ul id="store-orders"></ul><a href="/#billing">Pay an invoice</a></section>
   </section>
-  <section id="product-store-admin" hidden><h2>Product catalog management</h2>
+  <section id="product-store-admin" hidden><h2>Product catalog management</h2><details><summary>Create a product or subscription</summary><form id="store-product-create">
+ <label>SKU <input name="sku" required maxlength="40" pattern="[A-Za-z0-9][A-Za-z0-9._-]{0,39}"></label><label>Name <input name="name" required maxlength="180"></label><label>Category <input name="category" required maxlength="100"></label><label>Description <textarea name="description" maxlength="4000" required></textarea></label><label>Service terms <textarea name="terms" maxlength="4000"></textarea></label>
+ <label>Billing <select name="billing"><option value="one_time">One-time</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select></label>
+ <label>Customer price (USD cents) <input name="sellingCents" type="number" min="0" max="100000000" required></label><label>Reseller reference price (USD cents) <input name="resellerCents" type="number" min="0" max="100000000" required></label><label>Setup price (USD cents) <input name="setupCents" type="number" min="0" max="100000000" value="0" required></label><button>Create draft product</button></form></details>
     <p>Reference prices come from the August 2010 product list. Import creates drafts. Review current costs, availability, fulfillment and terms before publishing. Existing edits survive re-import. Recurring renewal prices are fixed at purchase; cancellation stops future invoices.</p>
     <button id="store-import-reference" type="button">Import 177 reference products</button><button id="store-admin-refresh" type="button">Refresh products &amp; orders</button><p id="store-admin-status" role="status"></p>
     <label>Search products <input id="store-admin-search" type="search"></label>
@@ -416,7 +420,7 @@ root.innerHTML = `
     <button id="store-import-template" type="button">Download CSV template</button><label>Product file <input id="store-import-file" type="file" accept=".csv,.json,text/csv,application/json"></label>
     <button id="store-import-preview" type="button">Preview import</button><label><input id="store-import-all" type="checkbox"> Select all import rows</label><span id="store-import-count" role="status"></span>
     <ul id="store-import-rows"></ul><button id="store-import-selected" type="button" disabled>Import selected products</button>
-    <div id="store-admin-products"></div><h3>Order commissioning &amp; delivery</h3><ul id="store-admin-orders"></ul>
+    <div id="store-admin-products"></div><section id="marketplace-orders-admin"><h3>Order commissioning &amp; delivery</h3><ul id="store-admin-orders"></ul></section>
   </section>
 
   <section id="social" hidden aria-label="Social platform">
@@ -865,7 +869,7 @@ root.innerHTML = `
       <p id="group-status" role="status"></p>
     </section>
     <section id="payment-admin">
-      <h3>Stripe management</h3><p>Tenant scoped Stripe Checkout for existing USD invoices. Enter a secret API key and webhook signing secret. Stored credentials are encrypted; existing values are never shown again.</p>
+      <section id="marketplace-stripe-admin"><h3>Stripe management</h3><p>Tenant scoped Stripe Checkout for existing USD invoices. Enter a secret API key and webhook signing secret. Stored credentials are encrypted; existing values are never shown again.</p>
       <p>Webhook URL: <code id="stripe-webhook-url"></code></p>
       <form id="stripe-settings" hidden><label>Stripe secret key <input name="secretKey" type="password" autocomplete="off" placeholder="Leave blank to keep existing"></label>
         <label>Webhook signing secret <input name="webhookSecret" type="password" autocomplete="off" placeholder="Leave blank to keep existing"></label>
@@ -876,7 +880,7 @@ root.innerHTML = `
       <p>Super administrators and explicitly authorized reseller administrators control their own store credentials and payment availability. Card issuance, wallet funding and withdrawals are not enabled by these settings.</p>
       <p><a href="https://dashboard.stripe.com/" target="_blank" rel="noopener noreferrer">Open Stripe Dashboard</a> · <a href="https://docs.stripe.com/issuing" target="_blank" rel="noopener noreferrer">Card issuing setup</a></p>
       <button id="stripe-refresh" type="button">Refresh gateway and payment attempts</button>
-      <p id="stripe-status" role="status"></p><h4>Recent payment attempts</h4><ul id="stripe-attempts"></ul>
+      <p id="stripe-status" role="status"></p><h4>Recent payment attempts</h4><ul id="stripe-attempts"></ul></section>
     </section>
     <section id="cluster-admin">
       <h3>API capacity</h3><p id="cluster-summary"></p>
@@ -1265,8 +1269,13 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   document.body.classList.toggle('money-mode',target==='money');
   if(target==='social'){void socialWorkspace.refresh();void socialLinks.refresh();void socialPublishing.refresh();}
   if(target==='money')void moneyWorkspace.refresh();
+  if(['product-store','marketplace-my-orders'].includes(target))void productStore.refresh();
+  if(['product-store-admin','marketplace-orders-admin'].includes(target))void productStore.refreshAdmin();
+  if(target==='payment-admin'||target.startsWith('marketplace-')&&target!=='marketplace-my-orders')void marketplaceControl.refresh();
+  if(target==='marketplace-stripe-admin')void commerceOps.refreshPayment();
+  if(target==='billing')void refreshBilling().catch(error=>{if(document?.querySelector('#billing-status'))$('#billing-status').textContent=error.message;});
   if(target==='carrier-console')void carrierConsole.refresh();
-  if(target==='telecom-features-admin')void telecomFeatureWorkspace.refresh();
+  if(target==='telecom-features-admin'){void telecomFeatureWorkspace.refresh();if(activeRole==='super_admin')void moduleReadiness.refresh();}
   if(advancedTelecomIds.has(target)){void advancedTelecomWorkspace.refresh(target);void telecomPoliciesWorkspace.refresh(target);void telecomReportsWorkspace.refresh(target);}
   if(target==='telecom-feature-core-refills')void telecomRefillsWorkspace.refresh();
   if(target==='telecom-feature-core-call-types'||target==='telecom-feature-core-rate-groups')void tariffCatalogWorkspace.refresh(target);
@@ -1305,6 +1314,8 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
 }
 function resetWorkspace() {
   marketplaceControl.reset();
+  productStore.stop();
+  moduleReadiness.stop();
   subscriberDelivery.stop();
   contactDiscovery.stop();
   userActivity?.stop();
@@ -1443,6 +1454,7 @@ const socialLinks=setupSocialLinks({document,get:apiGet,request:accountRequest})
 const socialWorkspace=setupSocialWorkspace({document,get:apiGet,request:accountRequest});
 const moneyWorkspace=setupMoneyWorkspace({document,get:apiGet,request:accountRequest,show:showWorkspace});
 const productStore=setupProductStore({get:apiGet,request:accountRequest,refreshBilling});
+const moduleReadiness=setupModuleReadiness({document,get:apiGet,request:accountRequest});
 const marketplaceControl=setupMarketplaceControl({get:apiGet,request:accountRequest});
 const commerceOps=setupCommerceOps({get:apiGet,request:accountRequest});
 const serverFleet=setupServerFleetAdmin({get:apiGet,request:accountRequest});

@@ -16,9 +16,9 @@ export async function migrateStoreGateways(pool){
  environment VARCHAR(12) NOT NULL,ciphertext BLOB NOT NULL,updated_by CHAR(36) NOT NULL,
  PRIMARY KEY(tenant_id,provider),FOREIGN KEY(tenant_id) REFERENCES tenants(id),FOREIGN KEY(updated_by) REFERENCES users(id)) ENGINE=InnoDB`);
 }
-async function gateway(pool,tenant,provider){
+async function gateway(pool,tenant,provider,{allowDisabled=false}={}){
  const row=(await pool.query('SELECT enabled,environment,ciphertext FROM store_gateways WHERE tenant_id=$1 AND provider=$2',[tenant,provider])).rows[0];
- if(!row||!row.enabled||!key())return null;
+ if(!row||(!row.enabled&&!allowDisabled)||!key())return null;
  return {...unseal(row.ciphertext,key(),tenant,provider),environment:row.environment};
 }
 async function api(provider,path,secret,body,fetchImpl){
@@ -99,24 +99,31 @@ export async function handleStoreGateways({req,res,path,user,pool,send,readJson,
   const a=(await pool.query('SELECT * FROM payment_attempts WHERE id=$1 AND tenant_id=$2 AND user_id=$3',[b.attemptId,user.tenant_id,user.id])).rows[0];
   if(!a||!['paystack','flutterwave'].includes(a.provider))return send(res,404,{error:'Payment attempt unavailable'});
   if(a.status==='paid')return send(res,200,{status:'paid'});
-  const g=await gateway(pool,user.tenant_id,a.provider);if(!g)return send(res,503,{error:'Gateway unavailable'});
-  let data;try{data=await api(a.provider,a.provider==='paystack'?'/transaction/verify/'+a.id:'/transactions/verify_by_reference?tx_ref='+a.id,g.secretKey,null,fetchImpl);}catch{return send(res,502,{error:'Verification unavailable; payment remains pending'});}
-  if(!matchesPayment(a,data))return send(res,409,{error:'Payment pending or reconciliation mismatch'});
-  const db=await pool.connect();try{
-   await db.query('START TRANSACTION');
-   const invoice=(await db.query('SELECT status,amount_cents,currency FROM invoices WHERE id=$1 AND user_id=$2 FOR UPDATE',[a.invoice_id,user.id])).rows[0];
-   if(!invoice||invoice.status==='void'||invoice.amount_cents!==a.amount_cents||invoice.currency!==a.currency){await db.query('ROLLBACK');return send(res,409,{error:'Invoice reconciliation mismatch'});}
-   const current=(await db.query('SELECT status FROM payment_attempts WHERE id=$1 AND tenant_id=$2 FOR UPDATE',[a.id,user.tenant_id])).rows[0];
-   if(current?.status==='paid'){await db.query('COMMIT');return send(res,200,{status:'paid'});}
-   if(invoice.status==='paid'){await db.query('ROLLBACK');return send(res,409,{error:'Invoice already paid; review duplicate transaction before reconciliation'});}
-   await db.query("UPDATE payment_attempts SET status='paid',session_id=$1 WHERE id=$2 AND tenant_id=$3",[a.provider+':'+data.id,a.id,user.tenant_id]);
-   await db.query("UPDATE invoices SET status='paid' WHERE id=$1 AND user_id=$2 AND status='unpaid'",[a.invoice_id,user.id]);
-   await db.query('COMMIT');return send(res,200,{status:'paid'});
-  }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
+  const result=await reconcileStorePayment(pool,a,{fetchImpl});return send(res,result.status,result.body);
  }
  return send(res,404,{error:'Gateway route unavailable'});
 }
 export function matchesPayment(a,d){
+ if(!d||typeof d!=='object')return false;
  const amount=a.provider==='paystack'?Number(d.amount):Math.round(Number(d.amount)*100);
  return (a.provider==='paystack'?d.status==='success'&&d.reference===a.id:d.status==='successful'&&d.tx_ref===a.id)&&amount===a.amount_cents&&d.currency===a.currency&&d.id!=null;
+}
+
+export async function reconcileStorePayment(pool,a,{fetchImpl=fetch}={}){
+ const result=(status,body)=>({status,body});
+ if(a.status==='paid')return result(200,{status:'paid'});
+  const g=await gateway(pool,a.tenant_id,a.provider,{allowDisabled:true});if(!g)return result(503,{error:'Gateway unavailable'});
+  let data;try{data=await api(a.provider,a.provider==='paystack'?'/transaction/verify/'+a.id:'/transactions/verify_by_reference?tx_ref='+a.id,g.secretKey,null,fetchImpl);}catch{return result(502,{error:'Verification unavailable; payment remains pending'});}
+  if(!matchesPayment(a,data))return result(409,{error:'Payment pending or reconciliation mismatch'});
+  const db=await pool.connect();try{
+   await db.query('START TRANSACTION');
+   const invoice=(await db.query('SELECT status,amount_cents,currency FROM invoices WHERE id=$1 AND user_id=$2 FOR UPDATE',[a.invoice_id,a.user_id])).rows[0];
+   if(!invoice||invoice.status==='void'||invoice.amount_cents!==a.amount_cents||invoice.currency!==a.currency){await db.query('ROLLBACK');return result(409,{error:'Invoice reconciliation mismatch'});}
+   const current=(await db.query('SELECT status FROM payment_attempts WHERE id=$1 AND tenant_id=$2 FOR UPDATE',[a.id,a.tenant_id])).rows[0];
+   if(current?.status==='paid'){await db.query('COMMIT');return result(200,{status:'paid'});}
+   if(invoice.status==='paid'){await db.query('ROLLBACK');return result(409,{error:'Invoice already paid; review duplicate transaction before reconciliation'});}
+   await db.query("UPDATE payment_attempts SET status='paid',session_id=$1 WHERE id=$2 AND tenant_id=$3",[a.provider+':'+data.id,a.id,a.tenant_id]);
+   await db.query("UPDATE invoices SET status='paid' WHERE id=$1 AND user_id=$2 AND status='unpaid'",[a.invoice_id,a.user_id]);
+   await db.query('COMMIT');return result(200,{status:'paid'});
+  }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
 }

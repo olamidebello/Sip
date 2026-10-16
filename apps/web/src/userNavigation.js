@@ -1,7 +1,8 @@
 export const userNavigationGroups=[
  {label:'Chats & contacts',items:[['chat','Chats'],['contact-directory','Find & import contacts'],['messenger-groups','Groups & communities'],['messenger-updates','Status updates'],['messenger-broadcast','Broadcast lists'],['messenger-starred','Starred messages'],['external-sms','Text messages']]},
  {label:'Calls & meetings',items:[['calling-workspace','Calls & dialpad'],['meetings','Video meetings'],['outbound-rates','Calling rates'],['geo','Calling area'],['agent-panel','Call center']]},
- {label:'Money & services',items:[['money','Send & request money'],['billing','Plans, numbers & billing'],['product-store','Products & services'],['dialplan-marketplace','Dial plan marketplace']]},
+ {label:'Money & services',items:[['money','Send & request money'],['billing','Plans, numbers & billing'],['dialplan-marketplace','Dial plan marketplace']]},
+ {label:'Marketplace',items:[['product-store','Shop products & services'],['marketplace-my-orders','My orders & subscriptions']]},
  {label:'Social & daily tools',items:[['social','Social feed'],['dashboard','Dashboard'],['campaign-inbox-panel','Announcements'],['planner','Events & tasks'],['search-panel','Search']]},
  {label:'Account & preferences',items:[['messenger-settings','Messenger settings'],['account','Account & security'],['contact-presence-settings','Privacy & presence'],['messenger-sessions','Linked devices'],['messenger-storage','Storage & data'],['locale-settings','Language, country & currency'],['background-user','Appearance'],['messenger-accessibility','Accessibility'],['activity-monitor','Activity monitor']]},
  {label:'Help & downloads',items:[['support','Support tickets'],['help','Help & tutorials'],['downloads','Download apps']]}

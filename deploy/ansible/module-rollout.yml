@@ -1,0 +1,31 @@
+---
+- name: Check the complete source module inventory before release deployment
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Require current generated module evidence
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/audit_application_modules.py, --check]
+      changed_when: false
+- name: Install prerequisites, build application and apply every registered migration
+  ansible.builtin.import_playbook: marketplace.yml
+- name: Verify application modules and report real external prerequisites
+  hosts: switch_nodes
+  become: true
+  tasks:
+    - name: Verify every registered application schema component
+      ansible.builtin.command:
+        argv: [docker, compose, --env-file, /etc/olamide/secrets.env, exec, '-T', api, node, moduleReadiness.js]
+        chdir: /opt/olamide/repo/deployment/docker
+      changed_when: false
+      register: module_readiness
+    - name: Read host and provider prerequisites without revealing secrets
+      ansible.builtin.command:
+        argv: [python3, /opt/olamide/repo/tools/telecom_requirements.py]
+      changed_when: false
+      register: module_requirements
+    - name: Report schema verification and remaining service commissioning
+      ansible.builtin.debug:
+        msg:
+          - '{{ module_readiness.stdout | from_json }}'
+          - '{{ module_requirements.stdout | from_json }}'
