@@ -35,6 +35,20 @@ export async function handleProductStore({req,res,path,user,pool,send,readJson})
 
  if(req.method!=='GET'&&!allowed(await catalogPolicy(pool,user.tenant_id),user,admin?'adminPlans':'planRequests'))return send(res,403,{error:'Catalog action disabled by tenant policy'});
  const root=admin?'/api/admin/store':'/api/store';
+ if(!admin&&path==='/api/store/info'&&req.method==='GET'){
+  const tenant=(await pool.query('SELECT name FROM tenants WHERE id=$1',[user.tenant_id])).rows[0];
+  return send(res,200,{name:policy?.name||tenant?.name||'Olamide marketplace',currency:'USD'});
+ }
+ if(admin&&path===root+'/products'&&req.method==='POST'){
+  const b=await readJson(req);
+  if(!validateProduct(b)||!validSku(b.sku)||typeof b.category!=='string'||!b.category.trim()||b.category.length>100)return send(res,400,{error:'Valid SKU, category, product fields and prices required'});
+  const db=await pool.connect();try{
+   await db.query('START TRANSACTION');
+   await db.query(`INSERT INTO store_products(tenant_id,sku,name,category,description,terms,billing,selling_cents,reseller_cents,setup_cents,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,[user.tenant_id,b.sku,b.name.trim(),b.category.trim(),b.description,b.terms,b.billing,b.sellingCents,b.resellerCents,b.setupCents,b.status]);
+   await db.query("INSERT INTO security_events(id,tenant_id,actor_id,action) VALUES($1,$2,$3,'store_product_created')",[randomUUID(),user.tenant_id,user.id]);
+   await db.query('COMMIT');return send(res,201,{sku:b.sku,status:b.status});
+  }catch(e){await db.query('ROLLBACK');if(e.code==='ER_DUP_ENTRY')return send(res,409,{error:'SKU already exists in this store'});throw e;}finally{db.release();}
+ }
  if(path===root+'/products'&&req.method==='GET'){
   const fields=admin?'*':'sku,name,category,description,terms,billing,selling_cents,setup_cents,status,revision';
   const rows=await pool.query(`SELECT ${fields} FROM store_products WHERE tenant_id=$1 ${admin?'':"AND status='published'"} ORDER BY category,name`,[user.tenant_id]);

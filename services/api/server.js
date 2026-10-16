@@ -1,3 +1,6 @@
+import {handleModuleAudit} from './moduleAudit.js';
+import {handleCdrArchives,startCdrArchives} from './cdrArchive.js';
+import {handlePaymentReconciliation,startPaymentReconciliation} from './paymentReconciliation.js';
 import {handleStoreGateways} from './storeGateways.js';
 import {handleMarketplaceControl} from './marketplaceControl.js';
 import {handleTelecomRefills} from './telecomRefills.js';
@@ -297,6 +300,8 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/passkey-policy'))return await handlePasskeyPolicy({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/operations'))return await handleOperationsPolicy({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/wallet-providers')) return await handleWalletProviderAdmin({req,res,path,user,pool,send,readJson});
+      if(path==='/api/admin/marketplace/reconciliation') return await handlePaymentReconciliation({req,res,user,pool,send});
+      if(path.startsWith('/api/admin/telecom/archives')) return await handleCdrArchives({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/marketplace/')||path==='/api/admin/marketplace/gateways') return await handleStoreGateways({req,res,path,user,pool,send,readJson,origin});
       if(path.startsWith('/api/admin/marketplace/')) return await handleMarketplaceControl({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/payments/')) return await handlePaymentAdmin({req,res,path,user,pool,send,readJson});
@@ -334,6 +339,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/telecom/policies/'))return await handleTelecomPolicies({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/tariff-catalog/'))return await handleTariffCatalog({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/telecom/resources/'))return await handleTelecomResources({req,res,path,user,pool,send});
+      if(path==='/api/admin/telecom/module-audit')return await handleModuleAudit({req,res,user,pool,send});
       if(path==='/api/admin/telecom/features')return await handleTelecomFeatures({req,res,user,send});
       if(path==='/api/admin/charging/overview') return await handleCharging({req,res,user,pool,send});
       if (path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales")
@@ -825,6 +831,8 @@ await migrate(pool);
 await migratePstnBilling(pool);
 const kamailioHttpBridge=startKamailioHttpBridge(pool);
 const stopTelecomReports=startTelecomReports(pool);
+const stopCdrArchives=startCdrArchives(pool);
+const stopPaymentReconciliation=startPaymentReconciliation(pool);
 const stopSipProvisioning=startSipProvisioning(pool,origin);
 const stopMessageExpiry=startMessageExpiry(pool);
 const stopSubscriberEmail=startSubscriberEmail(pool);
@@ -837,6 +845,8 @@ const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
 server.on("close",stopSubscriberEmail);
 server.on("close",stopTelecomReports);
+server.on("close",stopCdrArchives);
+server.on("close",stopPaymentReconciliation);
 server.on("close",stopSipProvisioning);
 server.on("close",()=>kamailioHttpBridge?.close());
 server.on("close",stopNativePush);

@@ -46,7 +46,7 @@
     "group": "Monitoring & reports",
     "target": "telecom-feature-automated-cdrs",
     "implementation": "partial",
-    "detail": "Durable scheduled CDR summaries are implemented. Complete scheduled raw CDR exports and archive pipelines remain pending.",
+    "detail": "Scheduled bounded raw CDR CSV.gz archives and summary reports are implemented. Archives retain originals, enforce tenant isolation and include SHA-256 checksums. External cold storage and continuous full-history archival remain pending.",
     "endpoint": "/api/admin/telecom/reports"
   },
   {
@@ -324,16 +324,16 @@
     "name": "Resellers & commissions",
     "group": "Accounts & security",
     "target": "tenant-admin",
-    "implementation": "not_implemented",
-    "detail": "Tenant roles exist; hierarchical reseller rating, commissions and provider portals are incomplete."
+    "implementation": "partial",
+    "detail": "Authorized tenant reseller stores, catalogs, orders and delegated payment gateway management are implemented. Hierarchical carrier rating, commissions and provider portals remain incomplete."
   },
   {
     "id": "archive",
     "name": "Archive, purge & cron",
     "group": "Monitoring & reports",
-    "target": null,
-    "implementation": "not_implemented",
-    "detail": "Retention/archive workers and scheduled job administration are incomplete."
+    "target": "telecom-features-admin",
+    "implementation": "partial",
+    "detail": "Tenant-scoped manual and scheduled compressed CDR archives, authenticated downloads and archive-copy removal are implemented. Automatic original-record retention/deletion and external cold storage are not implemented."
   },
   {
     "id": "n8n",

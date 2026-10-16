@@ -20,6 +20,13 @@ export async function canManageGateway(pool,user){
 }
 export async function handleMarketplaceControl({req,res,path,user,pool,send,readJson}){
  if(!['admin','super_admin'].includes(user.role))return send(res,403,{error:'Administrator required'});
+ if(path==='/api/admin/marketplace/overview'&&req.method==='GET'){
+  const [products,orders,policy]=await Promise.all([
+   pool.query('SELECT status,COUNT(*) AS count FROM store_products WHERE tenant_id=$1 GROUP BY status',[user.tenant_id]),
+   pool.query('SELECT o.status,i.status AS payment_status,COUNT(*) AS count,COALESCE(SUM(i.amount_cents),0) AS total_cents FROM store_orders o JOIN invoices i ON i.id=o.invoice_id WHERE o.tenant_id=$1 GROUP BY o.status,i.status',[user.tenant_id]),
+   storePolicy(pool,user.tenant_id)]);
+  return send(res,200,{tenantId:user.tenant_id,store:policy,products:products.rows,orders:orders.rows,currency:'USD',note:'Initial order invoice totals only. Renewal invoices, provider settlement and refunds are separate.'});
+ }
  if(path==='/api/admin/marketplace/stores'&&req.method==='GET'){
   const r=await pool.query(`SELECT t.id,t.name AS tenant_name,t.slug,s.authorized,s.enabled,s.gateway_admin,s.name FROM tenants t LEFT JOIN marketplace_stores s ON s.tenant_id=t.id ${user.role==='super_admin'?'':'WHERE t.id=$1'} ORDER BY t.name`,user.role==='super_admin'?[]:[user.tenant_id]);
   return send(res,200,{stores:r.rows,editable:user.role==='super_admin',recommendedPlans});

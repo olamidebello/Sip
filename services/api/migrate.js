@@ -1,3 +1,5 @@
+import {migrateCdrArchives} from './cdrArchive.js';
+import {migratePaymentReconciliation} from './paymentReconciliation.js';
 import {migrateStoreGateways} from './storeGateways.js';
 import {migrateMarketplaceControl} from './marketplaceControl.js';
 import {migrateTelecomRefills} from './telecomRefills.js';
@@ -96,6 +98,7 @@ export async function migrate(pool) {
       ['sip_profiles', () => migrateSipProfiles(pool)],
       ['marketplace_control', () => migrateMarketplaceControl(pool)],
       ['payments', () => migratePayments(pool)],
+      ['payment_reconciliation', () => migratePaymentReconciliation(pool)],
       ['store_gateways', () => migrateStoreGateways(pool)],
       ['product_store', () => migrateProductStore(pool)],
       ['cluster', () => migrateCluster(pool)],
@@ -115,6 +118,7 @@ export async function migrate(pool) {
       ['messaging_webhooks', () => migrateMessagingWebhooks(pool)],
       ['flowroute_rates', () => migrateFlowrouteRates(pool)],
       ['cdr', () => pool.initialize(awaitSql.cdr)],
+      ['cdr_archives', () => migrateCdrArchives(pool)],
       ['dids', () => pool.initialize(awaitSql.dids)],
       ['nigeria', () => pool.initialize(awaitSql.nigeria)],
       ['conversations', () => migrateConversations(pool)],

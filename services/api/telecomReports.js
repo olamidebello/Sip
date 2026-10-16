@@ -31,7 +31,7 @@ export async function handleTelecomReports({req,res,path,user,pool,send,readJson
 export async function enqueueDueReport(pool){
  const db=await pool.connect();try{
   await db.query('START TRANSACTION');
-  const schedule=(await db.query("SELECT s.* FROM telecom_report_schedules s JOIN users u ON u.id=s.actor_id AND u.tenant_id=s.tenant_id JOIN tenants t ON t.id=s.tenant_id WHERE s.enabled=TRUE AND s.next_at<=UTC_TIMESTAMP(3) AND u.status='active' AND u.role='super_admin' AND t.status='active' ORDER BY s.next_at,s.id LIMIT 1 FOR UPDATE SKIP LOCKED")).rows[0];
+  const schedule=(await db.query("SELECT s.* FROM telecom_report_schedules s JOIN users u ON u.id=s.actor_id JOIN tenants home ON home.id=u.tenant_id AND home.status='active' JOIN tenants t ON t.id=s.tenant_id WHERE s.enabled=TRUE AND s.next_at<=UTC_TIMESTAMP(3) AND u.status='active' AND u.role='super_admin' AND t.status='active' ORDER BY s.next_at,s.id LIMIT 1 FOR UPDATE SKIP LOCKED")).rows[0];
   if(!schedule){await db.query('COMMIT');return false;}
   await db.query('INSERT IGNORE INTO telecom_report_runs(id,schedule_id,tenant_id,due_at) VALUES($1,$2,$3,$4)',[randomUUID(),schedule.id,schedule.tenant_id,schedule.next_at]);
   await db.query('UPDATE telecom_report_schedules SET next_at=DATE_ADD(UTC_TIMESTAMP(3),INTERVAL interval_hours HOUR),revision=revision+1 WHERE id=$1',[schedule.id]);await db.query('COMMIT');return true;
@@ -47,7 +47,7 @@ export async function processReportRun(pool,{fetchImpl=fetch,now=new Date()}={})
  }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
  const update=(status,providerId=null)=>pool.query('UPDATE telecom_report_runs SET status=$1,provider_id=$2 WHERE id=$3 AND lease_token=$4',[status,providerId,job.id,job.token]);
  try{
-  const actor=(await pool.query("SELECT u.email FROM users u JOIN tenants t ON t.id=u.tenant_id JOIN telecom_report_schedules s ON s.actor_id=u.id AND s.tenant_id=u.tenant_id WHERE s.id=$1 AND s.enabled=TRUE AND u.id=$2 AND u.tenant_id=$3 AND u.role='super_admin' AND u.status='active' AND t.status='active'",[job.schedule_id,job.actor_id,job.tenant_id])).rows[0];
+  const actor=(await pool.query("SELECT u.email FROM users u JOIN tenants home ON home.id=u.tenant_id AND home.status='active' JOIN telecom_report_schedules s ON s.actor_id=u.id JOIN tenants t ON t.id=s.tenant_id WHERE s.id=$1 AND s.enabled=TRUE AND u.id=$2 AND s.tenant_id=$3 AND u.role='super_admin' AND u.status='active' AND t.status='active'",[job.schedule_id,job.actor_id,job.tenant_id])).rows[0];
   if(!actor||now-new Date(job.created_at)>23*3600000){await update('cancelled');return true;}
   let payload=typeof job.payload==='string'?JSON.parse(job.payload):job.payload;
   if(!payload){const end=new Date(new Date(job.due_at).getTime()-86400000).toISOString().slice(0,10),from=new Date(Date.parse(end+'T00:00:00Z')-(Number(job.lookback_days)-1)*86400000).toISOString().slice(0,10);payload=await collectReport(pool,job.tenant_id,reportRange(new URLSearchParams({from,to:end})));await pool.query('UPDATE telecom_report_runs SET payload=$1 WHERE id=$2 AND lease_token=$3',[JSON.stringify(payload),job.id,job.token]);}
