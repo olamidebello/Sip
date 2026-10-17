@@ -61,7 +61,7 @@ API source modules: 124. Application feature entries: 86. Kamailio entries: 266.
 | messagePrivacy | True | True | messagePrivacy.test.js | handleViewOnce, startMessageExpiry |
 | messagingWebhooks | True | True | messagingWebhooks.test.js | handleFlowrouteWebhook, handleMessagingWebhookAdmin, handleExternalSms, handleSmsNumberAdmin |
 | messengerFeatures | True | True | messengerFeatures.test.js | handleMessengerFeatures |
-| messengerPreferences | True | True | messengerPreferences.test.js | handleMessengerPreferences |
+| messengerPreferences | True | True | messengerPreferences.test.js, profilePhoto.test.js | handleMessengerPreferences, handleProfilePhoto |
 | migrate | True | False | moduleRollout.integration.test.js, storeGateways.integration.test.js, tariffCatalog.integration.test.js, telecomModules.integration.test.js | library / CLI / no direct reference |
 | mobileAdmin | True | False | mobileAdmin.test.js | handleMobileAdmin |
 | moduleAudit | True | False | moduleAudit.test.js | handleModuleAudit |
@@ -220,6 +220,7 @@ API source modules: 124. Application feature entries: 86. Kamailio entries: 266.
 | apps/web/src/pricing.js | web | unverified |
 | apps/web/src/productImport.js | web | unverified |
 | apps/web/src/productStore.js | web | unverified |
+| apps/web/src/profilePhoto.js | web | unverified |
 | apps/web/src/providerCredentialsAdmin.js | web | unverified |
 | apps/web/src/providerWebhookAdmin.js | web | unverified |
 | apps/web/src/reports.js | web | unverified |
