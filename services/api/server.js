@@ -18,7 +18,7 @@ import {handleContactDiscovery} from './contactDiscovery.js';
 import {handleSubscriberSettings,deliverSubscriberSms,startSubscriberEmail} from './subscriberDelivery.js';
 import {handleSubscriberRouting,startSubscriberDelivery} from './subscriberRouting.js';
 import {handleViewOnce,startMessageExpiry} from './messagePrivacy.js';
-import {handleMessengerPreferences} from './messengerPreferences.js';
+import {handleMessengerPreferences,handleProfilePhoto} from './messengerPreferences.js';
 import {handleScheduledCalls} from './scheduledCalls.js';
 import {handleNavigationPolicy} from './navigationPolicy.js';
 import {createProxyClientResolver,createRequestLimiter,requestLimitRule} from './requestLimits.js';
@@ -282,6 +282,7 @@ async function handler(req, res) {
       if(path==='/api/account/subscriber-delivery'||path==='/api/account/subscriber-registration')return await handleSubscriberSettings({req,res,path,user,pool,send,readJson,sessionHash:tokenHash(currentToken(req))});
       if(path==='/api/messenger/privacy/capabilities'&&req.method==='GET')return send(res,200,{directDisappearing:!!user.features?.messaging,directViewOnce:!!user.features?.messaging,endToEndEncryption:false,nativeBackupSync:false});
       if(/^\/api\/messenger\/messages\/[0-9a-f-]{36}\/open$/.test(path))return await handleViewOnce({req,res,path,user,pool,send});
+      if(path==='/api/account/photo')return await handleProfilePhoto({req,res,user,pool,send,readJson});
       if(path==='/api/messenger/preferences')return await handleMessengerPreferences({req,res,user,pool,send,readJson});
       if(path.startsWith('/api/messenger/')||path.startsWith('/api/account/sessions'))return await handleMessengerFeatures({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin),sessionHash:tokenHash(currentToken(req)),closeSessions:hashes=>meetingSignaling?.closeSessions(hashes)});
       if(path.startsWith('/api/admin/user-sessions'))return await handleSessionPolicy({req,res,path,user,pool,send,readJson,closeSessions:hashes=>meetingSignaling?.closeSessions(hashes)});
