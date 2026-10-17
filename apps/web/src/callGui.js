@@ -54,6 +54,17 @@ export function setupCallGui({document,openVideo,openAudio=()=>{}}) {
   document.addEventListener('keydown',keyboardTones);
   const toggle=document.createElement('button');toggle.type='button';toggle.className='call-keypad-toggle';toggle.textContent='Keypad';toggle.setAttribute('aria-expanded','false');toggle.onclick=()=>{keypad.hidden=!keypad.hidden;toggle.setAttribute('aria-expanded',String(!keypad.hidden));active.classList.toggle('call-keypad-open',!keypad.hidden);};active.querySelector('.call-controls').prepend(toggle);
   const audio=document.createElement('button');audio.type='button';audio.className='call-audio-output';audio.textContent='Audio output';audio.onclick=openAudio;active.querySelector('.call-controls').prepend(audio);
+  const tray=active.querySelector('.call-controls');
+  const decorate=(b,g,label)=>{b.innerHTML=icon(g)+`<span>${label}</span>`;b.setAttribute('aria-label',label);};
+  decorate(audio,'devices','Speaker');audio.setAttribute('aria-label','Speaker and audio output settings');
+  const mute=document.getElementById('mute');if(mute)decorate(mute,'mic','Mute');
+  const hangup=document.getElementById('hangup');decorate(hangup,'calls','End');
+  const meetingAction=(label,g)=>{const b=document.createElement('button');b.type='button';decorate(b,g,label);b.setAttribute('aria-label',label+' — open separate video meeting invitation');b.title='Open a separate video meeting invitation';b.onclick=()=>{active.classList.add('call-minimized');const m=active.querySelector('.call-minimize');m.textContent='Expand call';m.setAttribute('aria-expanded','false');openVideo();};return b;};
+  const participant=meetingAction('Add participant','people');participant.className='call-add-participant';active.append(participant);
+  const extras=document.createElement('div');extras.className='call-more-actions';extras.id='call-more-actions';extras.hidden=true;
+  const hold=document.getElementById('hold');if(hold)extras.append(hold);extras.append(toggle);active.append(extras);
+  const more=document.createElement('button');more.type='button';decorate(more,'more','More');more.setAttribute('aria-expanded','false');more.setAttribute('aria-controls',extras.id);more.onclick=()=>{extras.hidden=!extras.hidden;more.setAttribute('aria-expanded',String(!extras.hidden));};
+  tray.append(audio,meetingAction('Video','video'));if(mute)tray.append(mute);tray.append(more,meetingAction('Share','send'),hangup);
   function controls(connected){for(const b of [document.getElementById('hold'),document.getElementById('mute'),toggle,...keypad.querySelectorAll('button')])if(b)b.disabled=!connected;}
   controls(false);
   const live=document.getElementById('meeting-live');
@@ -71,7 +82,7 @@ export function setupCallGui({document,openVideo,openAudio=()=>{}}) {
     held(value){captions[1].textContent=value?'On hold':'Connected';},
     active(value){
       clearInterval(timer);timer=undefined;active.classList.remove('call-minimized');incoming.classList.remove('call-minimized');
-      controls(value);resetTones();keypad.hidden=true;active.classList.remove('call-keypad-open');toggle.setAttribute('aria-expanded','false');
+      controls(value);resetTones();extras.hidden=true;more.setAttribute('aria-expanded','false');keypad.hidden=true;active.classList.remove('call-keypad-open');toggle.setAttribute('aria-expanded','false');
       if(value){captions[1].textContent='Connected';incoming.hidden=true;started=Date.now();const tick=()=>{const seconds=Math.floor((Date.now()-started)/1000);duration.textContent=`${Math.floor(seconds/60).toString().padStart(2,'0')}:${(seconds%60).toString().padStart(2,'0')}`;};tick();timer=setInterval(tick,1000);}
       else duration.textContent='';
     },
