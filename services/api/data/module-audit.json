@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.",
   "summary": {
-    "clientSourceModules": 122,
+    "clientSourceModules": 123,
     "apiSourceModules": 124,
     "applicationFeatures": 86,
     "featureStates": {
@@ -426,6 +426,11 @@
     },
     {
       "source": "apps/web/src/productStore.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/profilePhoto.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -1832,19 +1837,22 @@
     {
       "id": "messengerPreferences",
       "source": "services/api/messengerPreferences.js",
-      "sha256": "895aa63d1892f146a3921b56e8015d3d79ff91977674402863528af72086a370",
+      "sha256": "51fd2a65d0b86f470557e6a69deb1faa91c6a2768e7041b9e7969c9cf5054754",
       "exportedHandlers": [
-        "handleMessengerPreferences"
+        "handleMessengerPreferences",
+        "handleProfilePhoto"
       ],
       "serverReferencedHandlers": [
-        "handleMessengerPreferences"
+        "handleMessengerPreferences",
+        "handleProfilePhoto"
       ],
       "exportedWorkers": [],
       "serverStartedWorkers": [],
       "reachableFromServer": true,
       "migrationImported": true,
       "tests": [
-        "messengerPreferences.test.js"
+        "messengerPreferences.test.js",
+        "profilePhoto.test.js"
       ],
       "guiReferences": [
         "apps/web/src/main.js"
@@ -2603,7 +2611,7 @@
     {
       "id": "server",
       "source": "services/api/server.js",
-      "sha256": "b07510add7648177f78931c403088d0d7ab4060e89afab0dd67ea114e00c56d6",
+      "sha256": "5e5851d9e143b8fcf94ef67d680ebb71051cea8d74d09612d1e080e7a692c0c3",
       "exportedHandlers": [],
       "serverReferencedHandlers": [],
       "exportedWorkers": [],
@@ -3380,6 +3388,7 @@
         "apps/web/src/pricing.js",
         "apps/web/src/productImport.js",
         "apps/web/src/productStore.js",
+        "apps/web/src/profilePhoto.js",
         "apps/web/src/providerCredentialsAdmin.js",
         "apps/web/src/providerWebhookAdmin.js",
         "apps/web/src/reports.js",
