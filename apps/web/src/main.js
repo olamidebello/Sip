@@ -1,3 +1,4 @@
+import {setupCallSounds} from './callSounds.js';
 import {setupSecureChat} from './secureChatUi.js';
 import {createAdaptiveAudio} from './adaptiveAudio.js';
 import {setupServiceCountries} from './serviceCountriesUi.js';
@@ -1496,7 +1497,7 @@ const operatorAdmin=setupOperatorControl();
 const switchAdmin=setupKamailioAdmin();
 const mobileAdmin = setupMobileAdmin();
 const tenantAdmin = setupTenants();
-const callsScreen=setupCallsScreen({document,get:apiGet,request:accountRequest,show:showWorkspace,retryConnection:()=>autoSip.wake(),canRedial:()=>!!lastDialedTarget,connected:()=>sipRegistered&&!!phone?.isConnected(),dial:address=>{dialForm.elements.target.value=address;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));dialForm.requestSubmit();}});
+const callsScreen=setupCallsScreen({document,onPanel:mode=>callSounds.panel(mode),get:apiGet,request:accountRequest,show:showWorkspace,retryConnection:()=>autoSip.wake(),canRedial:()=>!!lastDialedTarget,connected:()=>sipRegistered&&!!phone?.isConnected(),dial:address=>{dialForm.elements.target.value=address;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));dialForm.requestSubmit();}});
 const messengerPreferences=setupMessengerPreferences({document,get:apiGet,request:accountRequest});
 const sessionAdmin=setupSessionAdmin(document);
 navigationPolicy=setupNavigationPolicy({document,get:apiGet,request:accountRequest,changed:()=>{updateNavigation();chatComposer?.refresh();if(activeRole&&!adminTarget(activeView)&&!navigationAllowed(activeView))showWorkspace(userHome(),{historyMode:'replace'});}});
@@ -1515,6 +1516,7 @@ const authProviders = setupAuthProviders();
 const catalogControl = setupCatalogControl();
 setupInstall();
 const outgoingRingback=createRingback();
+const callSounds=setupCallSounds({document,canDial:()=>sipRegistered&&!!phone?.isConnected(),busy:()=>onCall||!!currentCall});
 window.addEventListener("pagehide",()=>outgoingRingback.stop());
 dialForm.addEventListener("submit",()=>outgoingRingback.arm(),{capture:true});
 const locationStatus=document.createElement('aside');locationStatus.id='location-access-status';locationStatus.setAttribute('role','status');locationStatus.hidden=true;
@@ -1615,7 +1617,7 @@ $("#clear-calls").onclick = async () => {
   catch(error) {report(error);}
 };
 function finishCall(result) {
-  outgoingRingback.stop();
+  outgoingRingback.stop();callSounds.stop();
   if (!currentCall) return;
   recentCalls.unshift({ ...currentCall, result, at: new Date().toISOString() });
   recentCalls = recentCalls.slice(0, 50);
@@ -2647,7 +2649,7 @@ const autoSip=createAutoSipRegistration({
   },
   async disconnect(){sipConnectionGeneration++;if(phone){const current=phone;phone=undefined;sipRegistered=false;if(onCall)await current.hangup().catch(()=>{});await current.unregister().catch(()=>{});await current.disconnect().catch(()=>{});callState(false);connectForm.hidden=connectForm.dataset.canEdit!=='true';dialForm.hidden=false;$('#disconnect').hidden=true;}}
 });
-const nativeCalls=createNativeCallClient({plugin:()=>window.Capacitor?.Plugins?.NativePush,wake:()=>autoSip.wake(),currentCall:()=>({callId:currentCall?.sipCallId}),answer:()=>{if(!phone)throw new Error('SIP connection pending');return phone.answer();},end:()=>onCall?phone?.hangup():phone?.decline(),onError:report});
+const nativeCalls=createNativeCallClient({plugin:()=>window.Capacitor?.Plugins?.NativePush,wake:()=>autoSip.wake(),currentCall:()=>({callId:currentCall?.sipCallId}),answer:()=>{callSounds.stop();if(!phone)throw new Error('SIP connection pending');return phone.answer();},end:()=>{callSounds.stop();return onCall?phone?.hangup():phone?.decline();},onError:report});
 window.addEventListener('online',()=>{autoSip.wake();if(softphoneUserId)void nativePush.start();});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')autoSip.wake();});
 window.addEventListener('pagehide',()=>{void autoSip.stop();});
@@ -2656,9 +2658,9 @@ fetch("/api/me", { credentials: "same-origin" })
   .then(async (response) => response.ok ? signedIn(await response.json()) : undefined)
   .catch(() => { $("#account-status").textContent = "Account service unavailable"; });
 
-function status(message) { callsScreen.connectionStatus(message);$("#status").textContent = message;const badge=$('#communication-status');if(badge)badge.textContent=message; }
+function status(message) { callsScreen.connectionStatus(message);callSounds.refresh();$("#status").textContent = message;const badge=$('#communication-status');if(badge)badge.textContent=message; }
 function callState(active) {
-  outgoingRingback.stop();
+  outgoingRingback.stop();callSounds.stop();
   onCall = active;
   callGui.active(active);
   const nativeCall=window.Capacitor?.Plugins?.NativePush;
@@ -2712,12 +2714,13 @@ async function registerSip(data,shouldContinue=()=>true) {
           finishCall("declined (do not disturb)");
           return;
         }
+        outgoingRingback.stop();
         void nativeCalls.incoming(currentCall.sipCallId).catch(report);
-        const incomingCall=currentCall;callGui.number(incomingCall.address);callGui.identity(callAddressLabel(incomingCall.address));void registeredCallLabel(incomingCall.address).then(label=>{if(currentCall===incomingCall)callGui.identity(label);});callsScreen.stop();callGui.incoming(); showWorkspace("calling-workspace"); status("Incoming call");
+        const incomingCall=currentCall;callGui.number(incomingCall.address);callGui.identity(callAddressLabel(incomingCall.address));void registeredCallLabel(incomingCall.address).then(label=>{if(currentCall===incomingCall)callGui.identity(label);});callsScreen.stop();callGui.incoming(); showWorkspace("calling-workspace"); callSounds.incoming();status("Incoming call");
       },
       onCallAnswered: () => { void nativeCalls.connected(currentCall?.sipCallId).catch(report); if (currentCall) currentCall.answered = true; showWorkspace("calling-workspace"); callState(true); status("Call connected"); },
       onCallHangup: () => { void nativeCalls.ended(currentCall?.sipCallId).catch(report); finishCall(currentCall?.answered ? "completed" : "missed or unanswered"); callState(false); status("Call ended"); },
-      onServerDisconnect: () => {outgoingRingback.stop();if(!current())return;sipRegistered=false;void subscriberDelivery.wake();status("Connection lost. Reconnecting…");autoSip.dropped();},
+      onServerDisconnect: () => {outgoingRingback.stop();callSounds.stop();if(!current())return;sipRegistered=false;void subscriberDelivery.wake();status("Connection lost. Reconnecting…");autoSip.dropped();},
       onRegistered: () => {if(current()){sipRegistered=true;void subscriberDelivery.wake();status("Registered");}},
       onUnregistered: () => {if(!current())return;sipRegistered=false;void subscriberDelivery.wake();status("SIP registration lost. Reconnecting…");autoSip.dropped();}
     }
@@ -2784,11 +2787,11 @@ dialForm.addEventListener("submit", async (event) => {
     await phone.call(authorizedTarget,{earlyMedia:true,extraHeaders:locationMonitor.current().proof?['X-Olamide-Location-Proof: '+locationMonitor.current().proof]:[]},{requestDelegate:{
       onProgress:response=>{
         const code=response.message.statusCode;
-        if(code===183&&response.message.body){carrierEarlyMedia=true;outgoingRingback.stop();}
+        if(code===183&&response.message.body){carrierEarlyMedia=true;outgoingRingback.stop();callSounds.stop();}
         else if(code===180&&!carrierEarlyMedia)outgoingRingback.start();
       },
       onAccept:()=>outgoingRingback.stop(),
-      onReject:response=>{outgoingRingback.stop();finishCall('failed');callState(false);status('Call rejected: '+response.message.statusCode+' '+(response.message.reasonPhrase||''));}
+      onReject:response=>{outgoingRingback.stop();callSounds.stop();finishCall('failed');callState(false);status('Call rejected: '+response.message.statusCode+' '+(response.message.reasonPhrase||''));}
     }}); }
   catch (error) { finishCall("failed");callState(false); report(error); }
   } finally {dialing=false;}
@@ -2798,9 +2801,9 @@ $("#check-location").onclick = async () => {
   const result = await locationMonitor.ensure();
   $("#geo-result").textContent = result.reason;
 };
-$("#answer").onclick = async () => { try { await phone?.answer(); } catch (error) { report(error); } };
-$("#reject").onclick = async () => { try { await phone?.decline(); finishCall("declined"); } catch (error) { report(error); } };
-$("#hangup").onclick = async () => { outgoingRingback.stop(); try { await phone?.hangup(); } catch (error) { report(error); } };
+$("#answer").onclick = async () => { callSounds.stop();try { await phone?.answer(); } catch (error) { report(error); } };
+$("#reject").onclick = async () => { callSounds.stop();try { await phone?.decline(); finishCall("declined"); } catch (error) { report(error); } };
+$("#hangup").onclick = async () => { outgoingRingback.stop();callSounds.stop(); try { await phone?.hangup(); } catch (error) { report(error); } };
 $("#hold").onclick = async () => {
   if (!phone || !onCall) return;
   try {
@@ -2823,7 +2826,7 @@ $("#send-tone").onclick = async () => {
   try { await phone.sendDTMF(tone); $("#tone").value = ""; } catch (error) { report(error); }
 };
 $("#disconnect").onclick = async () => {
-  outgoingRingback.stop();
+  outgoingRingback.stop();callSounds.stop();
   await autoSip.stop();
   if (!phone) return;
   try {
