@@ -1,3 +1,4 @@
+import {customerText,customerProvider} from './customerBrand.js';
 import {setupPlatformWatchdog} from './platformWatchdogUi.js';
 import {setupDidShop} from './didShopUi.js';
 import {setupProfileLanding} from './profileLanding.js';
@@ -148,7 +149,7 @@ root.innerHTML = `
     <section id="help-faq"><h3>Frequently asked questions</h3>
       <details><summary>How do I register and sign in?</summary><p>Choose Create an account in the Sign in menu, enter your details, type the password twice, and complete the CAPTCHA. Your account is created immediately. Return to Sign in with your email or assigned username.</p></details>
       <details><summary>How do I make a call?</summary><p>Open Dialer, enter the secure SIP WebSocket server and your provisioned SIP account, connect, and dial an allowed number. Your administrator must activate the account on a real switch.</p></details>
-      <details><summary>Why can I not send an external text?</summary><p>Your administrator must assign an SMS enabled Flowroute number, set a daily allowance, and configure the carrier account. Check Communications → Text messages for your sender.</p></details>
+      <details><summary>Why can I not send an external text?</summary><p>Your administrator must assign an SMS enabled Olamide number, set a daily allowance, and configure the carrier account. Check Communications → Text messages for your sender.</p></details>
       <details><summary>How do I buy a number or plan?</summary><p>Open Plans, numbers & billing. Requests create an invoice; payment, number assignment and carrier activation need operational review.</p></details>
       <details><summary>What does biometric sign in do?</summary><p>Passkeys use a device fingerprint, face, or PIN check. Your device keeps the private key; Olamide stores a public key.</p></details>
       <details><summary>Where can I get technical help?</summary><p>Sign in and open Support tickets. The AI support guide is available when your administrator configures it.</p></details>
@@ -187,7 +188,7 @@ root.innerHTML = `
     <h2>Welcome to Olamide</h2>
     <p>Registration creates an active account and SIP identity immediately. Calling needs an activated switch account; no number or plan is assigned at signup.</p>
     <p id="signin-role-help">Your assigned role controls which menus appear after sign-in.</p>
-    <section id="signed-in-profile" hidden><h3>My profile</h3><label>Name <input id="profile-name" readonly></label><label>Email <input id="profile-email" readonly></label></section>
+    <section id="signed-in-profile" hidden><h3>My profile</h3><button id="profile-marketplace" type="button" aria-expanded="false" aria-controls="profile-marketplace-actions">Market place</button><div id="profile-marketplace-actions" hidden><button id="profile-phone-numbers" type="button">Phone numbers</button><button id="profile-rate-check" type="button">Rate check</button></div><label>Name <input id="profile-name" readonly></label><label>Email <input id="profile-email" readonly></label></section>
     <nav class="auth-pages" aria-label="Account pages"><a href="/pages/login">Sign in</a><a href="/pages/signup">Register</a><a href="/pages/ldap-login">Directory sign in</a></nav>
     <form id="signup">
       <h3>Create an account</h3><p>Review our <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a> and <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> before registering.</p>
@@ -400,7 +401,7 @@ root.innerHTML = `
     <p id="chat-status" role="status"></p>
   </section>
   <section id="external-sms" hidden>
-    <h2>Text messages</h2><p>Send SMS to external mobile numbers using an assigned, messaging-enabled Flowroute number. Carrier delivery and fees depend on the provider. Ask your administrator to assign a sender and daily allowance.</p>
+    <h2>Text messages</h2><p>Send SMS to external mobile numbers using an assigned, messaging-enabled Olamide number. Carrier delivery and fees depend on the provider. Ask your administrator to assign a sender and daily allowance.</p>
     <button id="sms-refresh" type="button">Refresh inbox and sent</button>
     <form id="sms-send"><h3>New text</h3>
       <label>From <select name="from" id="sms-senders" required></select></label>
@@ -410,7 +411,7 @@ root.innerHTML = `
     <details><summary>Subscriber SMS and call routing</summary><p>Copies use your verified profile email and SIP chat. Calls use SIP when the subscriber opts in and is registered online. Carrier SMS delivery still applies.</p><form id="subscriber-routing"><label><input type="checkbox" name="sms_to_email"> Copy incoming SMS to email</label><label><input type="checkbox" name="sms_to_chat"> Copy incoming SMS to SIP chat</label><label><input type="checkbox" name="prefer_online_sip"> Prefer online SIP subscribers for number calls</label><label><input type="checkbox" name="receive_number_sip_calls"> Accept number calls on SIP</label><button>Save controls</button></form><button id="routing-refresh" type="button">Reload routing</button><button id="routing-email-code" type="button">Send email verification code</button><form id="routing-verify"><label>Email code <input name="code" inputmode="numeric" pattern="[0-9]{6}" required></label><button>Verify</button></form><p id="routing-status" role="status"></p><h3>SMS in SIP chat</h3><div id="routing-chat"></div></details><p id="sms-status" role="status"></p><h3>Inbox</h3><div id="sms-inbox"></div><h3>Sent</h3><div id="sms-sent"></div>
   </section>
   <section id="outbound-rates" hidden><h2>Outbound calling rates</h2>
-    <p>Look up the current Flowroute customer rate by destination digits. Prices are USD per minute; this is a rate quote, not a live call charge.</p>
+    <p>Look up the current Olamide customer rate by destination digits. Prices are USD per minute; this is a rate quote, not a live call charge.</p>
     <form id="outbound-rate-search"><label>Destination digits <input name="prefix" inputmode="numeric" pattern="[0-9]{1,15}" placeholder="12065551234" required></label><button>Find rate</button></form>
     <p id="outbound-rate-result" role="status"></p>
   </section>
@@ -475,20 +476,20 @@ root.innerHTML = `
     <ul id="wallet-entries"></ul><p id="wallet-status" role="status"></p>
     <h3>Available numbers</h3>
     <label>Provider <select id="number-provider">
-      <option value="inhouse">In-house</option><option value="flowroute">Flowroute</option><option value="didww">DIDWW</option>
+      <option value="inhouse">In-house</option><option value="flowroute">Olamide</option><option value="didww">DIDWW</option>
     </select></label>
-    <label>Number search (prefix for Flowroute; contains for DIDWW) <input id="number-prefix" placeholder="+23420315"></label>
+    <label>Number search (prefix for Olamide; contains for DIDWW) <input id="number-prefix" placeholder="+23420315"></label>
     <button id="search-numbers" type="button">Search numbers</button>
-    <p>Flowroute and DIDWW prices include a 30% increase on provider USD costs. Orders charge setup plus the first month. Availability is checked at submission; carrier purchase and activation require fulfillment review.</p>
+    <p>Olamide and DIDWW prices include a 30% increase on provider USD costs. Orders charge setup plus the first month. Availability is checked at submission; carrier purchase and activation require fulfillment review.</p>
     <label><input id="did-order-terms" type="checkbox"> I accept the displayed setup and monthly prices and understand this is a request pending carrier fulfillment, not an activated DID.</label>
-    <button id="next-numbers" type="button" hidden>Next Flowroute results</button>
+    <button id="next-numbers" type="button" hidden>Next Olamide results</button>
     <ul id="numbers"></ul>
     <h3>My number requests</h3><ul id="my-numbers"></ul><ul id="provider-requests"></ul>
     <h3>Port a number</h3>
     <p>This creates a draft request for review; it does not submit a carrier port.</p>
     <form id="port-form">
       <label>Number (E.164) <input name="number" placeholder="+12125550123" required></label>
-      <label>Destination provider <select name="provider"><option value="flowroute">Flowroute</option>
+      <label>Destination provider <select name="provider"><option value="flowroute">Olamide</option>
         <option value="didww">DIDWW</option></select></label>
       <button>Create draft</button>
     </form>
@@ -1397,7 +1398,6 @@ function updateNavigation() {
     }
     details.append(links);groups.append(details);
   }
-  const phoneNumbers=document.createElement("button");phoneNumbers.type="button";phoneNumbers.className="nav-phone-numbers";phoneNumbers.textContent="Phone numbers";phoneNumbers.onclick=()=>didShopUi.open();nav.append(phoneNumbers);
   const signout=document.createElement("button");signout.type="button";signout.className="nav-signout";signout.textContent="Sign out";signout.onclick=()=>$("#logout").click();nav.append(signout);
   const quickMenu=document.createElement("details");quickMenu.className="menu-group locale-menu";
   const quickTitle=document.createElement("summary");quickTitle.textContent="Language & currency";quickMenu.append(quickTitle);
@@ -1464,6 +1464,9 @@ localeSettings=setupLocaleSettings({get:path=>apiGet(path),request:(path,body,me
 const serviceCountryUi=setupServiceCountries({document,get:apiGet,request:accountRequest,onSaved:async()=>{await localeSettings.refresh(activeRole==='super_admin'||activeRole==='admin');await locationMonitor.ensure();}});
 const platformWatchdog=setupPlatformWatchdog({document,get:apiGet,request:accountRequest});
 const didShopUi=setupDidShop({document,get:apiGet,request:accountRequest,show:showWorkspace});
+$('#profile-marketplace').onclick=()=>{const actions=$('#profile-marketplace-actions');actions.hidden=!actions.hidden;$('#profile-marketplace').setAttribute('aria-expanded',String(!actions.hidden));};
+$('#profile-phone-numbers').onclick=()=>didShopUi.open();
+$('#profile-rate-check').onclick=()=>{if(showWorkspace('outbound-rates')!==false)$('#outbound-rate-search input').focus();};
 const profileLanding=setupProfileLanding({document,get:apiGet,show:showWorkspace,onComplete:async()=>{showWorkspace(userHome(),{historyMode:'replace'});pageRoutes.render();}});
 const secureChatUi=setupSecureChat({document,get:apiGet,request:accountRequest});
 const adaptiveAudio=createAdaptiveAudio({onStatus:value=>{let label=$('#adaptive-audio-status');if(!label){label=document.createElement('p');label.id='adaptive-audio-status';label.setAttribute('role','status');$('#status').after(label);}label.textContent=value.mode+(value.codec?' · '+value.codec:'')+(value.targetBitrate?' · '+Math.round(value.targetBitrate/1000)+' kbps target':'')+(Number.isFinite(value.availableKbps)?' · estimated available '+Math.round(value.availableKbps)+' kbps':'')+(Number.isFinite(value.loss)?' · loss '+Math.round(value.loss*100)+'%':'');}});
@@ -1710,13 +1713,13 @@ async function accountRequest(path, body, method="POST") {
     body: JSON.stringify(body)
   });
   const data = await response.json();
-  if (!response.ok) {const error=new Error(data.error || "Account request failed");error.status=response.status;error.code=data.code;const retry=Number(response.headers.get('Retry-After')||data.retryAfter);if(Number.isFinite(retry)&&retry>0)error.retryAfter=retry;throw error;}
+  if (!response.ok) {const error=new Error(["admin","super_admin"].includes(activeRole)?data.error||"Account request failed":customerText(data.error||"Account request failed"));error.status=response.status;error.code=data.code;const retry=Number(response.headers.get('Retry-After')||data.retryAfter);if(Number.isFinite(retry)&&retry>0)error.retryAfter=retry;throw error;}
   return data;
 }
 async function apiGet(path) {
   const response = await fetch(path, { credentials: "same-origin" });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Request failed");
+  if (!response.ok) throw new Error(["admin","super_admin"].includes(activeRole)?data.error||"Request failed":customerText(data.error||"Request failed"));
   return data;
 }
 async function refreshCdr() {
@@ -2097,7 +2100,7 @@ async function loadPlans() {
   for (const plan of plans) {
     const option = document.createElement("option");
     option.value = plan.id;
-    option.textContent = `${plan.name} — ${money(plan.monthly_cents)}/month: ${plan.description}`;
+    option.textContent = `${customerText(plan.name)} — ${money(plan.monthly_cents)}/month: ${customerText(plan.description)}`;
     list.append(option);
   }
 }
@@ -2121,7 +2124,7 @@ async function refreshCatalogAdmin() {
   }
   $("#admin-did-requests").replaceChildren(...didData.requests.map(request=>{
     const item=document.createElement("li");
-    item.textContent=`${request.email}: ${request.number_e164} (${request.provider}) — ${request.status}; invoice ${request.invoice_status||"none"}; setup ${money(request.setup_cents)}, monthly ${money(request.monthly_cents)}`;
+    item.textContent=`${request.email}: ${request.number_e164} (${customerProvider(request.provider)}) — ${request.status}; invoice ${request.invoice_status||"none"}; setup ${money(request.setup_cents)}, monthly ${money(request.monthly_cents)}`;
     return item;
   }));
 }
@@ -2142,7 +2145,7 @@ async function refreshBilling() {
   const storePayments=await apiGet('/api/marketplace/gateways').catch(()=>({providers:[]}));
   $("#invoices").replaceChildren(...invoices.invoices.map((invoice) => {
     const li = document.createElement("li");
-    li.textContent = `${invoice.description}: ${money(invoice.amount_cents)} — ${invoice.status} `;
+    li.textContent = `${customerText(invoice.description)}: ${money(invoice.amount_cents)} — ${invoice.status} `;
     if(invoice.status==='unpaid'&&invoice.currency==='USD'&&Number(invoice.amount_cents)>0){
       const button=document.createElement('button');button.type='button';button.textContent='Pay with Stripe';
       button.onclick=async()=>{button.disabled=true;try{const result=await accountRequest('/api/payments/checkout',{invoiceId:invoice.id});
@@ -2170,7 +2173,7 @@ async function refreshBilling() {
   }
   $("#ports").replaceChildren(...ports.requests.map((request) => {
     const li = document.createElement("li");
-    li.textContent = `${request.number_e164} → ${request.provider}: ${request.status}`;
+    li.textContent = `${request.number_e164} → ${customerProvider(request.provider)}: ${request.status}`;
     return li;
   }));
 }
@@ -2198,7 +2201,7 @@ async function refreshMyNumbers() {
   }));
   $("#provider-requests").replaceChildren(...requests.map(request=>{
     const item=document.createElement("li");
-    item.textContent=`${request.number_e164} (${request.provider}): ${request.status}; invoice ${request.invoice_status||"none"}; no carrier order placed`;
+    item.textContent=`${request.number_e164} (${customerProvider(request.provider)}): ${request.status}; invoice ${request.invoice_status||"none"}; no carrier order placed`;
     return item;
   }));
 }
@@ -2682,7 +2685,7 @@ fetch("/api/me", { credentials: "same-origin" })
   .then(async (response) => response.ok ? signedIn(await response.json()) : undefined)
   .catch(() => { $("#account-status").textContent = "Account service unavailable"; });
 
-function status(message) { callsScreen.connectionStatus(message);callSounds.refresh();$("#status").textContent = message;const badge=$('#communication-status');if(badge)badge.textContent=message; }
+function status(message) { message=customerText(message); callsScreen.connectionStatus(message);callSounds.refresh();$("#status").textContent = message;const badge=$('#communication-status');if(badge)badge.textContent=message; }
 function callState(active) {
   outgoingRingback.stop();callSounds.stop();
   onCall = active;
@@ -2952,7 +2955,7 @@ $('#flowroute-rate-import').onsubmit=async event=>{
 $('#outbound-rate-search').onsubmit=async event=>{
   event.preventDefault();const prefix=event.currentTarget.elements.prefix.value;
   try{const {rate}=await apiGet('/api/rates/flowroute/search?prefix='+encodeURIComponent(prefix));
-    $('#outbound-rate-result').textContent=rate?`${rate.destination} · +${rate.prefix} · $${rate.price_usd_per_minute}/minute · ${rate.first_interval}s first, ${rate.sub_interval}s thereafter`:'No active Flowroute rate for this destination.';
+    $('#outbound-rate-result').textContent=rate?`${rate.destination} · +${rate.prefix} · $${rate.price_usd_per_minute}/minute · ${rate.first_interval}s first, ${rate.sub_interval}s thereafter`:'No active Olamide rate for this destination.';
   }catch(error){$('#outbound-rate-result').textContent=error.message;}
 };
 
