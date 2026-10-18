@@ -11,7 +11,7 @@ def patch(source, token):
     if len(re.findall(r'\brequest_route\s*\{',source))!=1:raise ValueError('Expected one request route')
     hook='''
     # Trusted carrier requests use DID ownership, never the authenticated outbound billing path.
-    if (is_method("INVITE") && !has_totag() && (src_ip == 34.210.91.112/28 || src_ip == 34.226.36.32/28)) {
+    if (is_method("INVITE") && ($tt == $null || $tt == "") && (src_ip == 34.210.91.112/28 || src_ip == 34.226.36.32/28)) {
         route(OLAMIDE_FLOWROUTE_INBOUND); exit;
     }
 '''
