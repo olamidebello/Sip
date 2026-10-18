@@ -88,110 +88,28 @@
       argv: '{{ did_compose + ["config", "--quiet"] }}'
     changed_when: false
     no_log: true
-  - name: Identify current API image
+  - name: Test recovery image reconstruction
     ansible.builtin.command:
       argv:
-      - docker
-      - inspect
-      - --format
-      - '{{ "{{.Image}}" }}'
-      - docker-api-1
+      - python3
+      - /opt/olamide/repo/deployment/ansible/backup-running-image.test.py
     changed_when: false
-    register: did_old_api
-  - name: Check whether running API image still exists
+  - name: Preserve api recovery image and verify layer content
     ansible.builtin.command:
       argv:
-      - docker
-      - image
-      - inspect
-      - --format
-      - '{{ "{{.Id}}" }}'
-      - '{{ did_old_api.stdout }}'
-    register: did_old_api_available
-    changed_when: false
-    failed_when: false
-  - name: Keep previous API image for recovery
-    ansible.builtin.command:
-      argv:
-      - docker
-      - tag
-      - '{{ did_old_api.stdout }}'
-      - olamide-api:before-did-{{ did_stamp }}
-    changed_when: false
-    when: did_old_api_available.rc == 0
-  - name: Snapshot running API container when original image was removed
-    ansible.builtin.command:
-      argv:
-      - docker
-      - commit
-      - --pause=false
+      - python3
+      - /opt/olamide/repo/deployment/ansible/backup-running-image.py
       - docker-api-1
       - olamide-api:before-did-{{ did_stamp }}
-    when: did_old_api_available.rc != 0
     changed_when: true
-    no_log: true
-  - name: Verify API recovery image before building
+  - name: Preserve web recovery image and verify layer content
     ansible.builtin.command:
       argv:
-      - docker
-      - image
-      - inspect
-      - --format
-      - '{{ "{{.Id}}" }}'
-      - olamide-api:before-did-{{ did_stamp }}
-    changed_when: false
-  - name: Identify current web image
-    ansible.builtin.command:
-      argv:
-      - docker
-      - inspect
-      - --format
-      - '{{ "{{.Image}}" }}'
-      - docker-web-1
-    changed_when: false
-    register: did_old_web
-  - name: Check whether running web image still exists
-    ansible.builtin.command:
-      argv:
-      - docker
-      - image
-      - inspect
-      - --format
-      - '{{ "{{.Id}}" }}'
-      - '{{ did_old_web.stdout }}'
-    register: did_old_web_available
-    changed_when: false
-    failed_when: false
-  - name: Keep previous web image for recovery
-    ansible.builtin.command:
-      argv:
-      - docker
-      - tag
-      - '{{ did_old_web.stdout }}'
-      - olamide-web:before-did-{{ did_stamp }}
-    changed_when: false
-    when: did_old_web_available.rc == 0
-  - name: Snapshot running web container when original image was removed
-    ansible.builtin.command:
-      argv:
-      - docker
-      - commit
-      - --pause=false
+      - python3
+      - /opt/olamide/repo/deployment/ansible/backup-running-image.py
       - docker-web-1
       - olamide-web:before-did-{{ did_stamp }}
-    when: did_old_web_available.rc != 0
     changed_when: true
-    no_log: true
-  - name: Verify web recovery image before building
-    ansible.builtin.command:
-      argv:
-      - docker
-      - image
-      - inspect
-      - --format
-      - '{{ "{{.Id}}" }}'
-      - olamide-web:before-did-{{ did_stamp }}
-    changed_when: false
   - name: Build DID API and profile GUI
     ansible.builtin.command:
       argv: '{{ did_compose + ["build", "api", "web"] }}'
