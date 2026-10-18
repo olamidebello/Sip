@@ -1,6 +1,7 @@
 const releasesUrl="https://github.com/olamidebello/Sip/releases";
+const androidPreview={name:'OlamideSip.apk',browser_download_url:'https://github.com/olamidebello/Sip/releases/download/mobile-preview-20261018/OlamideSip.apk'};
 const packages=[
-  {label:"Android",kind:"APK preview",match:/\.apk$/i,note:"Debug build for testing. Install only if you trust this release."},
+  {label:"Android",kind:"APK preview",match:/\.apk$/i,note:"Latest October 18 Android debug build for testing. Install only if you trust this release."},
   {label:"Windows",kind:"Desktop preview",match:/\.exe$/i,note:"Unsigned installer."},
   {label:"macOS",kind:"Desktop preview",match:/\.dmg$/i,note:"Unsigned installer."},
   {label:"Linux",kind:"Desktop preview",match:/\.AppImage$/i,note:"AppImage package."}
@@ -33,7 +34,7 @@ export async function setupDownloads(fetchReleases=fetch) {
   } catch {
     status.textContent="Could not check packages right now. The releases page has the current downloads.";
   }
-  list.replaceChildren(...packages.map(item=>card(item,assets.find(asset=>item.match.test(asset.name)&&asset.browser_download_url))));
+  list.replaceChildren(...packages.map(item=>card(item,item.label==='Android'?androidPreview:assets.find(asset=>item.match.test(asset.name)&&asset.browser_download_url))));
   const carrierAsset=assets.find(asset=>asset.name==="olamide-carrier-signed.apk"&&asset.browser_download_url);
   if (carrierAsset) list.append(card({label:"Carrier partner",kind:"Signed Android APK",note:"For SIM profiles that authorize this APK signing certificate. Includes a carrier display-name control, not a system dialer."},carrierAsset));
   const browser=document.createElement("article");browser.className="download-card browser-card";
