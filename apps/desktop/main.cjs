@@ -13,7 +13,7 @@ app.whenReady().then(() => {
   });
   const window = new BrowserWindow({
     width: 1180, height: 800, minWidth: 390, minHeight: 550,
-    title: 'Olamide', autoHideMenuBar: true,
+    title: 'Olamide', icon: require('path').join(__dirname, 'build/icon.png'), autoHideMenuBar: true,
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true,
       webviewTag: false, devTools: false }
   });
