@@ -82,3 +82,21 @@ jobs:
           name: olamide-ios-simulator
           path: apps/mobile/build/Build/Products/Debug-iphonesimulator/App.app/
           if-no-files-found: error
+  publish-mobile:
+    needs: [android, ios-simulator]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: olamide-android-debug-apk
+          path: apk
+      - name: Publish Android preview download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cp apk/*.apk OlamideSip.apk
+          sha256sum OlamideSip.apk > OlamideSip.apk.sha256
+          gh release create mobile-preview-20261018 OlamideSip.apk OlamideSip.apk.sha256 --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'Olamide Android preview — October 18, 2026' --notes 'Android debug APK for testing. Connects to https://sip.dobhrap.com. iOS simulator app is available in the build artifacts.' --prerelease
