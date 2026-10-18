@@ -16,7 +16,7 @@ def compose_files(repo, saved=''):
             files.append(path)
     for path in [directory / 'compose.override.yml', directory / 'compose.override.yaml',
                  directory / 'compose.callerids.yml', Path('/etc/olamide/compose.location.yml'),
-                 Path('/etc/olamide/compose.countries.yml')]:
+                 Path('/etc/olamide/compose.countries.yml'), Path('/etc/olamide/compose.flowroute-inbound.yml')]:
         if path.is_file() and path not in files:
             files.append(path)
     return files

@@ -1,3 +1,5 @@
+import {didOwner,didNumber,flowrouteApi,provisionDid} from './flowrouteDidRouting.js';
+import {providerCredentials} from './providerCredentials.js';
 import {queueSubscriberSms} from './subscriberRouting.js';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { isAdmin, defaultTenantId } from './tenancy.js';
@@ -47,13 +49,14 @@ export function normalizeFlowroute(kind, payload) {
       typeof data.id !== 'string' || !/^[\w-]{1,128}$/.test(data.id))
     throw new Error('Invalid Flowroute event');
   const sender = attributes.from, recipient = attributes.to;
-  if (typeof sender !== 'string' || !/^\+?[0-9]{7,16}$/.test(sender) ||
-      typeof recipient !== 'string' || !/^\+?[0-9]{7,16}$/.test(recipient))
+  if (typeof sender !== 'string' || !didNumber(sender) ||
+      typeof recipient !== 'string' || !didNumber(recipient))
     throw new Error('Invalid message addresses');
   const level = isReceipt ? Number(attributes.level) : 0;
   if (isReceipt && ![1,2].includes(level)) throw new Error('Invalid receipt level');
   if (kind === 'mms' && attributes.is_mms === false || kind === 'sms' && attributes.is_mms === true)
     throw new Error('Message type mismatch');
+  if(!isReceipt&&attributes.direction&&attributes.direction!=='inbound')throw new Error('Invalid message direction');
   const body = attributes.body ?? '';
   if (typeof body !== 'string' || body.length > 100000) throw new Error('Invalid message body');
   const status = attributes.status ?? '';
@@ -68,7 +71,7 @@ export function normalizeFlowroute(kind, payload) {
     mime: String(item.attributes?.mime_type || '').slice(0,128),
     size: Math.max(0,Number(item.attributes?.file_size) || 0)
   })) : [];
-  return {id:data.id,sender,recipient,body,level,status,statusCode,media,timestamp};
+  return {id:data.id,sender:didNumber(sender),recipient:didNumber(recipient),body,level,status,statusCode,media,timestamp};
 }
 
 export async function handleFlowrouteWebhook({req,res,path,pool,send}) {
@@ -89,13 +92,11 @@ export async function handleFlowrouteWebhook({req,res,path,pool,send}) {
       if (Buffer.byteLength(raw) > 1024 * 1024) return send(res,413,{error:'Webhook too large'});
     }
     const event = normalizeFlowroute(match[2], JSON.parse(raw));
-    const owner = !match[2].endsWith('-dlr') ? await pool.query(
-      'SELECT user_id FROM flowroute_sms_numbers WHERE number_e164=$1 AND tenant_id=$2 AND enabled=TRUE',
-      [event.recipient,tenant()]) : {rows:[]};
+    const owner = !match[2].endsWith('-dlr') ? await didOwner(pool,tenant(),event.recipient) : null;
     const result = await pool.query(`INSERT IGNORE INTO flowroute_message_events
       (id,tenant_id,kind,owner_id,provider_event_id,receipt_level,sender,recipient,body,status,status_code,media_metadata,occurred_at)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-      [randomUUID(),tenant(),match[2],owner.rows[0]?.user_id || null,event.id,event.level,event.sender,event.recipient,event.body,
+      [randomUUID(),tenant(),match[2],owner?.user_id || null,event.id,event.level,event.sender,event.recipient,event.body,
        event.status,event.statusCode,JSON.stringify(event.media),event.timestamp]);
     if (match[2].endsWith('-dlr') && result.rowCount)
       await pool.query("UPDATE flowroute_sms_outbound SET status=$1 WHERE tenant_id=$2 AND provider_event_id=$3",
@@ -121,6 +122,14 @@ export async function handleMessagingWebhookAdmin({req,res,user,pool,send,origin
 
 const phone = value => typeof value === 'string' && /^\+[1-9][0-9]{7,14}$/.test(value);
 export async function handleExternalSms({req,res,path,user,pool,send,readJson}) {
+  if(path==='/api/external-sms/conversation'&&req.method==='GET'){
+    const params=new URL(req.url,'http://localhost').searchParams,number=didNumber(params.get('number')),peer=didNumber(params.get('peer'));
+    if(!number||!peer)return send(res,400,{error:'DID and contact number required'});
+    const owner=await didOwner(pool,user.tenant_id,number);if(owner?.user_id!==user.id)return send(res,403,{error:'Assigned DID required'});
+    const rows=await pool.query(`SELECT id,'received' AS direction,body,status,received_at AS created_at FROM flowroute_message_events WHERE tenant_id=$1 AND owner_id=$2 AND recipient=$3 AND sender=$4 AND kind='sms'
+      UNION ALL SELECT id,'sent' AS direction,body,status,created_at FROM flowroute_sms_outbound WHERE tenant_id=$1 AND user_id=$2 AND sender=$3 AND recipient=$4 ORDER BY created_at DESC,id DESC LIMIT 100`,[user.tenant_id,user.id,number,peer]);
+    return send(res,200,{messages:rows.rows.reverse()});
+  }
   if (path === '/api/external-sms/numbers' && req.method === 'GET') {
     const rows=await pool.query('SELECT number_e164,daily_limit,used_today,usage_day,enabled FROM flowroute_sms_numbers WHERE tenant_id=$1 AND user_id=$2 ORDER BY number_e164',[user.tenant_id,user.id]);
     return send(res,200,{numbers:rows.rows});
@@ -137,19 +146,25 @@ export async function handleExternalSms({req,res,path,user,pool,send,readJson}) 
   if (path === '/api/external-sms/send' && req.method === 'POST') {
     if (!user.features?.messaging) return send(res,403,{error:'Messaging access required'});
     if (user.tenant_id !== tenant()) return send(res,403,{error:'Carrier account unavailable for tenant'});
-    const {from,to,body}=await readJson(req);
+    const {from,to,body,idempotencyKey}=await readJson(req);
     if (!phone(from)||!phone(to)||typeof body!=='string'||body.trim().length<1||body.length>1600)
       return send(res,400,{error:'Valid international numbers and message required (max 1600 characters)'});
-    const access=process.env.FLOWROUTE_ACCESS_KEY,secretKey=process.env.FLOWROUTE_SECRET_KEY;
+    const stored=await providerCredentials(pool,user.tenant_id,'flowroute');
+    if(stored?.disabled)return send(res,503,{error:'Flowroute credentials disabled'});
+    const access=stored?.accessKey||process.env.FLOWROUTE_ACCESS_KEY,secretKey=stored?.secretKey||process.env.FLOWROUTE_SECRET_KEY;
     if (!access||!secretKey) return send(res,503,{error:'Flowroute messaging is not configured'});
-    // Atomic allowance prevents concurrent submissions from exceeding an assigned number's daily cap.
-    const reserve=await pool.query(`UPDATE flowroute_sms_numbers SET
-      used_today=IF(usage_day=UTC_DATE(),used_today+1,1), usage_day=UTC_DATE()
-      WHERE number_e164=$1 AND tenant_id=$2 AND user_id=$3 AND enabled=TRUE
-      AND IF(usage_day=UTC_DATE(),used_today,0)<daily_limit`,[from,user.tenant_id,user.id]);
-    if (!reserve.rowCount) return send(res,403,{error:'Sender unavailable or daily SMS allowance exhausted'});
-    const id=randomUUID();
-    await pool.query('INSERT INTO flowroute_sms_outbound(id,tenant_id,user_id,sender,recipient,body) VALUES($1,$2,$3,$4,$5,$6)',[id,user.tenant_id,user.id,from,to,body.trim()]);
+    if(idempotencyKey!==undefined&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idempotencyKey))return send(res,400,{error:'Invalid request key'});
+    const owner=await didOwner(pool,user.tenant_id,from);if(owner?.user_id!==user.id)return send(res,403,{error:'Assigned DID required'});
+    const id=idempotencyKey||randomUUID(),db=await pool.connect();
+    try{
+      await db.query('BEGIN');
+      await db.query('SELECT number_e164 FROM flowroute_sms_numbers WHERE number_e164=$1 FOR UPDATE',[from]);
+      const previous=(await db.query('SELECT tenant_id,user_id,sender,recipient,body,status,provider_event_id FROM flowroute_sms_outbound WHERE id=$1',[id])).rows[0];
+      if(previous){await db.query('ROLLBACK');if(previous.tenant_id!==user.tenant_id||previous.user_id!==user.id||previous.sender!==from||previous.recipient!==to||previous.body!==body.trim())return send(res,409,{error:'Request key already used'});return send(res,previous.status==='accepted'||previous.status==='delivered'?202:409,{id,providerId:previous.provider_event_id,status:previous.status,error:previous.status==='accepted'||previous.status==='delivered'?undefined:'Check sent history before retrying this SMS'});}
+      const reserve=await db.query(`UPDATE flowroute_sms_numbers SET used_today=IF(usage_day=UTC_DATE(),used_today+1,1),usage_day=UTC_DATE() WHERE number_e164=$1 AND tenant_id=$2 AND user_id=$3 AND enabled=TRUE AND IF(usage_day=UTC_DATE(),used_today,0)<daily_limit`,[from,user.tenant_id,user.id]);
+      if(!reserve.rowCount){await db.query('ROLLBACK');return send(res,403,{error:'Sender unavailable or daily SMS allowance exhausted'});}
+      await db.query('INSERT INTO flowroute_sms_outbound(id,tenant_id,user_id,sender,recipient,body) VALUES($1,$2,$3,$4,$5,$6)',[id,user.tenant_id,user.id,from,to,body.trim()]);await db.query('COMMIT');
+    }catch(e){await db.query('ROLLBACK');if(e.code==='ER_DUP_ENTRY')return send(res,409,{error:'SMS request already processing; check sent history'});throw e;}finally{db.release();}
     try {
       const response=await fetch('https://api.flowroute.com/v2.2/messages',{
         method:'POST',headers:{Authorization:'Basic '+Buffer.from(`${access}:${secretKey}`).toString('base64'),
@@ -182,12 +197,15 @@ export async function handleSmsNumberAdmin({req,res,path,user,pool,send,readJson
     return send(res,200,{numbers:rows.rows});
   }
   if(path==='/api/admin/messaging/numbers' && req.method==='POST') {
-    const {number,userId,dailyLimit,enabled}=await readJson(req);
+    const input=await readJson(req);
+    if(input.operation==='provision'){if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});try{const result=await provisionDid(pool,user,input);await pool.query('INSERT INTO security_events(id,tenant_id,actor_id,action) VALUES($1,$2,$3,$4)',[randomUUID(),user.tenant_id,user.id,'flowroute_did_routes_configured']);return send(res,200,result);}catch(e){return send(res,502,{error:e.message});}}
+    const {number,userId,dailyLimit,enabled}=input;
     if(!phone(number)||typeof userId!=='string'||!/^[0-9a-f-]{36}$/i.test(userId)||!Number.isSafeInteger(dailyLimit)||dailyLimit<0||dailyLimit>10000||typeof enabled!=='boolean')
       return send(res,400,{error:'Valid assigned number, user and daily allowance required'});
     const target=await pool.query("SELECT 1 FROM users WHERE id=$1 AND tenant_id=$2 AND status='active'",[userId,user.tenant_id]);
     if(!target.rowCount) return send(res,404,{error:'Active tenant user unavailable'});
-    // An administrator must verify Flowroute number ownership and messaging enablement first.
+    try{await flowrouteApi(pool,user.tenant_id,'/v2/numbers/'+number.slice(1));}catch(e){return send(res,502,{error:e.message});}
+    const assigned=await didOwner(pool,user.tenant_id,number);if(assigned&&assigned.user_id!==userId)return send(res,409,{error:'DID is already assigned to another user'});
     await pool.query(`INSERT INTO flowroute_sms_numbers(number_e164,tenant_id,user_id,daily_limit,enabled)
       VALUES($1,$2,$3,$4,$5) ON DUPLICATE KEY UPDATE
       user_id=IF(tenant_id=VALUES(tenant_id),VALUES(user_id),user_id),
