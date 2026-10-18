@@ -1,9 +1,5 @@
-# DID shop implementation draft
+# Archived DID shop draft
 
-This directory preserves work in progress. It is not connected to application startup and is not a production deployment.
+These early snapshots are retained for history. Active implementation is now in services/api and apps/web/src. Use deployment/ansible/install-profile-did-shop.yml and deployment/native-push/PROFILE-DID-SHOP.md. Do not install files from this archived draft directory.
 
-Implemented draft modules cover Flowroute inventory search, retail DID quotes at provider cost plus 30 percent, authenticated order APIs, Stripe monthly subscriptions and verified-payment provisioning, primary DID selection, inbound routing, and user/admin screens.
-
-JavaScript syntax checks and Python compilation passed before upload. Integration and payment lifecycle tests have not been completed.
-
-Remaining work: wire startup migrations, routes, workers and profile navigation; complete wallet top-ups, available balance, external-call rate search and billing history; enforce a shared retail rate calculation for search and charging; finish administration and payment reconciliation; add tested Ansible deployment and end-to-end verification. Do not install individual draft modules into production.
+Profile wallet top-up and call-rate search extensions remain separate pending work.
