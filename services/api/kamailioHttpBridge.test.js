@@ -6,7 +6,7 @@ test('auth returns only active view digest, without a plaintext secret',async()=
 test('routes require same active tenant/domain and location leases',async()=>{
  const p={query:async(sql,a)=>{
   if(sql.includes('FROM sip_accounts a'))return {rows:[{user_id:'caller',tenant_id:'tenant'}]};
-  if(sql.includes('tenant_geofence_policy')||sql.includes('vpn_policy'))return {rows:[]};
+  if(sql.includes('tenant_geofence_policy')||sql.includes('vpn_policy')||sql.includes('user_service_countries'))return {rows:[]};
   assert.match(sql,/target.tenant_id=caller.tenant_id/);assert.match(sql,/target.domain=caller.domain/);assert.deepEqual(a,['ol123','sip.example','ol456']);
   return {rows:[{username:'ol456',user_id:'target'}]};
  }};
