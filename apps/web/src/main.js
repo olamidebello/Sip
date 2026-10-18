@@ -1,3 +1,4 @@
+import {setupProfileLanding} from './profileLanding.js';
 import {authorizeLocatedCall,renderShortDialAdmin} from './locationDialing.js';
 import {setupCallSounds} from './callSounds.js';
 import {setupSecureChat} from './secureChatUi.js';
@@ -1458,6 +1459,7 @@ const dashboard=setupDashboard({get:path=>apiGet(path),request:(path,body,method
 const support=setupSupport({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 localeSettings=setupLocaleSettings({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const serviceCountryUi=setupServiceCountries({document,get:apiGet,request:accountRequest,onSaved:async()=>{await localeSettings.refresh(activeRole==='super_admin'||activeRole==='admin');await locationMonitor.ensure();}});
+const profileLanding=setupProfileLanding({document,get:apiGet,show:showWorkspace,onComplete:async()=>{showWorkspace(userHome(),{historyMode:'replace'});pageRoutes.render();}});
 const secureChatUi=setupSecureChat({document,get:apiGet,request:accountRequest});
 const adaptiveAudio=createAdaptiveAudio({onStatus:value=>{let label=$('#adaptive-audio-status');if(!label){label=document.createElement('p');label.id='adaptive-audio-status';label.setAttribute('role','status');$('#status').after(label);}label.textContent=value.mode+(value.codec?' · '+value.codec:'')+(value.targetBitrate?' · '+Math.round(value.targetBitrate/1000)+' kbps target':'')+(Number.isFinite(value.availableKbps)?' · estimated available '+Math.round(value.availableKbps)+' kbps':'')+(Number.isFinite(value.loss)?' · loss '+Math.round(value.loss*100)+'%':'');}});
 const groupAdmin = setupGroupAdmin();
@@ -1888,7 +1890,17 @@ const contactDiscovery=setupContactDiscovery({document,get:apiGet,request:accoun
 const subscriberDelivery=setupSubscriberDelivery({document,get:apiGet,request:accountRequest,isRegistered:()=>sipRegistered&&!!phone?.isConnected()});
 chatComposer=setupChatComposerShortcuts({document,moneyAllowed:()=>navigationAllowed('money')&&!$('#money').hidden,getCurrency:()=>localeSettings.currency(),payContact:(email,mode)=>moneyWorkspace.payContact(email,mode),shareCard:async()=>{const owner=softphoneUserId,recipient=$('#contact-list').value;const card=await apiGet('/api/wallet/payment-card');if(owner!==softphoneUserId||recipient!==$('#contact-list').value||!navigationAllowed('money'))return;const body=$('#send-message [name=body]');const cardText='Olamide payment card\n'+card.name+'\nPay or request by email: '+card.email+'\nWallet currency: '+card.currency;body.value=[body.value.trim(),cardText].filter(Boolean).join('\n\n');body.dispatchEvent(new Event('input'));body.focus();}});
 async function loadMessages(){await conversations.refresh();}
-function signedIn(user) {
+let signInCheckGeneration=0;
+async function signedIn(user){
+ const token=++signInCheckGeneration;
+ const securityPending=user.mustChangePassword||user.passkeyEnrollmentRequired||user.passkeySigninRequired;
+ const state=securityPending?null:await profileLanding.check();
+ if(token!==signInCheckGeneration)return false;
+ finishSignedIn(user);
+ if(securityPending)return false;
+ return profileLanding.apply(state);
+}
+function finishSignedIn(user) {
   sessionWatch.start();
   $("#messenger-accessibility").hidden=false;void messengerPreferences.refresh().catch(()=>{});
   void navigationPolicy.refresh(user).catch(error=>{$('#navigation-policy-status').textContent=error.message;});
@@ -2530,7 +2542,7 @@ $("#passkey-login").onclick=async()=>{
   try {const options=await accountRequest('/api/passkeys/login/options',{email});
     const response=await startAuthentication({optionsJSON:options});
     const user=await accountRequest('/api/passkeys/login/verify',{email,response});
-    signedIn(user);if(!user.mustChangePassword){showWorkspace(userHome());pageRoutes.render();}}
+    if(await signedIn(user)){showWorkspace(userHome());pageRoutes.render();}}
   catch(error){$("#account-status").textContent=error.message;}
 };
 $("#login").addEventListener("submit", async (event) => {
@@ -2539,8 +2551,7 @@ $("#login").addEventListener("submit", async (event) => {
   try {
     const user = await accountRequest("/api/login", Object.fromEntries(new FormData(form)));
     form.reset();
-    signedIn(user);
-    if(!user.mustChangePassword){showWorkspace(userHome());pageRoutes.render();}
+    if(await signedIn(user)){showWorkspace(userHome());pageRoutes.render();}
   } catch (error) { $("#account-status").textContent = error.message; }
 });
 $("#ldap-login").addEventListener("submit",async(event)=>{
@@ -2548,10 +2559,11 @@ $("#ldap-login").addEventListener("submit",async(event)=>{
   const form=event.currentTarget;
   try {
     const user=await accountRequest("/api/login/ldap",Object.fromEntries(new FormData(form)));
-    form.reset();signedIn(user);showWorkspace(userHome());pageRoutes.render();
+    form.reset();if(await signedIn(user)){showWorkspace(userHome());pageRoutes.render();}
   } catch(error) {$("#account-status").textContent=error.message;}
 });
 $("#logout").onclick = async () => {
+  signInCheckGeneration++;
   locationMonitor.stop();locationStatus.hidden=true;
   sessionWatch.stop();messengerHub.stop();conversations.stopMedia();
   videoWorkflow=false;callsScreen.stop();navigationPolicy.stop();messengerPreferences.stop();$("#messenger-accessibility").hidden=true;
@@ -2559,6 +2571,7 @@ $("#logout").onclick = async () => {
   try {
     dialerContacts.clear();
     contactDirectory.clear();
+    profileLanding.stop();
     secureChatUi.stop();
     serviceCountryUi.stop();
     languageTools.stop();
@@ -2632,7 +2645,7 @@ $("#password-change").onsubmit=async(event)=>{
     const form=event.currentTarget;
     const result=await accountRequest("/api/account/password",Object.fromEntries(new FormData(form)));
     form.reset();$("#account-status").textContent=result.status;
-    const fresh=await apiGet("/api/me");signedIn(fresh);
+    const fresh=await apiGet("/api/me");await signedIn(fresh);
   } catch(error) {$("#account-status").textContent=error.message;}
 };
 const nativePush=createNativePushClient({request:accountRequest,onStatus:message=>{$('#sip-account-status').textContent=message;}});
