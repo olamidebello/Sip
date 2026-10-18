@@ -1,3 +1,4 @@
+import {managedIdentity} from './superAdminControl.js';
 import {migrateDefaultCallingPlan,trialRefund} from './defaultCallingPlan.js';
 import {loadTelecomPolicies,normalizeDestination,selectPolicyRate,assertCallingWindow,internationalAllowance,selectShadowRate,selectCallType} from './telecomPolicies.js';
 import {loadPolicy,assignedIdentity} from './outboundDids.js';
@@ -48,7 +49,7 @@ export async function reservePstn(pool,data){
   await db.query('START TRANSACTION');
   const policies=await loadTelecomPolicies(db,actor.tenant_id);
   destination=normalizeDestination(data.destination,policies);
-  const identity=assignedIdentity(loadPolicy(),actor.tenant_id,actor.user_id);
+  const identity=await managedIdentity(db,actor.tenant_id,actor.user_id)||assignedIdentity(loadPolicy(),actor.tenant_id,actor.user_id);
   const provider=identity?.provider||'flowroute';
   await db.query('INSERT IGNORE INTO wallet_accounts(user_id,tenant_id,balance_cents) VALUES($1,$2,0)',[actor.user_id,actor.tenant_id]);
   const wallet=(await db.query('SELECT balance_cents,currency FROM wallet_accounts WHERE user_id=$1 AND tenant_id=$2 FOR UPDATE',[actor.user_id,actor.tenant_id])).rows[0];
