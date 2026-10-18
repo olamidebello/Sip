@@ -157,5 +157,5 @@ export function setupSipVideoCall({document,active,button,getPhone,onStatus=()=>
   stage.querySelector('[data-camera]').onclick=()=>void controller.camera();
   stage.querySelector('[data-flip]').onclick=()=>void controller.flip();
   let timer;
-  return {active(value){clearInterval(timer);if(value){controller.attach(getPhone());timer=setInterval(()=>controller.refresh(),500);}else controller.reset();},dispose(){clearInterval(timer);controller.reset();stage.remove();prompt.remove();css.remove();}};
+  return {request:()=>controller.request(),active(value){clearInterval(timer);if(value){controller.attach(getPhone());timer=setInterval(()=>controller.refresh(),500);}else controller.reset();},dispose(){clearInterval(timer);controller.reset();stage.remove();prompt.remove();css.remove();}};
 }

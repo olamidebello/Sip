@@ -5,7 +5,7 @@ import {icon} from './messengerIcons.js';
 export function setupCallGui({document,openVideo,openAudio=()=>{},getPhone=()=>undefined,onStatus=()=>{}}) {
   const incoming=document.getElementById('incoming');
   const active=document.getElementById('active');
-  let timer,started,addressLabel='';
+  let timer,started,addressLabel='',connected=false;
   const captions=[];
   const names=[];
   const numbers=[];
@@ -39,7 +39,7 @@ export function setupCallGui({document,openVideo,openAudio=()=>{},getPhone=()=>u
     button.innerHTML=icon('calls')+`<span>${label}</span>`;button.setAttribute('aria-label',label+' audio call');
   }
   const video=document.createElement('button');video.type='button';video.className='chat-video-call';video.innerHTML=icon('video');video.setAttribute('aria-label','Open video meeting invitation');
-  video.onclick=openVideo;document.querySelector('.chat-thread-header')?.insertBefore(video,document.querySelector('.chat-thread-header button[aria-label="Conversation menu"]'));
+  video.onclick=()=>{if(connected){void sipVideo.request().catch(error=>onStatus(error.message));return;}openVideo();};document.querySelector('.chat-thread-header')?.insertBefore(video,document.querySelector('.chat-thread-header button[aria-label="Conversation menu"]'));
   const keypad=document.createElement('div');keypad.className='call-keypad';keypad.hidden=true;keypad.setAttribute('aria-label','In-call keypad');
   const toneDisplay=document.createElement('output');toneDisplay.className='call-keypad-number';toneDisplay.setAttribute('aria-label','Entered call menu digits');toneDisplay.setAttribute('aria-live','polite');
   const resetTones=()=>{toneDisplay.textContent='';};keypad.append(toneDisplay);
@@ -83,7 +83,9 @@ export function setupCallGui({document,openVideo,openAudio=()=>{},getPhone=()=>u
     pending(){resetTones();incoming.hidden=true;active.hidden=false;active.focus();duration.textContent='';captions[1].textContent='Calling…';controls(false);},
     identity(value){for(const name of names)name.textContent=callIdentityLabel(addressLabel,value);},
     held(value){captions[1].textContent=value?'On hold':'Connected';},
+    video(){return sipVideo.request();},
     active(value){
+      connected=!!value;
       sipVideo.active(value);inCallVideo.disabled=!value;
       clearInterval(timer);timer=undefined;active.classList.remove('call-minimized');incoming.classList.remove('call-minimized');
       controls(value);resetTones();extras.hidden=true;more.setAttribute('aria-expanded','false');keypad.hidden=true;active.classList.remove('call-keypad-open');toggle.setAttribute('aria-expanded','false');
