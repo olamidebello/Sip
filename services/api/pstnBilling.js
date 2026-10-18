@@ -1,3 +1,4 @@
+import {migrateDefaultCallingPlan,trialRefund} from './defaultCallingPlan.js';
 import {loadTelecomPolicies,normalizeDestination,selectPolicyRate,assertCallingWindow,internationalAllowance,selectShadowRate,selectCallType} from './telecomPolicies.js';
 import {loadPolicy,assignedIdentity} from './outboundDids.js';
 import {flowrouteTrunk,adapterTrunk} from './flowrouteTrunk.js';
@@ -21,7 +22,7 @@ export async function migratePstnBilling(pool){
  status VARCHAR(16) NOT NULL DEFAULT 'reserved',answered_epoch BIGINT NULL,ended_epoch BIGINT NULL,
  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),settled_at DATETIME(3) NULL,
  INDEX pstn_active(tenant_id,status),FOREIGN KEY(user_id) REFERENCES users(id),FOREIGN KEY(tenant_id) REFERENCES tenants(id)) ENGINE=InnoDB`);
- for(const [name,ddl] of [['caller_id','VARCHAR(16) NULL'],['provider',"VARCHAR(16) NOT NULL DEFAULT 'flowroute'"],['carrier_host','VARCHAR(80) NULL'],['shadow_policy_id','CHAR(36) NULL'],['shadow_rate','DECIMAL(12,6) NULL'],['shadow_first','INT NULL'],['shadow_step','INT NULL'],['call_type_id','CHAR(36) NULL']]){
+ for(const [name,ddl] of [['trial_seconds','INT NOT NULL DEFAULT 0'],['caller_id','VARCHAR(16) NULL'],['provider',"VARCHAR(16) NOT NULL DEFAULT 'flowroute'"],['carrier_host','VARCHAR(80) NULL'],['shadow_policy_id','CHAR(36) NULL'],['shadow_rate','DECIMAL(12,6) NULL'],['shadow_first','INT NULL'],['shadow_step','INT NULL'],['call_type_id','CHAR(36) NULL']]){
   const found=await db.query('SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=\'pstn_calls\' AND column_name=$1',[name]);
   if(!found.rowCount)await db.query(`ALTER TABLE pstn_calls ADD COLUMN ${name} ${ddl}`);
  }
@@ -32,6 +33,7 @@ export async function migratePstnBilling(pool){
  await db.query(`CREATE TABLE IF NOT EXISTS pstn_call_events (
  call_key CHAR(64) NOT NULL,event VARCHAR(16) NOT NULL,event_epoch BIGINT NOT NULL,
  PRIMARY KEY(call_key,event),FOREIGN KEY(call_key) REFERENCES pstn_calls(call_key)) ENGINE=InnoDB`);
+ await migrateDefaultCallingPlan(db);
  }finally{if(locked)await db.query("SELECT RELEASE_LOCK('olamide_pstn_schema_migration')");db.release();}
 }
 export async function reservePstn(pool,data){
@@ -48,6 +50,7 @@ export async function reservePstn(pool,data){
   destination=normalizeDestination(data.destination,policies);
   const identity=assignedIdentity(loadPolicy(),actor.tenant_id,actor.user_id);
   const provider=identity?.provider||'flowroute';
+  await db.query('INSERT IGNORE INTO wallet_accounts(user_id,tenant_id,balance_cents) VALUES($1,$2,0)',[actor.user_id,actor.tenant_id]);
   const wallet=(await db.query('SELECT balance_cents,currency FROM wallet_accounts WHERE user_id=$1 AND tenant_id=$2 FOR UPDATE',[actor.user_id,actor.tenant_id])).rows[0];
   const existing=(await db.query('SELECT * FROM pstn_calls WHERE call_key=$1 FOR UPDATE',[data.callKey])).rows[0];
   if(existing){
@@ -72,12 +75,16 @@ export async function reservePstn(pool,data){
   if(override)Object.assign(rate,{price_usd_per_minute:override.data.rate,first_interval:override.data.first,sub_interval:override.data.step});
   const shadow=selectShadowRate(policies,destination);
   const allowance=await internationalAllowance(db,policies,{tenantId:actor.tenant_id,userId:actor.user_id,destination});
-  let maxSeconds=3600;const balance=Number(wallet.balance_cents),budget=Math.min(balance,allowance);
-  while(maxSeconds>=60&&callCharge(rate.price_usd_per_minute,maxSeconds,rate.first_interval,rate.sub_interval)>budget)maxSeconds-=60;
-  if(maxSeconds<60)throw Error('Insufficient credit for one minute');
-  const reserved=callCharge(rate.price_usd_per_minute,maxSeconds,rate.first_interval,rate.sub_interval);
+  const trial=(await db.query('SELECT remaining_seconds FROM calling_trial_balances WHERE user_id=$1 AND tenant_id=$2 FOR UPDATE',[actor.user_id,actor.tenant_id])).rows[0];
+  const trialSeconds=Number(trial?.remaining_seconds||0);
+  let maxSeconds=trialSeconds||3600;const balance=Number(wallet.balance_cents),budget=Math.min(balance,allowance);
+  while(!trialSeconds&&maxSeconds>=60&&callCharge(rate.price_usd_per_minute,maxSeconds,rate.first_interval,rate.sub_interval)>budget)maxSeconds-=60;
+  if(!trialSeconds&&maxSeconds<60)throw Error('Insufficient credit for one minute');
+  const reserved=trialSeconds?0:callCharge(rate.price_usd_per_minute,maxSeconds,rate.first_interval,rate.sub_interval);
+  if(trialSeconds)await db.query('UPDATE calling_trial_balances SET remaining_seconds=remaining_seconds-$1 WHERE user_id=$2 AND tenant_id=$3',[trialSeconds,actor.user_id,actor.tenant_id]);
   if(config.authenticationMode!=='ip')throw Error('Kamailio paid route requires IP authentication');
   await db.query('INSERT INTO pstn_calls(call_key,tenant_id,user_id,destination,rate,first_interval,sub_interval,reserved_cents,max_seconds,caller_id,provider,carrier_host) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',[data.callKey,actor.tenant_id,actor.user_id,destination,rate.price_usd_per_minute,rate.first_interval,rate.sub_interval,reserved,maxSeconds,callerId,provider,identity?.carrierHost||null]);
+  if(trialSeconds)await db.query('UPDATE pstn_calls SET trial_seconds=$1 WHERE call_key=$2',[trialSeconds,data.callKey]);
   const callType=selectCallType(policies,destination);
   if(callType)await db.query('UPDATE pstn_calls SET call_type_id=$1 WHERE call_key=$2',[callType,data.callKey]);
   if(shadow)await db.query('UPDATE pstn_calls SET shadow_policy_id=$1,shadow_rate=$2,shadow_first=$3,shadow_step=$4 WHERE call_key=$5',[shadow.id,shadow.data.rate,shadow.data.first,shadow.data.step,data.callKey]);
@@ -104,8 +111,9 @@ export async function settlePstn(pool,data){
   if(failed&&start)throw Error('Conflicting events require review');
   const seconds=failed?0:Math.max(0,Number(end.event_epoch)-Number(start.event_epoch));
   if(seconds>Number(call.max_seconds)+5)throw Error('Duration exceeds reserved call budget; review required');
-  const charge=failed?0:callCharge(call.rate,Math.max(1,seconds),call.first_interval,call.sub_interval);
+  const charge=Number(call.trial_seconds)>0?0:failed?0:callCharge(call.rate,Math.max(1,seconds),call.first_interval,call.sub_interval);
   if(charge>Number(call.reserved_cents))throw Error('Charge exceeds reservation; review required');
+  if(Number(call.trial_seconds)>0)await db.query('UPDATE calling_trial_balances SET remaining_seconds=remaining_seconds+$1 WHERE user_id=$2 AND tenant_id=$3',[trialRefund(Number(call.trial_seconds),seconds,!!failed),call.user_id,call.tenant_id]);
   const refund=Number(call.reserved_cents)-charge;
   const wallet=(await db.query('SELECT balance_cents FROM wallet_accounts WHERE user_id=$1 AND tenant_id=$2 FOR UPDATE',[call.user_id,call.tenant_id])).rows[0];
   await db.query('UPDATE wallet_accounts SET balance_cents=balance_cents+$1 WHERE user_id=$2 AND tenant_id=$3',[refund,call.user_id,call.tenant_id]);
