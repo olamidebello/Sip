@@ -79,6 +79,7 @@
       - pstnBilling.test.js
       - shortDial.test.js
       - callAccess.test.js
+      - profileReadiness.test.js
     changed_when: false
 - name: Build and install VPN permissions and live geofence enforcement
   hosts: all
