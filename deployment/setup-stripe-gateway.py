@@ -4,8 +4,8 @@ import argparse,json,os,stat,subprocess,sys
 from pathlib import Path
 
 def main():
- p=argparse.ArgumentParser();p.add_argument('--key-file',default='/etc/olamide/stripe-api-key');p.add_argument('--admin-email',default='');p.add_argument('--tenant-id',default='');p.add_argument('--min-cents',type=int,default=100);p.add_argument('--max-cents',type=int,default=100000);p.add_argument('--invoice-only',action='store_true');args=p.parse_args()
- payload={'adminEmail':args.admin_email,'tenantId':args.tenant_id,'minCents':args.min_cents,'maxCents':args.max_cents,'enableTopups':not args.invoice_only}
+ p=argparse.ArgumentParser();p.add_argument('--endpoint-id',default='');p.add_argument('--key-file',default='/etc/olamide/stripe-api-key');p.add_argument('--admin-email',default='');p.add_argument('--tenant-id',default='');p.add_argument('--min-cents',type=int,default=100);p.add_argument('--max-cents',type=int,default=100000);p.add_argument('--invoice-only',action='store_true');args=p.parse_args()
+ payload={'endpointId':args.endpoint_id,'adminEmail':args.admin_email,'tenantId':args.tenant_id,'minCents':args.min_cents,'maxCents':args.max_cents,'enableTopups':not args.invoice_only}
  for filename,field in [(args.key_file,'secretKey'),('/etc/olamide/stripe-webhook-secret','webhookSecret')]:
   keyfile=Path(filename)
   if keyfile.is_symlink():raise SystemExit('Stripe secret file must not be a symlink')

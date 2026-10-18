@@ -50,3 +50,13 @@ Stripe does not expose signing secrets on ordinary endpoint retrieval. If creati
 Live payments still require a valid Stripe account. This playbook does not submit business verification, add payout bank details, create products/prices, alter taxes, or charge a card. After setup, review Administration > Payments & wallets and complete a small real payment to confirm carrier-independent settlement and wallet crediting.
 
 Reference: https://docs.stripe.com/api/webhook_endpoints/create
+
+## Multiple existing endpoints
+
+When Stripe has multiple endpoints at the workspace callback URL, choose the endpoint whose signing secret you saved. Pass its nonsecret `we_...` ID:
+
+```sh
+ansible-playbook -i localhost, -c local deployment/ansible/stripe-gateway.yml -e stripe_webhook_endpoint_id=we_YOUR_ENDPOINT_ID
+```
+
+Only that endpoint is adopted. Other endpoints are left unchanged; review and disable redundant ones separately in Stripe after confirming which integrations depend on them. The selected ID must match the workspace callback URL, and its signing secret must be supplied privately as described above.

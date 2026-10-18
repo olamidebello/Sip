@@ -10,6 +10,7 @@ export function setupInput(value){
  if(!Number.isSafeInteger(min)||!Number.isSafeInteger(max)||min<50||max<min||max>1000000)throw Error('Top-up limits must be between 50 and 1000000 USD cents');
  if(value.enableTopups!==undefined&&typeof value.enableTopups!=='boolean')throw Error('Boolean top-up setting required');
  if(value.secretKey&&(!/^sk_live_[A-Za-z0-9]{12,}$/.test(value.secretKey)||value.secretKey.length>300))throw Error('A live Stripe secret key is required by this integration');
+ if(value.endpointId&&!/^we_[A-Za-z0-9]+$/.test(value.endpointId))throw Error('Invalid Stripe webhook endpoint ID');
  if(value.webhookSecret&&(!/^whsec_[A-Za-z0-9]{12,}$/.test(value.webhookSecret)||value.webhookSecret.length>300))throw Error('Invalid webhook signing secret');
  return {...value,origin:origin.origin,minCents:min,maxCents:max};
 }
@@ -37,6 +38,7 @@ export async function configureStripe(pool,input,{fetcher=fetch}={}){
    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),FOREIGN KEY(tenant_id) REFERENCES tenants(id)
   ) ENGINE=InnoDB`);
   let state=(await db.query('SELECT * FROM stripe_gateway_setup WHERE tenant_id=$1',[tenant])).rows[0];
+  if(state?.endpoint_id&&options.endpointId&&state.endpoint_id!==options.endpointId)throw Error('Saved setup uses another webhook endpoint; existing gateway preserved');
   if(state&&(state.account_id!==account.id||state.webhook_url!==url))throw Error('Saved setup belongs to a different Stripe account or URL; existing gateway preserved');
   if(!state){state={account_id:account.id,webhook_url:url,request_id:randomUUID()};await db.query('INSERT INTO stripe_gateway_setup(tenant_id,account_id,webhook_url,request_id) VALUES($1,$2,$3,$4)',[tenant,account.id,url,state.request_id]);}
   let endpoint,signingSecret;
@@ -53,6 +55,7 @@ export async function configureStripe(pool,input,{fetcher=fetch}={}){
     matching.push(...matches);
     cursor=list.has_more?list.data?.at(-1)?.id:'';if(++pages>100)throw Error('Too many webhooks to inspect safely');
    }while(cursor);
+   if(options.endpointId){const selected=matching.filter(e=>e.id===options.endpointId);if(selected.length!==1)throw Error('Selected webhook endpoint does not match this workspace URL');matching.splice(0,matching.length,...selected);}
    if(matching.length){
     if(matching.length!==1)throw Error('An existing webhook URL has multiple endpoints; reconcile duplicates in Stripe first');
     const candidate=matching[0];
