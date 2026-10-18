@@ -1,0 +1,14 @@
+---
+- import_playbook: install-location-short-dial.yml
+- name: Verify login profile-completion behavior is installed
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Verify profile readiness validator in running API
+      ansible.builtin.command:
+        argv: [docker, exec, docker-api-1, node, --input-type=module, -e, "import {readiness} from './profileReadiness.js';const r=readiness({});if(r.complete||r.landingPage!=='account'||!r.missing.includes('service_countries'))process.exit(1);console.log('Login profile-completion validator ready');"]
+      changed_when: false
+    - name: Report completed user navigation
+      ansible.builtin.debug:
+        msg: Refresh the app and sign in. Missing contact/address records, service countries, primary country or locale records land on My profile. Save profile and country forms, then use Complete setup / Check again. Password-change and required-passkey flows retain priority. The check also runs when restoring an existing browser session. No extra biometric verification is claimed.
