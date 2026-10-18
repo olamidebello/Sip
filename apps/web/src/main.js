@@ -1,3 +1,4 @@
+import {authorizeLocatedCall,renderShortDialAdmin} from './locationDialing.js';
 import {setupCallSounds} from './callSounds.js';
 import {setupSecureChat} from './secureChatUi.js';
 import {createAdaptiveAudio} from './adaptiveAudio.js';
@@ -1702,7 +1703,7 @@ async function accountRequest(path, body, method="POST") {
     body: JSON.stringify(body)
   });
   const data = await response.json();
-  if (!response.ok) {const error=new Error(data.error || "Account request failed");error.status=response.status;const retry=Number(response.headers.get('Retry-After')||data.retryAfter);if(Number.isFinite(retry)&&retry>0)error.retryAfter=retry;throw error;}
+  if (!response.ok) {const error=new Error(data.error || "Account request failed");error.status=response.status;error.code=data.code;const retry=Number(response.headers.get('Retry-After')||data.retryAfter);if(Number.isFinite(retry)&&retry>0)error.retryAfter=retry;throw error;}
   return data;
 }
 async function apiGet(path) {
@@ -1928,6 +1929,7 @@ function signedIn(user) {
   serviceCountryUi.show(user).catch(error=>{$('#account-status').textContent=error.message;});
   locationMonitor.start();
   $('#geofence-admin').hidden=user.role!=='super_admin';
+  renderShortDialAdmin({document,get:apiGet,request:accountRequest,isSuperAdmin:user.role==='super_admin'}).catch(error=>{$('#geofence-admin-status').textContent=error.message;});
   apiGet('/api/redirector').then(({target})=>{if(target?.wssUrl&&!onCall)$("#connect [name=server]").value=target.wssUrl;}).catch(()=>{});
   document.body.classList.add("workspace-mode");
   refreshSoftphoneState(user).catch(error=>{$("#account-status").textContent=error.message;});
@@ -2776,7 +2778,7 @@ dialForm.addEventListener("submit", async (event) => {
   $("#geo-result").textContent = location.reason;
   if (!location.allowed) { status("Call blocked: " + location.reason); return; }
   let authorizedTarget=target;
-  try {const access=await accountRequest('/api/softphone/authorize',{target});authorizedTarget=access.target||target;}catch(error){status(error.message);return;}
+  try {const access=await authorizeLocatedCall({target,request:accountRequest});authorizedTarget=access.target||target;if(access.normalized){target=authorizedTarget;dialForm.elements.target.value=access.normalizedNumber;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));$('#geo-result').textContent='Country code from '+access.country+' ('+access.source+'): '+access.normalizedNumber;}}catch(error){status(error.message);return;}
   lastDialedTarget=target;
   currentCall = { direction: "outgoing", address: target };
   callGui.number(target);
