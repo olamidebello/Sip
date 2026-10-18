@@ -137,6 +137,7 @@
       - kamailioHttpBridge.test.js
       - didSms.test.js
       - messagingWebhooks.test.js
+      - provisionFlowroute.test.js
     changed_when: false
   - name: Back up application billing and provisioning records
     ansible.builtin.command:
