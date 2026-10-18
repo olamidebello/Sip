@@ -1,0 +1,66 @@
+---
+# Run after applying the wallet top-up commit to the existing server checkout.
+# sudo ansible-playbook -i localhost, -c local deployment/ansible/wallet-topups.yml
+- name: Deploy wallet top-ups and balance controls
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    app_repo: /opt/olamide/repo
+  tasks:
+    - name: Preserve or initialize the private payment encryption key
+      ansible.builtin.command:
+        argv: [python3, '{{ app_repo }}/deployment/wallet-funding/provision-payment-key.py']
+      no_log: true
+
+    - name: Build the updated API and web interface
+      ansible.builtin.command:
+        argv: [docker, compose, build, api, web]
+        chdir: '{{ app_repo }}/deployment/docker'
+
+    - name: Apply additive wallet database migrations before startup
+      ansible.builtin.command:
+        argv: [docker, compose, run, --rm, --no-deps, api, node, migrate.js]
+        chdir: '{{ app_repo }}/deployment/docker'
+
+    - name: Recreate API and web while retaining existing volumes and overrides
+      ansible.builtin.command:
+        argv: [docker, compose, up, '-d', '--no-deps', api, web]
+        chdir: '{{ app_repo }}/deployment/docker'
+
+    - name: Wait for API health and confirm funding tables
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - exec
+          - '-T'
+          - api
+          - node
+          - --input-type=module
+          - '-e'
+          - >-
+            import {createDatabase} from './db.js';
+            const r=await fetch('http://127.0.0.1:8080/api/health');
+            if(!r.ok)throw Error('API unhealthy');
+            const db=createDatabase(process.env.MYSQL_URL);
+            try{const t=await db.query("SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('wallet_funding_policy','wallet_topups','wallet_topup_credits','wallet_topup_events')");if(t.rowCount!==4)throw Error('Funding tables missing');}finally{await db.end();}
+        chdir: '{{ app_repo }}/deployment/docker'
+      register: wallet_health
+      until: wallet_health.rc == 0
+      retries: 18
+      delay: 5
+      changed_when: false
+
+    - name: Verify the public web interface
+      ansible.builtin.uri:
+        url: https://sip.dobhrap.com/
+        status_code: 200
+      register: wallet_web
+      until: wallet_web.status == 200
+      retries: 6
+      delay: 5
+
+    - name: Report setup location
+      ansible.builtin.debug:
+        msg: 'Open Administration > Payments & wallets > Wallet top-ups. Configure live Stripe credentials and the displayed webhook URL, then enable top-ups and save the limits.'

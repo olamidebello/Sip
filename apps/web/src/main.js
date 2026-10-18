@@ -1,3 +1,5 @@
+import {setupWalletTopups,setupWalletFundingAdmin} from './walletTopups.js';
+import './walletTopups.css';
 import {setupModuleReadiness} from './moduleReadiness.js';
 import {setupMarketplaceControl} from './marketplaceControl.js';
 import {setupDialIdentityInput,dialInputTarget} from './dialIdentityInput.js';
@@ -434,7 +436,7 @@ root.innerHTML = `
   </section>
   <section id="money" hidden aria-label="Money workspace">
     <div class="money-header"><button id="money-back" type="button" aria-label="Back to chats">←</button><h2>Money <span>$</span></h2><button id="money-settings" type="button" aria-label="Money profile and settings">Profile</button></div>
-    <div class="money-balance-card"><small>Available balance · USD</small><strong id="money-total">$0.00</strong><div><button id="money-funding" type="button" disabled>Add money</button><button id="money-payout" type="button" disabled>Cash out</button></div><p id="money-funding-note"></p></div>
+    <div class="money-balance-card"><small>Available balance · USD</small><strong id="money-total" data-wallet-value="availableBalanceCents">$0.00</strong><p>Account balance <b data-wallet-value="accountBalanceCents">$0.00</b> · Reserved for calls <b data-wallet-value="reservedBalanceCents">$0.00</b></p><div><button id="money-funding" data-wallet-topup type="button" disabled>Top Up</button><button id="money-payout" type="button" disabled>Cash out</button></div><p id="money-funding-note"></p></div>
     <div data-money-panel="home" class="money-keypad-panel"><label class="sr-only" for="money-amount">Amount in US dollars</label><div class="money-amount-input"><span>$</span><input id="money-amount" inputmode="decimal" autocomplete="off" placeholder="0" aria-label="Amount in US dollars"></div><div class="money-keypad"><button type="button" data-money-key="1" aria-label="1">1</button><button type="button" data-money-key="2" aria-label="2">2</button><button type="button" data-money-key="3" aria-label="3">3</button><button type="button" data-money-key="4" aria-label="4">4</button><button type="button" data-money-key="5" aria-label="5">5</button><button type="button" data-money-key="6" aria-label="6">6</button><button type="button" data-money-key="7" aria-label="7">7</button><button type="button" data-money-key="8" aria-label="8">8</button><button type="button" data-money-key="9" aria-label="9">9</button><button type="button" data-money-key="." aria-label=".">.</button><button type="button" data-money-key="0" aria-label="0">0</button><button type="button" data-money-key="back" aria-label="⌫">⌫</button></div><div class="money-primary-actions"><button id="money-start-request" type="button">Request</button><button id="money-start-pay" type="button">Pay</button></div></div>
     <div data-money-panel="pay" hidden><h3>Pay <span id="money-pay-amount">$0</span></h3><p>Send from your available internal balance.</p><form id="money-pay-form"><label>To <input id="money-recipient" type="email" required autocomplete="email" placeholder="Recipient email"></label><button type="submit">Confirm payment</button></form></div>
     <div data-money-panel="request" hidden><h3>Request money</h3><form id="money-request-form"><label>From <input id="money-payer" type="email" required placeholder="Payer email"></label><label>Amount (USD) <input id="money-request-amount" inputmode="decimal" required></label><label>For <input id="money-request-note" maxlength="200" placeholder="Add a note"></label><button type="submit">Send request</button></form></div>
@@ -452,8 +454,8 @@ root.innerHTML = `
     <p id="subscription"></p>
     <h3>Invoices</h3><ul id="invoices"></ul><p id="checkout-status" role="status"></p>
     <h3>Account wallet</h3>
-    <p id="wallet-balance">Loading wallet…</p>
-    <p>Funding and cash-out are unavailable until a verified payment provider is connected. A wallet transfer requires an existing cleared balance.</p>
+    <div class="wallet-balance-summary"><p>Account balance <strong data-wallet-value="accountBalanceCents">$0.00</strong></p><p>Available balance <strong data-wallet-value="availableBalanceCents">$0.00</strong><small>Reserved for active calls: <span data-wallet-value="reservedBalanceCents">$0.00</span></small></p><button type="button" data-wallet-topup disabled>Top Up</button></div><p id="wallet-balance">Loading wallet…</p>
+    <p data-wallet-funding-note></p><p>Available funds can be used for calling and internal transfers. Funds reserved for active calls are temporarily unavailable. Cash-out is unavailable.</p><h4>Top-up payments</h4><ul id="wallet-topup-history"></ul><p id="wallet-topup-status" role="status" aria-live="polite"></p>
     <form id="wallet-transfer">
       <label>Recipient email <input name="recipientEmail" type="email" required></label>
       <label>Amount (USD cents) <input name="amountCents" type="number" min="1" max="100000000" step="1" required></label>
@@ -877,7 +879,7 @@ root.innerHTML = `
         <label><input name="confirmLive" type="checkbox"> Confirm live Stripe payments and reconciliation responsibility</label>
         <button>Save Stripe settings</button></form>
       <button id="stripe-verify" type="button" hidden>Verify Stripe connection</button>
-      <p>Super administrators and explicitly authorized reseller administrators control their own store credentials and payment availability. Card issuance, wallet funding and withdrawals are not enabled by these settings.</p>
+      <p>Super administrators and explicitly authorized reseller administrators control their own store credentials and payment availability. Use Wallet top-ups to enable account funding separately. Card issuance and withdrawals remain unavailable.</p>
       <p><a href="https://dashboard.stripe.com/" target="_blank" rel="noopener noreferrer">Open Stripe Dashboard</a> · <a href="https://docs.stripe.com/issuing" target="_blank" rel="noopener noreferrer">Card issuing setup</a></p>
       <button id="stripe-refresh" type="button">Refresh gateway and payment attempts</button>
       <p id="stripe-status" role="status"></p><h4>Recent payment attempts</h4><ul id="stripe-attempts"></ul></section>
@@ -956,6 +958,7 @@ root.innerHTML = `
       <p id="provider-webhook-status" role="status"></p>
     </section>
       <section id="google-oauth-admin" hidden><h3>Google Contacts OAuth</h3><p>Configure Google Contacts for the selected tenant after deployment. Enable the People API and authorize this application's origin in Google Cloud.</p><p id="google-oauth-origin"></p><form id="google-oauth-config"><label>OAuth Client ID <input name="clientId" maxlength="254" placeholder="123-example.apps.googleusercontent.com"></label><label><input name="enabled" type="checkbox">Enable Google Contacts import</label><button>Save OAuth settings</button></form><button id="google-oauth-refresh" type="button">Reload settings</button><p id="google-oauth-admin-status" role="status"></p></section>
+      <section id="wallet-funding-admin" hidden><h3>Wallet top-ups</h3><p data-funding-readiness></p><a href="/admin#marketplace-stripe-admin">Configure Stripe credentials</a><p>Stripe webhook URL: <code data-funding-webhook></code></p><p>Subscribe to checkout.session.completed, checkout.session.async_payment_succeeded, checkout.session.async_payment_failed and checkout.session.expired. Live confirmed payments credit wallets automatically, once per top-up. Disabling funding stops new checkouts; confirmed payments from existing checkouts are still credited.</p><form><label><input type="checkbox" name="enabled">Enable account top-ups</label><label>Minimum (USD)<input name="min" type="number" min="0.50" max="10000" step="0.01" required></label><label>Maximum (USD)<input name="max" type="number" min="0.50" max="10000" step="0.01" required></label><button>Save top-up controls</button></form><button type="button" data-funding-refresh>Refresh top-up payments</button><p role="status"></p><h4>Recent payments</h4><ul></ul><h4>Account balances</h4><p>Available funds exclude reservations for active calls. Showing up to 1,000 accounts in this workspace.</p><div data-funding-balances></div></section>
       <section id="wallet-providers-admin" hidden><h3>Wallet providers: Dwolla and Flutterwave</h3>
 <p>Configure USD bank payments through Dwolla and NGN payments through Flutterwave. Connection checks do not enable deposits or withdrawals.</p>
 <form id="wallet-provider-form" autocomplete="off"><label>Provider <select name="provider"><option value="dwolla">Dwolla (USD)</option><option value="flutterwave">Flutterwave v3 (NGN)</option></select></label>
@@ -1155,6 +1158,7 @@ root.innerHTML = `
   </section>
   <section id="calling-workspace" class="calling-workspace" hidden>
   <h2>Calls</h2>
+  <div class="wallet-balance-summary" id="calling-wallet-summary" hidden><p>Account balance <strong data-wallet-value="accountBalanceCents">$0.00</strong></p><p>Available balance <strong data-wallet-value="availableBalanceCents">$0.00</strong></p><button type="button" data-wallet-topup disabled>Top Up</button></div>
   <p id="calling-access" role="status">Internal SIP calls are available without a subscription after your SIP account is activated. External calls require an active plan.</p><a href="#billing">Manage calling plan</a>
   <button id="connect-assigned-sip" type="button">Reconnect</button>
   <p>Connection details are assigned automatically when you sign in. Use this button to retry activation or reconnect.</p>
@@ -1231,6 +1235,7 @@ const callGui=setupCallGui({document,openAudio:()=>callsScreen.open('settings'),
 }});
 setupDownloads();
 setupCarrierControl();
+root.insertAdjacentHTML('beforeend',`<dialog id="wallet-topup-dialog" aria-labelledby="wallet-topup-title"><button type="button" data-topup-close aria-label="Close top-up">Close</button><h2 id="wallet-topup-title">Top up your account</h2><p id="wallet-topup-limits"></p><form><label>Amount (USD)<input name="amount" type="number" inputmode="decimal" min="1" step="0.01" required autocomplete="off"></label><p>Pay securely with Stripe. Your balance updates after payment confirmation.</p><button type="submit">Buy Now</button><p role="status" aria-live="polite"></p></form></dialog>`);
 const navigationGroups=[
   ...userNavigationGroups,
   ...adminNavigationGroups
@@ -1269,6 +1274,8 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   document.body.classList.toggle('money-mode',target==='money');
   if(target==='social'){void socialWorkspace.refresh();void socialLinks.refresh();void socialPublishing.refresh();}
   if(target==='money')void moneyWorkspace.refresh();
+  if(['money','billing','calling-workspace'].includes(target))void walletTopups.refresh();
+  if(target==='wallet-funding-admin')void walletFundingAdmin.refresh();
   if(['product-store','marketplace-my-orders'].includes(target))void productStore.refresh();
   if(['product-store-admin','marketplace-orders-admin'].includes(target))void productStore.refreshAdmin();
   if(target==='payment-admin'||target.startsWith('marketplace-')&&target!=='marketplace-my-orders')void marketplaceControl.refresh();
@@ -1452,6 +1459,8 @@ const sipProfiles = setupSipProfiles({get:apiGet,request:accountRequest,permissi
 const socialPublishing=setupSocialPublishing({document,get:apiGet,request:accountRequest});
 const socialLinks=setupSocialLinks({document,get:apiGet,request:accountRequest});
 const socialWorkspace=setupSocialWorkspace({document,get:apiGet,request:accountRequest});
+const walletTopups=setupWalletTopups({document,get:apiGet,request:accountRequest});
+const walletFundingAdmin=setupWalletFundingAdmin({document,get:apiGet,request:accountRequest});
 const moneyWorkspace=setupMoneyWorkspace({document,get:apiGet,request:accountRequest,show:showWorkspace});
 const productStore=setupProductStore({get:apiGet,request:accountRequest,refreshBilling});
 const moduleReadiness=setupModuleReadiness({document,get:apiGet,request:accountRequest});
@@ -1921,6 +1930,7 @@ function signedIn(user) {
   $("#carrier-console").hidden=!["admin","super_admin"].includes(user.role);
   $("#provider-credentials-admin").hidden=user.role!=="super_admin";
   $("#wallet-providers-admin").hidden=user.role!=="super_admin";
+  walletFundingAdmin.start(user);
   $("#activity-monitor").hidden=false;
   userActivity.start(user.role);
   $("#didww-admin").hidden=user.role!=="super_admin";
@@ -1963,7 +1973,8 @@ function signedIn(user) {
   if(user.features?.billing){productStore.refresh();if(["admin","super_admin"].includes(user.role))productStore.refreshAdmin();}
   $("#social").hidden=false;
   $("#money").hidden=!user.features?.billing;
-  if(user.features?.billing)moneyWorkspace.start(user);
+  $("#calling-wallet-summary").hidden=!user.features?.billing;
+  if(user.features?.billing){moneyWorkspace.start(user);walletTopups.start(user);}
   $("#billing").hidden = !user.features?.billing;
   if (user.features?.meetings) meetings.show();
   else meetings.hide();
@@ -2074,10 +2085,10 @@ async function refreshBilling() {
     apiGet("/api/billing/subscription"),
     apiGet("/api/porting"),apiGet("/api/wallet")
   ]);
-  $("#wallet-balance").textContent=`Available internal balance: ${money(wallet.balanceCents)} ${wallet.currency}. No funding provider connected.`;
+  $("#wallet-balance").textContent=`Available balance: ${money(wallet.availableBalanceCents??wallet.balanceCents)} ${wallet.currency}. Funds reserved for active calls are excluded.`;
   $("#wallet-entries").replaceChildren(...wallet.entries.map(entry=>{
     const item=document.createElement("li");
-    item.textContent=`${Number(entry.delta_cents)>=0?"Received":"Sent"} ${money(Math.abs(Number(entry.delta_cents)))} · ${new Date(entry.created_at).toLocaleString()}`;
+    item.textContent=`${entry.type==='topup'?"Top Up":Number(entry.delta_cents)>=0?"Received":"Sent"} ${money(Math.abs(Number(entry.delta_cents)))} · ${new Date(entry.created_at).toLocaleString()}`;
     return item;
   }));
   $("#subscription").textContent = subscription.subscription
@@ -2525,7 +2536,7 @@ $("#logout").onclick = async () => {
     socialPublishing.clear();
     socialLinks.clear();
     socialWorkspace.stop();
-    moneyWorkspace.stop();
+    moneyWorkspace.stop();walletTopups.stop();walletFundingAdmin.stop();
     await nativeCalls.stop();
     await nativePush.stop();
     $("#signed-in-profile").hidden=true;

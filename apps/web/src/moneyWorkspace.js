@@ -11,7 +11,7 @@ export function setupMoneyWorkspace({document,get,request,show,redirect=url=>loc
  for(const b of document.querySelectorAll('[data-money-tab]'))b.onclick=()=>view(b.dataset.moneyTab);
  $('money-logout').onclick=()=>document.getElementById('logout').click();
  $('money-back').onclick=()=>show('chat');$('money-settings').onclick=()=>show('account');
- $('money-funding').onclick=()=>status('Wallet deposits are not configured.');$('money-payout').onclick=()=>status('Bank withdrawals are not configured.');
+ $('money-payout').onclick=()=>status('Bank withdrawals are not configured.');
  $('money-billing').onclick=()=>show('billing');$('money-refresh').onclick=()=>refresh();
  $('money-amount').oninput=()=>{$('money-pay-amount').textContent=moneyAmount();};
  function moneyAmount(){try{return money(dollarsToCents($('money-amount').value));}catch{return '$0';}}
@@ -31,7 +31,7 @@ export function setupMoneyWorkspace({document,get,request,show,redirect=url=>loc
    $('money-provider-status').textContent=capabilities.invoiceCheckoutAvailable?`Stripe ${capabilities.mode} checkout available for invoices.`:'Online payments are not configured for this workspace.';
    $('money-funding-note').textContent=capabilities.fundingNote+' '+capabilities.payoutNote;
    const history=$('money-history');history.replaceChildren();
-   for(const row of wallet.entries){const li=document.createElement('li'),title=document.createElement('strong'),stamp=document.createElement('small');title.textContent=`${Number(row.delta_cents)>0?'Received':'Sent'} ${money(Math.abs(Number(row.delta_cents)))}`;stamp.textContent=new Date(row.created_at).toLocaleString();li.append(title,stamp);history.append(li);}if(!history.children.length)history.textContent='Your transactions will appear here.';
+   for(const row of wallet.entries){const li=document.createElement('li'),title=document.createElement('strong'),stamp=document.createElement('small');title.textContent=`${row.type==='topup'?'Top Up':Number(row.delta_cents)>0?'Received':'Sent'} ${money(Math.abs(Number(row.delta_cents)))}`;stamp.textContent=new Date(row.created_at).toLocaleString();li.append(title,stamp);history.append(li);}if(!history.children.length)history.textContent='Your transactions will appear here.';
    const list=$('money-requests');list.replaceChildren();
    for(const row of requests.requests){const li=document.createElement('li');const incoming=row.payer_id===owner;li.textContent=`${incoming?'From '+row.requester_email:'To '+row.payer_email} · ${money(row.amount_cents)} · ${row.status}${row.note?' · '+row.note:''}`;
     if(row.status==='pending'){
