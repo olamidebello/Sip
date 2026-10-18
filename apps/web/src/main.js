@@ -1460,7 +1460,7 @@ const dashboard=setupDashboard({get:path=>apiGet(path),request:(path,body,method
 const support=setupSupport({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 localeSettings=setupLocaleSettings({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const serviceCountryUi=setupServiceCountries({document,get:apiGet,request:accountRequest,onSaved:async()=>{await localeSettings.refresh(activeRole==='super_admin'||activeRole==='admin');await locationMonitor.ensure();}});
-const didShopUi=setupDidShop({document,get:apiGet,request:accountRequest});
+const didShopUi=setupDidShop({document,get:apiGet,request:accountRequest,show:showWorkspace});
 const profileLanding=setupProfileLanding({document,get:apiGet,show:showWorkspace,onComplete:async()=>{showWorkspace(userHome(),{historyMode:'replace'});pageRoutes.render();}});
 const secureChatUi=setupSecureChat({document,get:apiGet,request:accountRequest});
 const adaptiveAudio=createAdaptiveAudio({onStatus:value=>{let label=$('#adaptive-audio-status');if(!label){label=document.createElement('p');label.id='adaptive-audio-status';label.setAttribute('role','status');$('#status').after(label);}label.textContent=value.mode+(value.codec?' · '+value.codec:'')+(value.targetBitrate?' · '+Math.round(value.targetBitrate/1000)+' kbps target':'')+(Number.isFinite(value.availableKbps)?' · estimated available '+Math.round(value.availableKbps)+' kbps':'')+(Number.isFinite(value.loss)?' · loss '+Math.round(value.loss*100)+'%':'');}});
@@ -2908,7 +2908,7 @@ let pendingSubscriberSms;
 $('#sms-send').onsubmit=async event=>{
   event.preventDefault();const form=event.currentTarget;const input=Object.fromEntries(new FormData(form));
   const signature=JSON.stringify(input);if(!pendingSubscriberSms||pendingSubscriberSms.signature!==signature)pendingSubscriberSms={signature,key:crypto.randomUUID()};
-  try{const result=await accountRequest('/api/external-sms/send',{...input,idempotencyKey:pendingSubscriberSms.key});pendingSubscriberSms=null;$('#sms-status').textContent=result.status==='subscriber_accepted'?`Subscriber text accepted. Chat: ${result.chatDelivered?'delivered':'off'}; email: ${result.emailQueued?'queued':'off'}.`:`Carrier accepted SMS ${result.providerId}`;form.elements.body.value='';await refreshExternalSms();}
+  try{const result=await accountRequest('/api/external-sms/send',{...input,idempotencyKey:pendingSubscriberSms.key});pendingSubscriberSms=null;$('#sms-status').textContent=result.status==='subscriber_accepted'?`Subscriber text accepted. Chat: ${result.chatDelivered?'delivered':'off'}; email: ${result.emailQueued?'queued':'off'}.`:result.status==='unknown'?'Carrier acceptance is unknown. Check sent history before trying again.':`Carrier SMS ${result.status}: ${result.providerId||result.id}`;form.elements.body.value='';await refreshExternalSms();}
   catch(error){$('#sms-status').textContent=error.message;}
 };
 async function refreshSmsNumberAdmin(){
