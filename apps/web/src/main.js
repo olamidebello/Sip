@@ -1,3 +1,4 @@
+import {setupPlatformWatchdog} from './platformWatchdogUi.js';
 import {setupDidShop} from './didShopUi.js';
 import {setupProfileLanding} from './profileLanding.js';
 import {authorizeLocatedCall,renderShortDialAdmin} from './locationDialing.js';
@@ -1460,6 +1461,7 @@ const dashboard=setupDashboard({get:path=>apiGet(path),request:(path,body,method
 const support=setupSupport({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 localeSettings=setupLocaleSettings({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const serviceCountryUi=setupServiceCountries({document,get:apiGet,request:accountRequest,onSaved:async()=>{await localeSettings.refresh(activeRole==='super_admin'||activeRole==='admin');await locationMonitor.ensure();}});
+const platformWatchdog=setupPlatformWatchdog({document,get:apiGet,request:accountRequest});
 const didShopUi=setupDidShop({document,get:apiGet,request:accountRequest,show:showWorkspace});
 const profileLanding=setupProfileLanding({document,get:apiGet,show:showWorkspace,onComplete:async()=>{showWorkspace(userHome(),{historyMode:'replace'});pageRoutes.render();}});
 const secureChatUi=setupSecureChat({document,get:apiGet,request:accountRequest});
@@ -1939,6 +1941,7 @@ function finishSignedIn(user) {
   activeRole=["admin","super_admin"].includes(user.role)?user.role:"user";
   if(!document.querySelector('#profile-allows-vpn')){const label=document.createElement('label');label.innerHTML='<input id="profile-allows-vpn" type="checkbox" checked disabled> Allows VPN (managed by super admin)';$('#signed-in-profile').append(label);}
   const vpnBox=document.querySelector('#profile-allows-vpn');vpnBox.disabled=user.role!=='super_admin';vpnBox.onchange=async()=>{try{await accountRequest('/api/admin/location-policy/users/'+user.id,{allowsVpn:vpnBox.checked},'PUT');await locationMonitor.ensure();}catch(e){$('#account-status').textContent=e.message;}};
+  platformWatchdog.show(user).catch(error=>{$('#account-status').textContent=error.message;});
   didShopUi.show(user).catch(error=>{$('#account-status').textContent=error.message;});
   secureChatUi.show(user);
   serviceCountryUi.show(user).catch(error=>{$('#account-status').textContent=error.message;});
@@ -2576,6 +2579,7 @@ $("#logout").onclick = async () => {
     contactDirectory.clear();
     profileLanding.stop();
     secureChatUi.stop();
+    platformWatchdog.stop();
     didShopUi.stop();
     serviceCountryUi.stop();
     languageTools.stop();
