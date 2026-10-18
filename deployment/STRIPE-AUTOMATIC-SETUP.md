@@ -43,7 +43,7 @@ Other optional variables: `stripe_tenant_id`, `stripe_key_file`, `stripe_enable_
 
 Keys are passed to the one-off setup container through stdin, never command arguments. No key is added to Git or printed by the setup utility. The private key file is optional after successful setup; subsequent runs can use the encrypted database key. Do not delete or rotate `PAYMENT_CONFIG_KEY` independently of the encrypted data.
 
-An existing webhook at the same URL that was not created by this setup stops automatic creation to avoid duplicate delivery or replacing unknown signing secrets. Keep the existing working gateway or reconcile that endpoint in Stripe first. Never remove a working production endpoint without reviewing pending payments.
+An existing webhook at the same URL can be adopted without deletion. Reveal that endpoint's `whsec_...` signing secret in Stripe Dashboard > Webhooks, then save it using the same hidden-input method above to `/etc/olamide/stripe-webhook-secret` (root-owned, mode 0600). Rerun the playbook. It updates the one matching endpoint's supported events and management metadata, encrypts the supplied secret, and creates no duplicate endpoint. Multiple matching endpoints stop for review. Do not paste secrets into chat or command arguments.
 
 Stripe does not expose signing secrets on ordinary endpoint retrieval. If creation succeeds but database persistence fails, reruns reuse a saved request ID to recover the idempotent creation response during the recovery window. If that window expires, setup stops instead of creating a duplicate endpoint.
 

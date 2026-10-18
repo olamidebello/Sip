@@ -10,6 +10,7 @@ export function setupInput(value){
  if(!Number.isSafeInteger(min)||!Number.isSafeInteger(max)||min<50||max<min||max>1000000)throw Error('Top-up limits must be between 50 and 1000000 USD cents');
  if(value.enableTopups!==undefined&&typeof value.enableTopups!=='boolean')throw Error('Boolean top-up setting required');
  if(value.secretKey&&(!/^sk_live_[A-Za-z0-9]{12,}$/.test(value.secretKey)||value.secretKey.length>300))throw Error('A live Stripe secret key is required by this integration');
+ if(value.webhookSecret&&(!/^whsec_[A-Za-z0-9]{12,}$/.test(value.webhookSecret)||value.webhookSecret.length>300))throw Error('Invalid webhook signing secret');
  return {...value,origin:origin.origin,minCents:min,maxCents:max};
 }
 export async function configureStripe(pool,input,{fetcher=fetch}={}){
@@ -47,16 +48,29 @@ export async function configureStripe(pool,input,{fetcher=fetch}={}){
    await api('webhook_endpoints/'+encodeURIComponent(state.endpoint_id),{body});
   }else{
    // Refuse unknown matching endpoints: Stripe only returns the signing secret on creation.
-   let cursor='',pages=0;do{const list=await api('webhook_endpoints?limit=100'+(cursor?'&starting_after='+encodeURIComponent(cursor):''));
+   let cursor='',pages=0;const matching=[];do{const list=await api('webhook_endpoints?limit=100'+(cursor?'&starting_after='+encodeURIComponent(cursor):''));
     const matches=(list.data||[]).filter(e=>e.url===url);
-    if(matches.some(e=>e.metadata?.olamide_setup===state.request_id&&Number(e.created)<Date.now()/1000-23*3600))throw Error('Webhook signing secret recovery window expired; existing gateway preserved. Recover the signing secret privately before continuing');
-    if(matches.some(e=>e.metadata?.olamide_setup!==state.request_id))throw Error('An existing webhook uses this URL. Keep the current gateway or remove the duplicate in Stripe before automatic setup');
+    matching.push(...matches);
     cursor=list.has_more?list.data?.at(-1)?.id:'';if(++pages>100)throw Error('Too many webhooks to inspect safely');
    }while(cursor);
-   const body=new URLSearchParams({url,description:'Olamide payments and wallet confirmations','metadata[olamide_tenant]':tenant,'metadata[olamide_setup]':state.request_id});checkoutEvents.forEach(e=>body.append('enabled_events[]',e));
-   endpoint=await api('webhook_endpoints',{body,key:'olamide-webhook-'+state.request_id});
-   if(!/^we_[A-Za-z0-9]+$/.test(endpoint.id||'')||endpoint.livemode!==true||endpoint.url!==url||!/^whsec_[A-Za-z0-9]+$/.test(endpoint.secret||''))throw Error('Webhook signing secret unavailable; existing gateway preserved');
-   signingSecret=endpoint.secret;
+   if(matching.length){
+    if(matching.length!==1)throw Error('An existing webhook URL has multiple endpoints; reconcile duplicates in Stripe first');
+    const candidate=matching[0];
+    if(options.webhookSecret){
+     if(candidate.livemode!==true||!/^we_[A-Za-z0-9]+$/.test(candidate.id||''))throw Error('Invalid existing live webhook');
+     endpoint=candidate;signingSecret=options.webhookSecret;
+     const body=new URLSearchParams({disabled:'false','metadata[olamide_tenant]':tenant,'metadata[olamide_setup]':state.request_id});checkoutEvents.forEach(e=>body.append('enabled_events[]',e));
+     await api('webhook_endpoints/'+encodeURIComponent(endpoint.id),{body});
+    }else if(candidate.metadata?.olamide_setup!==state.request_id){
+     throw Error('An existing webhook uses this URL. Save its signing secret privately in /etc/olamide/stripe-webhook-secret to adopt it without deletion');
+    }else if(Number(candidate.created)<Date.now()/1000-23*3600){throw Error('Webhook signing secret recovery window expired; save its signing secret privately to continue');}
+   }
+   if(!endpoint){
+    const body=new URLSearchParams({url,description:'Olamide payments and wallet confirmations','metadata[olamide_tenant]':tenant,'metadata[olamide_setup]':state.request_id});checkoutEvents.forEach(e=>body.append('enabled_events[]',e));
+    endpoint=await api('webhook_endpoints',{body,key:'olamide-webhook-'+state.request_id});
+    if(!/^we_[A-Za-z0-9]+$/.test(endpoint.id||'')||endpoint.livemode!==true||endpoint.url!==url||!/^whsec_[A-Za-z0-9]+$/.test(endpoint.secret||''))throw Error('Webhook signing secret unavailable; existing gateway preserved');
+    signingSecret=endpoint.secret;
+   }
    // Persist the one-time signing secret before enabling the application gateway.
    await db.query('UPDATE stripe_gateway_setup SET endpoint_id=$1,signing_secret_cipher=$2 WHERE tenant_id=$3',[endpoint.id,encryptPaymentSecret(signingSecret),tenant]);
   }
