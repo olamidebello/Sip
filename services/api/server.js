@@ -1,3 +1,4 @@
+import {handleCallingPlan} from './defaultCallingPlan.js';
 import {handleModuleAudit} from './moduleAudit.js';
 import {handleCdrArchives,startCdrArchives} from './cdrArchive.js';
 import {handlePaymentReconciliation,startPaymentReconciliation} from './paymentReconciliation.js';
@@ -631,6 +632,7 @@ async function handler(req, res) {
         );
         return send(res, 201, { id,status:"draft" });
       }
+      if(path==='/api/admin/calling-plan') return handleCallingPlan({req,res,path,user,pool,send,readJson});
       if (path === "/api/admin/plans" && req.method === "GET") {
         if (!isAdmin(user)) return send(res,403,{error:"Administrator required"});
         const result=await pool.query("SELECT id,name,description,monthly_cents,active FROM plans WHERE tenant_id=$1 ORDER BY name LIMIT 200",[user.tenant_id]);
