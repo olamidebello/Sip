@@ -1,0 +1,47 @@
+- import_playbook: install-profile-did-shop.yml
+- name: Apply and verify saved Flowroute carrier configuration
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Provision saved gateway and switch routing
+    ansible.builtin.command:
+      argv:
+      - docker
+      - exec
+      - docker-api-1
+      - node
+      - /app/commissionPaidCalls.js
+    no_log: true
+    changed_when: true
+  - name: Apply tenant billing, paid DID voice routes and SMS callbacks
+    ansible.builtin.command:
+      argv:
+      - docker
+      - exec
+      - docker-api-1
+      - node
+      - /app/provisionFlowroute.js
+    register: flowroute_provision
+    no_log: true
+    changed_when: true
+    failed_when: flowroute_provision.rc not in [0, 2]
+  - name: Report verified configuration and pending provider activation
+    ansible.builtin.debug:
+      msg: '{{ flowroute_provision.stdout | from_json }}'
+    when: flowroute_provision.stdout | length > 0
+  - name: Require resolved configuration prerequisites
+    ansible.builtin.assert:
+      that:
+      - flowroute_provision.rc == 0
+      fail_msg: Flowroute setup ran but some credentials, live payment setup or carrier ownership/task outcomes require review.
+        Inspect super-admin DID/SMS status and saved gateway settings. Pending asynchronous SMS activation continues automatically;
+        no uncertain acquisition or activation is retried blindly.
+      success_msg: Saved Flowroute gateway, purchased DID voice routes and SMS setup applied. Pending SMS activations continue
+        automatically.
+  - name: Report service verification
+    ansible.builtin.debug:
+      msg: My profile shows DID and SMS status. Test an inbound/outbound call and SMS with your own numbers after provider
+        activation. This playbook manages application-owned paid DIDs only. It preserves unrelated carrier numbers/routes
+        and cannot create provider credentials, override carrier approval, or bypass registration requirements. Carrier portal
+        IP authorization must match the saved public IP.
