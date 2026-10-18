@@ -1,8 +1,30 @@
-const CACHE="olamide-shell-v1";
+const CACHE="olamide-shell-v2";
 const SHELL=["/offline.html","/icon-192.png","/icon-512.png","/manifest.webmanifest"];
 self.addEventListener("install",event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)));
   self.skipWaiting();
+});
+self.addEventListener('push',event=>{
+  event.waitUntil((async()=>{
+    let data={};
+    try{data=event.data?.json()||{};}catch{}
+    const incoming=data.kind==='incoming_call' && Number(data.expiresAt)>Date.now();
+    await self.registration.showNotification(incoming?'Incoming Olamide call':'Olamide call notification',{
+      body:incoming?'Tap to open your softphone and answer.':'Open Olamide to check your calls.',
+      icon:'/icon-192.png',badge:'/icon-192.png',
+      tag:typeof data.callId==='string'?'call-'+data.callId.slice(0,128):'olamide-call',
+      requireInteraction:incoming,data:{url:'/'},
+    });
+  })());
+});
+self.addEventListener('notificationclick',event=>{
+  event.notification.close();
+  event.waitUntil((async()=>{
+    const windows=await self.clients.matchAll({type:'window',includeUncontrolled:true});
+    const client=windows.find(item=>new URL(item.url).origin===self.location.origin);
+    if(client){await client.focus();client.postMessage({type:'OLAMIDE_CALL_WAKE'});return;}
+    await self.clients.openWindow('/');
+  })());
 });
 self.addEventListener("activate",event=>{
   event.waitUntil(Promise.all([
@@ -30,3 +52,4 @@ self.addEventListener("fetch",event=>{
     }));
   }
 });
+

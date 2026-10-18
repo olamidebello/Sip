@@ -1,3 +1,4 @@
+import {handleWebPushDevice,sendBrowserPush} from './webPush.js';
 import {sendApns} from './apnsPush.js';
 import {readFile} from 'node:fs/promises';
 import {createSign,createHash,randomUUID,timingSafeEqual} from 'node:crypto';
@@ -54,6 +55,7 @@ export async function handleNativePush({req,res,path,user,pool,send,readJson,ses
   return send(res,202,{queued:devices.length});
  }
  if(!user)return send(res,401,{error:'Sign in required'});
+ if(path.startsWith('/api/native-push/web-'))return await handleWebPushDevice({req,res,path,user,pool,send,readJson,sessionHash});
  if(path==='/api/native-push/device'&&['POST','DELETE'].includes(req.method)){
   const {token,platform='android'}=await readJson(req);
   if(!['android','ios'].includes(platform)||platform==='ios'&&!/^[a-f0-9]{32,512}$/i.test(token||''))return send(res,400,{error:'Valid device platform and token required'});
@@ -81,10 +83,11 @@ export function startNativePush(pool){
      ORDER BY j.next_attempt LIMIT 10 FOR UPDATE SKIP LOCKED`)).rows;
     for(const job of jobs)await db.query("UPDATE native_push_jobs SET status='sending',attempts=attempts+1,next_attempt=DATE_ADD(NOW(3),INTERVAL 20 SECOND) WHERE id=$1",[job.id]);await db.query('COMMIT');
    }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
-   await Promise.all(jobs.map(async job=>{try{const data=typeof job.payload==='string'?JSON.parse(job.payload):job.payload;if(Number(data.expiresAt)<=Date.now()){await pool.query("UPDATE native_push_jobs SET status='expired' WHERE id=$1",[job.id]);return;}if(job.platform==='ios')await sendApns(job.token,data);else await sendFcm(job.token,data);await pool.query("UPDATE native_push_jobs SET status='sent' WHERE id=$1",[job.id]);}catch(error){if(error.unregistered)await pool.query('DELETE FROM native_push_devices WHERE token=$1',[job.token]);else await pool.query("UPDATE native_push_jobs SET status=$2,next_attempt=DATE_ADD(NOW(3),INTERVAL 5 SECOND) WHERE id=$1",[job.id,Number(job.attempts)>=2?'failed':'pending']);}}));
+   await Promise.all(jobs.map(async job=>{try{const data=typeof job.payload==='string'?JSON.parse(job.payload):job.payload;if(Number(data.expiresAt)<=Date.now()){await pool.query("UPDATE native_push_jobs SET status='expired' WHERE id=$1",[job.id]);return;}if(job.platform==='web')await sendBrowserPush(job.token,data);else if(job.platform==='ios')await sendApns(job.token,data);else await sendFcm(job.token,data);await pool.query("UPDATE native_push_jobs SET status='sent' WHERE id=$1",[job.id]);}catch(error){if(error.unregistered)await pool.query('DELETE FROM native_push_devices WHERE token=$1',[job.token]);else await pool.query("UPDATE native_push_jobs SET status=$2,next_attempt=DATE_ADD(NOW(3),INTERVAL 5 SECOND) WHERE id=$1",[job.id,Number(job.attempts)>=2?'failed':'pending']);}}));
    await pool.query("DELETE FROM native_push_jobs WHERE expires_at<DATE_SUB(NOW(3),INTERVAL 1 DAY)");
   }catch(e){console.error('Native push worker pending',e.name);}
   if(!stopped){timer=setTimeout(tick,1000);timer.unref?.();}
  }
- if(process.env.NATIVE_PUSH_SERVICE_ACCOUNT_FILE||process.env.NATIVE_PUSH_APNS_CONFIG_FILE)void tick();return ()=>{stopped=true;clearTimeout(timer);};
+ if(process.env.WEB_PUSH_CONFIG_FILE||process.env.NATIVE_PUSH_SERVICE_ACCOUNT_FILE||process.env.NATIVE_PUSH_APNS_CONFIG_FILE)void tick();return ()=>{stopped=true;clearTimeout(timer);};
 }
+
