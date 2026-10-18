@@ -4,7 +4,7 @@ export const userNavigationGroups=[
  {label:'Money & services',items:[['money','Send & request money'],['billing','Plans, numbers & billing'],['dialplan-marketplace','Dial plan marketplace']]},
  {label:'Marketplace',items:[['product-store','Shop products & services'],['marketplace-my-orders','My orders & subscriptions']]},
  {label:'Social & daily tools',items:[['social','Social feed'],['dashboard','Dashboard'],['campaign-inbox-panel','Announcements'],['planner','Events & tasks'],['search-panel','Search']]},
- {label:'Account & preferences',items:[['messenger-settings','Messenger settings'],['account','Account & security'],['contact-presence-settings','Privacy & presence'],['messenger-sessions','Linked devices'],['messenger-storage','Storage & data'],['locale-settings','Language, country & currency'],['background-user','Appearance'],['messenger-accessibility','Accessibility'],['activity-monitor','Activity monitor']]},
+ {label:'Account & preferences',items:[['messenger-settings','Messenger settings'],['account','Account & security'],['location-history-settings','Location history'],['contact-presence-settings','Privacy & presence'],['messenger-sessions','Linked devices'],['messenger-storage','Storage & data'],['locale-settings','Language, country & currency'],['background-user','Appearance'],['messenger-accessibility','Accessibility'],['activity-monitor','Activity monitor']]},
  {label:'Help & downloads',items:[['support','Support tickets'],['help','Help & tutorials'],['downloads','Download apps']]}
 ];
 export function setupUserNavigation({document,nav,target}){

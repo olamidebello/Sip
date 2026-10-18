@@ -1,3 +1,4 @@
+import {setupLocationHistory} from './locationHistory.js';
 import {setupModuleReadiness} from './moduleReadiness.js';
 import {setupMarketplaceControl} from './marketplaceControl.js';
 import {setupDialIdentityInput,dialInputTarget} from './dialIdentityInput.js';
@@ -174,7 +175,7 @@ root.innerHTML = `
     <h2>Welcome to Olamide</h2>
     <p>Registration creates an active account and SIP identity immediately. Calling needs an activated switch account; no number or plan is assigned at signup.</p>
     <p id="signin-role-help">Your assigned role controls which menus appear after sign-in.</p>
-    <section id="signed-in-profile" hidden><h3>My profile</h3><label>Name <input id="profile-name" readonly></label><label>Email <input id="profile-email" readonly></label></section>
+    <section id="signed-in-profile" hidden><h3>My profile</h3><p><a class="button-link" href="/#outbound-rates">Rate check</a> · <a href="/#location-history-settings">Location history</a></p><label>Name <input id="profile-name" readonly></label><label>Email <input id="profile-email" readonly></label></section>
     <nav class="auth-pages" aria-label="Account pages"><a href="/pages/login">Sign in</a><a href="/pages/signup">Register</a><a href="/pages/ldap-login">Directory sign in</a></nav>
     <form id="signup">
       <h3>Create an account</h3><p>Review our <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a> and <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> before registering.</p>
@@ -224,6 +225,13 @@ root.innerHTML = `
       <label>New password <input name="newPassword" type="password" autocomplete="new-password" minlength="12" required></label>
       <button>Change password and sign out other sessions</button>
     </form>
+    <section id="location-history-settings" hidden><h3>Location history</h3>
+      <p>Save a location only when you choose. Your latest 100 check-ins are stored in your account. This does not track you in the background or recover past locations.</p>
+      <button id="location-history-save" type="button">Save current location</button>
+      <button id="location-history-refresh" type="button">Refresh history</button>
+      <button id="location-history-clear" type="button">Clear history</button>
+      <p id="location-history-status" role="status"></p><ol id="location-history-list"></ol>
+    </section>
     <section id="passkey-settings" hidden><h3>Passkeys and device biometrics</h3>
       <p>Your device checks your fingerprint, face or PIN locally. Olamide stores only a public key.</p>
       <button id="passkey-add" type="button">Add a passkey</button><ul id="passkey-list"></ul>
@@ -1313,6 +1321,7 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   return true;
 }
 function resetWorkspace() {
+  locationHistory.stop();
   marketplaceControl.reset();
   productStore.stop();
   moduleReadiness.stop();
@@ -1443,6 +1452,7 @@ const contactCard=setupContactCard({document,get:apiGet,request:accountRequest,c
 const dialerContacts=setupDialerContacts({document,get:apiGet,input:dialForm.elements.target,openContact:c=>void contactCard.open(c),inCall:()=>onCall,onStatus:message=>status(message)});
 $('#dialpad-video').innerHTML=icon('video');$('#dial .dialpad-call').innerHTML=icon('calls');
 $('#dialpad-video').onclick=()=>{callsScreen.stop();if(!showWorkspace('meetings')){status('Video meetings are not enabled for this account');return;}$('#meeting-create input').value='Video call with '+(dialForm.elements.target.value||'contact');$('#meeting-create input').focus();};
+const locationHistory=setupLocationHistory({document,get:apiGet,request:accountRequest});
 const meetings = setupMeetings();
 const dashboard=setupDashboard({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const support=setupSupport({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
@@ -1890,6 +1900,7 @@ function signedIn(user) {
     $('#account-status').textContent=user.passkeySigninRequired?'Sign out and use passkey sign-in to continue.':'Register a passkey, then sign out and use passkey sign-in.';
     showWorkspace('account');return;
   }
+  void locationHistory.start(user);
   $("#signed-in-profile").hidden=false;
   $("#profile-name").value=user.name || "";
   $("#profile-email").value=user.email || "";

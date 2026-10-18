@@ -1,3 +1,4 @@
+import {migrateLocationHistory} from './locationHistory.js';
 import {migrateCdrArchives} from './cdrArchive.js';
 import {migratePaymentReconciliation} from './paymentReconciliation.js';
 import {migrateStoreGateways} from './storeGateways.js';
@@ -133,6 +134,7 @@ export async function migrate(pool) {
       ['catalog', () => migrateCatalogControl(pool)],
       ['softphone', () => migrateSoftphoneState(pool)],
       ['geofence', () => migrateGeofencePolicy(pool)],
+      ['location_history', () => migrateLocationHistory(pool)],
       ['wallet', () => migrateWallet(pool)],
       ['dashboard', () => migrateDashboard(pool)],
       ['dashboard_views', () => migrateDashboardViews(pool)],

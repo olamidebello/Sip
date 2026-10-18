@@ -1,3 +1,4 @@
+import {handleLocationHistory} from './locationHistory.js';
 import {handleModuleAudit} from './moduleAudit.js';
 import {handleCdrArchives,startCdrArchives} from './cdrArchive.js';
 import {handlePaymentReconciliation,startPaymentReconciliation} from './paymentReconciliation.js';
@@ -282,6 +283,7 @@ async function handler(req, res) {
       if(path==='/api/account/subscriber-delivery'||path==='/api/account/subscriber-registration')return await handleSubscriberSettings({req,res,path,user,pool,send,readJson,sessionHash:tokenHash(currentToken(req))});
       if(path==='/api/messenger/privacy/capabilities'&&req.method==='GET')return send(res,200,{directDisappearing:!!user.features?.messaging,directViewOnce:!!user.features?.messaging,endToEndEncryption:false,nativeBackupSync:false});
       if(/^\/api\/messenger\/messages\/[0-9a-f-]{36}\/open$/.test(path))return await handleViewOnce({req,res,path,user,pool,send});
+      if(path==='/api/account/location-history')return await handleLocationHistory({req,res,user,pool,send,readJson});
       if(path==='/api/account/photo')return await handleProfilePhoto({req,res,user,pool,send,readJson});
       if(path==='/api/messenger/preferences')return await handleMessengerPreferences({req,res,user,pool,send,readJson});
       if(path.startsWith('/api/messenger/')||path.startsWith('/api/account/sessions'))return await handleMessengerFeatures({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin),sessionHash:tokenHash(currentToken(req)),closeSessions:hashes=>meetingSignaling?.closeSessions(hashes)});
