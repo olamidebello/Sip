@@ -1,0 +1,4 @@
+// Apply to system-generated display text only. Provider identifiers and user-authored content stay intact.
+export function customerText(value){return typeof value==='string'?value.replace(/https?:\/\/[^\s"'<>]*flowroute[^\s"'<>]*/gi,'Olamide service').replace(/[^\s<>]+@(?:[\w.-]*\.)?flowroute\.com/gi,'Olamide support').replace(/\bFLOWROUTE_[A-Z0-9_]+\b/g,'Olamide service configuration').replace(/\bflowroute\b/gi,'Olamide'):value;}
+export function customerEnvelope(body){if(!body||typeof body!=='object'||Array.isArray(body))return body;const result={...body};for(const key of ['error','message','note','reason','answer','warning'])if(typeof result[key]==='string')result[key]=customerText(result[key]);return result;}
+export function customerProvider(provider){return /^flowroute$/i.test(String(provider))?'Olamide':provider;}
