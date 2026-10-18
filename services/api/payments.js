@@ -1,10 +1,9 @@
 import {canManageGateway,storePolicy} from './marketplaceControl.js';
-import {randomUUID,randomBytes,createCipheriv,createDecipheriv,createHmac,timingSafeEqual} from 'node:crypto';
+import {randomUUID,createHmac,timingSafeEqual} from 'node:crypto';
+import {paymentKey as key,encryptPaymentSecret as encrypt,decryptPaymentSecret as decrypt,stripeGateway as config} from './stripeGateway.js';
+import {acceptTopupEvent,fundingCapabilities} from './walletFunding.js';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const key=()=>/^[0-9a-f]{64}$/i.test(process.env.PAYMENT_CONFIG_KEY||'')?Buffer.from(process.env.PAYMENT_CONFIG_KEY,'hex'):null;
-function encrypt(value){const k=key();if(!k)throw new Error('Payment encryption key unavailable');const iv=randomBytes(12),c=createCipheriv('aes-256-gcm',k,iv);return Buffer.concat([iv,c.update(value,'utf8'),c.final(),c.getAuthTag()]);}
-function decrypt(value){const k=key();if(!k)throw new Error('Payment encryption key unavailable');const data=Buffer.from(value),c=createDecipheriv('aes-256-gcm',k,data.subarray(0,12));c.setAuthTag(data.subarray(-16));return Buffer.concat([c.update(data.subarray(12,-16)),c.final()]).toString('utf8');}
 export async function migratePayments(pool){
   await pool.query(`CREATE TABLE IF NOT EXISTS payment_gateways (
     tenant_id CHAR(36) PRIMARY KEY, enabled BOOLEAN NOT NULL DEFAULT FALSE,
@@ -39,7 +38,6 @@ export function verifyStripeSignature(raw,header,secret,now=Date.now()){
   });
 }
 
-async function config(pool,tenant){return (await pool.query('SELECT enabled,mode,secret_key_cipher,webhook_secret_cipher FROM payment_gateways WHERE tenant_id=$1',[tenant])).rows[0];}
 function publicConfig(row){return {configured:!!row,enabled:!!row?.enabled,mode:row?.mode||null,secretKeySet:!!row?.secret_key_cipher,webhookSecretSet:!!row?.webhook_secret_cipher};}
 export async function verifyStripeConnection(secret,fetchImpl=fetch){
   const response=await fetchImpl('https://api.stripe.com/v1/balance',{headers:{Authorization:'Bearer '+secret},signal:AbortSignal.timeout(10000)});
@@ -129,7 +127,7 @@ export async function handleStripeWebhook({req,res,path,pool,send}){
   const tenant=/^\/api\/webhooks\/stripe\/([0-9a-f-]{36})$/i.exec(path)?.[1];
   if(!uuid.test(tenant||''))return send(res,404,{error:'Webhook unavailable'});
   const gateway=await config(pool,tenant);
-  if(!gateway?.enabled||!key())return send(res,404,{error:'Webhook unavailable'});
+  if(!gateway||!key())return send(res,404,{error:'Webhook unavailable'});
   const chunks=[];let size=0;
   for await(const chunk of req){size+=chunk.length;if(size>1024*1024)return send(res,413,{error:'Webhook too large'});chunks.push(chunk);}
   const raw=Buffer.concat(chunks);
@@ -140,6 +138,7 @@ export async function handleStripeWebhook({req,res,path,pool,send}){
   const db=await pool.connect();
   try{
     await db.query('START TRANSACTION');
+    if(await acceptTopupEvent(db,tenant,event)){await db.query('COMMIT');return send(res,200,{received:true});}
     const inserted=await db.query('INSERT IGNORE INTO payment_events(provider_event_id,tenant_id,event_type) VALUES($1,$2,$3)',[event.id,tenant,event.type]);
     if(!inserted.rowCount){await db.query('COMMIT');return send(res,200,{received:true,duplicate:true});}
     if(paid){
@@ -162,9 +161,8 @@ export async function handleStripeWebhook({req,res,path,pool,send}){
 }
 
 export async function paymentCapabilities(pool,tenant){
- const row=await config(pool,tenant);
- return {invoiceCheckoutAvailable:!!(row?.enabled&&key()),mode:row?.mode||null,
- fundingAvailable:false,payoutAvailable:false,
- fundingNote:'Wallet deposits require a dedicated funding integration.',
+ const row=await config(pool,tenant),funding=await fundingCapabilities(pool,tenant);
+ return {...funding,invoiceCheckoutAvailable:!!(row?.enabled&&key()),mode:row?.mode||null,
+ payoutAvailable:false,
  payoutNote:'Bank withdrawals require a payout provider and verified recipient account.'};
 }

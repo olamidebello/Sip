@@ -1,3 +1,4 @@
+import {inboundDid} from './flowrouteDidRouting.js';
 import http from 'node:http';
 import {reservePstn,settlePstn} from './pstnBilling.js';
 import {timingSafeEqual} from 'node:crypto';
@@ -7,6 +8,7 @@ export function bridgeAuthorized(header,token){
  return actual.length===expected.length&&timingSafeEqual(actual,expected);
 }
 export async function bridgeLookup(pool,path,data){
+ if(path==='/api/switch/kamailio/inbound')return inboundDid(pool,data);
  const identity=/^[a-zA-Z0-9]{2,64}$/;
  if(path==='/api/switch/kamailio/billing-event')return settlePstn(pool,data);
 

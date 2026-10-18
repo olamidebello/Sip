@@ -1,3 +1,6 @@
+import {migrateWalletAdminCredits} from './walletAdminCredits.js';
+import {migrateLocationHistory} from './locationHistory.js';
+import {migrateWalletFunding} from './walletFunding.js';
 import {migrateCdrArchives} from './cdrArchive.js';
 import {migratePaymentReconciliation} from './paymentReconciliation.js';
 import {migrateStoreGateways} from './storeGateways.js';
@@ -134,6 +137,9 @@ export async function migrate(pool) {
       ['softphone', () => migrateSoftphoneState(pool)],
       ['geofence', () => migrateGeofencePolicy(pool)],
       ['wallet', () => migrateWallet(pool)],
+      ['wallet_funding', () => migrateWalletFunding(pool)],
+      ['wallet_admin_credits', () => migrateWalletAdminCredits(pool)],
+      ['location_history', () => migrateLocationHistory(pool)],
       ['dashboard', () => migrateDashboard(pool)],
       ['dashboard_views', () => migrateDashboardViews(pool)],
       ['workspace_shortcuts', () => migrateWorkspaceShortcuts(pool)],

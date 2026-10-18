@@ -1,0 +1,79 @@
+---
+- import_playbook: wallet-topups.yml
+- name: Install Flowroute DID inbound calls and chat SMS
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    app_repo: /opt/olamide/repo
+  tasks:
+    - name: Preserve existing callback token or generate a private token
+      ansible.builtin.command:
+        argv: [python3, '{{ app_repo }}/deployment/flowroute-callback-secret.py']
+      no_log: true
+    - name: Recreate API with the preserved callback configuration
+      ansible.builtin.command:
+        argv: [python3, '{{ app_repo }}/deployment/wallet-funding/compose-runtime.py', up, '-d', '--no-deps', '--force-recreate', api]
+    - name: Wait for the API before enabling inbound routing
+      ansible.builtin.command:
+        argv: [docker, exec, docker-api-1, node, '-e', "fetch('http://127.0.0.1:8080/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      register: api_ready
+      until: api_ready.rc == 0
+      retries: 18
+      delay: 5
+      changed_when: false
+    - name: Verify DID routing and callback safeguards in the built API
+      ansible.builtin.command:
+        argv: [docker, exec, docker-api-1, node, --test, flowrouteDidRouting.test.js, messagingWebhooks.test.js, kamailioHttpBridge.test.js]
+      changed_when: false
+    - name: Stage inbound route while preserving existing SIP configuration
+      ansible.builtin.command:
+        argv: [python3, '{{ app_repo }}/tools/prepare_flowroute_inbound.py']
+      no_log: true
+    - name: Validate the complete staged Kamailio configuration
+      ansible.builtin.command:
+        argv: [kamailio, '-c', '-f', /etc/kamailio/.flowroute-inbound-staged.cfg]
+      changed_when: false
+    - name: Back up existing SIP routing
+      ansible.builtin.copy:
+        src: /etc/kamailio/kamailio.cfg
+        dest: /etc/kamailio/.before-flowroute-inbound.cfg
+        remote_src: true
+        mode: '0600'
+    - name: Activate validated inbound routing
+      block:
+        - name: Install staged configuration
+          ansible.builtin.copy:
+            src: /etc/kamailio/.flowroute-inbound-staged.cfg
+            dest: /etc/kamailio/kamailio.cfg
+            remote_src: true
+            owner: root
+            group: kamailio
+            mode: '0640'
+          register: inbound_config
+        - name: Restart Kamailio on change
+          ansible.builtin.systemd:
+            name: kamailio
+            state: restarted
+          when: inbound_config.changed
+        - name: Verify SIP service
+          ansible.builtin.command:
+            argv: [systemctl, is-active, kamailio]
+          changed_when: false
+      rescue:
+        - name: Restore previous SIP configuration
+          ansible.builtin.copy:
+            src: /etc/kamailio/.before-flowroute-inbound.cfg
+            dest: /etc/kamailio/kamailio.cfg
+            remote_src: true
+            owner: root
+            group: kamailio
+            mode: '0640'
+        - name: Restart restored service
+          ansible.builtin.systemd:
+            name: kamailio
+            state: restarted
+        - ansible.builtin.fail:
+            msg: Inbound activation failed; previous SIP configuration restored.
+    - ansible.builtin.debug:
+        msg: 'Open Administration > Security & integrations > Messaging webhooks. Assign a verified Flowroute DID to its user, then Configure voice and SMS routes. User SMS threads are in Chats > SMS messages. Keep the user signed into SIP for incoming calls. Carrier messaging activation and any required registration remain prerequisites.'

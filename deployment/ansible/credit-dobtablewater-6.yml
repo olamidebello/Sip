@@ -1,0 +1,82 @@
+---
+# Run on the SIP server:
+# sudo ansible-playbook -i localhost, -c local credit-dobtablewater-6.yml
+# --check validates the playbook but skips the credit.
+# This fixed request key makes reruns safe. Do not change it for retries.
+- name: Credit USD 6 to dobtablewater wallet once
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    api_container: docker-api-1
+  tasks:
+    - name: Apply audited USD 6 credit in one database transaction
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - -i
+          - -w
+          - /app
+          - "{{ api_container }}"
+          - node
+          - --input-type=module
+        stdin: |
+          import {createDatabase} from './db.js';
+          const email='dobtablewater@gmail.com';
+          const amount=600;
+          const key='manual-credit-20261018-dobtablewater-usd600';
+          const pool=createDatabase(process.env.MYSQL_URL);
+          const db=await pool.connect();
+          let transaction=false;
+          try {
+            // Separate administrative ledger: existing call/transfer ledgers require
+            // real calls/transfers and cannot represent an administrative credit.
+            await db.query(`CREATE TABLE IF NOT EXISTS admin_wallet_credits (
+              request_key VARCHAR(128) PRIMARY KEY,
+              user_id CHAR(36) NOT NULL, tenant_id CHAR(36) NOT NULL,
+              email VARCHAR(254) NOT NULL, currency CHAR(3) NOT NULL,
+              amount_cents BIGINT NOT NULL, balance_before_cents BIGINT NOT NULL,
+              balance_after_cents BIGINT NOT NULL,
+              reason VARCHAR(255) NOT NULL,
+              created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
+            ) ENGINE=InnoDB`);
+            const engines=await db.query("SELECT TABLE_NAME,ENGINE FROM information_schema.tables WHERE table_schema=DATABASE() AND TABLE_NAME IN ('users','wallet_accounts','admin_wallet_credits')");
+            if(engines.rowCount!==3||engines.rows.some(r=>r.ENGINE!=='InnoDB'))throw Error('Required transactional tables unavailable');
+            await db.query('START TRANSACTION'); transaction=true;
+            const users=await db.query("SELECT id,tenant_id,status FROM users WHERE LOWER(email)=$1 FOR UPDATE",[email]);
+            if(users.rowCount!==1||users.rows[0].status!=='active')throw Error('Exactly one active matching account required');
+            const user=users.rows[0];
+            if(!user.tenant_id)throw Error('Account tenant missing');
+            await db.query("INSERT IGNORE INTO wallet_accounts(user_id,tenant_id,currency,balance_cents) VALUES($1,$2,'USD',0)",[user.id,user.tenant_id]);
+            const wallets=await db.query('SELECT currency,balance_cents FROM wallet_accounts WHERE user_id=$1 AND tenant_id=$2 FOR UPDATE',[user.id,user.tenant_id]);
+            if(wallets.rowCount!==1||wallets.rows[0].currency!=='USD')throw Error('Exactly one USD wallet required');
+            const prior=(await db.query('SELECT * FROM admin_wallet_credits WHERE request_key=$1 FOR UPDATE',[key])).rows[0];
+            if(prior) {
+              if(prior.user_id!==user.id||prior.tenant_id!==user.tenant_id||prior.currency!=='USD'||Number(prior.amount_cents)!==amount||prior.email!==email)throw Error('Credit request key conflict');
+              await db.query('ROLLBACK');transaction=false;
+              console.log(JSON.stringify({changed:false,email,creditCents:amount,balanceCents:String(wallets.rows[0].balance_cents),message:'Credit already applied'}));
+            } else {
+              const before=Number(wallets.rows[0].balance_cents);
+              if(!Number.isSafeInteger(before)||before<0||!Number.isSafeInteger(before+amount))throw Error('Invalid wallet balance');
+              const after=before+amount;
+              const update=await db.query('UPDATE wallet_accounts SET balance_cents=balance_cents+$1 WHERE user_id=$2 AND tenant_id=$3',[amount,user.id,user.tenant_id]);
+              if(update.rowCount!==1)throw Error('Expected exactly one wallet update');
+              await db.query("INSERT INTO admin_wallet_credits(request_key,user_id,tenant_id,email,currency,amount_cents,balance_before_cents,balance_after_cents,reason) VALUES($1,$2,$3,$4,'USD',$5,$6,$7,$8)",[key,user.id,user.tenant_id,email,amount,before,after,'User-authorized administrative USD 6 credit on 2026-10-18']);
+              const verify=(await db.query('SELECT balance_cents FROM wallet_accounts WHERE user_id=$1 AND tenant_id=$2',[user.id,user.tenant_id])).rows[0];
+              if(Number(verify.balance_cents)!==after)throw Error('Balance verification failed');
+              await db.query('COMMIT');transaction=false;
+              console.log(JSON.stringify({changed:true,email,creditCents:amount,beforeCents:before,balanceCents:after,currency:'USD'}));
+            }
+          } catch(error) {
+            if(transaction)await db.query('ROLLBACK');
+            console.error('Credit failed: '+(error.code||error.message));process.exitCode=1;
+          } finally {db.release();await pool.end();}
+      register: credit_result
+      changed_when: (credit_result.stdout | from_json).changed | bool
+      when: not ansible_check_mode
+
+    - name: Show verified credit result
+      ansible.builtin.debug:
+        msg: "{{ credit_result.stdout | from_json }}"
+      when: not ansible_check_mode

@@ -1,0 +1,29 @@
+---
+# Supply a root-owned 0600 /etc/olamide/stripe-api-key, or reuse an encrypted live key saved in the GUI.
+- import_playbook: wallet-topups.yml
+- name: Automatically configure Stripe payments and wallet funding
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    app_repo: /opt/olamide/repo
+    stripe_key_file: /etc/olamide/stripe-api-key
+    stripe_admin_email: ''
+    stripe_webhook_endpoint_id: ''
+    stripe_tenant_id: ''
+    stripe_topup_min_cents: 100
+    stripe_topup_max_cents: 100000
+    stripe_enable_topups: true
+  tasks:
+    - name: Validate automatic Stripe setup safeguards
+      ansible.builtin.command:
+        argv: [python3, '{{ app_repo }}/deployment/wallet-funding/compose-runtime.py', run, --rm, --no-deps, '-T', api, node, --test, setupStripeGateway.test.js]
+      changed_when: false
+    - name: Configure the live gateway and managed webhook without exposing keys
+      ansible.builtin.command:
+        argv: "{{ [ 'python3', app_repo + '/deployment/setup-stripe-gateway.py', '--key-file', stripe_key_file, '--endpoint-id', stripe_webhook_endpoint_id, '--admin-email', stripe_admin_email, '--tenant-id', stripe_tenant_id, '--min-cents', stripe_topup_min_cents | string, '--max-cents', stripe_topup_max_cents | string ] + ([] if stripe_enable_topups | bool else ['--invoice-only']) }}"
+      register: stripe_setup
+      changed_when: stripe_setup.rc == 0
+    - name: Report Stripe payment setup
+      ansible.builtin.debug:
+        msg: 'Stripe gateway configured, public signed webhook verified, and payment secrets encrypted. Open Administration > Payments & wallets to review settings. No card was charged. Complete one real payment to verify end-to-end settlement.'
