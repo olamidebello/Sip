@@ -1,0 +1,9 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {JSDOM} from 'jsdom';import {setupServiceCountries} from './serviceCountriesUi.js';
+test('country selection, primary country, profile save and event navigation are wired',async()=>{
+ const dom=new JSDOM('<form id="signup"><button type="submit">Create</button></form><section id="signed-in-profile"></section><section id="geofence-admin"></section>');
+ const prior={Option:globalThis.Option,FormData:globalThis.FormData};globalThis.Option=dom.window.Option;globalThis.FormData=dom.window.FormData;const writes=[];
+ const countries=[{code:'US',name:'United States',language:'en',currency:'USD',boundaryAvailable:true},{code:'NG',name:'Nigeria',language:'en',currency:'NGN',boundaryAvailable:true}];
+ const get=async path=>path.endsWith('/catalog')?{countries}:path.endsWith('/service-countries')?{settings:{countries:['US'],primaryCountry:'US'}}:path.endsWith('/biodata')?{profile:{},complete:false,missing:['phone_e164'],checkedAt:'now'}:{events:[],nextBefore:null};
+ const ui=setupServiceCountries({document:dom.window.document,get,request:async(...a)=>writes.push(a)});
+ try{await ui.registration();const d=dom.window.document,select=d.querySelector('[data-countries]');select.options[0].selected=true;select.onchange();assert.equal((await ui.registration()).primaryCountry,'US');d.querySelector('[data-all]').checked=true;d.querySelector('[data-all]').onchange();assert.deepEqual((await ui.registration()).countries,['US','NG']);await ui.show({role:'super_admin'});assert.ok(d.querySelector('#country-admin-events'));await d.querySelector('[data-country-form]').onsubmit({preventDefault(){}});assert.deepEqual(writes[0],['/api/account/service-countries',{countries:['US'],primaryCountry:'US'},'PUT']);assert.ok(d.querySelector('[data-events]'));}finally{ui.stop();globalThis.Option=prior.Option;globalThis.FormData=prior.FormData;dom.window.close();}
+});
