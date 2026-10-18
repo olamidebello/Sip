@@ -1,3 +1,4 @@
+import {resolveShortDial} from './shortDial.js';
 import {onlineNumberTarget} from './subscriberRouting.js';
 export async function activeSubscription(pool,user) {
   const result=await pool.query(`SELECT 1 FROM subscriptions s JOIN plans p ON p.id=s.plan_id
@@ -37,14 +38,16 @@ export async function callAccess(pool,user,target) {
   return await activeSubscription(pool,user)?{allowed:true,scope:'external'}:
     {allowed:false,error:'An active subscription is required for external calls',configurationUrl:'/#billing'};
 }
-export async function handleCallAccess({req,res,path,user,pool,send,readJson}) {
+export async function handleCallAccess({req,res,path,user,pool,send,readJson,sessionHash,ip}) {
   if(path==='/api/softphone/access'&&req.method==='GET') {
     const external=await activeSubscription(pool,user);
     return send(res,200,{internalCalls:true,externalCalls:external,scope:external?'subscribed':'internal_only',configurationUrl:'/#billing'});
   }
   if(path==='/api/softphone/authorize'&&req.method==='POST') {
-    const {target}=await readJson(req),result=await callAccess(pool,user,target);
-    return send(res,result.allowed?200:403,result);
+    const {target,position}=await readJson(req);let normalized;
+    try{normalized=await resolveShortDial(pool,user,target,{position,sessionHash,ip});}catch(e){return send(res,400,{error:e.message,code:e.code||'INVALID_NATIONAL_NUMBER'});}
+    const result=await callAccess(pool,user,normalized.target);
+    return send(res,result.allowed?200:403,result.allowed?{...normalized,...result,target:result.target||normalized.target}:result);
   }
   return send(res,404,{error:'Call access route unavailable'});
 }
