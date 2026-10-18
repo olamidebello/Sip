@@ -17,11 +17,41 @@
   "build": {
     "appId": "com.dobhrap.olamide.desktop",
     "productName": "Olamide",
-    "files": ["main.cjs", "package.json"],
-    "directories": {"output": "dist"},
-    "linux": {"target": ["AppImage"], "category": "Network"},
-    "win": {"target": ["nsis"]},
-    "mac": {"target": ["dmg"]},
-    "nsis": {"oneClick": false, "allowToChangeInstallationDirectory": true}
+    "files": [
+      "main.cjs",
+      "package.json",
+      "build/icon.png"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Network",
+      "icon": "build/icon.png"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "build/icon.icns"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "createDesktopShortcut": true,
+      "shortcutName": "Olamide"
+    }
   }
 }
