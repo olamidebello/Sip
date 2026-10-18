@@ -1,0 +1,280 @@
+- name: Build and install profile DID sales and monthly subscriptions
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    did_compose:
+    - docker
+    - compose
+    - -p
+    - docker
+    - --env-file
+    - /opt/olamide/repo/deployment/docker/.env
+    - -f
+    - /opt/olamide/repo/deployment/docker/compose.yml
+    - -f
+    - /opt/olamide/repo/deployment/docker/compose.callerids.yml
+    - -f
+    - /etc/olamide/compose.location.yml
+    - -f
+    - /etc/olamide/compose.countries.yml
+    - -f
+    - /etc/olamide/compose.didshop.yml
+  tasks:
+  - name: Fix recovery snapshot timestamp for this run
+    ansible.builtin.set_fact:
+      did_stamp: '{{ now(utc=true,fmt="%Y%m%d%H%M%S") }}'
+  - name: Test inbound route patch invariants
+    ansible.builtin.command:
+      argv:
+      - python3
+      - /opt/olamide/repo/deployment/ansible/install-did-ingress.test.py
+    changed_when: false
+  - name: Require existing deployment deployment/docker/compose.yml
+    ansible.builtin.command:
+      argv:
+      - test
+      - -f
+      - /opt/olamide/repo/deployment/docker/compose.yml
+    changed_when: false
+  - name: Require existing deployment deployment/docker/compose.callerids.yml
+    ansible.builtin.command:
+      argv:
+      - test
+      - -f
+      - /opt/olamide/repo/deployment/docker/compose.callerids.yml
+    changed_when: false
+  - name: Require installed location resource /etc/olamide/compose.location.yml
+    ansible.builtin.command:
+      argv:
+      - test
+      - -f
+      - /etc/olamide/compose.location.yml
+    changed_when: false
+  - name: Require installed location resource /etc/olamide/compose.countries.yml
+    ansible.builtin.command:
+      argv:
+      - test
+      - -f
+      - /etc/olamide/compose.countries.yml
+    changed_when: false
+  - name: Require installed location resource /etc/olamide/country-resources/countries.geojson
+    ansible.builtin.command:
+      argv:
+      - test
+      - -f
+      - /etc/olamide/country-resources/countries.geojson
+    changed_when: false
+  - name: Validate staged inbound switch configuration
+    ansible.builtin.command:
+      argv:
+      - python3
+      - /opt/olamide/repo/deployment/ansible/install-did-ingress.py
+      - --check
+    changed_when: false
+    no_log: true
+  - name: Create private DID deployment directory
+    ansible.builtin.file:
+      path: /etc/olamide/didshop-backups
+      state: directory
+      mode: '0700'
+  - name: Persist DID ingress runtime configuration
+    ansible.builtin.copy:
+      dest: /etc/olamide/compose.didshop.yml
+      content: "services:\n  api:\n    environment:\n      DID_SHOP_INGRESS_READY: \"true\"\n"
+      mode: '0600'
+      backup: true
+  - name: Validate combined Compose configuration
+    ansible.builtin.command:
+      argv: '{{ did_compose + ["config", "--quiet"] }}'
+    changed_when: false
+    no_log: true
+  - name: Build DID API and profile GUI
+    ansible.builtin.command:
+      argv: '{{ did_compose + ["build", "api", "web"] }}'
+    changed_when: true
+  - name: Verify retail billing and ingress tests
+    ansible.builtin.command:
+      argv:
+      - docker
+      - run
+      - --rm
+      - --entrypoint
+      - node
+      - -v
+      - /etc/olamide/country-resources/countries.geojson:/app/resources/countries.geojson:ro
+      - olamide-api:local
+      - --test
+      - didShop.test.js
+      - defaultCallingPlan.test.js
+      - callingPlanAdmin.test.js
+      - pstnBilling.test.js
+      - kamailioHttpBridge.test.js
+    changed_when: false
+  - name: Back up application billing and provisioning records
+    ansible.builtin.command:
+      argv:
+      - docker
+      - exec
+      - docker-api-1
+      - node
+      - --input-type=module
+      - -e
+      - import {createDatabase} from './db.js';const db=createDatabase(process.env.MYSQL_URL);const tables=['invoices','inhouse_dids','managed_outbound_identities','did_shop_settings','did_shop_orders','did_shop_quotes','did_shop_subscriptions','did_shop_receipts','did_shop_billing','did_shop_stripe_events','user_primary_did'];try{const
+        out={};for(const t of tables){try{out[t]=(await db.query('SELECT * FROM '+t)).rows;}catch(e){if(e.code!=='ER_NO_SUCH_TABLE')throw
+        e;}}console.log(JSON.stringify(out));}finally{await db.end();}
+    changed_when: false
+    register: did_backup
+    no_log: true
+  - name: Save private timestamped billing backup
+    ansible.builtin.copy:
+      content: '{{ did_backup.stdout }}'
+      dest: /etc/olamide/didshop-backups/records-{{ did_stamp }}.json
+      mode: '0600'
+    no_log: true
+  - name: Identify current API image
+    ansible.builtin.command:
+      argv:
+      - docker
+      - inspect
+      - --format
+      - '{{ "{{.Image}}" }}'
+      - docker-api-1
+    changed_when: false
+    register: did_old_api
+  - name: Identify current web image
+    ansible.builtin.command:
+      argv:
+      - docker
+      - inspect
+      - --format
+      - '{{ "{{.Image}}" }}'
+      - docker-web-1
+    changed_when: false
+    register: did_old_web
+  - name: Keep previous API image for recovery
+    ansible.builtin.command:
+      argv:
+      - docker
+      - tag
+      - '{{ did_old_api.stdout }}'
+      - olamide-api:before-did-{{ did_stamp }}
+    changed_when: false
+  - name: Keep previous web image for recovery
+    ansible.builtin.command:
+      argv:
+      - docker
+      - tag
+      - '{{ did_old_web.stdout }}'
+      - olamide-web:before-did-{{ did_stamp }}
+    changed_when: false
+  - name: Preserve switch configuration before activation
+    ansible.builtin.copy:
+      src: /etc/kamailio/kamailio.cfg
+      dest: /etc/olamide/didshop-backups/kamailio-{{ did_stamp }}.cfg
+      remote_src: true
+      mode: '0600'
+    no_log: true
+  - name: Activate validated DID deployment
+    block:
+    - name: Install authenticated inbound DID switch route
+      ansible.builtin.command:
+        argv:
+        - python3
+        - /opt/olamide/repo/deployment/ansible/install-did-ingress.py
+      changed_when: '''changed:'' in did_patch.stdout'
+      register: did_patch
+      no_log: true
+    - name: Restart switch only when ingress changed
+      ansible.builtin.service:
+        name: kamailio
+        state: restarted
+      when: did_patch.changed
+    - name: Start updated API and GUI with persistent overrides
+      ansible.builtin.command:
+        argv: '{{ did_compose + ["up", "-d", "--no-deps", "--no-build", "api", "web"] }}'
+      changed_when: true
+    - name: Verify API startup and DID database schema
+      ansible.builtin.command:
+        argv:
+        - docker
+        - exec
+        - docker-api-1
+        - node
+        - --input-type=module
+        - -e
+        - import {createDatabase} from './db.js';const r=await fetch('http://127.0.0.1:8080/api/health');if(r.status!==200||(await
+          r.json()).status!=='ok')process.exit(1);const db=createDatabase(process.env.MYSQL_URL);try{for(const t of ['did_shop_orders','did_shop_subscriptions','did_shop_receipts','user_primary_did'])await
+          db.query('SELECT 1 FROM '+t+' LIMIT 1');console.log('DID application and schema ready');}finally{await db.end();}
+      changed_when: false
+      register: did_health
+      retries: 20
+      delay: 3
+      until: did_health.rc == 0
+    - name: Restore Flowroute carrier configuration after switch reload
+      ansible.builtin.command:
+        argv:
+        - docker
+        - exec
+        - docker-api-1
+        - node
+        - /app/commissionPaidCalls.js
+      changed_when: true
+      no_log: true
+    - name: Verify signed payment endpoint routing without credentials
+      ansible.builtin.command:
+        argv:
+        - docker
+        - exec
+        - docker-api-1
+        - node
+        - --input-type=module
+        - -e
+        - const r=await fetch('http://127.0.0.1:8080/api/webhooks/did-shop/00000000-0000-0000-0000-000000000000',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});if(![400,404].includes(r.status))process.exit(1);console.log('DID
+          webhook routing ready; unsigned events rejected');
+      changed_when: false
+    rescue:
+    - name: Restore pre-install switch configuration
+      ansible.builtin.copy:
+        src: /etc/olamide/didshop-backups/kamailio-{{ did_stamp }}.cfg
+        dest: /etc/kamailio/kamailio.cfg
+        remote_src: true
+        mode: '0640'
+      no_log: true
+    - name: Restart restored switch
+      ansible.builtin.service:
+        name: kamailio
+        state: restarted
+    - name: Prepare recovery image override
+      ansible.builtin.copy:
+        dest: /etc/olamide/didshop-backups/rollback-{{ did_stamp }}.yml
+        mode: '0600'
+        content: "services:\n  api:\n    image: olamide-api:before-did-{{ did_stamp }}\n  web:\n    image: olamide-web:before-did-{{\
+          \ did_stamp }}\n"
+    - name: Restore previously running containers
+      ansible.builtin.command:
+        argv: '{{ did_compose + ["-f", "/etc/olamide/didshop-backups/rollback-" + did_stamp + ".yml", "up", "-d", "--no-deps",
+          "--no-build", "api", "web"] }}'
+      changed_when: true
+    - name: Restore previous carrier table
+      ansible.builtin.command:
+        argv:
+        - docker
+        - exec
+        - docker-api-1
+        - node
+        - /app/commissionPaidCalls.js
+      changed_when: false
+      no_log: true
+    - name: Report activation failure after restoring previous images
+      ansible.builtin.fail:
+        msg: DID activation failed. Previous API/web images and switch configuration were restored. Additive schema and private
+          backups are retained. Review the failed task before retrying.
+  - name: Report DID purchase and administrator navigation
+    ansible.builtin.debug:
+      msg: Refresh and sign in. My profile / My phone numbers provides DID rate search, checkout, recurring monthly billing
+        and primary DID selection. Super admin opens Admin / carrier controls / Profile DID sales and recurring billing to
+        configure live Stripe billing and manage sales. Save Flowroute API credentials and enable a live Stripe gateway in
+        existing settings first. No carrier purchase occurs until a signed live payment is verified. Preserve /etc/olamide/compose.didshop.yml
+        with all existing overrides in future deployments. Wallet top-ups and call-rate profile search are separate pending
+        work.
