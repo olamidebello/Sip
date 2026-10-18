@@ -19,6 +19,7 @@ class PatchTests(unittest.TestCase):
   self.assertEqual(module.patch(new),new)
   self.assertEqual(new.count('route[OLAMIDE_DID_INBOUND]'),1)
   self.assertIn('Authorization: Bearer '+('a'*64),new)
-  self.assertIn('!has_totag()',new)
+  self.assertIn('$tt == ""',new)
+  self.assertNotIn('has_totag()',new)
   self.assertIn('lookup("location")',new)
 if __name__=='__main__':unittest.main()
