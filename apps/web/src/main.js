@@ -1,3 +1,5 @@
+import {createLocationMonitor} from './locationMonitor.js';
+import {renderLocationPolicyAdmin} from './locationPolicyAdmin.js';
 import {renderPlatformControl} from './platformControlAdmin.js';
 import {createRingback} from './ringback.js';
 import {renderCallingPlanAdmin} from './callingPlanAdmin.js';
@@ -1509,6 +1511,16 @@ setupInstall();
 const outgoingRingback=createRingback();
 window.addEventListener("pagehide",()=>outgoingRingback.stop());
 dialForm.addEventListener("submit",()=>outgoingRingback.arm(),{capture:true});
+const locationStatus=document.createElement('aside');locationStatus.id='location-access-status';locationStatus.setAttribute('role','status');locationStatus.hidden=true;
+const locationStatusText=document.createElement('span'),locationRetry=document.createElement('button');locationRetry.type='button';locationRetry.textContent='Enable location / Retry';locationStatus.append(locationStatusText,locationRetry);document.body.prepend(locationStatus);
+const locationMonitor=createLocationMonitor({get:apiGet,post:(path,body)=>accountRequest(path,body),onState:value=>{
+  locationStatus.hidden=!value.restricted||value.allowed;locationStatusText.textContent=value.reason||value.error||'Location verification required';
+  const box=document.querySelector('#profile-allows-vpn');if(box&&typeof value.allowsVpn==='boolean')box.checked=value.allowsVpn;
+},onDenied:()=>{if(phone?.session)void phone.hangup().catch(()=>{});}});
+locationRetry.onclick=()=>void locationMonitor.ensure();
+window.addEventListener('pagehide',()=>locationMonitor.stop());
+window.addEventListener('pageshow',()=>{if(activeRole&&!activeRole.startsWith('pending_'))locationMonitor.start();});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&activeRole&&!activeRole.startsWith('pending_'))void locationMonitor.ensure();});
 let phone;
 let sipRegistered=false;
 let onCall = false;
@@ -1653,6 +1665,7 @@ async function loadGeofencePolicy() {
   return policy;
 }
 async function loadGeofenceAdmin() {
+  await renderLocationPolicyAdmin({document,get:apiGet,request:accountRequest,isSuperAdmin:activeRole==='super_admin'});
   const policy=await apiGet("/api/admin/geofence");
   $("#geofence-enabled").checked=policy.enabled;
   $("#geofence-accuracy").value=policy.maxAccuracyMeters;
@@ -1901,6 +1914,10 @@ function signedIn(user) {
   $("#profile-name").value=user.name || "";
   $("#profile-email").value=user.email || "";
   activeRole=["admin","super_admin"].includes(user.role)?user.role:"user";
+  if(!document.querySelector('#profile-allows-vpn')){const label=document.createElement('label');label.innerHTML='<input id="profile-allows-vpn" type="checkbox" checked disabled> Allows VPN (managed by super admin)';$('#signed-in-profile').append(label);}
+  const vpnBox=document.querySelector('#profile-allows-vpn');vpnBox.disabled=user.role!=='super_admin';vpnBox.onchange=async()=>{try{await accountRequest('/api/admin/location-policy/users/'+user.id,{allowsVpn:vpnBox.checked},'PUT');await locationMonitor.ensure();}catch(e){$('#account-status').textContent=e.message;}};
+  locationMonitor.start();
+  $('#geofence-admin').hidden=user.role!=='super_admin';
   apiGet('/api/redirector').then(({target})=>{if(target?.wssUrl&&!onCall)$("#connect [name=server]").value=target.wssUrl;}).catch(()=>{});
   document.body.classList.add("workspace-mode");
   refreshSoftphoneState(user).catch(error=>{$("#account-status").textContent=error.message;});
@@ -2523,6 +2540,7 @@ $("#ldap-login").addEventListener("submit",async(event)=>{
   } catch(error) {$("#account-status").textContent=error.message;}
 });
 $("#logout").onclick = async () => {
+  locationMonitor.stop();locationStatus.hidden=true;
   sessionWatch.stop();messengerHub.stop();conversations.stopMedia();
   videoWorkflow=false;callsScreen.stop();navigationPolicy.stop();messengerPreferences.stop();$("#messenger-accessibility").hidden=true;
   $("#user-session-admin").hidden=true;
@@ -2739,7 +2757,7 @@ dialForm.addEventListener("submit", async (event) => {
   catch(error){report(error);return;}
   try {await loadGeofencePolicy();} catch {status("Location policy unavailable. Call blocked.");return;}
   if (!geoPolicyLoaded) {status("Location policy unavailable. Call blocked.");return;}
-  const location = await checkCurrentLocation(geoPolicy);
+  const location = await locationMonitor.ensure();
   $("#geo-result").textContent = location.reason;
   if (!location.allowed) { status("Call blocked: " + location.reason); return; }
   let authorizedTarget=target;
@@ -2751,7 +2769,7 @@ dialForm.addEventListener("submit", async (event) => {
   const outgoingCall=currentCall;void registeredCallLabel(target).then(label=>{if(currentCall===outgoingCall)callGui.identity(label);});
   try { callsScreen.stop();callGui.pending();status("Calling…"); let carrierEarlyMedia=false;
     outgoingRingback.start();
-    await phone.call(authorizedTarget,{earlyMedia:true},{requestDelegate:{
+    await phone.call(authorizedTarget,{earlyMedia:true,extraHeaders:locationMonitor.current().proof?['X-Olamide-Location-Proof: '+locationMonitor.current().proof]:[]},{requestDelegate:{
       onProgress:response=>{
         const code=response.message.statusCode;
         if(code===183&&response.message.body){carrierEarlyMedia=true;outgoingRingback.stop();}
@@ -2765,7 +2783,7 @@ dialForm.addEventListener("submit", async (event) => {
 });
 $("#check-location").onclick = async () => {
   try {await loadGeofencePolicy();} catch {$("#geo-result").textContent="Location policy unavailable";return;}
-  const result = await checkCurrentLocation(geoPolicy);
+  const result = await locationMonitor.ensure();
   $("#geo-result").textContent = result.reason;
 };
 $("#answer").onclick = async () => { try { await phone?.answer(); } catch (error) { report(error); } };
