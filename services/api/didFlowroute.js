@@ -1,9 +1,10 @@
 import {providerCredentials} from './providerCredentials.js';
-export async function flowrouteRequest(pool,tenant,path,{method='GET',body,fetchImpl=fetch}={}){
- if(!/^\/(numbers|routes)(\/|\?|$)/.test(path))throw Error('Invalid Flowroute API path');
+export async function flowrouteRequest(pool,tenant,path,{method='GET',body,version='v2',fetchImpl=fetch}={}){
+ if(!['v2','v2.2'].includes(version))throw Error('Invalid API version');
+ if(!/^\/(numbers|routes|messages|message-provision)(\/|\?|$)/.test(path))throw Error('Invalid Flowroute API path');
  const stored=await providerCredentials(pool,tenant,'flowroute');if(stored?.disabled)throw Error('Flowroute credentials are disabled');
  const access=stored?.accessKey||process.env.FLOWROUTE_ACCESS_KEY,secret=stored?.secretKey||process.env.FLOWROUTE_SECRET_KEY;if(!access||!secret)throw Error('Flowroute API credentials are not configured');
- const r=await fetchImpl('https://api.flowroute.com/v2'+path,{method,headers:{Authorization:'Basic '+Buffer.from(access+':'+secret).toString('base64'),Accept:'application/vnd.api+json',...(body?{'Content-Type':'application/vnd.api+json'}:{})},body:body?JSON.stringify(body):undefined,redirect:'error',signal:AbortSignal.timeout(10000)});
+ const r=await fetchImpl('https://api.flowroute.com/'+version+path,{method,headers:{Authorization:'Basic '+Buffer.from(access+':'+secret).toString('base64'),Accept:'application/vnd.api+json',...(body?{'Content-Type':'application/vnd.api+json'}:{})},body:body?JSON.stringify(body):undefined,redirect:'error',signal:AbortSignal.timeout(10000)});
  if(!r.ok){const e=Error('Flowroute operation unavailable ('+r.status+')');e.providerStatus=r.status;throw e;}
  return r.status===204?null:await r.json();
 }
