@@ -93,6 +93,31 @@
     ansible.builtin.command:
       argv: '{{ did_compose + ["build", "api", "web"] }}'
     changed_when: true
+  - name: Build cached GUI test stage
+    ansible.builtin.command:
+      argv:
+      - docker
+      - build
+      - --target
+      - build
+      - -t
+      - olamide-web:did-tests
+      - -f
+      - /opt/olamide/repo/deployment/docker/web.Dockerfile
+      - /opt/olamide/repo
+    changed_when: true
+  - name: Verify profile DID pricing and SMS navigation
+    ansible.builtin.command:
+      argv:
+      - docker
+      - run
+      - --rm
+      - --entrypoint
+      - node
+      - olamide-web:did-tests
+      - --test
+      - src/didShopUi.test.js
+    changed_when: false
   - name: Verify retail billing and ingress tests
     ansible.builtin.command:
       argv:
@@ -110,6 +135,8 @@
       - callingPlanAdmin.test.js
       - pstnBilling.test.js
       - kamailioHttpBridge.test.js
+      - didSms.test.js
+      - messagingWebhooks.test.js
     changed_when: false
   - name: Back up application billing and provisioning records
     ansible.builtin.command:
@@ -120,7 +147,7 @@
       - node
       - --input-type=module
       - -e
-      - import {createDatabase} from './db.js';const db=createDatabase(process.env.MYSQL_URL);const tables=['invoices','inhouse_dids','managed_outbound_identities','did_shop_settings','did_shop_orders','did_shop_quotes','did_shop_subscriptions','did_shop_receipts','did_shop_billing','did_shop_stripe_events','user_primary_did'];try{const
+      - import {createDatabase} from './db.js';const db=createDatabase(process.env.MYSQL_URL);const tables=['invoices','inhouse_dids','managed_outbound_identities','did_shop_settings','did_shop_orders','did_shop_quotes','did_shop_subscriptions','did_shop_receipts','did_shop_billing','did_shop_stripe_events','user_primary_did','did_sms_settings','did_sms_requests','flowroute_sms_numbers','flowroute_sms_outbound','flowroute_message_events'];try{const
         out={};for(const t of tables){try{out[t]=(await db.query('SELECT * FROM '+t)).rows;}catch(e){if(e.code!=='ER_NO_SUCH_TABLE')throw
         e;}}console.log(JSON.stringify(out));}finally{await db.end();}
     changed_when: false
@@ -204,7 +231,7 @@
         - --input-type=module
         - -e
         - import {createDatabase} from './db.js';const r=await fetch('http://127.0.0.1:8080/api/health');if(r.status!==200||(await
-          r.json()).status!=='ok')process.exit(1);const db=createDatabase(process.env.MYSQL_URL);try{for(const t of ['did_shop_orders','did_shop_subscriptions','did_shop_receipts','user_primary_did'])await
+          r.json()).status!=='ok')process.exit(1);const db=createDatabase(process.env.MYSQL_URL);try{for(const t of ['did_shop_orders','did_shop_subscriptions','did_shop_receipts','user_primary_did','did_sms_settings','did_sms_requests'])await
           db.query('SELECT 1 FROM '+t+' LIMIT 1');console.log('DID application and schema ready');}finally{await db.end();}
       changed_when: false
       register: did_health
@@ -277,4 +304,6 @@
         configure live Stripe billing and manage sales. Save Flowroute API credentials and enable a live Stripe gateway in
         existing settings first. No carrier purchase occurs until a signed live payment is verified. Preserve /etc/olamide/compose.didshop.yml
         with all existing overrides in future deployments. Wallet top-ups and call-rate profile search are separate pending
-        work.
+        work. Purchased DIDs automatically queue Flowroute messaging activation and per-number inbound/delivery callbacks.
+        When SMS is ready, use Send / receive SMS on the profile. Super admin controls Purchased DID messaging enablement,
+        daily limits and provisioning retries. Provider eligibility or registration may require action in Flowroute.
