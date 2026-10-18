@@ -1,16 +1,27 @@
 #!/usr/bin/env python3
 """Preserve the active payment encryption key, or initialize an unused installation."""
 import os
+import json
 from pathlib import Path
 import re
 import secrets
 import subprocess
 
 paths = [Path('/etc/olamide/secrets.env'), Path('/opt/olamide/repo/deployment/docker/.env')]
-result = subprocess.run(['docker', 'exec', 'docker-api-1', 'node', '-e',
-                         "process.stdout.write(process.env.PAYMENT_CONFIG_KEY||'')"],
-                        capture_output=True, text=True, check=True)
-active = result.stdout.strip()
+result = subprocess.run(['docker', 'inspect', 'docker-api-1', '--format', '{{json .Config.Env}}'],
+                        capture_output=True, text=True)
+if result.returncode:
+    raise SystemExit('Could not inspect saved API configuration; existing keys preserved')
+try:
+    environment = json.loads(result.stdout)
+    if not isinstance(environment, list) or not all(isinstance(v, str) for v in environment):
+        raise ValueError('Invalid environment')
+    active_values = [v.split('=', 1)[1] for v in environment if v.startswith('PAYMENT_CONFIG_KEY=')]
+    if len(active_values) > 1:
+        raise ValueError('Duplicate saved key')
+    active = active_values[0].strip() if active_values else ''
+except (ValueError, TypeError):
+    raise SystemExit('Invalid saved API configuration; existing keys preserved')
 contents = {}
 candidates = set()
 if active:
