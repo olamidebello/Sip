@@ -17,3 +17,11 @@ Checkout authorizes setup plus first month and automatic monthly rental. Signed 
 Acquisition timeouts and interrupted purchases are deliberately marked for reconciliation; they are never blindly repurchased. Administrators can retry safe route/account provisioning. Refunds and ambiguous provider ownership require review in Stripe/Flowroute. This version does not provide every possible carrier or payment administration operation in the local GUI.
 
 This installer does not add the separately requested wallet top-up/profile call-rate search enhancements. Existing call charging and trial allowances are preserved. Tests use local fixtures and mocks; real paid acquisition, provider delivery, customer subscription renewal and live two-way audio must be verified on the deployed server.
+
+## Purchased DID SMS
+
+The installer also migrates messaging setup and idempotent-send records and starts a 30-second provisioning worker. Paid active DIDs request Flowroute messaging activation, track the provider task, install per-number SMS and delivery callbacks, and become assigned SMS senders when activation is confirmed. Voice provisioning remains available while messaging activation is pending.
+
+My phone numbers shows SMS status and a Send / receive SMS button when ready. The existing External SMS screen provides sender selection, compose, inbox, sent history and refresh. Super admin Purchased DID messaging controls enablement, daily submitted-message limits (default 100), and setup retries. Disabling locally blocks sends and receipt ingestion; it does not cancel provider messaging service fees. Carrier messaging fees are separate from DID monthly rental and this version does not deduct SMS usage from the wallet.
+
+Callbacks use private per-DID random tokens and authenticated provider message-record readback. Unverified payload bodies never enter the inbox. SMS is carrier text messaging and is not the encrypted private chat feature. Provider eligibility, applicable messaging registration, account approval and delivery restrictions can prevent activation or delivery; this installer cannot bypass those requirements. Uncertain sends keep their request key and are not automatically repeated.
