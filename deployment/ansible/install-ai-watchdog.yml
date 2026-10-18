@@ -279,6 +279,24 @@
     loop:
     - olamide-platform-watchdog.service
     - olamide-watchdog-checks.timer
+  - name: Verify host event delivery and API heartbeat
+    ansible.builtin.command:
+      argv:
+      - docker
+      - exec
+      - docker-api-1
+      - node
+      - --input-type=module
+      - -e
+      - import {createDatabase} from './db.js';import {hostTenant} from './platformWatchdog.js';const p=createDatabase(process.env.MYSQL_URL);try{const
+        r=await p.query("SELECT 1 FROM watchdog_service_state WHERE tenant_id=$1 AND component='api' AND status='healthy'
+        AND updated_at>DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 2 MINUTE)",[hostTenant()]);if(!r.rowCount)process.exitCode=1;else
+        console.log('Host watchdog heartbeat and event ingestion verified');}finally{await p.end();}
+    register: watchdog_heartbeat
+    retries: 20
+    delay: 3
+    until: watchdog_heartbeat.rc == 0
+    changed_when: false
   - name: Check reused AI key availability without revealing it
     ansible.builtin.command:
       argv:
