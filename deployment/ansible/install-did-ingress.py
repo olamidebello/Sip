@@ -9,7 +9,7 @@ def patch(old):
  if not auth:raise ValueError('Authenticated bridge token not found in the existing switch layout')
  if not re.search(r'onreply_route\s*\[\s*MEDIA_REPLY\s*\]',old):raise ValueError('Required MEDIA_REPLY reply route not found')
  if not re.search(r'request_route\s*\{',old):raise ValueError('Main request_route block not found')
- hook='\n    '+MARK+'\n    if (is_method("INVITE") && !has_totag() && $rU =~ "^did-[a-f0-9]{64}$") { route(OLAMIDE_DID_INBOUND); exit; }\n'
+ hook='\n    '+MARK+'\n    if (is_method("INVITE") && ($tt == $null || $tt == "") && $rU =~ "^did-[a-f0-9]{64}$") { route(OLAMIDE_DID_INBOUND); exit; }\n'
  new=re.sub(r'request_route\s*\{',lambda m:m[0]+hook,old,count=1)
  route=r'''
 route[OLAMIDE_DID_INBOUND] {
