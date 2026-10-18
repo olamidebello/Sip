@@ -46,7 +46,8 @@ def backup(container,tag,directory):
    api('POST','/commit?'+urlencode({'container':temp_name,'repo':repository,'tag':label,'pause':'false'}),recovery_config(inspect['Config']))
    restored=json.loads(run(['docker','image','inspect',tag]).stdout)[0]['Config']
    expected=recovery_config(inspect['Config'])
-   if any(restored.get(key)!=value for key,value in expected.items()):raise RuntimeError('Recovery startup configuration mismatch')
+   mismatched=[key for key,value in expected.items() if restored.get(key)!=value]
+   if mismatched:raise RuntimeError('Recovery startup configuration mismatch in fields: '+','.join(mismatched))
    with open(os.devnull,'wb') as sink:subprocess.run(['docker','image','save',tag],check=True,stdout=sink,stderr=subprocess.PIPE)
    print('Recovery image reconstructed from running filesystem; startup configuration preserved')
  finally:
@@ -60,4 +61,5 @@ if __name__=='__main__':
   detail=error.stderr.decode('utf8','replace') if isinstance(error.stderr,bytes) else str(error.stderr or '')
   category='missing Docker content' if re.search(r'not found|NotFound',detail,re.I) else 'disk capacity' if 'no space left' in detail.lower() else 'Docker filesystem export/import operation'
   parser.exit(1,'Recovery backup failed: '+category+'. Running containers were not replaced.\n')
+ except RuntimeError as error:parser.exit(1,str(error)+'. Running containers were not replaced.\n')
  except Exception as error:parser.exit(1,'Recovery backup failed: '+type(error).__name__+'. Running containers were not replaced.\n')
