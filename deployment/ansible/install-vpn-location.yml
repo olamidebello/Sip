@@ -1,0 +1,136 @@
+---
+- name: Build and install VPN permissions and live geofence enforcement
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    repo: /opt/olamide/repo
+    compose_args:
+      - docker
+      - compose
+      - -p
+      - docker
+      - --env-file
+      - /opt/olamide/repo/deployment/docker/.env
+      - -f
+      - /opt/olamide/repo/deployment/docker/compose.yml
+      - -f
+      - /opt/olamide/repo/deployment/docker/compose.callerids.yml
+      - -f
+      - /etc/olamide/compose.location.yml
+  tasks:
+    - name: Preserve optional IP lookup configuration when no replacement supplied
+      ansible.builtin.stat:
+        path: /etc/olamide/compose.location.yml
+      register: location_override
+    - name: Install private runtime location configuration
+      ansible.builtin.copy:
+        dest: /etc/olamide/compose.location.yml
+        mode: '0600'
+        backup: true
+        content: |
+          services:
+            api:
+              environment:
+                LOCATION_IP_LOOKUP_URL: {{ location_ip_lookup_url | default('') | to_json }}
+                LOCATION_IP_LOOKUP_TOKEN: {{ location_ip_lookup_token | default('') | to_json }}
+      when: not location_override.stat.exists or location_ip_lookup_url is defined
+      no_log: true
+    - name: Validate combined deployment
+      ansible.builtin.command:
+        argv: '{{ compose_args + ["config", "--quiet"] }}'
+      changed_when: false
+    - name: Build API and browser application
+      ansible.builtin.command:
+        argv: '{{ compose_args + ["build", "api", "web"] }}'
+      changed_when: true
+    - name: Run server location, bridge, billing and administrator tests
+      ansible.builtin.command:
+        argv: [docker, run, --rm, --entrypoint, node, olamide-api:local, --test, locationPolicy.test.js, kamailioHttpBridge.test.js, pstnBilling.test.js, superAdminControl.test.js, defaultCallingPlan.test.js, callingPlanAdmin.test.js]
+      changed_when: false
+    - name: Test browser location lifecycle and ringback
+      ansible.builtin.command:
+        argv: [docker, run, --rm, -v, '/opt/olamide/repo/apps/web/src:/tests:ro', 'node:22-bookworm-slim', node, --test, /tests/locationMonitor.test.js, /tests/ringback.test.js]
+      changed_when: false
+    - name: Test host dialog parser
+      ansible.builtin.command:
+        argv: [python3, '{{ repo }}/deployment/native-push/test_location_watchdog.py']
+      changed_when: false
+    - name: Preflight switch dialog tracking without changing configuration
+      ansible.builtin.command:
+        argv: [python3, '{{ repo }}/deployment/native-push/install-location-dialogs.py', --check]
+      changed_when: false
+    - name: Install updated API and web with location schema
+      ansible.builtin.command:
+        argv: '{{ compose_args + ["up", "-d", "--no-deps", "api", "web"] }}'
+      changed_when: true
+    - name: Verify application readiness inside API container
+      ansible.builtin.command:
+        argv: [docker, exec, docker-api-1, node, --input-type=module, -e, "const r=await fetch('http://127.0.0.1:8080/api/health');const b=await r.json();if(r.status!==200||b.status!=='ok')process.exit(1);"]
+      register: location_health
+      retries: 20
+      delay: 3
+      until: location_health.rc == 0
+      changed_when: false
+    - name: Track internal SIP dialogs for ongoing enforcement
+      ansible.builtin.command:
+        argv: [python3, '{{ repo }}/deployment/native-push/install-location-dialogs.py']
+      register: location_dialogs
+      changed_when: "location_dialogs.stdout.startswith('changed:')"
+    - name: Restart switch when dialog tracking changed
+      ansible.builtin.systemd:
+        name: kamailio
+        state: restarted
+      when: location_dialogs.changed
+    - name: Restore existing Flowroute activation after switch update
+      ansible.builtin.command:
+        argv: [docker, exec, docker-api-1, node, /app/commissionPaidCalls.js]
+      when: location_dialogs.changed
+      changed_when: true
+    - name: Verify switch dialog RPC support
+      ansible.builtin.command:
+        argv: [kamcmd, -s, 'unix:/run/kamailio/olamide_carrier_ctl', dlg.briefing, cFs]
+      changed_when: false
+      no_log: true
+    - name: Create host watchdog directory
+      ansible.builtin.file:
+        path: /usr/local/libexec/olamide
+        state: directory
+        mode: '0750'
+    - name: Install host location watchdog
+      ansible.builtin.copy:
+        src: '{{ repo }}/deployment/native-push/location-watchdog.py'
+        remote_src: true
+        dest: /usr/local/libexec/olamide/location-watchdog.py
+        mode: '0750'
+      register: watchdog_file
+    - name: Install watchdog service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/olamide-location-watchdog.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Olamide SIP location lease watchdog
+          After=network-online.target docker.service kamailio.service
+          Wants=network-online.target
+          [Service]
+          Type=simple
+          ExecStart=/usr/bin/python3 /usr/local/libexec/olamide/location-watchdog.py
+          Restart=always
+          RestartSec=5
+          NoNewPrivileges=true
+          PrivateTmp=true
+          ProtectSystem=strict
+          ProtectHome=true
+          [Install]
+          WantedBy=multi-user.target
+      register: watchdog_unit
+    - name: Enable ongoing call enforcement
+      ansible.builtin.systemd:
+        name: olamide-location-watchdog
+        enabled: true
+        daemon_reload: true
+        state: '{{ "restarted" if watchdog_file.changed or watchdog_unit.changed else "started" }}'
+    - name: Report controls and location requirements
+      ansible.builtin.debug:
+        msg: Refresh the app. My profile shows Allows VPN; only super admin can edit it. Open Admin / Geofencing for user and group controls. Default Yes uses device location with an enabled geofence. No geofence means unrestricted service without GPS tracking. VPN-disabled users need a trusted IP/VPN lookup endpoint when geofencing is enabled. Include /etc/olamide/compose.location.yml in future deployments.
