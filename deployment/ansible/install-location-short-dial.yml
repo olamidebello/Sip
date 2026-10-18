@@ -1,0 +1,23 @@
+---
+- name: Test device location retry behavior
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Test location-aware dial authorization
+      ansible.builtin.command:
+        argv: [docker, run, --rm, -v, '/opt/olamide/repo/apps/web/src:/tests:ro', 'node:22-bookworm-slim', node, --test, /tests/locationDialing.test.js]
+      changed_when: false
+- import_playbook: install-call-sounds.yml
+- name: Verify automatic country-code configuration
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Verify short-dial schema and phone numbering metadata
+      ansible.builtin.command:
+        argv: [docker, exec, docker-api-1, node, --input-type=module, -e, "import {createDatabase} from './db.js';import {prefixNationalNumber} from './shortDial.js';const db=createDatabase(process.env.MYSQL_URL);try{await db.query('SELECT 1 FROM tenant_short_dial_policy LIMIT 1');if(prefixNationalNumber('612345678','FR')!=='+33612345678')process.exitCode=1;else console.log('Country-code policy and numbering metadata ready');}finally{await db.end();}"]
+      changed_when: false
+    - name: Report administrator controls
+      ansible.builtin.debug:
+        msg: Refresh the app. Super admin / Admin / Geofencing / Automatic country codes controls enablement, maximum short-number digits (default 9) and optional saved-primary-country fallback (default off). The dialer uses fresh device or trusted IP location; internal extensions and full international numbers retain their routing. Incomplete national numbers require the missing area code. Existing subscription, location and carrier authorization still apply.
