@@ -1,3 +1,4 @@
+import {getProfileReadiness} from './profileReadiness.js';
 import {migrateShortDial,handleShortDialAdmin} from './shortDial.js';
 import {migrateSecureChat,handleSecureChat} from './secureChat.js';
 import {migrateServiceCountries,handleServiceCountries,startProfileTracker,countryCatalog} from './serviceCountries.js';
@@ -283,6 +284,7 @@ async function handler(req, res) {
         path === "/api/admin/cdr" || path.startsWith('/api/marketplace/') || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if(path==='/api/account/profile-readiness'&&req.method==='GET')return send(res,200,await getProfileReadiness(pool,user));
       if(path==='/api/service-countries/catalog'||path==='/api/account/service-countries'||path==='/api/account/biodata'||path==='/api/account/service-events'||path==='/api/admin/service-events')return handleServiceCountries({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/location/')||path.startsWith('/api/admin/location-policy'))return handleLocationPolicy({req,res,path,user,pool,send,readJson,sessionHash:tokenHash(currentToken(req)),ip:await proxyClient(req)});
       const locationRecovery=path==='/api/geofence'||path.startsWith('/api/account/')||path==='/api/softphone/calls'&&req.method==='POST'||path.startsWith('/api/admin/')&&user.role==='super_admin';
