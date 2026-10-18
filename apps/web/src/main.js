@@ -1225,7 +1225,7 @@ setupContactManagerLayout(document);
 setupChatLanding(document);
 setupChatGestures(document);
 const messengerHub=setupMessengerHub({document,request:(...args)=>accountRequest(...args),get:(...args)=>apiGet(...args),show:showWorkspace,isSignedIn:()=>!!activeRole,openContact:id=>{showWorkspace('chat');const select=$('#contact-list');select.value=id;select.dispatchEvent(new window.Event('change',{bubbles:true}));$('#chat').classList.add('thread-open');}});
-const callGui=setupCallGui({document,openAudio:()=>callsScreen.open('settings'),openVideo:()=>{
+const callGui=setupCallGui({document,getPhone:()=>phone,onStatus:message=>status(message),openAudio:()=>callsScreen.open('settings'),openVideo:()=>{
   if($('#meetings').hidden){$('#chat-status').textContent='Video meetings are not enabled for this account.';return;}
   videoWorkflow=true;showWorkspace('meetings');$('#meeting-create input')?.focus();
 }});
@@ -2762,7 +2762,9 @@ $("#hold").onclick = async () => {
 $("#mute").onclick = () => {
   if (!phone || !onCall) return;
   try {
+    const videoTracks=(phone.localMediaStream?.getVideoTracks()||[]).map(track=>({track,enabled:track.enabled}));
     if (muted) phone.unmute(); else phone.mute();
+    for(const {track,enabled} of videoTracks)track.enabled=enabled;
     muted = !muted;
     $("#mute").textContent = muted ? "Unmute" : "Mute";$("#mute").setAttribute("aria-pressed",String(muted));
   } catch (error) { report(error); }
