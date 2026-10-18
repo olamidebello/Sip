@@ -1,6 +1,6 @@
 import {dialInputTarget} from './dialIdentityInput.js';
 import {icon} from './messengerIcons.js';
-export function setupCallsScreen({document,get,request,show,dial,retryConnection=()=>{},connected=()=>true,canRedial=()=>false}){
+export function setupCallsScreen({document,get,request,show,dial,retryConnection=()=>{},connected=()=>true,canRedial=()=>false,onPanel=()=>{}}){
  const panel=document.getElementById('calling-workspace'),dialog=document.createElement('dialog');dialog.className='calls-dialog';dialog.setAttribute('aria-labelledby','calls-dialog-title');dialog.innerHTML='<button type="button" class="calls-close" aria-label="Close">×</button><h2 id="calls-dialog-title"></h2><div id="calls-dialog-content"></div><p id="scheduled-call-status" role="status"></p>';panel.append(dialog);
  const callSelected=document.createElement('button');callSelected.type='button';callSelected.className='calls-contact-call';callSelected.textContent='Call selected contact';callSelected.hidden=true;dialog.append(callSelected);
  function refreshCall(){const submit=document.querySelector('#dial .dialpad-call');if(submit){const entered=!!dialInputTarget(document.getElementById('dial').elements.target);submit.disabled=!connected()||(!entered&&!canRedial());submit.setAttribute('aria-label',entered?'Place voice call':'Load last dialed number');}callSelected.disabled=!connected()||!dialInputTarget(document.getElementById('dial').elements.target);}
@@ -16,7 +16,7 @@ export function setupCallsScreen({document,get,request,show,dial,retryConnection
 
  const content=dialog.querySelector('#calls-dialog-content');let moved=null,original=null,next=null,dialogGeneration=0;
  function restore(){if(moved){original.insertBefore(moved,next?.parentNode===original?next:null);moved=null;}}
- dialog.addEventListener('close',()=>{dialogGeneration++;restore();});dialog.querySelector('.calls-close').onclick=()=>dialog.close();
+ dialog.addEventListener('close',()=>{dialogGeneration++;restore();if(!dialog.open)onPanel(null);});dialog.querySelector('.calls-close').onclick=()=>dialog.close();
  const shortcuts=document.createElement('div');shortcuts.className='calls-shortcuts';for(const [mode,label,symbol]of [['keypad','Call','calls'],['schedule','Schedule','calendar'],['keypad','Keypad','keypad'],['favorites','Favorites','heart']]){const button=document.createElement('button');button.type='button';button.innerHTML=icon(symbol)+'<span>'+label+'</span>';button.onclick=()=>open(mode);shortcuts.append(button);}panel.querySelector('h2').after(shortcuts);
  const recent=document.createElement('div');recent.className='calls-recent';recent.innerHTML='<h3>Recent</h3>';recent.append(document.getElementById('recent-calls'));shortcuts.after(recent);
  const floating=document.createElement('button');floating.type='button';floating.className='calls-new';floating.setAttribute('aria-label','New call');floating.innerHTML=icon('calls');floating.onclick=()=>open('contacts');panel.append(floating);
@@ -30,7 +30,8 @@ export function setupCallsScreen({document,get,request,show,dial,retryConnection
  retry.hidden=!['keypad','contacts'].includes(mode);if(!retry.hidden)connectionStatus(document.getElementById('status')?.textContent||'Waiting for SIP connection');
  if(mode==='keypad')document.getElementById('dial').elements.target.dispatchEvent(new document.defaultView.Event('input',{bubbles:true}));
  if(!dialog.open)dialog.showModal();
+ onPanel(mode);
  }
  document.addEventListener('messenger:navigate',event=>{if(event.detail!=='calling-workspace'&&dialog.open)dialog.close();});
- return {open,connectionStatus,stop(){dialogGeneration++;dialog.close();restore();content.replaceChildren();}};
+ return {open,connectionStatus,stop(){dialogGeneration++;dialog.close();restore();content.replaceChildren();onPanel(null);}};
 }
