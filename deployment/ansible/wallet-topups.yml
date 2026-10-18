@@ -15,24 +15,35 @@
 
     - name: Build the updated API and web interface
       ansible.builtin.command:
-        argv: [docker, compose, build, api, web]
+        argv: [python3, '{{ app_repo }}/deployment/wallet-funding/compose-runtime.py', build, api, web]
         chdir: '{{ app_repo }}/deployment/docker'
 
     - name: Apply additive wallet database migrations before startup
       ansible.builtin.command:
-        argv: [docker, compose, run, --rm, --no-deps, api, node, migrate.js]
+        argv: [python3, '{{ app_repo }}/deployment/wallet-funding/compose-runtime.py', run, --rm, --no-deps, api, node, migrate.js]
         chdir: '{{ app_repo }}/deployment/docker'
+
+    - name: Inspect country feature resource requirements
+      ansible.builtin.stat:
+        path: '{{ app_repo }}/services/api/countryBoundaries.js'
+      register: wallet_country_feature
+
+    - name: Check the saved country mount before replacing the API
+      ansible.builtin.command:
+        argv: [python3, '{{ app_repo }}/deployment/wallet-funding/compose-runtime.py', run, --rm, --no-deps, api, node, --input-type=module, '-e', "import {boundaries} from './countryBoundaries.js';console.log('Validated country boundaries:',boundaries().size);"]
+      when: wallet_country_feature.stat.exists
+      changed_when: false
 
     - name: Recreate API and web while retaining existing volumes and overrides
       ansible.builtin.command:
-        argv: [docker, compose, up, '-d', '--no-deps', api, web]
+        argv: [python3, '{{ app_repo }}/deployment/wallet-funding/compose-runtime.py', up, '-d', '--no-deps', api, web]
         chdir: '{{ app_repo }}/deployment/docker'
 
     - name: Wait for API health and confirm funding tables
       ansible.builtin.command:
         argv:
-          - docker
-          - compose
+          - python3
+          - '{{ app_repo }}/deployment/wallet-funding/compose-runtime.py'
           - exec
           - '-T'
           - api

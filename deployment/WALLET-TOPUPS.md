@@ -13,7 +13,7 @@ cd /opt/olamide/repo
 sudo ansible-playbook -i localhost, -c local deployment/ansible/wallet-topups.yml
 ```
 
-The playbook preserves existing payment encryption keys, initializes a key only when no encrypted gateways exist, rebuilds API and GUI, applies additive database migrations, and checks API health and the four funding tables. It uses the existing Compose environment and overrides, preserves volumes, and does not change Kamailio configuration.
+The playbook preserves existing payment encryption keys, initializes a key only when no encrypted gateways exist, rebuilds API and GUI, applies additive database migrations, and checks API health and the four funding tables. It explicitly preserves the running container’s Compose configuration files plus the saved caller-ID, location, and country overrides, validates country resources before replacing the API, preserves volumes, and does not change Kamailio configuration.
 
 In Administration > Payments & wallets > Wallet top-ups:
 
