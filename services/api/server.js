@@ -1,3 +1,6 @@
+import {migrateDidShop,handleDidShop} from './didShop.js';
+import {migrateDidPayments,handleDidWebhook} from './didPayments.js';
+import {startDidProvisioning} from './didProvisioning.js';
 import {getProfileReadiness} from './profileReadiness.js';
 import {migrateShortDial,handleShortDialAdmin} from './shortDial.js';
 import {migrateSecureChat,handleSecureChat} from './secureChat.js';
@@ -181,15 +184,16 @@ async function handler(req, res) {
   const stripeWebhook = path.startsWith("/api/webhooks/stripe/");
   const providerWebhook=path.startsWith("/api/webhooks/providers/");
   const didwwWebhook=path.startsWith("/api/webhooks/didww/");
+  const didShopWebhook=path.startsWith('/api/webhooks/did-shop/');
   const cdrIngest = req.method === "POST" && path === "/api/integrations/cdr";
   const switchXml = path === "/api/switch/xml";
   const deployRunner = path.startsWith('/api/integrations/deployment/');
   const kamailioRunner=path.startsWith('/api/integrations/kamailio/');
-  if (req.method !== "GET" && !nativePushHook && !deployRunner && !kamailioRunner && !switchXml && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
+  if (req.method !== "GET" && !didShopWebhook && !nativePushHook && !deployRunner && !kamailioRunner && !switchXml && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
     return send(res, 403, { error: "Invalid origin" });
   try {
     if(req.method!=='GET'||path==='/api/register/captcha'){
-      const external=!!(nativePushHook||deployRunner||kamailioRunner||switchXml||cdrIngest||flowrouteWebhook||stripeWebhook||providerWebhook||didwwWebhook);
+      const external=!!(didShopWebhook||nativePushHook||deployRunner||kamailioRunner||switchXml||cdrIngest||flowrouteWebhook||stripeWebhook||providerWebhook||didwwWebhook);
       const client=await proxyClient(req);
       const edge=requestLimiter.check('edge:'+client,600);
       if(!edge.allowed)return send(res,429,{error:'Too many requests',retryAfter:edge.retryAfter},{'Retry-After':String(edge.retryAfter)});
@@ -198,6 +202,7 @@ async function handler(req, res) {
       const limited=requestLimiter.check(rule.key,rule.maximum);
       if(!limited.allowed)return send(res,429,{error:'Too many requests',retryAfter:limited.retryAfter},{'Retry-After':String(limited.retryAfter)});
     }
+    if(didShopWebhook)return await handleDidWebhook({req,res,path,pool,send});
     if(path==='/api/native-push/wake')return await handleNativePush({req,res,path,pool,send,readJson});
     if (switchXml) return send(res,410,{error:'Legacy XML integration retired'});
     if(kamailioRunner) return await handleKamailioRunner({req,res,path,pool,send,readJson});
@@ -647,6 +652,7 @@ async function handler(req, res) {
         );
         return send(res, 201, { id,status:"draft" });
       }
+      if(path.startsWith('/api/account/did-shop/')||path==='/api/admin/did-shop'||path.startsWith('/api/admin/did-shop/'))return handleDidShop({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/platform-control')) return handleSuperAdminControl({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/calling-plan') return handleCallingPlan({req,res,path,user,pool,send,readJson});
       if (path === "/api/admin/plans" && req.method === "GET") {
@@ -853,6 +859,9 @@ await migrateLocationPolicy(pool);
 await migrateServiceCountries(pool);
 await migrateSecureChat(pool);
 await migrateShortDial(pool);
+await migrateDidShop(pool);
+await migrateDidPayments(pool);
+const stopDidProvisioning=startDidProvisioning(pool);
 const stopProfileTracker=startProfileTracker(pool);
 const stopLocationCleanup=startLocationCleanup(pool);
 const kamailioHttpBridge=startKamailioHttpBridge(pool);
@@ -869,6 +878,7 @@ const stopStoreRenewals=startStoreRenewals(pool);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
+server.on("close",stopDidProvisioning);
 server.on("close",stopLocationCleanup);
 server.on("close",stopProfileTracker);
 server.on("close",stopSubscriberEmail);
