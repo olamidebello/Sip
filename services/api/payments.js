@@ -168,3 +168,5 @@ export async function paymentCapabilities(pool,tenant){
  fundingNote:'Wallet deposits require a dedicated funding integration.',
  payoutNote:'Bank withdrawals require a payout provider and verified recipient account.'};
 }
+// Server-only adapter used by DID subscriptions; never returned through a public route.
+export async function didStripeGateway(pool,tenant){const r=await config(pool,tenant);if(!r?.enabled||r.mode!=='live'||!key())throw Error('Enabled live Stripe gateway required');return {secret:decrypt(r.secret_key_cipher)};}
