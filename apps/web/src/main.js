@@ -1397,6 +1397,7 @@ function updateNavigation() {
     }
     details.append(links);groups.append(details);
   }
+  const phoneNumbers=document.createElement("button");phoneNumbers.type="button";phoneNumbers.className="nav-phone-numbers";phoneNumbers.textContent="Phone numbers";phoneNumbers.onclick=()=>didShopUi.open();nav.append(phoneNumbers);
   const signout=document.createElement("button");signout.type="button";signout.className="nav-signout";signout.textContent="Sign out";signout.onclick=()=>$("#logout").click();nav.append(signout);
   const quickMenu=document.createElement("details");quickMenu.className="menu-group locale-menu";
   const quickTitle=document.createElement("summary");quickTitle.textContent="Language & currency";quickMenu.append(quickTitle);
