@@ -1,0 +1,19 @@
+---
+- name: Validate dial tone and incoming ringtone lifecycle
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Test generated call sounds and existing outgoing ringback
+      ansible.builtin.command:
+        argv: [docker, run, --rm, -v, '/opt/olamide/repo/apps/web/src:/tests:ro', 'node:22-bookworm-slim', node, --test, /tests/callSounds.test.js, /tests/ringback.test.js]
+      changed_when: false
+- import_playbook: install-encrypted-audio.yml
+- name: Report call sound controls
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Report available calling tones
+      ansible.builtin.debug:
+        msg: Refresh the app. An empty connected keypad plays dial tone until digits are entered. Incoming calls ring unless Do not disturb declines them. Call settings has a Dial tone and incoming ringtone checkbox. Answering, declining, disconnecting, hanging up and leaving the page stop tones. Outgoing ringback remains enabled and yields to carrier early media. Mobile browsers may require a tap to enable audio and may suspend background pages.
