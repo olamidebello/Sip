@@ -1,3 +1,4 @@
+import {serviceLocationAccess} from './locationPolicy.js';
 import {tokenHash} from './security.js';
 import { WebSocketServer, WebSocket } from "ws";
 
@@ -59,7 +60,8 @@ export function attachMeetingSignaling(server, { pool, origin, currentUser }) {
   }
   async function sessionActive(ws){
     const result=await pool.query('SELECT 1 FROM sessions WHERE token_hash=$1 AND user_id=$2 AND expires_at>UTC_TIMESTAMP(3)',[ws.sessionHash,ws.userId]);
-    return result.rowCount>0;
+    if(!result.rowCount)return false;
+    return (await serviceLocationAccess(pool,ws.tenantId,ws.userId,{sessionHash:ws.sessionHash})).allowed;
   }
   let checking=false;
   const sessionTimer=setInterval(async()=>{
