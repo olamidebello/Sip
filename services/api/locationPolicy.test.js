@@ -17,6 +17,7 @@ test('fence checks movement and uncertainty conservatively',()=>{
  assert.equal(evaluateLocation(fence,{latitude:NaN,longitude:0,accuracy:0}).allowed,false);
 });
 function database(lease){return {query:async(sql,args)=>{
+ if(sql.includes('user_service_countries'))return {rows:[]};
  if(sql.includes('tenant_geofence_policy'))return {rows:[{policy:fence}]};
  if(sql.startsWith('SELECT allows_vpn'))return {rows:[]};
  if(sql.includes('group_vpn_policy'))return {rows:[]};
@@ -44,7 +45,7 @@ test('IP lookup is server-configured and rejects classified VPNs',async()=>{
 });
 test('heartbeat ignores client source selection when VPN disabled',async()=>{
  const old=process.env.LOCATION_IP_LOOKUP_URL;delete process.env.LOCATION_IP_LOOKUP_URL;
- const db={query:async sql=>sql.includes('tenant_geofence_policy')?{rows:[{policy:fence}]}:sql.startsWith('SELECT allows_vpn')?{rows:[{allows_vpn:0}]}:{rows:[]}};
+ const db={connect:async()=>({query:async()=>({rows:[]}),release(){}}),query:async sql=>sql.includes('tenant_geofence_policy')?{rows:[{policy:fence}]}:sql.startsWith('SELECT allows_vpn')?{rows:[{allows_vpn:0}]}:{rows:[]}};
  try{const r=await handleLocationPolicy({req:{method:'POST'},path:'/api/location/heartbeat',user:{id:'u',tenant_id:'t'},pool:db,sessionHash:'session',ip:'1.2.3.4',readJson:async()=>({source:'gps',latitude:32.8,longitude:-96.8,accuracy:1,timestamp:Date.now()}),send:(_,code,body)=>({code,body})});assert.equal(r.code,403);assert.match(r.body.error,/not configured/);}finally{if(old!==undefined)process.env.LOCATION_IP_LOOKUP_URL=old;}
 });
 
