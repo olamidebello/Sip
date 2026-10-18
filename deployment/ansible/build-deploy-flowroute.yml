@@ -1,4 +1,3 @@
-# Existing installation only. Requires saved Flowroute IP trunk, Docker Compose, Ansible and configured carrier adapter.
 - name: Activate Flowroute and synchronize user caller IDs
   hosts: all
   become: true
@@ -51,16 +50,25 @@
       - '{{ policy_script }}'
       - '{{ authorized_numbers | to_json }}'
       - '{{ authorization_reference }}'
+      - '{{ caller_id_overrides | default({}) | to_json }}'
     vars:
-      policy_script: "import {execFileSync} from 'node:child_process';\nimport {pathToFileURL} from 'node:url';\nimport {dirname,join} from 'node:path';\nconst file=execFileSync('find',['/app','-type','f','-name','commissionPaidCalls.js'],{encoding:'utf8'}).trim().split('\\n')[0];\nif(!file) throw Error('API directory not found');\nconst base=dirname(file);\nconst {createDatabase}=await import(pathToFileURL(join(base,'db.js')));\nconst {validatePolicy,loadPolicy}=await import(pathToFileURL(join(base,'outboundDids.js')));\nconst allowed=new Set(JSON.parse(process.argv[1]));\nif([...allowed].some(n=>typeof n!=='string'||!/^\\+[1-9][0-9]{7,14}$/.test(n))) throw Error('Invalid authorized number');\nconst old=loadPolicy();\nif(Object.values(old.tenants).some(c=>c.assignments.some(a=>a.provider!=='flowroute'||a.evidence!==process.argv[2]))) throw Error('Existing policy has independently managed assignments; merge explicitly first');\nconst pool=createDatabase(process.env.MYSQL_URL);\ntry {\n \
-        \ const rows=(await pool.query(`SELECT u.id,u.tenant_id,p.phone_e164,d.number_e164\n    FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id\n    LEFT JOIN inhouse_dids d ON d.user_id=u.id AND d.tenant_id=u.tenant_id AND d.status='assigned'\n    WHERE u.status='active' ORDER BY u.id,d.number_e164`)).rows;\n  const policy={version:1,tenants:{}};\n  const seen=new Set();\n  for(const r of rows){\n    if(seen.has(r.id)) throw Error('Multiple assigned DIDs for a user; choose a primary DID first');\n    seen.add(r.id);\n    const number=r.number_e164||r.phone_e164;\n    // Keep each tenant present even if no user has an approved number.\n    // This prevents the existing billing code falling back to the trunk ID.\n    const c=policy.tenants[r.tenant_id]??={assignments:[]};\n    if(!number||!allowed.has(number)) continue;\n    c.assignments.push({userId:r.id,number,provider:'flowroute',authorized:true,evidence:process.argv[2]});\n  }\n  if(!Object.values(policy.tenants).some(c=>c.assignments.length))\
-        \ throw Error('No approved user numbers match the database');\n  console.log(JSON.stringify(validatePolicy(policy),null,2));\n} finally {await pool.end();}\n"
+      policy_script: "import {execFileSync} from 'node:child_process';\nimport {pathToFileURL} from 'node:url';\nimport {dirname,join} from 'node:path';\nconst file=execFileSync('find',['/app','-type','f','-name','commissionPaidCalls.js'],{encoding:'utf8'}).trim().split('\\n')[0];\nif(!file) throw Error('API directory not found');\nconst base=dirname(file);\nconst {createDatabase}=await import(pathToFileURL(join(base,'db.js')));\nconst {validatePolicy,loadPolicy}=await import(pathToFileURL(join(base,'outboundDids.js')));\nconst allowed=new Set(JSON.parse(process.argv[1]));\nif([...allowed].some(n=>typeof n!=='string'||!/^\\+[1-9][0-9]{7,14}$/.test(n))) throw Error('Invalid authorized number');\nconst overrides=JSON.parse(process.argv[3]);\nif(!overrides||Array.isArray(overrides)||typeof overrides!=='object') throw Error('Caller ID overrides must be an email-to-number mapping');\nconst matched=new Set();\nconst old=loadPolicy();\nif(Object.values(old.tenants).some(c=>c.assignments.some(a=>a.provider!=='flowroute'||a.evidence!==process.argv[2])))\
+        \ throw Error('Existing policy has independently managed assignments; merge explicitly first');\nconst pool=createDatabase(process.env.MYSQL_URL);\ntry {\n  const rows=(await pool.query(`SELECT u.id,u.email,u.tenant_id,p.phone_e164,d.number_e164\n    FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id\n    LEFT JOIN inhouse_dids d ON d.user_id=u.id AND d.tenant_id=u.tenant_id AND d.status='assigned'\n    WHERE u.status='active' ORDER BY u.id,d.number_e164`)).rows;\n  const policy={version:1,tenants:{}};\n  const seen=new Set();\n  for(const r of rows){\n    if(seen.has(r.id)) throw Error('Multiple assigned DIDs for a user; choose a primary DID first');\n    seen.add(r.id);\n    const email=r.email.toLowerCase();\n    const override=overrides[email];\n    if(override!==undefined){\n      if(!allowed.has(override)) throw Error('Override number must be in authorized_numbers');\n      matched.add(email);\n      if(r.number_e164&&r.number_e164!==override) throw Error('Assigned DID\
+        \ conflicts with explicit caller ID');\n    }\n    const number=r.number_e164||override||r.phone_e164;\n    // Keep each tenant present even if no user has an approved number.\n    // This prevents the existing billing code falling back to the trunk ID.\n    const c=policy.tenants[r.tenant_id]??={assignments:[]};\n    if(!number||!allowed.has(number)) continue;\n    c.assignments.push({userId:r.id,number,provider:'flowroute',authorized:true,evidence:process.argv[2]});\n  }\n  if(Object.keys(overrides).some(email=>!matched.has(email))) throw Error('Override email does not match an active user');\n  if(!Object.values(policy.tenants).some(c=>c.assignments.length)) throw Error('No approved user numbers match the database');\n  console.log(JSON.stringify(validatePolicy(policy),null,2));\n} finally {await pool.end();}\n"
     register: generated_policy
     changed_when: false
     no_log: true
+    failed_when: false
+  - name: Report policy validation failure without exposing policy contents
+    ansible.builtin.assert:
+      that:
+      - generated_policy.rc == 0
+      fail_msg: '{{ (generated_policy.stderr | regex_findall(''(?m)^Error: .*$'') | first) | default(''Policy generation failed; check database and API availability'') }}'
   - name: Save policy with backup
     ansible.builtin.copy:
-      content: '{{ generated_policy.stdout }}\n'
+      content: '{{ generated_policy.stdout }}
+
+        '
       dest: '{{ policy_target }}'
       mode: '0600'
       backup: true
