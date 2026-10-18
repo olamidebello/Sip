@@ -32,6 +32,8 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
         const body=document.createElement('p');body.textContent=message.deleted_at?'Message removed':message.body;item.append(body);appendAttachment(document,item,message);
         const stamp=document.createElement('small');stamp.className='message-timestamp';stamp.textContent=new Date(message.created_at).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})+(message.edited_at?' · edited':'');if(own){const state=messageReceipt(message),receipt=document.createElement('span');receipt.className='message-receipt'+(state.read?' read':'');receipt.textContent=state.symbol;receipt.setAttribute('aria-label',state.label);stamp.append(' ',receipt);}item.append(stamp);
         if(!message.deleted_at&&!message.view_once){
+          const options=document.createElement('button');options.type='button';options.className='message-options-trigger';options.textContent='⋮';options.setAttribute('aria-label','Message options');options.setAttribute('aria-expanded','false');options.title='Swipe left or right, or tap for message options';item.prepend(options);
+          item.setAttribute('aria-label','Message. Swipe left or right, long press, or press Enter for options.');
           const controls=document.createElement('div');controls.className='message-actions';
           controls.append(action('Copy',async()=>{if(await details.copy(message))$('#chat-status').textContent='Message copied.';}));controls.append(action('Info',()=>details.info(message)));
           controls.append(action(message.starred?'Unstar':'Star',async()=>{await request('/api/messenger/messages/'+message.id+'/star',{starred:!message.starred},'PUT');await refresh();}));
@@ -80,3 +82,4 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
     clearDraft();await request('/api/messages/conversation/'+thread(),{typing:false},'PUT').catch(()=>{});
   }};
 }
+
