@@ -1,3 +1,4 @@
+import {ensureDefaultCallingPlan} from './defaultCallingPlan.js';
 import {provisionKamailioAccount} from './kamailioAccounts.js';
 import { randomUUID, randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
 import { verifyPassword } from './security.js';
@@ -41,6 +42,7 @@ function decrypt(value,key){const buffer=Buffer.from(value),iv=buffer.subarray(0
   const cipher=createDecipheriv('aes-256-gcm',key,iv);cipher.setAuthTag(tag);
   return Buffer.concat([cipher.update(buffer.subarray(12,-16)),cipher.final()]).toString('utf8');}
 export async function createSipAccount(db,userId,domain) {
+  await ensureDefaultCallingPlan(db,userId);
   const existing=(await db.query("SELECT id,username,status FROM sip_accounts WHERE user_id=$1",[userId])).rows[0];
   if(existing) return existing;
   const owner=(await db.query("SELECT tenant_id FROM users WHERE id=$1",[userId])).rows[0];
