@@ -1,3 +1,4 @@
+import {didInboundLookup} from './didIngress.js';
 import {serviceLocationAccess} from './locationPolicy.js';
 import http from 'node:http';
 import {reservePstn,settlePstn} from './pstnBilling.js';
@@ -24,6 +25,7 @@ export async function bridgeLookup(pool,path,data){
  const identity=/^[a-zA-Z0-9]{2,64}$/;
  if(path==='/api/switch/kamailio/billing-event')return settlePstn(pool,data);
 
+ if(path==='/api/switch/kamailio/did-inbound')return didInboundLookup(pool,data);
  if(typeof data.domain!=='string'||!/^[-a-zA-Z0-9.]{1,253}$/.test(data.domain))return [400,{error:'Invalid domain'}];
  if(path==='/api/switch/kamailio/auth'){
   if(!identity.test(data.username||''))return [400,{error:'Invalid username'}];
