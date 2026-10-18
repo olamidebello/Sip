@@ -72,7 +72,6 @@
       - /opt/olamide/repo/deployment/ansible/install-did-ingress.py
       - --check
     changed_when: false
-    no_log: true
   - name: Create private DID deployment directory
     ansible.builtin.file:
       path: /etc/olamide/didshop-backups
