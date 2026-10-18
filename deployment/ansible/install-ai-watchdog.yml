@@ -1,0 +1,305 @@
+- name: Build and install AI platform watchdog and super-admin events
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    watchdog_compose:
+    - docker
+    - compose
+    - -p
+    - docker
+    - --env-file
+    - /opt/olamide/repo/deployment/docker/.env
+    - -f
+    - /opt/olamide/repo/deployment/docker/compose.yml
+    - -f
+    - /opt/olamide/repo/deployment/docker/compose.callerids.yml
+    - -f
+    - /etc/olamide/compose.location.yml
+    - -f
+    - /etc/olamide/compose.countries.yml
+    - -f
+    - /etc/olamide/compose.didshop.yml
+    - -f
+    - /etc/olamide/compose.watchdog.yml
+    watchdog_host_tenant: 00000000-0000-4000-8000-000000000000
+    watchdog_public_origin: https://sip.dobhrap.com
+  tasks:
+  - name: Fix deployment snapshot timestamp
+    ansible.builtin.set_fact:
+      did_stamp: '{{ now(utc=true,fmt="%Y%m%d%H%M%S") }}'
+  - name: Validate public health-check origin
+    ansible.builtin.assert:
+      that:
+      - watchdog_public_origin is match('^https://[a-zA-Z0-9.-]+(:[0-9]+)?$')
+      fail_msg: Use a public HTTPS origin without credentials or a path
+  - name: Create host script directory
+    ansible.builtin.file:
+      path: /usr/local/libexec/olamide
+      state: directory
+      mode: '0755'
+  - name: Test existing-key reuse without file writes
+    ansible.builtin.command:
+      argv:
+      - python3
+      - /opt/olamide/repo/deployment/ansible/reuse-watchdog-key.test.py
+    changed_when: false
+  - name: Test watchdog restart boundaries
+    ansible.builtin.command:
+      argv:
+      - python3
+      - /opt/olamide/repo/deployment/ansible/platform-watchdog.test.py
+    changed_when: false
+  - name: Create private watchdog state directory
+    ansible.builtin.file:
+      path: /var/lib/olamide-watchdog
+      state: directory
+      mode: '0700'
+  - name: Persist watchdog runtime configuration without copying keys
+    ansible.builtin.copy:
+      dest: /etc/olamide/compose.watchdog.yml
+      mode: '0600'
+      backup: true
+      content: "services:\n  api:\n    environment:\n      OPENAI_API_KEY: ${OPENAI_API_KEY:-}\n      WATCHDOG_HOST_TENANT:\
+        \ \"{{ watchdog_host_tenant }}\"\n      WATCHDOG_AI_MODEL: ${OPENAI_SUPPORT_MODEL:-gpt-4.1-mini}\n"
+  - name: Validate complete watchdog Compose configuration
+    ansible.builtin.command:
+      argv: '{{ watchdog_compose + ["config", "--quiet"] }}'
+    changed_when: false
+    no_log: true
+  - name: Preserve api recovery image and verify layer content
+    ansible.builtin.command:
+      argv:
+      - python3
+      - /opt/olamide/repo/deployment/ansible/backup-running-image.py
+      - docker-api-1
+      - olamide-api:before-did-{{ did_stamp }}
+    changed_when: true
+  - name: Preserve web recovery image and verify layer content
+    ansible.builtin.command:
+      argv:
+      - python3
+      - /opt/olamide/repo/deployment/ansible/backup-running-image.py
+      - docker-web-1
+      - olamide-web:before-did-{{ did_stamp }}
+    changed_when: true
+  - name: Build watchdog API and dashboard
+    ansible.builtin.command:
+      argv: '{{ watchdog_compose + ["build", "api", "web"] }}'
+    changed_when: true
+  - name: Build cached GUI regression image
+    ansible.builtin.command:
+      argv:
+      - docker
+      - build
+      - --target
+      - build
+      - -t
+      - olamide-web:watchdog-tests
+      - -f
+      - /opt/olamide/repo/deployment/docker/web.Dockerfile
+      - /opt/olamide/repo
+    changed_when: true
+  - name: Test watchdog AI metadata isolation and authorization
+    ansible.builtin.command:
+      argv:
+      - docker
+      - run
+      - --rm
+      - --network
+      - none
+      - --entrypoint
+      - node
+      - olamide-api:local
+      - --test
+      - platformWatchdog.test.js
+      - didShop.test.js
+      - didSms.test.js
+      - pstnBilling.test.js
+    changed_when: false
+  - name: Test watchdog navigation and privacy
+    ansible.builtin.command:
+      argv:
+      - docker
+      - run
+      - --rm
+      - --network
+      - none
+      - --entrypoint
+      - node
+      - olamide-web:watchdog-tests
+      - --test
+      - src/platformWatchdogUi.test.js
+      - src/didShopUi.test.js
+    changed_when: false
+  - name: Activate watchdog application with image recovery
+    block:
+    - name: Start watchdog API and GUI
+      ansible.builtin.command:
+        argv: '{{ ["python3", "/opt/olamide/repo/deployment/ansible/reuse-watchdog-key.py"] + watchdog_compose + ["up", "-d",
+          "--no-deps", "--no-build", "api", "web"] }}'
+      changed_when: true
+      no_log: true
+    - name: Verify watchdog API and schema
+      ansible.builtin.command:
+        argv:
+        - docker
+        - exec
+        - docker-api-1
+        - node
+        - --input-type=module
+        - -e
+        - import {createDatabase} from './db.js';const r=await fetch('http://127.0.0.1:8080/api/health');if(r.status!==200||(await
+          r.json()).status!=='ok')process.exit(1);const p=createDatabase(process.env.MYSQL_URL);try{for(const t of ['watchdog_events','watchdog_settings','watchdog_ai_jobs','watchdog_service_state'])await
+          p.query('SELECT 1 FROM '+t+' LIMIT 1');console.log('Watchdog API and schema ready');}finally{await p.end();}
+      changed_when: false
+      register: watchdog_ready
+      retries: 20
+      delay: 3
+      until: watchdog_ready.rc == 0
+    rescue:
+    - name: Write private rollback image override
+      ansible.builtin.copy:
+        dest: /etc/olamide/didshop-backups/watchdog-rollback-{{ did_stamp }}.yml
+        mode: '0600'
+        content: "services:\n  api:\n    image: olamide-api:before-did-{{ did_stamp }}\n  web:\n    image: olamide-web:before-did-{{\
+          \ did_stamp }}\n"
+    - name: Restore previous application images
+      ansible.builtin.command:
+        argv: '{{ ["python3", "/opt/olamide/repo/deployment/ansible/reuse-watchdog-key.py"] + watchdog_compose + ["-f", "/etc/olamide/didshop-backups/watchdog-rollback-"
+          + did_stamp + ".yml", "up", "-d", "--no-deps", "--no-build", "api", "web"] }}'
+      changed_when: true
+      no_log: true
+    - name: Report failed watchdog activation
+      ansible.builtin.fail:
+        msg: Watchdog API activation failed; previous API and GUI images restored. Additive watchdog tables and private backups
+          are retained.
+  - name: Install watchdog scripts
+    ansible.builtin.copy:
+      src: '{{ playbook_dir }}/{{ item }}'
+      dest: /usr/local/libexec/olamide/{{ item }}
+      mode: '0700'
+    loop:
+    - platform-watchdog.py
+    - platform-watchdog-checks.py
+  - name: Install olamide-platform-watchdog.service
+    ansible.builtin.copy:
+      dest: /etc/systemd/system/olamide-platform-watchdog.service
+      content: '[Unit]
+
+        Description=Olamide platform health and bounded service recovery
+
+        After=docker.service network-online.target
+
+        Wants=network-online.target
+
+        [Service]
+
+        Type=simple
+
+        ExecStart=/usr/bin/python3 /usr/local/libexec/olamide/platform-watchdog.py
+
+        Restart=always
+
+        RestartSec=5
+
+        Environment=WATCHDOG_PUBLIC_ORIGIN={{ watchdog_public_origin }}
+
+        UMask=0077
+
+        NoNewPrivileges=true
+
+        PrivateTmp=true
+
+        ProtectHome=true
+
+        ProtectSystem=strict
+
+        ReadWritePaths=/var/lib/olamide-watchdog /run
+
+        MemoryMax=256M
+
+        [Install]
+
+        WantedBy=multi-user.target
+
+        '
+      mode: '0644'
+    register: watchdog_unit
+  - name: Install olamide-watchdog-checks.service
+    ansible.builtin.copy:
+      dest: /etc/systemd/system/olamide-watchdog-checks.service
+      content: '[Unit]
+
+        Description=Olamide isolated UI and feature regression checks
+
+        After=docker.service
+
+        [Service]
+
+        Type=oneshot
+
+        ExecStart=/usr/bin/python3 /usr/local/libexec/olamide/platform-watchdog-checks.py
+
+        UMask=0077
+
+        TimeoutStartSec=420
+
+        '
+      mode: '0644'
+    register: watchdog_unit
+  - name: Install olamide-watchdog-checks.timer
+    ansible.builtin.copy:
+      dest: /etc/systemd/system/olamide-watchdog-checks.timer
+      content: '[Unit]
+
+        Description=Run isolated Olamide feature checks every fifteen minutes
+
+        [Timer]
+
+        OnBootSec=2min
+
+        OnUnitActiveSec=15min
+
+        Persistent=true
+
+        [Install]
+
+        WantedBy=timers.target
+
+        '
+      mode: '0644'
+    register: watchdog_unit
+  - name: Enable watchdog and regression schedule
+    ansible.builtin.systemd:
+      name: '{{ item }}'
+      state: restarted
+      enabled: true
+      daemon_reload: true
+    loop:
+    - olamide-platform-watchdog.service
+    - olamide-watchdog-checks.timer
+  - name: Check reused AI key availability without revealing it
+    ansible.builtin.command:
+      argv:
+      - docker
+      - exec
+      - docker-api-1
+      - node
+      - --input-type=module
+      - -e
+      - console.log(JSON.stringify({aiConfigured:!!(process.env.OPENAI_API_KEY||process.env.OPENAI_SUPPORT_API_KEY)}));
+    changed_when: false
+    register: watchdog_key_status
+  - name: Report watchdog dashboard and coverage
+    ansible.builtin.debug:
+      msg:
+      - Refresh and sign in as super admin. Admin / Carrier controls / AI platform watchdog shows service health, UI events,
+        acknowledgements, recovery settings and AI incident analysis.
+      - Known unhealthy services can restart after three failed checks, at most twice per hour with a ten-minute cooldown.
+        Recovery pauses during deployments; Docker and MySQL are monitored without automatic restarts.
+      - Selected isolated UI/billing/DID regression tests run every fifteen minutes. Actual customer transactions, payments,
+        SMS delivery and two-way audio are not exercised automatically. UI clicks are observations, not proof of functional
+        success.
+      - 'Reuse status: {{ watchdog_key_status.stdout }}'
+      - Include /etc/olamide/compose.watchdog.yml with every existing override in future deployments.
