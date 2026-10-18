@@ -1,7 +1,7 @@
 const releasesUrl="https://github.com/olamidebello/Sip/releases";
-const androidPreview={name:'OlamideSip.apk',browser_download_url:'https://github.com/olamidebello/Sip/releases/download/mobile-preview-20261018/OlamideSip.apk'};
+const androidPreview={name:'OlamideSip.apk',browser_download_url:'https://github.com/olamidebello/Sip/releases/download/branded-preview-20261018/OlamideSip.apk'};
 const packages=[
-  {label:"Android",kind:"APK preview",match:/\.apk$/i,note:"Latest October 18 Android debug build for testing. Install only if you trust this release."},
+  {label:"Android",kind:"APK preview",match:/\.apk$/i,note:"Latest Olamide branded Android debug build for testing. Install only if you trust this release."},
   {label:"Windows",kind:"Desktop preview",match:/\.exe$/i,note:"Unsigned installer."},
   {label:"macOS",kind:"Desktop preview",match:/\.dmg$/i,note:"Unsigned installer."},
   {label:"Linux",kind:"Desktop preview",match:/\.AppImage$/i,note:"AppImage package."}
