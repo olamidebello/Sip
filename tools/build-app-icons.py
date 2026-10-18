@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-"""Generate native and desktop icons from the canonical Olamide SVG."""
+"""Generate native and desktop icons from the canonical Olamide app logo."""
 from pathlib import Path
-from io import BytesIO
 import json
-import cairosvg
 from PIL import Image
 root=Path(__file__).resolve().parents[1]
-source=root/'apps/web/public/olamide-icon.svg'
-image=Image.open(BytesIO(cairosvg.svg2png(url=str(source),output_width=1024,output_height=1024))).convert('RGBA')
+source=root/'apps/web/public/icon-512.png'
+image=Image.open(source).convert('RGBA').resize((1024,1024),Image.Resampling.LANCZOS)
 # Opaque background is required for iOS; preserve the same logo on every platform.
 base=Image.new('RGBA',image.size,'#070d1c');base.alpha_composite(image)
 def png(path,size):
