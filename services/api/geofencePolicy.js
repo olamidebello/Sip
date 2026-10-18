@@ -1,5 +1,4 @@
 import {randomUUID} from "node:crypto";
-import {isAdmin} from "./tenancy.js";
 
 const defaultPolicy={enabled:false,maxAccuracyMeters:100,zones:[]};
 export function validateGeofencePolicy(input) {
@@ -33,11 +32,11 @@ export async function handleGeofencePolicy({req,res,path,user,pool,send,readJson
   if (path==="/api/geofence" && req.method==="GET")
     return send(res,200,await getGeofencePolicy(pool,user.tenant_id));
   if (path==="/api/admin/geofence" && req.method==="GET") {
-    if (!isAdmin(user)) return send(res,403,{error:"Administrator required"});
+    if (user.role!=="super_admin") return send(res,403,{error:"Super administrator required"});
     return send(res,200,await getGeofencePolicy(pool,user.tenant_id));
   }
   if (path==="/api/admin/geofence" && req.method==="PUT") {
-    if (!isAdmin(user)) return send(res,403,{error:"Administrator required"});
+    if (user.role!=="super_admin") return send(res,403,{error:"Super administrator required"});
     let policy;
     try {policy=validateGeofencePolicy(await readJson(req));}
     catch(error) {return send(res,400,{error:error.message});}
