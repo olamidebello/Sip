@@ -1,3 +1,5 @@
+import {setupSecureChat} from './secureChatUi.js';
+import {createAdaptiveAudio} from './adaptiveAudio.js';
 import {setupServiceCountries} from './serviceCountriesUi.js';
 import {createLocationMonitor} from './locationMonitor.js';
 import {renderLocationPolicyAdmin} from './locationPolicyAdmin.js';
@@ -54,7 +56,7 @@ import {setupConversations} from './conversations.js';
 import {setupWorkspaceNavigation,fragmentTarget} from "./workspaceNavigation.js";
 import {setupUserActivity} from "./userActivity.js";
 import {setupProductStore} from './productStore.js';
-import { SimpleUser } from "sip.js/lib/platform/web";
+import { SimpleUser, defaultSessionDescriptionHandlerFactory } from "sip.js/lib/platform/web";
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import { checkCurrentLocation } from "./geofence.js";
 import { setupMeetings } from "./meetings.js";
@@ -359,7 +361,7 @@ root.innerHTML = `
       <div class="bulk-controls"><label><input id="address-book-select-all" type="checkbox">Select all contacts in preview</label><button id="address-book-select-all-button" type="button" disabled>Select all</button><button id="address-book-clear-selection" type="button" disabled>Clear selection</button><span id="address-book-selection-count" role="status">0 contacts selected</span></div><p>Turn off automatic saving above to review and select phone contacts before importing.</p><ul id="address-book-preview"></ul><button id="address-book-save" type="button" disabled>Import selected contacts</button>
       <ul id="address-book-list"></ul><p id="contact-directory-status" role="status"></p>
     </details>
-    <p>Account messages are stored on this server. They are not end-to-end encrypted.</p>
+    <p>Standard account messages are stored on this server. Use Encrypted private messages below for encrypted one-to-one text.</p>
     <form id="add-contact">
       <label>Contact email <input name="email" type="email" required></label>
       <button>Add contact</button>
@@ -1454,6 +1456,8 @@ const dashboard=setupDashboard({get:path=>apiGet(path),request:(path,body,method
 const support=setupSupport({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 localeSettings=setupLocaleSettings({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const serviceCountryUi=setupServiceCountries({document,get:apiGet,request:accountRequest,onSaved:async()=>{await localeSettings.refresh(activeRole==='super_admin'||activeRole==='admin');await locationMonitor.ensure();}});
+const secureChatUi=setupSecureChat({document,get:apiGet,request:accountRequest});
+const adaptiveAudio=createAdaptiveAudio({onStatus:value=>{let label=$('#adaptive-audio-status');if(!label){label=document.createElement('p');label.id='adaptive-audio-status';label.setAttribute('role','status');$('#status').after(label);}label.textContent=value.mode+(value.codec?' · '+value.codec:'')+(value.targetBitrate?' · '+Math.round(value.targetBitrate/1000)+' kbps target':'')+(Number.isFinite(value.availableKbps)?' · estimated available '+Math.round(value.availableKbps)+' kbps':'')+(Number.isFinite(value.loss)?' · loss '+Math.round(value.loss*100)+'%':'');}});
 const groupAdmin = setupGroupAdmin();
 const sipProfiles = setupSipProfiles({get:apiGet,request:accountRequest,permissionsChanged:updateNavigation});
 const socialPublishing=setupSocialPublishing({document,get:apiGet,request:accountRequest});
@@ -1918,6 +1922,7 @@ function signedIn(user) {
   activeRole=["admin","super_admin"].includes(user.role)?user.role:"user";
   if(!document.querySelector('#profile-allows-vpn')){const label=document.createElement('label');label.innerHTML='<input id="profile-allows-vpn" type="checkbox" checked disabled> Allows VPN (managed by super admin)';$('#signed-in-profile').append(label);}
   const vpnBox=document.querySelector('#profile-allows-vpn');vpnBox.disabled=user.role!=='super_admin';vpnBox.onchange=async()=>{try{await accountRequest('/api/admin/location-policy/users/'+user.id,{allowsVpn:vpnBox.checked},'PUT');await locationMonitor.ensure();}catch(e){$('#account-status').textContent=e.message;}};
+  secureChatUi.show(user);
   serviceCountryUi.show(user).catch(error=>{$('#account-status').textContent=error.message;});
   locationMonitor.start();
   $('#geofence-admin').hidden=user.role!=='super_admin';
@@ -2550,6 +2555,7 @@ $("#logout").onclick = async () => {
   try {
     dialerContacts.clear();
     contactDirectory.clear();
+    secureChatUi.stop();
     serviceCountryUi.stop();
     languageTools.stop();
     contactCard.stop();carrierConsole.stop();
@@ -2660,6 +2666,7 @@ function callState(active) {
   if($("#return-to-call")) $("#return-to-call").hidden=!active;
   $("#active").hidden = !active;
   if (!active) {
+    adaptiveAudio.stop();
     advancedCalling.reset();
     $("#incoming").hidden = true;
     onHold = false;
@@ -2690,6 +2697,7 @@ async function registerSip(data,shouldContinue=()=>true) {
     reconnectionAttempts:8,reconnectionDelay:4,registererOptions:{expires:300,refreshFrequency:80},
     media: { remote: { audio: $("#remote") } },
     userAgentOptions: {
+      sessionDescriptionHandlerFactory:(session,options)=>{const handler=defaultSessionDescriptionHandlerFactory()(session,options);adaptiveAudio.prepare(handler.peerConnection);return handler;},
       transportOptions:{server,keepAliveInterval:30,keepAliveDebounce:10},
       authorizationUsername: String(data.get("username")),
       authorizationPassword: String(data.get("password"))
