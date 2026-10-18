@@ -9,6 +9,9 @@ export async function migrateSuperAdminControl(pool){
 }
 export async function managedIdentity(db,tenant,user){
  const r=(await db.query('SELECT number_e164,authorized FROM managed_outbound_identities WHERE user_id=$1 AND tenant_id=$2',[user,tenant])).rows[0];
+ if(r&&!Number(r.authorized))throw Error('Outbound caller ID is disabled by administrator');
+ const primary=(await db.query("SELECT o.number_e164 FROM user_primary_did p JOIN did_shop_orders o ON o.id=p.order_id AND o.tenant_id=p.tenant_id AND o.user_id=p.user_id WHERE p.user_id=$1 AND p.tenant_id=$2 AND o.status='active' AND o.rental_until>UTC_TIMESTAMP(3)",[user,tenant])).rows[0];
+ if(primary)return {callerId:primary.number_e164,provider:'flowroute'};
  if(!r)return null;
  if(!Number(r.authorized)||!e164.test(r.number_e164||''))throw Error('Outbound caller ID is disabled by administrator');
  return {callerId:r.number_e164,provider:'flowroute'};
