@@ -24,6 +24,12 @@ class Tests(unittest.TestCase):
    self.assertFalse(any(c[:2] in [['docker','stop'],['docker','restart']] for c in calls))
    self.assertFalse(any(c[:3]==['docker','rm','docker-api-1'] for c in calls))
    self.assertEqual(api.call_args.args[2]['Env'],config['Env'])
+ def test_root_user_aliases_match_but_non_root_identity_must_be_preserved(self):
+  for root in ('','0','root','0:0','root:root'):
+   self.assertEqual(m.configuration_mismatches({'User':''},{'User':root}),[])
+  self.assertEqual(m.configuration_mismatches({'User':'node'},{'User':'0'}),['User'])
+  self.assertEqual(m.configuration_mismatches({'User':'1000:1000'},{'User':'1000:1001'}),['User'])
+  self.assertEqual(m.configuration_mismatches({'Cmd':['node','server.js']},{'Cmd':['sh']}),['Cmd'])
  def test_service_mismatch_is_rejected_before_docker(self):
   with self.assertRaises(ValueError):m.backup('docker-api-1','olamide-web:before-did-20261018120000','/tmp')
 if __name__=='__main__':unittest.main()
