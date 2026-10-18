@@ -1,0 +1,59 @@
+---
+- name: Build and deploy the default two-minute calling plan
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    repo: /opt/olamide/repo
+    compose_args:
+      - docker
+      - compose
+      - -p
+      - docker
+      - --env-file
+      - /opt/olamide/repo/deployment/docker/.env
+      - -f
+      - /opt/olamide/repo/deployment/docker/compose.yml
+      - -f
+      - /opt/olamide/repo/deployment/docker/compose.callerids.yml
+  tasks:
+    - name: Build updated API
+      ansible.builtin.command:
+        argv: '{{ compose_args + ["build", "api"] }}'
+      changed_when: true
+    - name: Run trial and billing tests in built image
+      ansible.builtin.command:
+        argv: [docker, run, --rm, --entrypoint, node, olamide-api:local, --test, defaultCallingPlan.test.js, pstnBilling.test.js]
+      changed_when: false
+    - name: Allow remaining trial calls shorter than one minute
+      ansible.builtin.replace:
+        path: /etc/kamailio/kamailio.cfg
+        regexp: '\$var\(paid_seconds\) < 60'
+        replace: '$var(paid_seconds) < 1'
+        backup: true
+        validate: 'kamailio -c -f %s'
+      register: sip_change
+    - name: Reload Kamailio configuration if minimum changed
+      ansible.builtin.systemd:
+        name: kamailio
+        state: restarted
+      when: sip_change.changed
+    - name: Deploy API and enroll existing users through startup migration
+      ansible.builtin.command:
+        argv: '{{ compose_args + ["up", "-d", "--no-deps", "api"] }}'
+      changed_when: true
+    - name: Wait for API
+      ansible.builtin.uri:
+        url: http://127.0.0.1:18080/api/me
+        status_code: [200, 401]
+      register: api_health
+      retries: 20
+      delay: 3
+      until: api_health.status in [200,401]
+    - name: Restore Flowroute after any Kamailio restart
+      ansible.builtin.command:
+        argv: [docker, exec, docker-api-1, node, /app/commissionPaidCalls.js]
+      changed_when: true
+    - name: Report plan behavior
+      ansible.builtin.debug:
+        msg: Active users now receive a one-time 120-second trial. New users enroll automatically. Active paid plans are preserved. Caller ID authorization and active carrier rates are still required.
