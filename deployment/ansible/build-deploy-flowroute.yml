@@ -1,0 +1,171 @@
+# Existing installation only. Requires saved Flowroute IP trunk, Docker Compose, Ansible and configured carrier adapter.
+- name: Activate Flowroute and synchronize user caller IDs
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    repo: /opt/olamide/repo
+    api_container: docker-api-1
+    policy_dir: /var/lib/olamide/service-inventory
+    policy_target: /var/lib/olamide/service-inventory/outbound-dids.json
+    compose_base: /opt/olamide/repo/deployment/docker/compose.yml
+    compose_env: /opt/olamide/repo/deployment/docker/.env
+    compose_override: /opt/olamide/repo/deployment/docker/compose.callerids.yml
+  tasks:
+  - name: Require authorized numbers and evidence
+    ansible.builtin.assert:
+      that:
+      - authorized_default_caller_id is defined
+      - authorized_default_caller_id is match('^[+][1-9][0-9]{7,14}$')
+      - authorized_numbers is defined
+      - authorized_numbers is sequence
+      - authorized_numbers is not string
+      - authorized_default_caller_id in authorized_numbers
+      - authorization_reference is defined
+      - authorization_reference | trim | length > 0
+      fail_msg: Supply authorized_default_caller_id, authorized_numbers and authorization_reference in your private variables file.
+  - name: Validate Kamailio configuration before deployment
+    ansible.builtin.command:
+      argv:
+      - kamailio
+      - -c
+      - -f
+      - /etc/kamailio/kamailio.cfg
+    changed_when: false
+  - name: Create protected policy directory
+    ansible.builtin.file:
+      path: '{{ policy_dir }}'
+      state: directory
+      mode: '0750'
+      group: '1000'
+  - name: Build validated policy from assigned DIDs or profile fallback
+    ansible.builtin.command:
+      argv:
+      - docker
+      - exec
+      - -i
+      - '{{ api_container }}'
+      - node
+      - --input-type=module
+      - -e
+      - '{{ policy_script }}'
+      - '{{ authorized_numbers | to_json }}'
+      - '{{ authorization_reference }}'
+    vars:
+      policy_script: "import {execFileSync} from 'node:child_process';\nimport {pathToFileURL} from 'node:url';\nimport {dirname,join} from 'node:path';\nconst file=execFileSync('find',['/app','-type','f','-name','commissionPaidCalls.js'],{encoding:'utf8'}).trim().split('\\n')[0];\nif(!file) throw Error('API directory not found');\nconst base=dirname(file);\nconst {createDatabase}=await import(pathToFileURL(join(base,'db.js')));\nconst {validatePolicy,loadPolicy}=await import(pathToFileURL(join(base,'outboundDids.js')));\nconst allowed=new Set(JSON.parse(process.argv[1]));\nif([...allowed].some(n=>typeof n!=='string'||!/^\\+[1-9][0-9]{7,14}$/.test(n))) throw Error('Invalid authorized number');\nconst old=loadPolicy();\nif(Object.values(old.tenants).some(c=>c.assignments.some(a=>a.provider!=='flowroute'||a.evidence!==process.argv[2]))) throw Error('Existing policy has independently managed assignments; merge explicitly first');\nconst pool=createDatabase(process.env.MYSQL_URL);\ntry {\n \
+        \ const rows=(await pool.query(`SELECT u.id,u.tenant_id,p.phone_e164,d.number_e164\n    FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id\n    LEFT JOIN inhouse_dids d ON d.user_id=u.id AND d.tenant_id=u.tenant_id AND d.status='assigned'\n    WHERE u.status='active' ORDER BY u.id,d.number_e164`)).rows;\n  const policy={version:1,tenants:{}};\n  const seen=new Set();\n  for(const r of rows){\n    if(seen.has(r.id)) throw Error('Multiple assigned DIDs for a user; choose a primary DID first');\n    seen.add(r.id);\n    const number=r.number_e164||r.phone_e164;\n    // Keep each tenant present even if no user has an approved number.\n    // This prevents the existing billing code falling back to the trunk ID.\n    const c=policy.tenants[r.tenant_id]??={assignments:[]};\n    if(!number||!allowed.has(number)) continue;\n    c.assignments.push({userId:r.id,number,provider:'flowroute',authorized:true,evidence:process.argv[2]});\n  }\n  if(!Object.values(policy.tenants).some(c=>c.assignments.length))\
+        \ throw Error('No approved user numbers match the database');\n  console.log(JSON.stringify(validatePolicy(policy),null,2));\n} finally {await pool.end();}\n"
+    register: generated_policy
+    changed_when: false
+    no_log: true
+  - name: Save policy with backup
+    ansible.builtin.copy:
+      content: '{{ generated_policy.stdout }}\n'
+      dest: '{{ policy_target }}'
+      mode: '0600'
+      backup: true
+      owner: '1000'
+      group: '1000'
+    no_log: true
+  - name: Persist caller ID policy path in Compose override
+    ansible.builtin.copy:
+      dest: '{{ compose_override }}'
+      mode: '0600'
+      backup: true
+      content: "services:\n  api:\n    environment:\n      OUTBOUND_DID_POLICY_FILE: {{ policy_target }}\n"
+  - name: Validate combined Compose configuration
+    ansible.builtin.command:
+      argv:
+      - docker
+      - compose
+      - -p
+      - docker
+      - --env-file
+      - '{{ compose_env }}'
+      - -f
+      - '{{ compose_base }}'
+      - -f
+      - '{{ compose_override }}'
+      - config
+      - --quiet
+    changed_when: false
+  - name: Build API and web from current checkout
+    ansible.builtin.command:
+      argv:
+      - docker
+      - compose
+      - -p
+      - docker
+      - --env-file
+      - '{{ compose_env }}'
+      - -f
+      - '{{ compose_base }}'
+      - -f
+      - '{{ compose_override }}'
+      - build
+      - api
+      - web
+    changed_when: true
+  - name: Test built API trunk validation
+    ansible.builtin.command:
+      argv:
+      - docker
+      - run
+      - --rm
+      - --entrypoint
+      - node
+      - olamide-api:local
+      - --test
+      - flowrouteTrunk.test.js
+    changed_when: false
+  - name: Install built API and web containers with persistent policy
+    ansible.builtin.command:
+      argv:
+      - docker
+      - compose
+      - -p
+      - docker
+      - --env-file
+      - '{{ compose_env }}'
+      - -f
+      - '{{ compose_base }}'
+      - -f
+      - '{{ compose_override }}'
+      - up
+      - -d
+      - --no-deps
+      - api
+      - web
+    changed_when: true
+  - name: Save trunk default and activate through existing guarded commissioning
+    ansible.builtin.command:
+      argv:
+      - docker
+      - exec
+      - -i
+      - '{{ api_container }}'
+      - node
+      - --input-type=module
+      - -e
+      - '{{ activate_script }}'
+      - '{{ authorized_default_caller_id }}'
+    vars:
+      activate_script: "import {execFileSync} from 'node:child_process';\nimport {pathToFileURL} from 'node:url';\nimport {dirname,join} from 'node:path';\nconst file=execFileSync('find',['/app','-type','f','-name','commissionPaidCalls.js'],{encoding:'utf8'}).trim().split('\\n')[0];\nif(!file) throw Error('Commissioning script missing');\nconst base=dirname(file);\nconst {createDatabase}=await import(pathToFileURL(join(base,'db.js')));\nconst {flowrouteTrunk,saveFlowrouteTrunk}=await import(pathToFileURL(join(base,'flowrouteTrunk.js')));\nconst pool=createDatabase(process.env.MYSQL_URL);\ntry {\n  const admins=(await pool.query(\"SELECT id,tenant_id,role FROM users WHERE role='super_admin' AND status='active' ORDER BY id\")).rows;\n  if(new Set(admins.map(u=>u.tenant_id)).size!==1) throw Error('Exactly one active administrator tenant required');\n  const user=admins[0],c=await flowrouteTrunk(pool,user.tenant_id);\n  if(!c||c.authenticationMode!=='ip'||!c.allowedIpConfirmed) throw Error('Saved\
+        \ IP-authenticated trunk and confirmed Flowroute allowed IP required');\n  if(c.callerId!==process.argv[1]) {\n    const {revision,...settings}=c;\n    const r=await saveFlowrouteTrunk(pool,user,{expectedRevision:revision,\n      authenticationMode:c.authenticationMode,pop:c.pop,sipUsername:c.sipUsername,\n      sipPassword:'',techPrefix:c.techPrefix,publicIp:c.publicIp,\n      allowedIpConfirmed:c.allowedIpConfirmed,callerId:process.argv[1],maxConcurrentCalls:c.maxConcurrentCalls});\n    if(r.code!==200) throw Error(r.body.error);\n  }\n} finally {await pool.end();}\nawait import(pathToFileURL(file));\n"
+    no_log: true
+    changed_when: true
+  - name: Verify carrier activation without displaying trunk configuration
+    ansible.builtin.command:
+      argv:
+      - kamcmd
+      - -s
+      - unix:/run/kamailio/olamide_carrier_ctl
+      - htable.dump
+      - olamide_carrier
+    register: carrier_table
+    changed_when: false
+    failed_when: carrier_table.rc != 0 or 'sip.flowroute.com' not in carrier_table.stdout
+    no_log: true
+  - name: Report next verification step
+    ansible.builtin.debug:
+      msg: Carrier table populated. Test a call for provider acceptance and two-way audio. Re-run after profile/DID changes or Kamailio restart; always include compose.callerids.yml in future API deployments.
