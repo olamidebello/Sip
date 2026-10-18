@@ -1,0 +1,8 @@
+---
+- name: Install super-admin profile and provisioning controls
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Build, test and deploy updated API and web
+      ansible.builtin.import_tasks: platform-control-tasks.yml
