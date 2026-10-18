@@ -24,7 +24,7 @@ export async function ensureDefaultCallingPlan(db,userId){
  const setting=(await db.query('SELECT allowance_seconds FROM calling_plan_settings WHERE tenant_id=$1',[u.tenant_id])).rows[0];
  const seconds=Number(setting.allowance_seconds);
  await db.query("INSERT IGNORE INTO plans(id,tenant_id,name,description,monthly_cents,active) VALUES($1,$2,'Starter — 10 free minutes','One-time 600-second outbound calling allowance. Carrier and caller ID requirements apply.',0,TRUE)",[id,u.tenant_id]);
- await db.query("INSERT INTO subscriptions(user_id,plan_id,status) VALUES($1,$2,'active') ON DUPLICATE KEY UPDATE plan_id=IF(status='active',plan_id,VALUES(plan_id)),status='active'",[userId,id]);
+ await db.query("INSERT IGNORE INTO subscriptions(user_id,plan_id,status) VALUES($1,$2,'active')",[userId,id]);
  await db.query('INSERT IGNORE INTO calling_trial_balances(user_id,tenant_id,remaining_seconds,granted_seconds) VALUES($1,$2,$3,$3)',[userId,u.tenant_id,seconds]);
 }
 export async function migrateDefaultCallingPlan(db){
