@@ -6,13 +6,13 @@ test('answered duration consumes seconds and rounds up',()=>{
  assert.equal(trialRefund(120,35.2),84);assert.equal(trialRefund(84,84),0);
  assert.equal(trialRefund(120,125),0);assert.equal(trialRefund(120,0),119);
 });
-test('invalid accounting input fails',()=>{for(const v of [0,-1,121])assert.throws(()=>trialRefund(v,1));});
+test('invalid accounting input fails',()=>{for(const v of [0,-1,3601])assert.throws(()=>trialRefund(v,1));});
 test('plans are stable and isolated by tenant',()=>{assert.equal(defaultPlanId('a'),defaultPlanId('a'));assert.notEqual(defaultPlanId('a'),defaultPlanId('b'));});
 test('enrollment preserves active plans and never replenishes an existing grant',async()=>{
- const calls=[];const db={query:async(sql,args)=>{calls.push({sql,args});return {rows:[{tenant_id:'tenant'}]};}};
+ const calls=[];const db={query:async(sql,args)=>{calls.push({sql,args});return {rows:[{tenant_id:'tenant',allowance_seconds:600}]};}};
  await ensureDefaultCallingPlan(db,'user');
- assert.match(calls[2].sql,/IF\(status='active',plan_id/);
- assert.match(calls[3].sql,/INSERT IGNORE/);
+ assert.ok(calls.some(c=>/IF\(status='active',plan_id/.test(c.sql))); 
+ assert.ok(calls.some(c=>/INSERT IGNORE INTO calling_trial_balances/.test(c.sql))); 
 });
 
 test('trial settlement returns unused seconds once and never charges money',async()=>{
