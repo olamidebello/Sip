@@ -1,67 +1,95 @@
----
 - name: Deploy ten-minute starter plan, super-admin controls and ringback
   hosts: all
   become: true
   gather_facts: false
   vars:
     compose_args:
-      - docker
-      - compose
-      - -p
-      - docker
-      - --env-file
-      - /opt/olamide/repo/deployment/docker/.env
-      - -f
-      - /opt/olamide/repo/deployment/docker/compose.yml
-      - -f
-      - /opt/olamide/repo/deployment/docker/compose.callerids.yml
+    - docker
+    - compose
+    - -p
+    - docker
+    - --env-file
+    - /opt/olamide/repo/deployment/docker/.env
+    - -f
+    - /opt/olamide/repo/deployment/docker/compose.yml
+    - -f
+    - /opt/olamide/repo/deployment/docker/compose.callerids.yml
   tasks:
-    - name: Build updated API and web
-      ansible.builtin.command:
-        argv: '{{ compose_args + ["build", "api", "web"] }}'
-      changed_when: true
-    - name: Run plan authorization, upgrade accounting and billing tests
-      ansible.builtin.command:
-        argv: [docker, run, --rm, --entrypoint, node, olamide-api:local, --test, defaultCallingPlan.test.js, callingPlanAdmin.test.js, pstnBilling.test.js]
-      changed_when: false
-    - name: Run ringback lifecycle tests
-      ansible.builtin.command:
-        argv: [docker, run, --rm, -v, '/opt/olamide/repo/apps/web/src:/tests:ro', 'node:22-bookworm-slim', node, --test, /tests/ringback.test.js]
-      changed_when: false
-    - name: Back up calling plan records before migration
-      ansible.builtin.command:
-        argv:
-          - docker
-          - exec
-          - docker-api-1
-          - node
-          - --input-type=module
-          - -e
-          - |
-            import {createDatabase} from '/app/db.js';
-            const pool=createDatabase(process.env.MYSQL_URL);
-            try{const result={};for(const table of ['plans','subscriptions','calling_trial_balances'])result[table]=(await pool.query('SELECT * FROM '+table)).rows;console.log(JSON.stringify(result));}finally{await pool.end();}
-      register: plan_backup
-      changed_when: false
-      no_log: true
-    - name: Store timestamped private backup
-      ansible.builtin.copy:
-        content: '{{ plan_backup.stdout }}'
-        dest: '/etc/olamide/calling-plan-before-ten-minutes-{{ now(utc=true,fmt="%Y%m%d%H%M%S") }}.json'
-        mode: '0600'
-      no_log: true
-    - name: Install updated containers and run startup migration
-      ansible.builtin.command:
-        argv: '{{ compose_args + ["up", "-d", "--no-deps", "api", "web"] }}'
-      changed_when: true
-    - name: Wait for API readiness after allowance migration
-      ansible.builtin.uri:
-        url: http://127.0.0.1:18080/api/health
-        status_code: 200
-      register: api_health
-      retries: 20
-      delay: 3
-      until: api_health.status == 200
-    - name: Report administrator location
-      ansible.builtin.debug:
-        msg: Open the admin Plan catalog and use Default calling plan. Existing 120-second grants were increased to 600 seconds without resetting usage. Reload the app to load outgoing ringback. Carrier acceptance and browser audio still require a live call test.
+  - name: Build updated API and web
+    ansible.builtin.command:
+      argv: '{{ compose_args + ["build", "api", "web"] }}'
+    changed_when: true
+  - name: Run plan authorization, upgrade accounting and billing tests
+    ansible.builtin.command:
+      argv:
+      - docker
+      - run
+      - --rm
+      - --entrypoint
+      - node
+      - olamide-api:local
+      - --test
+      - defaultCallingPlan.test.js
+      - callingPlanAdmin.test.js
+      - pstnBilling.test.js
+    changed_when: false
+  - name: Run ringback lifecycle tests
+    ansible.builtin.command:
+      argv:
+      - docker
+      - run
+      - --rm
+      - -v
+      - /opt/olamide/repo/apps/web/src:/tests:ro
+      - node:22-bookworm-slim
+      - node
+      - --test
+      - /tests/ringback.test.js
+    changed_when: false
+  - name: Back up calling plan records before migration
+    ansible.builtin.command:
+      argv:
+      - docker
+      - exec
+      - docker-api-1
+      - node
+      - --input-type=module
+      - -e
+      - 'import {createDatabase} from ''/app/db.js'';
+
+        const pool=createDatabase(process.env.MYSQL_URL);
+
+        try{const result={};for(const table of [''plans'',''subscriptions'',''calling_trial_balances''])result[table]=(await pool.query(''SELECT * FROM ''+table)).rows;console.log(JSON.stringify(result));}finally{await pool.end();}
+
+        '
+    register: plan_backup
+    changed_when: false
+    no_log: true
+  - name: Store timestamped private backup
+    ansible.builtin.copy:
+      content: '{{ plan_backup.stdout }}'
+      dest: /etc/olamide/calling-plan-before-ten-minutes-{{ now(utc=true,fmt="%Y%m%d%H%M%S") }}.json
+      mode: '0600'
+    no_log: true
+  - name: Install updated containers and run startup migration
+    ansible.builtin.command:
+      argv: '{{ compose_args + ["up", "-d", "--no-deps", "api", "web"] }}'
+    changed_when: true
+  - name: Wait for API readiness after allowance migration
+    register: api_health
+    retries: 20
+    delay: 3
+    until: api_health.rc == 0
+    ansible.builtin.command:
+      argv:
+      - docker
+      - exec
+      - docker-api-1
+      - node
+      - --input-type=module
+      - -e
+      - const r=await fetch('http://127.0.0.1:8080/api/health');const b=await r.json();if(r.status!==200||b.status!=='ok')process.exit(1);console.log('Application API healthy');
+    changed_when: false
+  - name: Report administrator location
+    ansible.builtin.debug:
+      msg: Open the admin Plan catalog and use Default calling plan. Existing 120-second grants were increased to 600 seconds without resetting usage. Reload the app to load outgoing ringback. Carrier acceptance and browser audio still require a live call test.
