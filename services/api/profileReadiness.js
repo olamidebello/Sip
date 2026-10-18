@@ -10,6 +10,8 @@ export function readiness({profile={},settings,preferences}={}){
  return {complete:missing.length===0,missing,landingPage:missing.length?'account':null,checkedAt:new Date().toISOString()};
 }
 export async function getProfileReadiness(pool,user){
- const [profile,settings,locale]=await Promise.all([pool.query('SELECT phone_e164,address_line1,address_line2,city,region,postal_code,country FROM user_profiles WHERE user_id=$1',[user.id]),getServiceCountries(pool,user.tenant_id,user.id),pool.query('SELECT preferences FROM user_locales WHERE user_id=$1 AND tenant_id=$2',[user.id,user.tenant_id])]);
- return readiness({profile:profile.rows[0],settings,preferences:locale.rows[0]?.preferences});
+ const account=(await pool.query('SELECT tenant_id FROM users WHERE id=$1',[user.id])).rows[0];
+ const homeTenant=account?.tenant_id||user.tenant_id;
+ const [profile,settings,locale]=await Promise.all([pool.query('SELECT phone_e164,address_line1,address_line2,city,region,postal_code,country FROM user_profiles WHERE user_id=$1',[user.id]),getServiceCountries(pool,homeTenant,user.id),pool.query('SELECT preferences FROM user_locales WHERE user_id=$1 AND tenant_id=$2',[user.id,homeTenant])]);
+ return {...readiness({profile:profile.rows[0],settings,preferences:locale.rows[0]?.preferences}),homeTenantId:homeTenant};
 }
