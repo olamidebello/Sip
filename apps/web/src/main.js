@@ -1465,6 +1465,7 @@ const serviceCountryUi=setupServiceCountries({document,get:apiGet,request:accoun
 const platformWatchdog=setupPlatformWatchdog({document,get:apiGet,request:accountRequest});
 const didShopUi=setupDidShop({document,get:apiGet,request:accountRequest,show:showWorkspace});
 $('#profile-marketplace').onclick=()=>{const actions=$('#profile-marketplace-actions');actions.hidden=!actions.hidden;$('#profile-marketplace').setAttribute('aria-expanded',String(!actions.hidden));};
+const settingsMarket=document.createElement('button');settingsMarket.type='button';settingsMarket.id='settings-marketplace';settingsMarket.textContent='Market place';settingsMarket.onclick=()=>{if(showWorkspace('account')===false)return;const actions=$('#profile-marketplace-actions');actions.hidden=false;$('#profile-marketplace').setAttribute('aria-expanded','true');$('#profile-marketplace').scrollIntoView?.({block:'start',behavior:'smooth'});$('#profile-phone-numbers').focus();};document.querySelector('.messenger-settings-profile').append(settingsMarket);
 $('#profile-phone-numbers').onclick=()=>didShopUi.open();
 $('#profile-rate-check').onclick=()=>{if(showWorkspace('outbound-rates')!==false)$('#outbound-rate-search input').focus();};
 const profileLanding=setupProfileLanding({document,get:apiGet,show:showWorkspace,onComplete:async()=>{showWorkspace(userHome(),{historyMode:'replace'});pageRoutes.render();}});
