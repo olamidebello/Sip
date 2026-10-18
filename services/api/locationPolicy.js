@@ -1,3 +1,5 @@
+import {getServiceCountries,appendServiceEvent} from './serviceCountries.js';
+import {countryVerdict} from './countryBoundaries.js';
 import {createHash,randomUUID,randomBytes} from 'node:crypto';
 import {isIP} from 'node:net';
 const uuid=/^[a-f0-9-]{36}$/i;
@@ -5,6 +7,7 @@ export const LOCATION_TTL=45000;
 const hash=s=>createHash('sha256').update(s).digest('hex');
 export function effectiveVpn(user,groups=[]){return user===null||user===undefined?{allowsVpn:!groups.some(v=>!Boolean(Number(v))),source:groups.length?'group':'default'}:{allowsVpn:!!Number(user),source:'user'};}
 export function evaluateLocation(policy,p){
+ if(policy.countries?.length){const c=countryVerdict(policy.countries,p);if(!c.allowed)return c;}
  if(!policy.enabled||!policy.zones?.length)return {allowed:true,reason:'No geofence restriction'};
  if(!p||![p.latitude,p.longitude,p.accuracy].every(Number.isFinite)||Math.abs(p.latitude)>90||Math.abs(p.longitude)>180||p.accuracy<0||p.accuracy>policy.maxAccuracyMeters)return {allowed:false,reason:'Accurate device location required'};
  const rad=n=>n*Math.PI/180;
@@ -25,11 +28,13 @@ export async function migrateLocationPolicy(db){
 }
 export async function locationRules(db,tenant,user){
  const p=(await db.query('SELECT policy FROM tenant_geofence_policy WHERE tenant_id=$1',[tenant])).rows[0]?.policy;
- const fence=p?(typeof p==='string'?JSON.parse(p):p):{enabled:false,zones:[],maxAccuracyMeters:100};
+ let fence=p?(typeof p==='string'?JSON.parse(p):p):{enabled:false,zones:[],maxAccuracyMeters:100};
  const u=(await db.query('SELECT allows_vpn FROM user_vpn_policy WHERE user_id=$1 AND tenant_id=$2',[user,tenant])).rows[0];
  const g=(await db.query('SELECT p.allows_vpn FROM group_vpn_policy p JOIN user_group_members m ON m.group_id=p.group_id JOIN user_groups g ON g.id=p.group_id AND g.tenant_id=p.tenant_id WHERE m.user_id=$1 AND p.tenant_id=$2',[user,tenant])).rows;
  const vpn=effectiveVpn(u?.allows_vpn,g.map(x=>x.allows_vpn));
- const restricted=!!fence.enabled&&!!fence.zones?.length;
+ const serviceCountries=await getServiceCountries(db,tenant,user);
+ if(serviceCountries&&!serviceCountries.all)fence={...fence,countries:serviceCountries.countries};
+ const restricted=!!fence.enabled&&!!fence.zones?.length||!!fence.countries?.length;
  return {...vpn,fence,restricted,policyHash:hash(JSON.stringify({fence,vpn})),ipLookupConfigured:!!process.env.LOCATION_IP_LOOKUP_URL};
 }
 export async function serviceLocationAccess(db,tenant,user,{sessionHash,ip,proof,requireProof=false,requireSession=false,now=Date.now()}={}){
@@ -95,9 +100,12 @@ export async function handleLocationPolicy({req,res,path,user,pool,send,readJson
   const expires=Date.now()+LOCATION_TTL;
   await pool.query('INSERT INTO location_service_leases(session_hash,user_id,tenant_id,ip_hash,policy_hash,source,latitude,longitude,accuracy,expires_ms,lease_proof) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON DUPLICATE KEY UPDATE ip_hash=VALUES(ip_hash),policy_hash=VALUES(policy_hash),source=VALUES(source),latitude=VALUES(latitude),longitude=VALUES(longitude),accuracy=VALUES(accuracy),expires_ms=VALUES(expires_ms)',[sessionHash,user.id,user.tenant_id,hash(ip),rules.policyHash,source,position.latitude,position.longitude,position.accuracy,expires,randomBytes(32).toString('hex')]);
   const proof=(await pool.query('SELECT lease_proof FROM location_service_leases WHERE session_hash=$1',[sessionHash])).rows[0].lease_proof;
+  await trackLocationState(pool,user,'allowed');
   return send(res,200,{allowed:true,restricted:true,expiresAt:expires,source,proof,reason:'Within allowed area'});
- }catch(e){await pool.query('DELETE FROM location_service_leases WHERE session_hash=$1',[sessionHash]);return send(res,403,{allowed:false,restricted:true,error:e.message});}
+ }catch(e){await trackLocationState(pool,user,'denied');await pool.query('DELETE FROM location_service_leases WHERE session_hash=$1',[sessionHash]);return send(res,403,{allowed:false,restricted:true,error:e.message});}
 }
 export function startLocationCleanup(pool){
  const timer=setInterval(()=>{pool.query('DELETE FROM location_service_leases WHERE expires_ms<$1',[Date.now()]).catch(()=>{});pool.query('DELETE FROM location_sip_calls WHERE created_at<DATE_SUB(UTC_TIMESTAMP(),INTERVAL 2 DAY)').catch(()=>{});},30000);timer.unref();return ()=>clearInterval(timer);
 }
+
+async function trackLocationState(pool,user,state){const db=await pool.connect();try{await db.query('START TRANSACTION');await db.query('SELECT id FROM users WHERE id=$1 AND tenant_id=$2 FOR UPDATE',[user.id,user.tenant_id]);const old=(await db.query('SELECT state FROM user_location_event_state WHERE user_id=$1',[user.id])).rows[0]?.state;if(old!==state){await db.query('INSERT INTO user_location_event_state(user_id,state) VALUES($1,$2) ON DUPLICATE KEY UPDATE state=VALUES(state)',[user.id,state]);await appendServiceEvent(db,user.tenant_id,user.id,user.id,'location_access_'+state,{});}await db.query('COMMIT');}catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}}
