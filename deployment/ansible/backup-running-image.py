@@ -6,6 +6,14 @@ from urllib.parse import urlencode
 CONFIG_FIELDS=('Env','Cmd','Entrypoint','WorkingDir','User','ExposedPorts','Labels','StopSignal','Shell','Healthcheck','Volumes')
 def recovery_config(config):
  return {key:config[key] for key in CONFIG_FIELDS if key in config and config[key] is not None}
+def normalized_user(value):
+ # Empty USER means the default root account on these Linux application images.
+ if value in (None,'','0','root','0:0','root:root','root:0','0:root'):return '0:0'
+ return value
+def configuration_mismatches(expected,restored):
+ return [key for key,value in expected.items() if
+         (normalized_user(restored.get(key))!=normalized_user(value) if key=='User'
+          else restored.get(key)!=value)]
 class DockerConnection(http.client.HTTPConnection):
  def __init__(self):super().__init__('localhost',timeout=600)
  def connect(self):self.sock=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM);self.sock.settimeout(self.timeout);self.sock.connect('/var/run/docker.sock')
@@ -46,7 +54,7 @@ def backup(container,tag,directory):
    api('POST','/commit?'+urlencode({'container':temp_name,'repo':repository,'tag':label,'pause':'false'}),recovery_config(inspect['Config']))
    restored=json.loads(run(['docker','image','inspect',tag]).stdout)[0]['Config']
    expected=recovery_config(inspect['Config'])
-   mismatched=[key for key,value in expected.items() if restored.get(key)!=value]
+   mismatched=configuration_mismatches(expected,restored)
    if mismatched:raise RuntimeError('Recovery startup configuration mismatch in fields: '+','.join(mismatched))
    with open(os.devnull,'wb') as sink:subprocess.run(['docker','image','save',tag],check=True,stdout=sink,stderr=subprocess.PIPE)
    print('Recovery image reconstructed from running filesystem; startup configuration preserved')
