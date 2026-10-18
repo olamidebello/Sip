@@ -1,3 +1,4 @@
+import {migrateDidSms,startDidSms,sendDidSms,handleDidSmsWebhook,handleDidSmsAdmin} from './didSms.js';
 import {migrateDidShop,handleDidShop} from './didShop.js';
 import {migrateDidPayments,handleDidWebhook} from './didPayments.js';
 import {startDidProvisioning} from './didProvisioning.js';
@@ -184,16 +185,17 @@ async function handler(req, res) {
   const stripeWebhook = path.startsWith("/api/webhooks/stripe/");
   const providerWebhook=path.startsWith("/api/webhooks/providers/");
   const didwwWebhook=path.startsWith("/api/webhooks/didww/");
+  const didSmsWebhook=path.startsWith('/api/webhooks/did-sms/');
   const didShopWebhook=path.startsWith('/api/webhooks/did-shop/');
   const cdrIngest = req.method === "POST" && path === "/api/integrations/cdr";
   const switchXml = path === "/api/switch/xml";
   const deployRunner = path.startsWith('/api/integrations/deployment/');
   const kamailioRunner=path.startsWith('/api/integrations/kamailio/');
-  if (req.method !== "GET" && !didShopWebhook && !nativePushHook && !deployRunner && !kamailioRunner && !switchXml && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
+  if (req.method !== "GET" && !didSmsWebhook && !didShopWebhook && !nativePushHook && !deployRunner && !kamailioRunner && !switchXml && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
     return send(res, 403, { error: "Invalid origin" });
   try {
     if(req.method!=='GET'||path==='/api/register/captcha'){
-      const external=!!(didShopWebhook||nativePushHook||deployRunner||kamailioRunner||switchXml||cdrIngest||flowrouteWebhook||stripeWebhook||providerWebhook||didwwWebhook);
+      const external=!!(didSmsWebhook||didShopWebhook||nativePushHook||deployRunner||kamailioRunner||switchXml||cdrIngest||flowrouteWebhook||stripeWebhook||providerWebhook||didwwWebhook);
       const client=await proxyClient(req);
       const edge=requestLimiter.check('edge:'+client,600);
       if(!edge.allowed)return send(res,429,{error:'Too many requests',retryAfter:edge.retryAfter},{'Retry-After':String(edge.retryAfter)});
@@ -202,6 +204,7 @@ async function handler(req, res) {
       const limited=requestLimiter.check(rule.key,rule.maximum);
       if(!limited.allowed)return send(res,429,{error:'Too many requests',retryAfter:limited.retryAfter},{'Retry-After':String(limited.retryAfter)});
     }
+    if(didSmsWebhook)return await handleDidSmsWebhook({req,res,path,pool,send});
     if(didShopWebhook)return await handleDidWebhook({req,res,path,pool,send});
     if(path==='/api/native-push/wake')return await handleNativePush({req,res,path,pool,send,readJson});
     if (switchXml) return send(res,410,{error:'Legacy XML integration retired'});
@@ -294,6 +297,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/location/')||path.startsWith('/api/admin/location-policy'))return handleLocationPolicy({req,res,path,user,pool,send,readJson,sessionHash:tokenHash(currentToken(req)),ip:await proxyClient(req)});
       const locationRecovery=path==='/api/geofence'||path.startsWith('/api/account/')||path==='/api/softphone/calls'&&req.method==='POST'||path.startsWith('/api/admin/')&&user.role==='super_admin';
       if(!locationRecovery){const access=await serviceLocationAccess(pool,user.tenant_id,user.id,{sessionHash:tokenHash(currentToken(req)),ip:await proxyClient(req)});if(!access.allowed)return send(res,403,{error:access.reason,code:'LOCATION_REQUIRED',locationRequired:true});}
+      if(path==='/api/admin/did-sms'||path.startsWith('/api/admin/did-sms/'))return handleDidSmsAdmin({req,res,user,path,pool,send,readJson});
       if(path==='/api/admin/short-dial')return handleShortDialAdmin({req,res,user,pool,send,readJson});
       if(path.startsWith('/api/secure-chat/'))return handleSecureChat({req,res,path,user,pool,send,readJson:r=>readJson(r,24576)});
 
@@ -340,7 +344,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/rates/flowroute') || path==='/api/rates/flowroute/search')
         return await handleFlowrouteRates({req,res,path,user,pool,send});
       if(path==='/api/admin/messaging/numbers') return await handleSmsNumberAdmin({req,res,path,user,pool,send,readJson});
-      if(path==='/api/external-sms/send'&&req.method==='POST'){const input=await readJson(req);try{const local=await deliverSubscriberSms({user,pool,input});if(local)return send(res,202,local);}catch(e){if(e.status)return send(res,e.status,{error:e.message});throw e;}if(!await activeSubscription(pool,user))return send(res,403,{error:'An active subscription is required for external texts',configurationUrl:'/#billing'});return await handleExternalSms({req,res,path,user,pool,send,readJson:async()=>input});}
+      if(path==='/api/external-sms/send'&&req.method==='POST'){const input=await readJson(req);const purchased=await pool.query('SELECT id FROM did_shop_orders WHERE number_e164=$1',[String(input.from||'')]);if(purchased.rowCount){if(!await activeSubscription(pool,user))return send(res,403,{error:'Active subscription required'});try{return send(res,202,await sendDidSms({pool,user,input}));}catch(e){return send(res,409,{error:e.message});}}try{const local=await deliverSubscriberSms({user,pool,input});if(local)return send(res,202,local);}catch(e){if(e.status)return send(res,e.status,{error:e.message});throw e;}if(!await activeSubscription(pool,user))return send(res,403,{error:'An active subscription is required for external texts',configurationUrl:'/#billing'});return await handleExternalSms({req,res,path,user,pool,send,readJson:async()=>input});}
 
       if(path.startsWith('/api/language/'))return await handleLanguageTools({req,res,path,user,send,readJson});
       if(path.startsWith('/api/social/')) return await handleSocial({req,res,path,user,pool,send,readJson});
@@ -861,6 +865,8 @@ await migrateSecureChat(pool);
 await migrateShortDial(pool);
 await migrateDidShop(pool);
 await migrateDidPayments(pool);
+await migrateDidSms(pool);
+const stopDidSms=startDidSms(pool);
 const stopDidProvisioning=startDidProvisioning(pool);
 const stopProfileTracker=startProfileTracker(pool);
 const stopLocationCleanup=startLocationCleanup(pool);
@@ -878,6 +884,7 @@ const stopStoreRenewals=startStoreRenewals(pool);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
+server.on("close",stopDidSms);
 server.on("close",stopDidProvisioning);
 server.on("close",stopLocationCleanup);
 server.on("close",stopProfileTracker);
