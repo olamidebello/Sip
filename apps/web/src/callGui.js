@@ -1,10 +1,11 @@
+import {setupSipVideoCall} from './sipVideoCall.js';
 import {callAddressLabel,callIdentityLabel} from './callIdentity.js';
 import {icon} from './messengerIcons.js';
 
-export function setupCallGui({document,openVideo,openAudio=()=>{}}) {
+export function setupCallGui({document,openVideo,openAudio=()=>{},getPhone=()=>undefined,onStatus=()=>{}}) {
   const incoming=document.getElementById('incoming');
   const active=document.getElementById('active');
-  let timer,started,addressLabel='';
+  let timer,started,addressLabel='',connected=false;
   const captions=[];
   const names=[];
   const numbers=[];
@@ -38,7 +39,7 @@ export function setupCallGui({document,openVideo,openAudio=()=>{}}) {
     button.innerHTML=icon('calls')+`<span>${label}</span>`;button.setAttribute('aria-label',label+' audio call');
   }
   const video=document.createElement('button');video.type='button';video.className='chat-video-call';video.innerHTML=icon('video');video.setAttribute('aria-label','Open video meeting invitation');
-  video.onclick=openVideo;document.querySelector('.chat-thread-header')?.insertBefore(video,document.querySelector('.chat-thread-header button[aria-label="Conversation menu"]'));
+  video.onclick=()=>{if(connected){void sipVideo.request().catch(error=>onStatus(error.message));return;}openVideo();};document.querySelector('.chat-thread-header')?.insertBefore(video,document.querySelector('.chat-thread-header button[aria-label="Conversation menu"]'));
   const keypad=document.createElement('div');keypad.className='call-keypad';keypad.hidden=true;keypad.setAttribute('aria-label','In-call keypad');
   const toneDisplay=document.createElement('output');toneDisplay.className='call-keypad-number';toneDisplay.setAttribute('aria-label','Entered call menu digits');toneDisplay.setAttribute('aria-live','polite');
   const resetTones=()=>{toneDisplay.textContent='';};keypad.append(toneDisplay);
@@ -64,7 +65,9 @@ export function setupCallGui({document,openVideo,openAudio=()=>{}}) {
   const extras=document.createElement('div');extras.className='call-more-actions';extras.id='call-more-actions';extras.hidden=true;
   const hold=document.getElementById('hold');if(hold)extras.append(hold);extras.append(toggle);active.append(extras);
   const more=document.createElement('button');more.type='button';decorate(more,'more','More');more.setAttribute('aria-expanded','false');more.setAttribute('aria-controls',extras.id);more.onclick=()=>{extras.hidden=!extras.hidden;more.setAttribute('aria-expanded',String(!extras.hidden));};
-  tray.append(audio,meetingAction('Video','video'));if(mute)tray.append(mute);tray.append(more,meetingAction('Share','send'),hangup);
+  const inCallVideo=document.createElement('button');inCallVideo.type='button';inCallVideo.className='call-video-toggle';decorate(inCallVideo,'video','Video');inCallVideo.disabled=true;
+  const sipVideo=setupSipVideoCall({document,active,button:inCallVideo,getPhone,onStatus});
+  tray.append(audio,inCallVideo);if(mute)tray.append(mute);tray.append(more,meetingAction('Share','send'),hangup);
   function controls(connected){for(const b of [document.getElementById('hold'),document.getElementById('mute'),toggle,...keypad.querySelectorAll('button')])if(b)b.disabled=!connected;}
   controls(false);
   const live=document.getElementById('meeting-live');
@@ -80,12 +83,16 @@ export function setupCallGui({document,openVideo,openAudio=()=>{}}) {
     pending(){resetTones();incoming.hidden=true;active.hidden=false;active.focus();duration.textContent='';captions[1].textContent='Calling…';controls(false);},
     identity(value){for(const name of names)name.textContent=callIdentityLabel(addressLabel,value);},
     held(value){captions[1].textContent=value?'On hold':'Connected';},
+    video(){return sipVideo.request();},
     active(value){
+      connected=!!value;
+      sipVideo.active(value);inCallVideo.disabled=!value;
       clearInterval(timer);timer=undefined;active.classList.remove('call-minimized');incoming.classList.remove('call-minimized');
       controls(value);resetTones();extras.hidden=true;more.setAttribute('aria-expanded','false');keypad.hidden=true;active.classList.remove('call-keypad-open');toggle.setAttribute('aria-expanded','false');
       if(value){captions[1].textContent='Connected';incoming.hidden=true;started=Date.now();const tick=()=>{const seconds=Math.floor((Date.now()-started)/1000);duration.textContent=`${Math.floor(seconds/60).toString().padStart(2,'0')}:${(seconds%60).toString().padStart(2,'0')}`;};tick();timer=setInterval(tick,1000);}
       else duration.textContent='';
     },
-    dispose(){clearInterval(timer);document.removeEventListener('keydown',keyboardTones);}
+    dispose(){sipVideo.dispose();clearInterval(timer);document.removeEventListener('keydown',keyboardTones);}
   };
 }
+

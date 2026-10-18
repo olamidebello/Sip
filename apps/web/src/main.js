@@ -1225,7 +1225,7 @@ setupContactManagerLayout(document);
 setupChatLanding(document);
 setupChatGestures(document);
 const messengerHub=setupMessengerHub({document,request:(...args)=>accountRequest(...args),get:(...args)=>apiGet(...args),show:showWorkspace,isSignedIn:()=>!!activeRole,openContact:id=>{showWorkspace('chat');const select=$('#contact-list');select.value=id;select.dispatchEvent(new window.Event('change',{bubbles:true}));$('#chat').classList.add('thread-open');}});
-const callGui=setupCallGui({document,openAudio:()=>callsScreen.open('settings'),openVideo:()=>{
+const callGui=setupCallGui({document,getPhone:()=>phone,onStatus:message=>status(message),openAudio:()=>callsScreen.open('settings'),openVideo:()=>{
   if($('#meetings').hidden){$('#chat-status').textContent='Video meetings are not enabled for this account.';return;}
   videoWorkflow=true;showWorkspace('meetings');$('#meeting-create input')?.focus();
 }});
@@ -1439,10 +1439,10 @@ async function registeredCallLabel(address){
 const dialIdentityInput=setupDialIdentityInput({input:dialForm.elements.target,lookup:registeredCallLabel,changed:()=>{dialIdentity.hidden=true;const output=$('#dialpad .dialpad-number');if(output)output.textContent=dialForm.elements.target.value||dialForm.elements.target.placeholder;}});
 function refreshDialIdentity(){return dialIdentityInput.refresh();}
 
-const contactCard=setupContactCard({document,get:apiGet,request:accountRequest,call:c=>{callsScreen.stop();dialForm.elements.target.value=c.target;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));callsScreen.open('keypad');},message:async c=>{callsScreen.stop();if(c.contactId){await loadContacts();$('#contact-list').value=c.contactId;$('#contact-list').dispatchEvent(new Event('change',{bubbles:true}));showWorkspace('chat');$('#chat').classList.add('thread-open');}else{if(!showWorkspace('external-sms'))throw Error('SMS is not enabled for your account');$('#sms-send').elements.to.value=c.target;$('#sms-send').elements.body.focus();}},video:c=>{callsScreen.stop();if(!showWorkspace('meetings'))throw Error('Video meetings are not enabled');$('#meeting-create input').value='Video call with '+c.name;$('#meeting-create input').focus();}});
+const contactCard=setupContactCard({document,get:apiGet,request:accountRequest,call:c=>{callsScreen.stop();dialForm.elements.target.value=c.target;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));callsScreen.open('keypad');},message:async c=>{callsScreen.stop();if(c.contactId){await loadContacts();$('#contact-list').value=c.contactId;$('#contact-list').dispatchEvent(new Event('change',{bubbles:true}));showWorkspace('chat');$('#chat').classList.add('thread-open');}else{if(!showWorkspace('external-sms'))throw Error('SMS is not enabled for your account');$('#sms-send').elements.to.value=c.target;$('#sms-send').elements.body.focus();}},video:c=>{if(onCall){void callGui.video().catch(report);return;}callsScreen.stop();if(!showWorkspace('meetings'))throw Error('Video meetings are not enabled');$('#meeting-create input').value='Video call with '+c.name;$('#meeting-create input').focus();}});
 const dialerContacts=setupDialerContacts({document,get:apiGet,input:dialForm.elements.target,openContact:c=>void contactCard.open(c),inCall:()=>onCall,onStatus:message=>status(message)});
 $('#dialpad-video').innerHTML=icon('video');$('#dial .dialpad-call').innerHTML=icon('calls');
-$('#dialpad-video').onclick=()=>{callsScreen.stop();if(!showWorkspace('meetings')){status('Video meetings are not enabled for this account');return;}$('#meeting-create input').value='Video call with '+(dialForm.elements.target.value||'contact');$('#meeting-create input').focus();};
+$('#dialpad-video').onclick=()=>{if(onCall){void callGui.video().catch(report);return;}callsScreen.stop();if(!showWorkspace('meetings')){status('Video meetings are not enabled for this account');return;}$('#meeting-create input').value='Video call with '+(dialForm.elements.target.value||'contact');$('#meeting-create input').focus();};
 const meetings = setupMeetings();
 const dashboard=setupDashboard({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const support=setupSupport({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
@@ -2762,7 +2762,9 @@ $("#hold").onclick = async () => {
 $("#mute").onclick = () => {
   if (!phone || !onCall) return;
   try {
+    const videoTracks=(phone.localMediaStream?.getVideoTracks()||[]).map(track=>({track,enabled:track.enabled}));
     if (muted) phone.unmute(); else phone.mute();
+    for(const {track,enabled} of videoTracks)track.enabled=enabled;
     muted = !muted;
     $("#mute").textContent = muted ? "Unmute" : "Mute";$("#mute").setAttribute("aria-pressed",String(muted));
   } catch (error) { report(error); }
