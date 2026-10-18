@@ -1,0 +1,31 @@
+---
+- name: Build and test encrypted messaging and adaptive voice
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Build communication API and GUI before installation
+      ansible.builtin.command:
+        argv: [docker, compose, -p, docker, --env-file, /opt/olamide/repo/deployment/docker/.env, -f, /opt/olamide/repo/deployment/docker/compose.yml, -f, /opt/olamide/repo/deployment/docker/compose.callerids.yml, build, api, web]
+      changed_when: true
+    - name: Test encrypted messaging authorization and envelope validation
+      ansible.builtin.command:
+        argv: [docker, run, --rm, --entrypoint, node, olamide-api:local, --test, secureChat.test.js]
+      changed_when: false
+    - name: Test encryption, key backups and adaptive audio behavior
+      ansible.builtin.command:
+        argv: [docker, run, --rm, -v, '/opt/olamide/repo/apps/web/src:/tests:ro', 'node:22-bookworm-slim', node, --test, /tests/secureCrypto.test.js, /tests/adaptiveAudio.test.js]
+      changed_when: false
+- import_playbook: install-country-onboarding.yml
+- name: Verify encrypted messaging schema
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Verify encrypted messaging tables in running API
+      ansible.builtin.command:
+        argv: [docker, exec, docker-api-1, node, --input-type=module, -e, "import {createDatabase} from './db.js';const db=createDatabase(process.env.MYSQL_URL);try{for(const t of ['secure_chat_keys','secure_chat_messages'])await db.query('SELECT 1 FROM '+t+' LIMIT 1');console.log('Encrypted messaging schema ready');}finally{await db.end();}"]
+      changed_when: false
+    - name: Report encrypted messages and voice quality navigation
+      ansible.builtin.debug:
+        msg: Refresh the app. Chat / Encrypted private messages provides key enablement, fingerprint verification, encrypted text and encrypted key backup/restore. Both contacts must enable it. Calling shows negotiated codec, bandwidth estimate, loss and adaptive Opus target bitrate. Carrier codecs and browser support limit adaptation. Existing messages, attachments and SMS are not converted to encrypted messages.
