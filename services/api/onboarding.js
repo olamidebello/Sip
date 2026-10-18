@@ -1,3 +1,4 @@
+import {validateCountries,saveServiceCountries,checkProfileHealth} from './serviceCountries.js';
 import {ensureDefaultPresence} from './defaultPresence.js';
 import {issueCaptcha,consumeCaptcha} from './signupCaptcha.js';
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
@@ -65,6 +66,7 @@ export async function handleOnboarding({req,res,path,pool,send,readJson,origin})
     const input=await readJson(req);
     if(typeof input.password!=='string'||input.password!==input.confirmPassword)return send(res,400,{error:'Passwords must match'});
     const data=validateRegistration(input);
+    let serviceLocation;try{serviceLocation=validateCountries(input.serviceLocation);}catch(e){return send(res,400,{error:e.message});}
     if(!await consumeCaptcha(pool,input.captchaId,input.captchaAnswer))return send(res,400,{error:'Invalid or expired CAPTCHA. Refresh and try again.'});
     if(!await registrationAllowed(pool,data.email))return send(res,403,{error:'Registration is closed or this email domain is not permitted'});
     const {salt,hash} = await hashPassword(data.password);
@@ -77,6 +79,8 @@ export async function handleOnboarding({req,res,path,pool,send,readJson,origin})
       await db.query('INSERT INTO user_profiles(user_id,phone_e164,address_line1,address_line2,city,region,postal_code,country) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
         [id,data.phone,data.address1,data.address2,data.city,data.region,data.postalCode,data.country]);
       await db.query("INSERT INTO user_group_members(user_id,group_id) VALUES($1,'00000000-0000-4000-8000-000000000001')",[id]);
+      await saveServiceCountries(db,defaultTenantId,id,serviceLocation);
+      await checkProfileHealth(db,defaultTenantId,id);
       await ensureDefaultPresence(db,id);
       await createSipAccount(db,id,new URL(origin).hostname);
       await db.query('COMMIT');
