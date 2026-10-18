@@ -1,3 +1,4 @@
+import {customerEnvelope} from './customerBrand.js';
 import {migrateWatchdog,handleWatchdog,startWatchdogAi} from './platformWatchdog.js';
 import {migrateDidSms,startDidSms,sendDidSms,handleDidSmsWebhook,handleDidSmsAdmin} from './didSms.js';
 import {migrateDidShop,handleDidShop} from './didShop.js';
@@ -133,7 +134,7 @@ function send(res, status, body, headers = {}) {
     "X-Content-Type-Options": "nosniff",
     ...headers
   });
-  res.end(JSON.stringify(body));
+  res.end(JSON.stringify(res.olamideOperator?body:customerEnvelope(body)));
 }
 async function readJson(req, limit=maxBodyBytes) {
   if (!req.headers["content-type"]?.startsWith("application/json"))
@@ -177,6 +178,7 @@ async function featuresFor(user) {
   return effectiveFeatures(result.rows.map((row) => row.features));
 }
 async function handler(req, res) {
+  res.olamideOperator=false;
   const path = new URL(req.url, origin).pathname;
   if(path==='/api/service-countries/catalog'&&req.method==='GET')return send(res,200,{countries:countryCatalog});
   const nativePushHook=path==='/api/native-push/wake'&&pushHookAuthorized(req);
@@ -260,6 +262,7 @@ async function handler(req, res) {
     }
     if (req.method === "GET" && path === "/api/me") {
       const user = await currentUser(req);
+      res.olamideOperator=!!user&&['admin','super_admin'].includes(user.role);
       return user
         ? send(res, 200, { id: user.id, name: user.display_name, email: user.email,authSource:user.auth_source,
             role: user.role, tenantId:user.tenant_id,mustChangePassword:!!user.must_change_password,passkeyEnrollmentRequired:user.passkeyGate==='enroll',passkeySigninRequired:user.passkeyGate==='signin', features:user.features })
@@ -292,6 +295,7 @@ async function handler(req, res) {
         path.startsWith("/api/secure-chat/") || path.startsWith("/api/location/") || path==="/api/service-countries/catalog" || path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path==="/api/admin/google-contacts" || path.startsWith("/api/dashboard") || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
         path === "/api/admin/cdr" || path.startsWith('/api/marketplace/') || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
       const user = await currentUser(req);
+      res.olamideOperator=!!user&&['admin','super_admin'].includes(user.role);
       if (!user) return send(res, 401, { error: "Sign in required" });
       if(path==='/api/account/profile-readiness'&&req.method==='GET')return send(res,200,await getProfileReadiness(pool,user));
       if(path==='/api/service-countries/catalog'||path==='/api/account/service-countries'||path==='/api/account/biodata'||path==='/api/account/service-events'||path==='/api/admin/service-events')return handleServiceCountries({req,res,path,user,pool,send,readJson});
