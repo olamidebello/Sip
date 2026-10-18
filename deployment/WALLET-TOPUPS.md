@@ -34,3 +34,14 @@ A timeout retains the original request ID. Retrying the same request reuses the 
 ## Validation
 
 Run `npm test` in services/api and apps/web, then `npm run build` in apps/web. `walletFunding.test.js` exercises payment matching, signature verification, failed/unpaid payments, duplicate delivery, rollback, ownership, request retries, and admin policy revisions. `walletTopups.test.js` exercises balances, checkout submission, retry persistence, server verification on return, and session changes. An optional database integration test runs against `TEST_MYSQL_URL`; use an isolated test database, never production.
+
+
+## Manual credits and location history
+
+Super administrators can use Payments & wallets > Manual user credits to search active users in the selected workspace, enter USD $0.01–$10,000 and a reason, confirm the target email/amount, and add funds. No payment processor is charged. The `wallet_admin_credits` ledger, security event and wallet balance commit together. Stable request IDs protect retries, and the report records the actor, target, reason and before/after balances. Refresh and Older credits load the report; Export displayed credits downloads only the loaded rows. End users see administrative credits in wallet activity.
+
+Settings > Location history opens a user's own report without requiring billing access. Successful existing service heartbeat leases are sampled once per source/session/minute into `user_location_history`. No new background GPS permission is requested by this feature. Record current location explicitly requests device permission and records a fresh device-reported position. GPS and IP positions are estimates, not verification of physical presence. Locations from before this deployment cannot be reconstructed. No raw IP address, session token or SIP location proof is included in history.
+
+Super administrators can use Captured user locations to search a user by name/email, filter by user, UTC dates or source, page older rows, open coordinate map links and export the currently displayed rows. `location_history_policy` controls collection and retention (default enabled, 90 days; allowed 1–365). Disabled collection stops new history but leaves active geofence enforcement unchanged. Reports exclude expired records immediately; the retention worker deletes them in bounded batches every five minutes. Users may delete their own saved history. Location-report controls do not change the existing country resource or service location authorization.
+
+Redeploy with the same wallet-topups playbook. It tests the new safeguards, creates the three additive tables, preserves the country/location/caller-ID runtime overrides, and verifies all seven funding/history tables before reporting success.

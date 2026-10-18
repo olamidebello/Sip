@@ -1,3 +1,4 @@
+import {handleWalletAdminCredits} from './walletAdminCredits.js';
 import {randomUUID} from 'node:crypto';
 import {stripeGateway,paymentKey,stripeRequest,decryptPaymentSecret} from './stripeGateway.js';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -117,6 +118,7 @@ export async function handleWalletFunding({req,res,path,user,pool,send,readJson,
 }
 export async function handleWalletFundingAdmin({req,res,path,user,pool,send,readJson,fetchImpl=fetch}){
  if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
+ if(['/api/admin/wallet-funding/users','/api/admin/wallet-funding/credits'].includes(path))return handleWalletAdminCredits({req,res,path,user,pool,send,readJson});
  if(path==='/api/admin/wallet-funding'&&req.method==='GET'){
   const [capabilities,topups,wallets]=await Promise.all([fundingCapabilities(pool,user.tenant_id),pool.query('SELECT t.*,u.email FROM wallet_topups t JOIN users u ON u.id=t.user_id WHERE t.tenant_id=$1 ORDER BY t.created_at DESC LIMIT 100',[user.tenant_id]),pool.query("SELECT u.email,w.balance_cents,(SELECT COALESCE(SUM(c.reserved_cents),0) FROM pstn_calls c WHERE c.user_id=w.user_id AND c.tenant_id=w.tenant_id AND c.status<>'settled') AS reserved_cents FROM wallet_accounts w JOIN users u ON u.id=w.user_id WHERE w.tenant_id=$1 ORDER BY u.email LIMIT 1000",[user.tenant_id])]);
   return send(res,200,{...capabilities,tenantId:user.tenant_id,wallets:wallets.rows.map(w=>({email:w.email,availableBalanceCents:Number(w.balance_cents),reservedBalanceCents:Number(w.reserved_cents),accountBalanceCents:Number(w.balance_cents)+Number(w.reserved_cents)})),webhookUrl:(process.env.PUBLIC_ORIGIN||'')+'/api/webhooks/stripe/'+user.tenant_id,topups:topups.rows.map(t=>({...publicTopup(t),email:t.email}))});

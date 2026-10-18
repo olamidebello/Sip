@@ -1,3 +1,4 @@
+@import './locationHistory.css';
 .wallet-balance-summary{display:flex;gap:1rem;align-items:center;flex-wrap:wrap;padding:.9rem;border:1px solid #d7e1df;border-radius:12px;margin:.75rem 0;background:#f5faf8;color:#173e35}
 .wallet-balance-summary p{margin:0}.wallet-balance-summary strong{font-variant-numeric:tabular-nums}.wallet-balance-summary small{display:block}.wallet-balance-summary button{margin-left:auto}
 #wallet-topup-dialog{width:min(430px,calc(100% - 2rem));max-height:90dvh;overflow:auto;border:0;border-radius:18px;padding:1.5rem;box-sizing:border-box;color:#173e35;background:#fff}

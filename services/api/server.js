@@ -92,6 +92,8 @@ import {
   verifyPassword, createSessionToken, tokenHash
 } from "./security.js";
 
+import {handleLocationHistory,observeLocationHeartbeat,startLocationHistoryRetention} from './locationHistory.js';
+
 const origin = process.env.PUBLIC_ORIGIN || "http://127.0.0.1:5173";
 const local = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
 if (!local && !origin.startsWith("https://"))
@@ -167,6 +169,7 @@ async function featuresFor(user) {
 }
 async function handler(req, res) {
   const path = new URL(req.url, origin).pathname;
+  observeLocationHeartbeat({req,res,path,pool,resolveUser:()=>currentUser(req),sessionHash:currentToken(req)?tokenHash(currentToken(req)):null});
   const nativePushHook=path==='/api/native-push/wake'&&pushHookAuthorized(req);
   if (req.method === "GET" && path === "/api/health")
     return send(res, 200, { status: "ok", ...(process.env.APP_RELEASE ? {release:process.env.APP_RELEASE} : {}) });
@@ -301,6 +304,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/campaigns/')||path.startsWith('/api/admin/campaigns'))return await handleCampaigns({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/passkey-policy'))return await handlePasskeyPolicy({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/operations'))return await handleOperationsPolicy({req,res,path,user,pool,send,readJson});
+      if(path.startsWith('/api/account/location-history')||path.startsWith('/api/admin/location-history'))return await handleLocationHistory({req,res,path,user,pool,send,readJson,sessionHash:tokenHash(currentToken(req))});
       if(path.startsWith('/api/admin/wallet-funding'))return await handleWalletFundingAdmin({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/wallet/topups'))return await handleWalletFunding({req,res,path,user,pool,send,readJson,origin});
       if(path.startsWith('/api/admin/wallet-providers')) return await handleWalletProviderAdmin({req,res,path,user,pool,send,readJson});
@@ -838,6 +842,7 @@ const stopTelecomReports=startTelecomReports(pool);
 const stopCdrArchives=startCdrArchives(pool);
 const stopPaymentReconciliation=startPaymentReconciliation(pool);
 const stopWalletFunding=startWalletFundingReconciliation(pool);
+const stopLocationHistory=startLocationHistoryRetention(pool);
 const stopSipProvisioning=startSipProvisioning(pool,origin);
 const stopMessageExpiry=startMessageExpiry(pool);
 const stopSubscriberEmail=startSubscriberEmail(pool);
@@ -853,6 +858,7 @@ server.on("close",stopTelecomReports);
 server.on("close",stopCdrArchives);
 server.on("close",stopPaymentReconciliation);
 server.on("close",stopWalletFunding);
+server.on("close",stopLocationHistory);
 server.on("close",stopSipProvisioning);
 server.on("close",()=>kamailioHttpBridge?.close());
 server.on("close",stopNativePush);

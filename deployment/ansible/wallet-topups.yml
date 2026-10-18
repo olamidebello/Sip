@@ -18,6 +18,11 @@
         argv: [python3, '{{ app_repo }}/deployment/wallet-funding/compose-runtime.py', build, api, web]
         chdir: '{{ app_repo }}/deployment/docker'
 
+    - name: Validate manual credit and location history safeguards
+      ansible.builtin.command:
+        argv: [python3, '{{ app_repo }}/deployment/wallet-funding/compose-runtime.py', run, --rm, --no-deps, api, node, --test, walletAdminCredits.test.js, locationHistory.test.js]
+      changed_when: false
+
     - name: Apply additive wallet database migrations before startup
       ansible.builtin.command:
         argv: [python3, '{{ app_repo }}/deployment/wallet-funding/compose-runtime.py', run, --rm, --no-deps, api, node, migrate.js]
@@ -55,7 +60,7 @@
             const r=await fetch('http://127.0.0.1:8080/api/health');
             if(!r.ok)throw Error('API unhealthy');
             const db=createDatabase(process.env.MYSQL_URL);
-            try{const t=await db.query("SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('wallet_funding_policy','wallet_topups','wallet_topup_credits','wallet_topup_events')");if(t.rowCount!==4)throw Error('Funding tables missing');}finally{await db.end();}
+            try{const t=await db.query("SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('wallet_funding_policy','wallet_topups','wallet_topup_credits','wallet_topup_events','wallet_admin_credits','location_history_policy','user_location_history')");if(t.rowCount!==7)throw Error('Funding tables missing');}finally{await db.end();}
         chdir: '{{ app_repo }}/deployment/docker'
       register: wallet_health
       until: wallet_health.rc == 0
@@ -74,4 +79,4 @@
 
     - name: Report setup location
       ansible.builtin.debug:
-        msg: 'Open Administration > Payments & wallets > Wallet top-ups. Configure live Stripe credentials and the displayed webhook URL, then enable top-ups and save the limits.'
+        msg: 'Open Administration > Payments & wallets > Manual user credits or Captured user locations. Users can open Settings > Location history. Configure live Stripe credentials and the displayed webhook URL, then enable top-ups and save the limits.'
