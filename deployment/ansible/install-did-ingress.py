@@ -5,10 +5,12 @@ import re,sys,subprocess,tempfile,os,datetime
 MARK='# OLAMIDE_DID_INGRESS_V1'
 def patch(old):
  if MARK in old:return old
- auth=re.search(r'Authorization: Bearer ([a-f0-9]{64})',old)
- if not auth or 'onreply_route[MEDIA_REPLY]' not in old or 'request_route {' not in old:raise ValueError('Expected authenticated bridge and MEDIA_REPLY routing layout unavailable')
+ auth=re.search(r'Authorization:\s*Bearer\s+([a-f0-9]{64})',old,re.I)
+ if not auth:raise ValueError('Authenticated bridge token not found in the existing switch layout')
+ if not re.search(r'onreply_route\s*\[\s*MEDIA_REPLY\s*\]',old):raise ValueError('Required MEDIA_REPLY reply route not found')
+ if not re.search(r'request_route\s*\{',old):raise ValueError('Main request_route block not found')
  hook='\n    '+MARK+'\n    if (is_method("INVITE") && !has_totag() && $rU =~ "^did-[a-f0-9]{64}$") { route(OLAMIDE_DID_INBOUND); exit; }\n'
- new=old.replace('request_route {','request_route {'+hook,1)
+ new=re.sub(r'request_route\s*\{',lambda m:m[0]+hook,old,count=1)
  route=r'''
 route[OLAMIDE_DID_INBOUND] {
     if (!mf_process_maxfwd_header("10")) { sl_send_reply("483", "Too Many Hops"); exit; }
@@ -40,14 +42,31 @@ route[OLAMIDE_DID_INBOUND] {
 }
 '''.replace('TOKEN',auth[1])
  return new+route
+def sanitized_diagnostics(value):
+ text=value.decode('utf8','replace') if isinstance(value,bytes) else str(value)
+ text=re.sub(r'Authorization:[^\r\n]*','Authorization: [redacted]',text,flags=re.I)
+ text=re.sub(r'[a-fA-F0-9]{32,}','[redacted]',text)
+ text=re.sub(r'"[^"\n]*"', '"[redacted]"',text)
+ text=re.sub(r"'[^'\n]*'", "'[redacted]'",text)
+ lines=[line for line in text.splitlines() if re.search(r'error|critical|failed|parse|syntax|cannot|not found|unknown',line,re.I)]
+ return '\n'.join(lines[-20:])[:5000] or 'Kamailio validation failed without a parser diagnostic'
+def validate(path,stage):
+ result=subprocess.run(['kamailio','-c','-f',str(path)],capture_output=True)
+ if result.returncode:
+  raise ValueError(stage+' configuration validation failed:\n'+sanitized_diagnostics(result.stderr+result.stdout))
 def main():
- path=Path('/etc/kamailio/kamailio.cfg');old=path.read_text();new=patch(old)
- if new==old:print('unchanged');return
+ path=Path('/etc/kamailio/kamailio.cfg');old=path.read_text()
+ validate(path,'Existing')
+ new=patch(old)
+ if new==old:print('unchanged; current configuration validated');return
  with tempfile.NamedTemporaryFile(mode='w',dir=path.parent,prefix='.did-ingress-',delete=False) as f:f.write(new);tmp=Path(f.name)
  try:
-  subprocess.run(['kamailio','-c','-f',str(tmp)],check=True,capture_output=True)
+  validate(tmp,'Staged DID ingress')
   if '--check' in sys.argv:print('validated');return
   backup=Path(str(path)+'.before-did-'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d%H%M%S'));backup.write_bytes(path.read_bytes());backup.chmod(0o600)
   st=path.stat();os.chmod(tmp,st.st_mode&0o777);os.chown(tmp,st.st_uid,st.st_gid);tmp.replace(path);print('changed: DID ingress installed')
  finally:tmp.unlink(missing_ok=True)
-if __name__=='__main__':main()
+if __name__=='__main__':
+ try:main()
+ except ValueError as error:print(str(error),file=sys.stderr);sys.exit(1)
+ except Exception as error:print('DID ingress preflight failed: '+type(error).__name__+'; check configuration file access and Kamailio installation',file=sys.stderr);sys.exit(1)
