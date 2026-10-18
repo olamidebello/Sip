@@ -1,3 +1,4 @@
+import {migrateWatchdog,handleWatchdog,startWatchdogAi} from './platformWatchdog.js';
 import {migrateDidSms,startDidSms,sendDidSms,handleDidSmsWebhook,handleDidSmsAdmin} from './didSms.js';
 import {migrateDidShop,handleDidShop} from './didShop.js';
 import {migrateDidPayments,handleDidWebhook} from './didPayments.js';
@@ -297,6 +298,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/location/')||path.startsWith('/api/admin/location-policy'))return handleLocationPolicy({req,res,path,user,pool,send,readJson,sessionHash:tokenHash(currentToken(req)),ip:await proxyClient(req)});
       const locationRecovery=path==='/api/geofence'||path.startsWith('/api/account/')||path==='/api/softphone/calls'&&req.method==='POST'||path.startsWith('/api/admin/')&&user.role==='super_admin';
       if(!locationRecovery){const access=await serviceLocationAccess(pool,user.tenant_id,user.id,{sessionHash:tokenHash(currentToken(req)),ip:await proxyClient(req)});if(!access.allowed)return send(res,403,{error:access.reason,code:'LOCATION_REQUIRED',locationRequired:true});}
+      if(path==='/api/account/watchdog-events'||path==='/api/admin/watchdog'||path.startsWith('/api/admin/watchdog/'))return handleWatchdog({req,res,path,user,pool,send,readJson:r=>readJson(r,32768)});
       if(path==='/api/admin/did-sms'||path.startsWith('/api/admin/did-sms/'))return handleDidSmsAdmin({req,res,user,path,pool,send,readJson});
       if(path==='/api/admin/short-dial')return handleShortDialAdmin({req,res,user,pool,send,readJson});
       if(path.startsWith('/api/secure-chat/'))return handleSecureChat({req,res,path,user,pool,send,readJson:r=>readJson(r,24576)});
@@ -865,6 +867,8 @@ await migrateSecureChat(pool);
 await migrateShortDial(pool);
 await migrateDidShop(pool);
 await migrateDidPayments(pool);
+await migrateWatchdog(pool);
+const stopWatchdogAi=startWatchdogAi(pool);
 await migrateDidSms(pool);
 const stopDidSms=startDidSms(pool);
 const stopDidProvisioning=startDidProvisioning(pool);
@@ -884,6 +888,7 @@ const stopStoreRenewals=startStoreRenewals(pool);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
+server.on("close",stopWatchdogAi);
 server.on("close",stopDidSms);
 server.on("close",stopDidProvisioning);
 server.on("close",stopLocationCleanup);
