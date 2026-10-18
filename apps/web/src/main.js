@@ -1,3 +1,5 @@
+import {createRingback} from './ringback.js';
+import {renderCallingPlanAdmin} from './callingPlanAdmin.js';
 import {setupModuleReadiness} from './moduleReadiness.js';
 import {setupMarketplaceControl} from './marketplaceControl.js';
 import {setupDialIdentityInput,dialInputTarget} from './dialIdentityInput.js';
@@ -1503,6 +1505,9 @@ const ldapAdmin = setupLdapAdmin();
 const authProviders = setupAuthProviders();
 const catalogControl = setupCatalogControl();
 setupInstall();
+const outgoingRingback=createRingback();
+window.addEventListener("pagehide",()=>outgoingRingback.stop());
+dialForm.addEventListener("submit",()=>outgoingRingback.arm(),{capture:true});
 let phone;
 let sipRegistered=false;
 let onCall = false;
@@ -1591,6 +1596,7 @@ $("#clear-calls").onclick = async () => {
   catch(error) {report(error);}
 };
 function finishCall(result) {
+  outgoingRingback.stop();
   if (!currentCall) return;
   recentCalls.unshift({ ...currentCall, result, at: new Date().toISOString() });
   recentCalls = recentCalls.slice(0, 50);
@@ -2047,6 +2053,7 @@ async function loadPlans() {
   }
 }
 async function refreshCatalogAdmin() {
+  await renderCallingPlanAdmin({document,get:apiGet,request:accountRequest,isSuperAdmin:activeRole==='super_admin'});
   const [planData,didData,policyData]=await Promise.all([apiGet("/api/admin/plans"),apiGet("/api/admin/numbers/requests"),apiGet("/api/admin/catalog-policy")]);
   const list=$("#admin-plans");list.replaceChildren();
   for(const plan of planData.plans) {
@@ -2621,6 +2628,7 @@ fetch("/api/me", { credentials: "same-origin" })
 
 function status(message) { callsScreen.connectionStatus(message);$("#status").textContent = message;const badge=$('#communication-status');if(badge)badge.textContent=message; }
 function callState(active) {
+  outgoingRingback.stop();
   onCall = active;
   callGui.active(active);
   const nativeCall=window.Capacitor?.Plugins?.NativePush;
@@ -2677,7 +2685,7 @@ async function registerSip(data,shouldContinue=()=>true) {
       },
       onCallAnswered: () => { void nativeCalls.connected(currentCall?.sipCallId).catch(report); if (currentCall) currentCall.answered = true; showWorkspace("calling-workspace"); callState(true); status("Call connected"); },
       onCallHangup: () => { void nativeCalls.ended(currentCall?.sipCallId).catch(report); finishCall(currentCall?.answered ? "completed" : "missed or unanswered"); callState(false); status("Call ended"); },
-      onServerDisconnect: () => {if(!current())return;sipRegistered=false;void subscriberDelivery.wake();status("Connection lost. Reconnecting…");autoSip.dropped();},
+      onServerDisconnect: () => {outgoingRingback.stop();if(!current())return;sipRegistered=false;void subscriberDelivery.wake();status("Connection lost. Reconnecting…");autoSip.dropped();},
       onRegistered: () => {if(current()){sipRegistered=true;void subscriberDelivery.wake();status("Registered");}},
       onUnregistered: () => {if(!current())return;sipRegistered=false;void subscriberDelivery.wake();status("SIP registration lost. Reconnecting…");autoSip.dropped();}
     }
@@ -2739,7 +2747,17 @@ dialForm.addEventListener("submit", async (event) => {
   callGui.number(target);
   callGui.identity(callAddressLabel(target));
   const outgoingCall=currentCall;void registeredCallLabel(target).then(label=>{if(currentCall===outgoingCall)callGui.identity(label);});
-  try { callsScreen.stop();callGui.pending();status("Calling…"); await phone.call(authorizedTarget); }
+  try { callsScreen.stop();callGui.pending();status("Calling…"); let carrierEarlyMedia=false;
+    outgoingRingback.start();
+    await phone.call(authorizedTarget,{earlyMedia:true},{requestDelegate:{
+      onProgress:response=>{
+        const code=response.message.statusCode;
+        if(code===183&&response.message.body){carrierEarlyMedia=true;outgoingRingback.stop();}
+        else if(code===180&&!carrierEarlyMedia)outgoingRingback.start();
+      },
+      onAccept:()=>outgoingRingback.stop(),
+      onReject:response=>{outgoingRingback.stop();finishCall('failed');callState(false);status('Call rejected: '+response.message.statusCode+' '+(response.message.reasonPhrase||''));}
+    }}); }
   catch (error) { finishCall("failed");callState(false); report(error); }
   } finally {dialing=false;}
 });
@@ -2750,7 +2768,7 @@ $("#check-location").onclick = async () => {
 };
 $("#answer").onclick = async () => { try { await phone?.answer(); } catch (error) { report(error); } };
 $("#reject").onclick = async () => { try { await phone?.decline(); finishCall("declined"); } catch (error) { report(error); } };
-$("#hangup").onclick = async () => { try { await phone?.hangup(); } catch (error) { report(error); } };
+$("#hangup").onclick = async () => { outgoingRingback.stop(); try { await phone?.hangup(); } catch (error) { report(error); } };
 $("#hold").onclick = async () => {
   if (!phone || !onCall) return;
   try {
@@ -2773,6 +2791,7 @@ $("#send-tone").onclick = async () => {
   try { await phone.sendDTMF(tone); $("#tone").value = ""; } catch (error) { report(error); }
 };
 $("#disconnect").onclick = async () => {
+  outgoingRingback.stop();
   await autoSip.stop();
   if (!phone) return;
   try {
@@ -2899,4 +2918,3 @@ $('#routing-refresh').onclick=()=>refreshSubscriberRouting().catch(e=>{$('#routi
 $('#subscriber-routing').onsubmit=async event=>{event.preventDefault();try{const body={};for(const key of routingFlags)body[key]=event.currentTarget.elements[key].checked;await accountRequest('/api/account/subscriber-routing',body,'PUT');await refreshSubscriberRouting();}catch(e){$('#routing-status').textContent=e.message;}};
 $('#routing-email-code').onclick=async()=>{try{await accountRequest('/api/account/subscriber-routing/email-code',{});$('#routing-status').textContent='Verification code sent to your profile email.';}catch(e){$('#routing-status').textContent=e.message;}};
 $('#routing-verify').onsubmit=async event=>{event.preventDefault();try{await accountRequest('/api/account/subscriber-routing/verify-email',{code:event.currentTarget.elements.code.value});event.currentTarget.reset();await refreshSubscriberRouting();}catch(e){$('#routing-status').textContent=e.message;}};
-
