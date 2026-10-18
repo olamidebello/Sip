@@ -25,3 +25,11 @@ The installer also migrates messaging setup and idempotent-send records and star
 My phone numbers shows SMS status and a Send / receive SMS button when ready. The existing External SMS screen provides sender selection, compose, inbox, sent history and refresh. Super admin Purchased DID messaging controls enablement, daily submitted-message limits (default 100), and setup retries. Disabling locally blocks sends and receipt ingestion; it does not cancel provider messaging service fees. Carrier messaging fees are separate from DID monthly rental and this version does not deduct SMS usage from the wallet.
 
 Callbacks use private per-DID random tokens and authenticated provider message-record readback. Unverified payload bodies never enter the inbox. SMS is carrier text messaging and is not the encrypted private chat feature. Provider eligibility, applicable messaging registration, account approval and delivery restrictions can prevent activation or delivery; this installer cannot bypass those requirements. Uncertain sends keep their request key and are not automatically repeated.
+
+## Automatic Flowroute configuration
+
+Run `deployment/ansible/provision-flowroute.yml` to build/install the complete DID/SMS release and then apply carrier configuration. It commissions the saved IP gateway, verifies tenant API access, configures the dedicated live recurring-billing webhook, processes eligible already-paid acquisitions, verifies/reconciles purchased DID voice routes, and requests SMS activation with per-number inbox and delivery callbacks. Existing super-admin SMS disablement and daily limits are preserved.
+
+Only application-owned paid active DIDs receive route updates. Unrelated numbers are not claimed or modified. Ambiguous acquisitions and interrupted messaging activation require review. Provider task processing is asynchronous and continues in the worker after the play ends. A sanitized summary reports credential setup needs, verified voice routes, ready/pending SMS and review counts.
+
+Flowroute API credentials, account funding/approval, IP allowlisting and any carrier messaging registrations must already be supplied or approved by the account owner. The playbook cannot fabricate these prerequisites. Local syntax/unit/build tests do not establish live provider acceptance.
