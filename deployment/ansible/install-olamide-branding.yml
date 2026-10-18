@@ -1,0 +1,22 @@
+---
+- name: Verify customer-facing Olamide branding before deployment
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Verify system branding and identifier preservation
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - --rm
+          - --network
+          - none
+          - -v
+          - /opt/olamide/repo/services/api:/tests:ro
+          - node:22-bookworm-slim
+          - node
+          - --test
+          - /tests/customerBrand.test.js
+      changed_when: false
+- import_playbook: install-ai-watchdog.yml
