@@ -1,3 +1,4 @@
+import {setupProfileRecords} from './profileRecords.js';
 import {customerText,customerProvider} from './customerBrand.js';
 import {setupPlatformWatchdog} from './platformWatchdogUi.js';
 import {setupDidShop} from './didShopUi.js';
@@ -1287,6 +1288,7 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   if(['product-store-admin','marketplace-orders-admin'].includes(target))void productStore.refreshAdmin();
   if(target==='payment-admin'||target.startsWith('marketplace-')&&target!=='marketplace-my-orders')void marketplaceControl.refresh();
   if(target==='marketplace-stripe-admin')void commerceOps.refreshPayment();
+  if(target==='account')void profileRecords.refresh();
   if(target==='billing')void refreshBilling().catch(error=>{if(document?.querySelector('#billing-status'))$('#billing-status').textContent=error.message;});
   if(target==='carrier-console')void carrierConsole.refresh();
   if(target==='telecom-features-admin'){void telecomFeatureWorkspace.refresh();if(activeRole==='super_admin')void moduleReadiness.refresh();}
@@ -1468,6 +1470,7 @@ $('#profile-marketplace').onclick=()=>{const actions=$('#profile-marketplace-act
 const settingsMarket=document.createElement('button');settingsMarket.type='button';settingsMarket.id='settings-marketplace';settingsMarket.textContent='Market place';settingsMarket.onclick=()=>{if(showWorkspace('account')===false)return;const actions=$('#profile-marketplace-actions');actions.hidden=false;$('#profile-marketplace').setAttribute('aria-expanded','true');$('#profile-marketplace').scrollIntoView?.({block:'start',behavior:'smooth'});$('#profile-phone-numbers').focus();};document.querySelector('.messenger-settings-profile').append(settingsMarket);
 $('#profile-phone-numbers').onclick=()=>didShopUi.open();
 $('#profile-rate-check').onclick=()=>{if(showWorkspace('outbound-rates')!==false)$('#outbound-rate-search input').focus();};
+const profileRecords=setupProfileRecords({document,get:apiGet,show:showWorkspace});
 const profileLanding=setupProfileLanding({document,get:apiGet,show:showWorkspace,onComplete:async()=>{showWorkspace(userHome(),{historyMode:'replace'});pageRoutes.render();}});
 const secureChatUi=setupSecureChat({document,get:apiGet,request:accountRequest});
 const adaptiveAudio=createAdaptiveAudio({onStatus:value=>{let label=$('#adaptive-audio-status');if(!label){label=document.createElement('p');label.id='adaptive-audio-status';label.setAttribute('aria-label','Live call codec and bandwidth');label.setAttribute('aria-live','off');$('#active .call-hero').append(label);}const speed=n=>Number.isFinite(n)?n.toFixed(1)+' kbps':'Measuring…';label.textContent=value.sentBytes===undefined?value.mode:`Codec: ${(value.codec||'Unknown').replace('audio/','')} send / ${(value.receiveCodec||'Unknown').replace('audio/','')} receive · Upload: ${speed(value.sendKbps)} · Download: ${speed(value.receiveKbps)} · Audio data: ${((value.sentBytes+value.receivedBytes)/1000000).toFixed(2)} MB · ${value.mode}`;label.title='Audio RTP payload measurements, refreshed every 5 seconds. Excludes network overhead, video and other app traffic.';}});
@@ -2585,7 +2588,7 @@ $("#logout").onclick = async () => {
     profileLanding.stop();
     secureChatUi.stop();
     platformWatchdog.stop();
-    didShopUi.stop();
+    didShopUi.stop();profileRecords.stop();
     serviceCountryUi.stop();
     languageTools.stop();
     contactCard.stop();carrierConsole.stop();
