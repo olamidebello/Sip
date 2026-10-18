@@ -1,24 +1,69 @@
----
 - name: Build control API and web
   ansible.builtin.command:
-    argv: [docker, compose, -p, docker, --env-file, /opt/olamide/repo/deployment/docker/.env, -f, /opt/olamide/repo/deployment/docker/compose.yml, -f, /opt/olamide/repo/deployment/docker/compose.callerids.yml, build, api, web]
+    argv:
+    - docker
+    - compose
+    - -p
+    - docker
+    - --env-file
+    - /opt/olamide/repo/deployment/docker/.env
+    - -f
+    - /opt/olamide/repo/deployment/docker/compose.yml
+    - -f
+    - /opt/olamide/repo/deployment/docker/compose.callerids.yml
+    - build
+    - api
+    - web
   changed_when: true
 - name: Test control authorization, trial grants and billing
   ansible.builtin.command:
-    argv: [docker, run, --rm, --entrypoint, node, olamide-api:local, --test, superAdminControl.test.js, defaultCallingPlan.test.js, callingPlanAdmin.test.js, pstnBilling.test.js]
+    argv:
+    - docker
+    - run
+    - --rm
+    - --entrypoint
+    - node
+    - olamide-api:local
+    - --test
+    - superAdminControl.test.js
+    - defaultCallingPlan.test.js
+    - callingPlanAdmin.test.js
+    - pstnBilling.test.js
   changed_when: false
 - name: Install API and web containers
   ansible.builtin.command:
-    argv: [docker, compose, -p, docker, --env-file, /opt/olamide/repo/deployment/docker/.env, -f, /opt/olamide/repo/deployment/docker/compose.yml, -f, /opt/olamide/repo/deployment/docker/compose.callerids.yml, up, -d, --no-deps, api, web]
+    argv:
+    - docker
+    - compose
+    - -p
+    - docker
+    - --env-file
+    - /opt/olamide/repo/deployment/docker/.env
+    - -f
+    - /opt/olamide/repo/deployment/docker/compose.yml
+    - -f
+    - /opt/olamide/repo/deployment/docker/compose.callerids.yml
+    - up
+    - -d
+    - --no-deps
+    - api
+    - web
   changed_when: true
 - name: Wait for control schema and API readiness
-  ansible.builtin.uri:
-    url: http://127.0.0.1:18080/api/health
-    status_code: 200
   register: platform_health
   retries: 20
   delay: 3
-  until: platform_health.status == 200
+  until: platform_health.rc == 0
+  ansible.builtin.command:
+    argv:
+    - docker
+    - exec
+    - docker-api-1
+    - node
+    - --input-type=module
+    - -e
+    - const r=await fetch('http://127.0.0.1:8080/api/health');const b=await r.json();if(r.status!==200||b.status!=='ok')process.exit(1);console.log('Application API healthy');
+  changed_when: false
 - name: Report control location
   ansible.builtin.debug:
     msg: Refresh the app and open Admin / Plan catalog / Super-admin platform controls. User profiles, explicit caller IDs, subscriptions, remaining seconds and provisioning retries are now managed there. Provider API secrets and adapter credentials use the linked existing write-only configuration screens. Server encryption keys are reported by configured status only.
