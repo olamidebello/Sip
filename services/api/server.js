@@ -1,3 +1,4 @@
+import {handleSuperAdminControl,migrateSuperAdminControl} from './superAdminControl.js';
 import {handleCallingPlan} from './defaultCallingPlan.js';
 import {handleModuleAudit} from './moduleAudit.js';
 import {handleCdrArchives,startCdrArchives} from './cdrArchive.js';
@@ -632,6 +633,7 @@ async function handler(req, res) {
         );
         return send(res, 201, { id,status:"draft" });
       }
+      if(path.startsWith('/api/admin/platform-control')) return handleSuperAdminControl({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/calling-plan') return handleCallingPlan({req,res,path,user,pool,send,readJson});
       if (path === "/api/admin/plans" && req.method === "GET") {
         if (!isAdmin(user)) return send(res,403,{error:"Administrator required"});
@@ -832,6 +834,7 @@ async function handler(req, res) {
 
 await migrate(pool);
 await migratePstnBilling(pool);
+await migrateSuperAdminControl(pool);
 const kamailioHttpBridge=startKamailioHttpBridge(pool);
 const stopTelecomReports=startTelecomReports(pool);
 const stopCdrArchives=startCdrArchives(pool);
