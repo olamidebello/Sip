@@ -1,0 +1,300 @@
+- name: Install country boundaries and preserve location runtime settings
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    repo: /opt/olamide/repo
+    country_resource_dir: /etc/olamide/country-resources
+    country_boundary_url: https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson
+    country_boundary_checksum: sha256:392a03db8aa3ba82c105852655620129b11182b95dfc34ef046827ea7d0e5b8c
+    country_compose_args:
+    - docker
+    - compose
+    - -p
+    - docker
+    - --env-file
+    - /opt/olamide/repo/deployment/docker/.env
+    - -f
+    - /opt/olamide/repo/deployment/docker/compose.yml
+    - -f
+    - /opt/olamide/repo/deployment/docker/compose.callerids.yml
+    - -f
+    - /etc/olamide/compose.location.yml
+    - -f
+    - /etc/olamide/compose.countries.yml
+  tasks:
+  - name: Create country resource directory
+    ansible.builtin.file:
+      path: '{{ country_resource_dir }}'
+      state: directory
+      mode: '0755'
+  - name: Download checksum verified country boundary resource
+    ansible.builtin.get_url:
+      url: '{{ country_boundary_url }}'
+      dest: '{{ country_resource_dir }}/countries.geojson'
+      checksum: '{{ country_boundary_checksum }}'
+      mode: '0644'
+      timeout: 60
+      backup: true
+  - name: Install persistent country resource mount
+    ansible.builtin.copy:
+      dest: /etc/olamide/compose.countries.yml
+      mode: '0600'
+      backup: true
+      content: "services:\n  api:\n    environment:\n      COUNTRY_BOUNDARIES_FILE: /app/resources/countries.geojson\n    volumes:\n      - {{ (country_resource_dir\
+        \ + '/countries.geojson:/app/resources/countries.geojson:ro') | to_json }}\n"
+  - name: Inspect existing private IP lookup runtime override
+    ansible.builtin.stat:
+      path: /etc/olamide/compose.location.yml
+    register: country_location_override
+  - name: Supply empty location runtime override only if missing
+    ansible.builtin.copy:
+      dest: /etc/olamide/compose.location.yml
+      mode: '0600'
+      content: 'services: {}'
+    when: not country_location_override.stat.exists
+  - name: Validate country deployment configuration
+    ansible.builtin.command:
+      argv: '{{ country_compose_args + ["config", "--quiet"] }}'
+    changed_when: false
+  - name: Build country onboarding API and GUI
+    ansible.builtin.command:
+      argv: '{{ country_compose_args + ["build", "api", "web"] }}'
+    changed_when: true
+  - name: Validate country policies and billing before deployment
+    ansible.builtin.command:
+      argv:
+      - docker
+      - run
+      - --rm
+      - --entrypoint
+      - node
+      - -v
+      - '{{ country_resource_dir }}/countries.geojson:/app/resources/countries.geojson:ro'
+      - olamide-api:local
+      - --test
+      - serviceCountries.test.js
+      - locationPolicy.test.js
+      - kamailioHttpBridge.test.js
+      - pstnBilling.test.js
+    changed_when: false
+- name: Build and install VPN permissions and live geofence enforcement
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    repo: /opt/olamide/repo
+    compose_args:
+    - docker
+    - compose
+    - -p
+    - docker
+    - --env-file
+    - /opt/olamide/repo/deployment/docker/.env
+    - -f
+    - /opt/olamide/repo/deployment/docker/compose.yml
+    - -f
+    - /opt/olamide/repo/deployment/docker/compose.callerids.yml
+    - -f
+    - /etc/olamide/compose.location.yml
+    - -f
+    - /etc/olamide/compose.countries.yml
+  tasks:
+  - name: Preserve optional IP lookup configuration when no replacement supplied
+    ansible.builtin.stat:
+      path: /etc/olamide/compose.location.yml
+    register: location_override
+  - name: Install private runtime location configuration
+    ansible.builtin.copy:
+      dest: /etc/olamide/compose.location.yml
+      mode: '0600'
+      backup: true
+      content: "services:\n  api:\n    environment:\n      LOCATION_IP_LOOKUP_URL: {{ location_ip_lookup_url | default('') | to_json }}\n      LOCATION_IP_LOOKUP_TOKEN:\
+        \ {{ location_ip_lookup_token | default('') | to_json }}\n"
+    when: not location_override.stat.exists or location_ip_lookup_url is defined
+    no_log: true
+  - name: Validate combined deployment
+    ansible.builtin.command:
+      argv: '{{ compose_args + ["config", "--quiet"] }}'
+    changed_when: false
+  - name: Build API and browser application
+    ansible.builtin.command:
+      argv: '{{ compose_args + ["build", "api", "web"] }}'
+    changed_when: true
+  - name: Run server location, bridge, billing and administrator tests
+    ansible.builtin.command:
+      argv:
+      - docker
+      - run
+      - --rm
+      - --entrypoint
+      - node
+      - olamide-api:local
+      - --test
+      - locationPolicy.test.js
+      - kamailioHttpBridge.test.js
+      - pstnBilling.test.js
+      - superAdminControl.test.js
+      - defaultCallingPlan.test.js
+      - callingPlanAdmin.test.js
+    changed_when: false
+  - name: Test browser location lifecycle and ringback
+    ansible.builtin.command:
+      argv:
+      - docker
+      - run
+      - --rm
+      - -v
+      - /opt/olamide/repo/apps/web/src:/tests:ro
+      - node:22-bookworm-slim
+      - node
+      - --test
+      - /tests/locationMonitor.test.js
+      - /tests/ringback.test.js
+    changed_when: false
+  - name: Test host dialog parser
+    ansible.builtin.command:
+      argv:
+      - python3
+      - '{{ repo }}/deployment/native-push/test_location_watchdog.py'
+    changed_when: false
+  - name: Preflight switch dialog tracking without changing configuration
+    ansible.builtin.command:
+      argv:
+      - python3
+      - '{{ repo }}/deployment/native-push/install-location-dialogs.py'
+      - --check
+    changed_when: false
+  - name: Install updated API and web with location schema
+    ansible.builtin.command:
+      argv: '{{ compose_args + ["up", "-d", "--no-deps", "api", "web"] }}'
+    changed_when: true
+  - name: Verify application readiness inside API container
+    ansible.builtin.command:
+      argv:
+      - docker
+      - exec
+      - docker-api-1
+      - node
+      - --input-type=module
+      - -e
+      - const r=await fetch('http://127.0.0.1:8080/api/health');const b=await r.json();if(r.status!==200||b.status!=='ok')process.exit(1);
+    register: location_health
+    retries: 20
+    delay: 3
+    until: location_health.rc == 0
+    changed_when: false
+  - name: Track internal SIP dialogs for ongoing enforcement
+    ansible.builtin.command:
+      argv:
+      - python3
+      - '{{ repo }}/deployment/native-push/install-location-dialogs.py'
+    register: location_dialogs
+    changed_when: location_dialogs.stdout.startswith('changed:')
+  - name: Restart switch when dialog tracking changed
+    ansible.builtin.systemd:
+      name: kamailio
+      state: restarted
+    when: location_dialogs.changed
+  - name: Restore existing Flowroute activation after switch update
+    ansible.builtin.command:
+      argv:
+      - docker
+      - exec
+      - docker-api-1
+      - node
+      - /app/commissionPaidCalls.js
+    when: location_dialogs.changed
+    changed_when: true
+  - name: Verify switch dialog RPC support
+    ansible.builtin.command:
+      argv:
+      - kamcmd
+      - -s
+      - unix:/run/kamailio/olamide_carrier_ctl
+      - dlg.briefing
+      - cFs
+    changed_when: false
+    no_log: true
+  - name: Create host watchdog directory
+    ansible.builtin.file:
+      path: /usr/local/libexec/olamide
+      state: directory
+      mode: '0750'
+  - name: Install host location watchdog
+    ansible.builtin.copy:
+      src: '{{ repo }}/deployment/native-push/location-watchdog.py'
+      remote_src: true
+      dest: /usr/local/libexec/olamide/location-watchdog.py
+      mode: '0750'
+    register: watchdog_file
+  - name: Install watchdog service
+    ansible.builtin.copy:
+      dest: /etc/systemd/system/olamide-location-watchdog.service
+      mode: '0644'
+      content: '[Unit]
+
+        Description=Olamide SIP location lease watchdog
+
+        After=network-online.target docker.service kamailio.service
+
+        Wants=network-online.target
+
+        [Service]
+
+        Type=simple
+
+        ExecStart=/usr/bin/python3 /usr/local/libexec/olamide/location-watchdog.py
+
+        Restart=always
+
+        RestartSec=5
+
+        NoNewPrivileges=true
+
+        PrivateTmp=true
+
+        ProtectSystem=strict
+
+        ProtectHome=true
+
+        [Install]
+
+        WantedBy=multi-user.target
+
+        '
+    register: watchdog_unit
+  - name: Enable ongoing call enforcement
+    ansible.builtin.systemd:
+      name: olamide-location-watchdog
+      enabled: true
+      daemon_reload: true
+      state: '{{ "restarted" if watchdog_file.changed or watchdog_unit.changed else "started" }}'
+  - name: Report controls and location requirements
+    ansible.builtin.debug:
+      msg: Refresh the app. My profile shows Allows VPN; only super admin can edit it. Open Admin / Geofencing for user and group controls. Default Yes
+        uses device location with an enabled geofence. No geofence means unrestricted service without GPS tracking. VPN-disabled users need a trusted IP/VPN
+        lookup endpoint when geofencing is enabled. Include /etc/olamide/compose.location.yml in future deployments.
+- name: Verify country onboarding resources and schema
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Verify country catalog through running application
+    ansible.builtin.command:
+      argv:
+      - docker
+      - exec
+      - docker-api-1
+      - node
+      - --input-type=module
+      - -e
+      - const r=await fetch('http://127.0.0.1:8080/api/service-countries/catalog');const b=await r.json();if(r.status!==200||b.countries.length!==249)process.exit(1);console.log('Country
+        catalog ready:',b.countries.length);
+    changed_when: false
+  - name: Report account and administrator navigation
+    ansible.builtin.debug:
+      msg: Registration now requires service countries and a primary country. Existing users choose locations in My profile / Service locations and profile.
+        My event tracker shows personal events; Admin / Geofencing / Service event tracker shows workspace events for super admin. Profile checks run in
+        batches of 100 active users per minute. Preserve /etc/olamide/compose.countries.yml and compose.location.yml in future deployments. Language and
+        currency are preferences; existing billing amounts and UI translations are unchanged.
