@@ -1,3 +1,4 @@
+import {migrateServiceCountries,handleServiceCountries,startProfileTracker,countryCatalog} from './serviceCountries.js';
 import {migrateLocationPolicy,handleLocationPolicy,serviceLocationAccess,startLocationCleanup} from './locationPolicy.js';
 import {handleSuperAdminControl,migrateSuperAdminControl} from './superAdminControl.js';
 import {handleCallingPlan} from './defaultCallingPlan.js';
@@ -169,6 +170,7 @@ async function featuresFor(user) {
 }
 async function handler(req, res) {
   const path = new URL(req.url, origin).pathname;
+  if(path==='/api/service-countries/catalog'&&req.method==='GET')return send(res,200,{countries:countryCatalog});
   const nativePushHook=path==='/api/native-push/wake'&&pushHookAuthorized(req);
   if (req.method === "GET" && path === "/api/health")
     return send(res, 200, { status: "ok", ...(process.env.APP_RELEASE ? {release:process.env.APP_RELEASE} : {}) });
@@ -275,10 +277,11 @@ async function handler(req, res) {
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
         path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") || path.startsWith("/api/native-push/") ||
-        path.startsWith("/api/location/") || path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path==="/api/admin/google-contacts" || path.startsWith("/api/dashboard") || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
+        path.startsWith("/api/location/") || path==="/api/service-countries/catalog" || path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path==="/api/admin/google-contacts" || path.startsWith("/api/dashboard") || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
         path === "/api/admin/cdr" || path.startsWith('/api/marketplace/') || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if(path==='/api/service-countries/catalog'||path==='/api/account/service-countries'||path==='/api/account/biodata'||path==='/api/account/service-events'||path==='/api/admin/service-events')return handleServiceCountries({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/location/')||path.startsWith('/api/admin/location-policy'))return handleLocationPolicy({req,res,path,user,pool,send,readJson,sessionHash:tokenHash(currentToken(req)),ip:await proxyClient(req)});
       const locationRecovery=path==='/api/geofence'||path.startsWith('/api/account/')||path==='/api/softphone/calls'&&req.method==='POST'||path.startsWith('/api/admin/')&&user.role==='super_admin';
       if(!locationRecovery){const access=await serviceLocationAccess(pool,user.tenant_id,user.id,{sessionHash:tokenHash(currentToken(req)),ip:await proxyClient(req)});if(!access.allowed)return send(res,403,{error:access.reason,code:'LOCATION_REQUIRED',locationRequired:true});}
@@ -841,6 +844,8 @@ await migrate(pool);
 await migratePstnBilling(pool);
 await migrateSuperAdminControl(pool);
 await migrateLocationPolicy(pool);
+await migrateServiceCountries(pool);
+const stopProfileTracker=startProfileTracker(pool);
 const stopLocationCleanup=startLocationCleanup(pool);
 const kamailioHttpBridge=startKamailioHttpBridge(pool);
 const stopTelecomReports=startTelecomReports(pool);
@@ -857,6 +862,7 @@ const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
 server.on("close",stopLocationCleanup);
+server.on("close",stopProfileTracker);
 server.on("close",stopSubscriberEmail);
 server.on("close",stopTelecomReports);
 server.on("close",stopCdrArchives);
