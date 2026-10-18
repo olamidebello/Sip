@@ -1,3 +1,4 @@
+import {renderPlatformControl} from './platformControlAdmin.js';
 import {createRingback} from './ringback.js';
 import {renderCallingPlanAdmin} from './callingPlanAdmin.js';
 import {setupModuleReadiness} from './moduleReadiness.js';
@@ -2053,6 +2054,7 @@ async function loadPlans() {
   }
 }
 async function refreshCatalogAdmin() {
+  await renderPlatformControl({document,get:apiGet,request:accountRequest,isSuperAdmin:activeRole==='super_admin',show:showWorkspace});
   await renderCallingPlanAdmin({document,get:apiGet,request:accountRequest,isSuperAdmin:activeRole==='super_admin'});
   const [planData,didData,policyData]=await Promise.all([apiGet("/api/admin/plans"),apiGet("/api/admin/numbers/requests"),apiGet("/api/admin/catalog-policy")]);
   const list=$("#admin-plans");list.replaceChildren();
