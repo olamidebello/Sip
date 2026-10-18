@@ -29,8 +29,8 @@ export async function setupDownloads(fetchReleases=fetch) {
     if (!response.ok) throw new Error("Release list unavailable");
     const releases=await response.json();
     const published=Array.isArray(releases)?releases.find(release=>Array.isArray(release.assets)&&release.assets.length):undefined;
-    assets=published?.assets||[];
-    status.textContent=published?`Showing ${published.name||published.tag_name} preview downloads. Android is a debug build; iOS builds are simulator-only.`:"No published packages yet. Check the releases page for updates.";
+    assets=Array.isArray(releases)?releases.filter(release=>!release.draft).flatMap(release=>Array.isArray(release.assets)?release.assets:[]):[];
+    status.textContent=published?'Available preview downloads. Android is a debug build; desktop installers are unsigned; iOS builds are simulator-only.':"No published packages yet. Check the releases page for updates.";
   } catch {
     status.textContent="Could not check packages right now. The releases page has the current downloads.";
   }
