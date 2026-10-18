@@ -1,3 +1,4 @@
+import {setupServiceCountries} from './serviceCountriesUi.js';
 import {createLocationMonitor} from './locationMonitor.js';
 import {renderLocationPolicyAdmin} from './locationPolicyAdmin.js';
 import {renderPlatformControl} from './platformControlAdmin.js';
@@ -1452,6 +1453,7 @@ const meetings = setupMeetings();
 const dashboard=setupDashboard({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 const support=setupSupport({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
 localeSettings=setupLocaleSettings({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
+const serviceCountryUi=setupServiceCountries({document,get:apiGet,request:accountRequest,onSaved:async()=>{await localeSettings.refresh(activeRole==='super_admin'||activeRole==='admin');await locationMonitor.ensure();}});
 const groupAdmin = setupGroupAdmin();
 const sipProfiles = setupSipProfiles({get:apiGet,request:accountRequest,permissionsChanged:updateNavigation});
 const socialPublishing=setupSocialPublishing({document,get:apiGet,request:accountRequest});
@@ -1916,6 +1918,7 @@ function signedIn(user) {
   activeRole=["admin","super_admin"].includes(user.role)?user.role:"user";
   if(!document.querySelector('#profile-allows-vpn')){const label=document.createElement('label');label.innerHTML='<input id="profile-allows-vpn" type="checkbox" checked disabled> Allows VPN (managed by super admin)';$('#signed-in-profile').append(label);}
   const vpnBox=document.querySelector('#profile-allows-vpn');vpnBox.disabled=user.role!=='super_admin';vpnBox.onchange=async()=>{try{await accountRequest('/api/admin/location-policy/users/'+user.id,{allowsVpn:vpnBox.checked},'PUT');await locationMonitor.ensure();}catch(e){$('#account-status').textContent=e.message;}};
+  serviceCountryUi.show(user).catch(error=>{$('#account-status').textContent=error.message;});
   locationMonitor.start();
   $('#geofence-admin').hidden=user.role!=='super_admin';
   apiGet('/api/redirector').then(({target})=>{if(target?.wssUrl&&!onCall)$("#connect [name=server]").value=target.wssUrl;}).catch(()=>{});
@@ -2330,7 +2333,7 @@ $("#signup").addEventListener("submit", async event=>{
  if(!signupCaptcha.ready()){await refreshSignupCaptcha();$('#account-status').textContent=signupCaptcha.ready()?'CAPTCHA refreshed. Enter the new six digits, then submit again.':'CAPTCHA unavailable. Tap New CAPTCHA to retry.';return;}
  if(form.elements.password.value!==form.elements.confirmPassword.value){$('#account-status').textContent='Passwords must match';return;}
  button.disabled=true;let created=false,failureMessage;
- try{const data=Object.fromEntries(new FormData(form));await accountRequest('/api/register',data);created=true;form.reset();$('#login').elements.email.value=data.email;$('#account-status').textContent='Account created. Sign in to continue.';pageRoutes.go('login');}
+ try{const data=Object.fromEntries(new FormData(form));data.serviceLocation=await serviceCountryUi.registration();await accountRequest('/api/register',data);created=true;form.reset();$('#login').elements.email.value=data.email;$('#account-status').textContent='Account created. Sign in to continue.';pageRoutes.go('login');}
  catch(error){failureMessage=error.message;}
  finally{button.disabled=false;if(!created){await refreshSignupCaptcha();$('#account-status').textContent=failureMessage+' '+(signupCaptcha.ready()?'Enter the new CAPTCHA and try again.':'CAPTCHA unavailable. Tap New CAPTCHA to retry.');}}
 });
@@ -2547,6 +2550,7 @@ $("#logout").onclick = async () => {
   try {
     dialerContacts.clear();
     contactDirectory.clear();
+    serviceCountryUi.stop();
     languageTools.stop();
     contactCard.stop();carrierConsole.stop();
     socialPublishing.clear();
