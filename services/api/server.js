@@ -1,3 +1,4 @@
+import {migrateShortDial,handleShortDialAdmin} from './shortDial.js';
 import {migrateSecureChat,handleSecureChat} from './secureChat.js';
 import {migrateServiceCountries,handleServiceCountries,startProfileTracker,countryCatalog} from './serviceCountries.js';
 import {migrateLocationPolicy,handleLocationPolicy,serviceLocationAccess,startLocationCleanup} from './locationPolicy.js';
@@ -286,6 +287,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/location/')||path.startsWith('/api/admin/location-policy'))return handleLocationPolicy({req,res,path,user,pool,send,readJson,sessionHash:tokenHash(currentToken(req)),ip:await proxyClient(req)});
       const locationRecovery=path==='/api/geofence'||path.startsWith('/api/account/')||path==='/api/softphone/calls'&&req.method==='POST'||path.startsWith('/api/admin/')&&user.role==='super_admin';
       if(!locationRecovery){const access=await serviceLocationAccess(pool,user.tenant_id,user.id,{sessionHash:tokenHash(currentToken(req)),ip:await proxyClient(req)});if(!access.allowed)return send(res,403,{error:access.reason,code:'LOCATION_REQUIRED',locationRequired:true});}
+      if(path==='/api/admin/short-dial')return handleShortDialAdmin({req,res,user,pool,send,readJson});
       if(path.startsWith('/api/secure-chat/'))return handleSecureChat({req,res,path,user,pool,send,readJson:r=>readJson(r,24576)});
 
       if(path.startsWith('/api/softphone/scheduled'))return await handleScheduledCalls({req,res,path,user,pool,send,readJson});
@@ -370,7 +372,7 @@ async function handler(req, res) {
         const number=/^\+?[0-9*#]+$/.test(match[1])?match[1]:'';
         return send(res,200,{label:person?(person.name?.trim()||person.phone||'Registered SIP user'):(number||'Unknown caller')});
       }
-      if(path==='/api/softphone/access'||path==='/api/softphone/authorize')return await handleCallAccess({req,res,path,user,pool,send,readJson});
+      if(path==='/api/softphone/access'||path==='/api/softphone/authorize')return await handleCallAccess({req,res,path,user,pool,send,readJson,sessionHash:tokenHash(currentToken(req)),ip:await proxyClient(req)});
       if (path.startsWith("/api/softphone/"))
         return await handleSoftphoneState({req,res,path,user,pool,send,readJson});
       if (path==="/api/geofence" || path==="/api/admin/geofence")
@@ -848,6 +850,7 @@ await migrateSuperAdminControl(pool);
 await migrateLocationPolicy(pool);
 await migrateServiceCountries(pool);
 await migrateSecureChat(pool);
+await migrateShortDial(pool);
 const stopProfileTracker=startProfileTracker(pool);
 const stopLocationCleanup=startLocationCleanup(pool);
 const kamailioHttpBridge=startKamailioHttpBridge(pool);
