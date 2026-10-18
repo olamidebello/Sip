@@ -1,3 +1,4 @@
+import {migrateLocationPolicy,handleLocationPolicy,serviceLocationAccess,startLocationCleanup} from './locationPolicy.js';
 import {handleSuperAdminControl,migrateSuperAdminControl} from './superAdminControl.js';
 import {handleCallingPlan} from './defaultCallingPlan.js';
 import {handleModuleAudit} from './moduleAudit.js';
@@ -274,10 +275,14 @@ async function handler(req, res) {
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
         path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") || path.startsWith("/api/native-push/") ||
-        path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path==="/api/admin/google-contacts" || path.startsWith("/api/dashboard") || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
+        path.startsWith("/api/location/") || path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path==="/api/admin/google-contacts" || path.startsWith("/api/dashboard") || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
         path === "/api/admin/cdr" || path.startsWith('/api/marketplace/') || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if(path.startsWith('/api/location/')||path.startsWith('/api/admin/location-policy'))return handleLocationPolicy({req,res,path,user,pool,send,readJson,sessionHash:tokenHash(currentToken(req)),ip:await proxyClient(req)});
+      const locationRecovery=path==='/api/geofence'||path.startsWith('/api/account/')||path==='/api/softphone/calls'&&req.method==='POST'||path.startsWith('/api/admin/')&&user.role==='super_admin';
+      if(!locationRecovery){const access=await serviceLocationAccess(pool,user.tenant_id,user.id,{sessionHash:tokenHash(currentToken(req)),ip:await proxyClient(req)});if(!access.allowed)return send(res,403,{error:access.reason,code:'LOCATION_REQUIRED',locationRequired:true});}
+
       if(path.startsWith('/api/softphone/scheduled'))return await handleScheduledCalls({req,res,path,user,pool,send,readJson});
       if(path==='/api/navigation'||path.startsWith('/api/admin/navigation'))return await handleNavigationPolicy({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/contacts/registration-alerts'))return await handleContactDiscovery({req,res,path,user,pool,send,readJson});
@@ -835,6 +840,8 @@ async function handler(req, res) {
 await migrate(pool);
 await migratePstnBilling(pool);
 await migrateSuperAdminControl(pool);
+await migrateLocationPolicy(pool);
+const stopLocationCleanup=startLocationCleanup(pool);
 const kamailioHttpBridge=startKamailioHttpBridge(pool);
 const stopTelecomReports=startTelecomReports(pool);
 const stopCdrArchives=startCdrArchives(pool);
@@ -849,6 +856,7 @@ const stopStoreRenewals=startStoreRenewals(pool);
 const address = process.env.LISTEN_ADDR || "127.0.0.1";
 const port = Number(process.env.PORT || 8080);
 const server = http.createServer(handler);
+server.on("close",stopLocationCleanup);
 server.on("close",stopSubscriberEmail);
 server.on("close",stopTelecomReports);
 server.on("close",stopCdrArchives);
@@ -859,6 +867,6 @@ server.on("close",stopNativePush);
 server.on("close",stopSubscriberDelivery);
 server.on("close",stopRateSync);
 server.on("close",stopStoreRenewals);
-meetingSignaling = attachMeetingSignaling(server, { pool, origin, currentUser });
+meetingSignaling = attachMeetingSignaling(server, { pool, origin, currentUser:async req=>{const u=await currentUser(req);if(!u)return null;const a=await serviceLocationAccess(pool,u.tenant_id,u.id,{sessionHash:tokenHash(currentToken(req)),ip:await proxyClient(req)});return a.allowed?u:null;} });
 server.listen(port, address, () =>
   console.log(`Account API listening on ${address}:${port}`));
