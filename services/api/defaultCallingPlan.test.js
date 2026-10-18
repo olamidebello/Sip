@@ -11,7 +11,7 @@ test('plans are stable and isolated by tenant',()=>{assert.equal(defaultPlanId('
 test('enrollment preserves active plans and never replenishes an existing grant',async()=>{
  const calls=[];const db={query:async(sql,args)=>{calls.push({sql,args});return {rows:[{tenant_id:'tenant',allowance_seconds:600}]};}};
  await ensureDefaultCallingPlan(db,'user');
- assert.ok(calls.some(c=>/IF\(status='active',plan_id/.test(c.sql))); 
+ assert.ok(calls.some(c=>/INSERT IGNORE INTO subscriptions/.test(c.sql))); 
  assert.ok(calls.some(c=>/INSERT IGNORE INTO calling_trial_balances/.test(c.sql))); 
 });
 
