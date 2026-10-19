@@ -17,7 +17,7 @@ export function showNumberPorting({document,get,request,user}){
  <button type="button" data-refresh>Refresh port requests</button><p data-status role="status" aria-live="polite"></p><div data-orders></div>`;
  parent.querySelector('[data-port-navigation]')?.remove();
  const nav=document.createElement('nav');nav.dataset.portNavigation='true';nav.setAttribute('aria-label','Number porting');
- const link=document.createElement('a');link.href='#account';link.textContent='Port my number';link.onclick=()=>{root.open=true;root.scrollIntoView?.({block:'start'});};nav.append(link);parent.prepend(nav);
+ const link=document.createElement('button');link.type='button';link.textContent='Port my number';link.setAttribute('aria-controls',root.id);link.setAttribute('aria-expanded','false');link.onclick=()=>{root.open=true;link.setAttribute('aria-expanded','true');root.scrollIntoView?.({block:'start',behavior:'smooth'});form.elements.number.focus({preventScroll:true});};root.addEventListener('toggle',()=>link.setAttribute('aria-expanded',String(root.open)));nav.append(link);parent.prepend(nav);
  showPortingAdmin({document,get,request,user,nav});
  parent.append(root);const $=s=>root.querySelector(s),form=$('[data-port-form]'),status=$('[data-status]');let requestKey=crypto.randomUUID(),busy=false;
  const active=()=>root.isConnected&&document.querySelector('#number-porting')===root;
@@ -68,7 +68,7 @@ function showPortingAdmin({document,get,request,user,nav}){
  const root=document.createElement('details');root.id='number-porting-admin';
  root.innerHTML='<summary>Manage number porting</summary><p>Manage requests in your current tenant. Carrier approval, routing activation and billing commissioning remain separate steps. Uncertain submissions require verified reconciliation to prevent duplicate orders.</p><button type="button" data-refresh>Refresh requests</button><label>Filter requests <input type="search" data-filter placeholder="Number, owner or status"></label><p role="status" data-status></p><div data-list></div>';
  document.querySelector('#signed-in-profile').append(root);
- const link=document.createElement('a');link.href='#account';link.textContent='Manage number porting';link.onclick=()=>{root.open=true;root.scrollIntoView?.({block:'start'});};nav.append(document.createTextNode(' · '),link);
+ const link=document.createElement('button');link.type='button';link.textContent='Manage number porting';link.onclick=()=>{root.open=true;root.scrollIntoView?.({block:'start'});};nav.append(document.createTextNode(' · '),link);
  const status=root.querySelector('[data-status]'),list=root.querySelector('[data-list]');let records=[];
  function action(text,fn){const b=document.createElement('button');b.type='button';b.textContent=text;b.onclick=async()=>{b.disabled=true;try{await fn();await refresh();}catch(e){status.textContent=e.message;}finally{b.disabled=false;}};return b;}
  function render(){list.replaceChildren();const q=root.querySelector('[data-filter]').value.toLowerCase();
