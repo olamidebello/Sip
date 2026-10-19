@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['.github/workflows/android-play.yml']
+    paths: ['.github/workflows/android-play.yml', 'apps/mobile/**', 'apps/web/public/olamide-logo.jpg']
 permissions:
   contents: read
 jobs:
@@ -23,6 +23,12 @@ jobs:
       - name: Generate existing Android app
         working-directory: apps/mobile
         run: npm install --no-audit --no-fund && npx cap add android && npx cap sync android && bash install-carrier-native.sh
+      - name: Apply original Olamide logo to Android and Play artwork
+        run: python3 -m pip install Pillow==11.3.0 && python3 apps/mobile/generate-brand-artwork.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: olamide-play-artwork
+          path: apps/mobile/play-artwork/
       - name: Build APK and release bundle
         working-directory: apps/mobile/android
         run: ./gradlew assembleDebug bundleRelease
