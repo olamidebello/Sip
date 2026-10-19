@@ -1,0 +1,81 @@
+---
+- name: Install Flowroute user number porting
+  hosts: switch_nodes
+  become: true
+  gather_facts: false
+  vars:
+    porting_repo: /opt/olamide/repo
+    porting_compose_dir: '{{ porting_repo }}/deployment/docker'
+  tasks:
+    - name: Validate additive source integration before modifying files
+      ansible.builtin.command:
+        argv: [python3, '{{ porting_repo }}/tools/install_number_porting.py', --repo, '{{ porting_repo }}', --check]
+      changed_when: false
+      check_mode: false
+    - name: Read runtime container metadata
+      ansible.builtin.command:
+        argv: [docker, inspect, docker-api-1]
+      register: porting_runtime_files
+      changed_when: false
+      check_mode: false
+      no_log: true
+    - name: Extract runtime Compose override paths
+      ansible.builtin.set_fact:
+        porting_runtime_compose_files: '{{ (porting_runtime_files.stdout | from_json)[0].Config.Labels["com.docker.compose.project.config_files"] }}'
+    - name: Require a complete runtime Compose file list
+      ansible.builtin.assert:
+        that:
+          - porting_runtime_compose_files.startswith('/')
+          - "'compose.yml' in porting_runtime_compose_files"
+    - name: Preserve runtime Compose file ordering
+      ansible.builtin.set_fact:
+        porting_compose: [docker, compose, -p, docker, --env-file, '{{ porting_compose_dir }}/.env']
+    - name: Append production override paths
+      ansible.builtin.set_fact:
+        porting_compose: '{{ porting_compose + ["-f", item] }}'
+      loop: '{{ porting_runtime_compose_files.split(",") }}'
+    - name: Install account, migration and worker hooks
+      ansible.builtin.command:
+        argv: [python3, '{{ porting_repo }}/tools/install_number_porting.py', --repo, '{{ porting_repo }}']
+      register: porting_install
+      changed_when: "'changed files: 0' not in porting_install.stdout"
+      when: not ansible_check_mode
+    - name: Build API and website before replacing either service
+      ansible.builtin.command:
+        argv: '{{ porting_compose + ["build", "api", "web"] }}'
+        chdir: '{{ porting_compose_dir }}'
+      changed_when: true
+      when: not ansible_check_mode
+    - name: Run isolated carrier workflow tests without live carrier requests
+      ansible.builtin.command:
+        argv: '{{ porting_compose + ["run", "--rm", "--no-deps", "--entrypoint", "node", "api", "--test", "numberPorting.test.js"] }}'
+        chdir: '{{ porting_compose_dir }}'
+      changed_when: false
+      when: not ansible_check_mode
+    - name: Deploy API and website with existing production mounts
+      ansible.builtin.command:
+        argv: '{{ porting_compose + ["up", "-d", "--no-deps", "api", "web"] }}'
+        chdir: '{{ porting_compose_dir }}'
+      changed_when: true
+      when: not ansible_check_mode
+    - name: Wait for public account API
+      ansible.builtin.uri:
+        url: https://sip.dobhrap.com/api/me
+        status_code: [200, 401]
+        follow_redirects: none
+        timeout: 10
+      register: porting_health
+      retries: 12
+      delay: 5
+      until: porting_health is succeeded
+      when: not ansible_check_mode
+    - name: Require authentication on the deployed porting API
+      ansible.builtin.uri:
+        url: https://sip.dobhrap.com/api/account/number-porting
+        status_code: 401
+        follow_redirects: none
+        timeout: 10
+      when: not ansible_check_mode
+    - name: Report user entry point
+      ansible.builtin.debug:
+        msg: My profile → Port a number to Olamide. Carrier API access and provider credential encryption must be configured. No real port order is submitted by this installer.
