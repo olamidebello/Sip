@@ -1,3 +1,4 @@
+import {showNumberPorting} from './numberPorting.js';
 import {setupLocationHistory} from './locationHistory.js';
 import {setupModuleReadiness} from './moduleReadiness.js';
 import {setupMarketplaceControl} from './marketplaceControl.js';
@@ -1902,6 +1903,7 @@ function signedIn(user) {
   }
   void locationHistory.start(user);
   $("#signed-in-profile").hidden=false;
+  showNumberPorting({document,get:apiGet,request:accountRequest,user});
   $("#profile-name").value=user.name || "";
   $("#profile-email").value=user.email || "";
   activeRole=["admin","super_admin"].includes(user.role)?user.role:"user";

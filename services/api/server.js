@@ -1,3 +1,4 @@
+import {handleNumberPorting,migrateNumberPorting,startNumberPorting} from './numberPorting.js';
 import {handleLocationHistory} from './locationHistory.js';
 import {handleModuleAudit} from './moduleAudit.js';
 import {handleCdrArchives,startCdrArchives} from './cdrArchive.js';
@@ -277,6 +278,7 @@ async function handler(req, res) {
         path === "/api/admin/cdr" || path.startsWith('/api/marketplace/') || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
       const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if(path.startsWith('/api/account/number-porting')||path.startsWith('/api/admin/number-porting'))return await handleNumberPorting({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/softphone/scheduled'))return await handleScheduledCalls({req,res,path,user,pool,send,readJson});
       if(path==='/api/navigation'||path.startsWith('/api/admin/navigation'))return await handleNavigationPolicy({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/contacts/registration-alerts'))return await handleContactDiscovery({req,res,path,user,pool,send,readJson});
@@ -831,6 +833,7 @@ async function handler(req, res) {
 }
 
 await migrate(pool);
+await migrateNumberPorting(pool);
 await migratePstnBilling(pool);
 const kamailioHttpBridge=startKamailioHttpBridge(pool);
 const stopTelecomReports=startTelecomReports(pool);
@@ -857,5 +860,7 @@ server.on("close",stopSubscriberDelivery);
 server.on("close",stopRateSync);
 server.on("close",stopStoreRenewals);
 meetingSignaling = attachMeetingSignaling(server, { pool, origin, currentUser });
+const stopNumberPorting=startNumberPorting(pool);
+server.on('close',stopNumberPorting);
 server.listen(port, address, () =>
   console.log(`Account API listening on ${address}:${port}`));
