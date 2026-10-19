@@ -21,6 +21,7 @@
         - '{{ stripe_repair_compose }}/compose.callerids.yml'
         - /etc/olamide/compose.location.yml
         - /etc/olamide/compose.countries.yml
+        - /etc/olamide/compose.didshop.yml
       register: stripe_repair_overrides
 
     - name: Preserve production Compose files and environment
