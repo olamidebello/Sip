@@ -39,3 +39,15 @@ test('regular users have profile navigation without administrator controls',()=>
  try{assert.equal(dom.window.document.querySelector('#number-porting-admin'),null);assert.match(dom.window.document.querySelector('[data-port-navigation]').textContent,/Port my number/);}
  finally{ui.stop();dom.window.close();}
 });
+
+test('port number button opens the form without submitting the profile',()=>{
+ const dom=new JSDOM('<form id="signed-in-profile"></form>');
+ const ui=showNumberPorting({document:dom.window.document,user:{id:'user'},get:async()=>({configured:true,requests:[]}),request:async()=>({})});
+ try{
+ const button=dom.window.document.querySelector('[data-port-navigation] button');
+ assert.equal(button.type,'button');button.click();
+ assert.equal(dom.window.document.querySelector('#number-porting').open,true);
+ assert.equal(button.getAttribute('aria-expanded'),'true');
+ assert.equal(dom.window.document.activeElement.name,'number');
+ }finally{ui.stop();dom.window.close();}
+});
