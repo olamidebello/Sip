@@ -22,3 +22,20 @@ test('carrier LOA is text, and submission requires separate explicit authorizati
  [...root.querySelectorAll('button')].find(b=>b.textContent==='Sign and authorize transfer').click();await tick();assert.equal(calls.length,0);assert.match(root.querySelector('[data-status]').textContent,/Complete the signer/);
  }finally{ui.stop();dom.window.close();}
 });
+test('super administrator gets scoped management navigation and queue control',async()=>{
+ const dom=new JSDOM('<section id="signed-in-profile"></section>');const calls=[];
+ const ui=showNumberPorting({document:dom.window.document,user:{id:'admin',role:'super_admin'},get:async()=>({configured:true,requests:[{id:'request',number:'+12125550123',userId:'owner',status:'processing'}]}),request:async(path)=>{calls.push(path);return {};}});
+ try{
+ const admin=dom.window.document.querySelector('#number-porting-admin');assert.ok(admin);
+ assert.match(dom.window.document.querySelector('[data-port-navigation]').textContent,/Manage number porting/);
+ admin.querySelector('[data-refresh]').click();await tick();
+ [...admin.querySelectorAll('button')].find(b=>b.textContent==='Queue processing / status check').click();await tick();
+ assert.equal(calls[0],'/api/admin/number-porting/request/refresh');
+ }finally{ui.stop();dom.window.close();}
+});
+test('regular users have profile navigation without administrator controls',()=>{
+ const dom=new JSDOM('<section id="signed-in-profile"></section>');
+ const ui=showNumberPorting({document:dom.window.document,user:{id:'user'},get:async()=>({configured:true,requests:[]}),request:async()=>({})});
+ try{assert.equal(dom.window.document.querySelector('#number-porting-admin'),null);assert.match(dom.window.document.querySelector('[data-port-navigation]').textContent,/Port my number/);}
+ finally{ui.stop();dom.window.close();}
+});
