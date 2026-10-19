@@ -14,6 +14,39 @@
       if(s.includes('payment_method_types'))process.exit(1);
       console.log('Stripe wallet checkout repair verified');
   tasks:
+    - name: Find installed production overrides
+      ansible.builtin.stat:
+        path: '{{ item }}'
+      loop:
+        - '{{ stripe_repair_compose }}/compose.callerids.yml'
+        - /etc/olamide/compose.location.yml
+        - /etc/olamide/compose.countries.yml
+      register: stripe_repair_overrides
+
+    - name: Preserve production Compose files and environment
+      ansible.builtin.set_fact:
+        stripe_repair_command: >-
+          {{ ['docker', 'compose', '-p', 'docker', '--env-file', stripe_repair_compose + '/.env', '-f', stripe_repair_compose + '/compose.yml'] }}
+
+    - name: Append installed overrides
+      ansible.builtin.set_fact:
+        stripe_repair_command: '{{ stripe_repair_command + ["-f", item.item] }}'
+      loop: '{{ stripe_repair_overrides.results }}'
+      when: item.stat.exists
+
+    - name: Check external country resource before deployment
+      ansible.builtin.stat:
+        path: /etc/olamide/country-resources/countries.geojson
+      register: stripe_repair_country_resource
+
+    - name: Require installed country resource when country override exists
+      ansible.builtin.assert:
+        that:
+          - stripe_repair_country_resource.stat.exists
+          - stripe_repair_country_resource.stat.size | default(0) > 0
+        fail_msg: Restore the country boundary resource before rebuilding the API.
+      when: stripe_repair_overrides.results[2].stat.exists
+
     - name: Read existing wallet funding source
       ansible.builtin.slurp:
         src: '{{ stripe_repair_source }}'
@@ -35,16 +68,7 @@
 
     - name: Inspect current API container
       ansible.builtin.command:
-        argv:
-          - docker
-          - compose
-          - exec
-          - -T
-          - api
-          - node
-          - --input-type=module
-          - -e
-          - '{{ stripe_repair_probe }}'
+        argv: '{{ stripe_repair_command + ["exec", "-T", "api", "node", "--input-type=module", "-e", stripe_repair_probe] }}'
         chdir: '{{ stripe_repair_compose }}'
       register: stripe_repair_runtime
       changed_when: false
@@ -53,7 +77,7 @@
 
     - name: Build repaired API image
       ansible.builtin.command:
-        argv: [docker, compose, build, api]
+        argv: '{{ stripe_repair_command + ["build", "api"] }}' 
         chdir: '{{ stripe_repair_compose }}'
       changed_when: true
       when:
@@ -62,7 +86,7 @@
 
     - name: Deploy repaired API without restarting dependencies
       ansible.builtin.command:
-        argv: [docker, compose, up, -d, --no-deps, api]
+        argv: '{{ stripe_repair_command + ["up", "-d", "--no-deps", "api"] }}' 
         chdir: '{{ stripe_repair_compose }}'
       changed_when: true
       when:
@@ -71,14 +95,18 @@
 
     - name: Verify deployed source syntax
       ansible.builtin.command:
-        argv: [docker, compose, exec, -T, api, node, --check, /app/walletFunding.js]
+        argv: '{{ stripe_repair_command + ["exec", "-T", "api", "node", "--check", "/app/walletFunding.js"] }}' 
         chdir: '{{ stripe_repair_compose }}'
+      register: stripe_repair_syntax
+      retries: 12
+      delay: 5
+      until: stripe_repair_syntax.rc == 0
       changed_when: false
       when: not ansible_check_mode
 
     - name: Verify unsupported parameter is absent in running API
       ansible.builtin.command:
-        argv: [docker, compose, exec, -T, api, node, --input-type=module, -e, '{{ stripe_repair_probe }}']
+        argv: '{{ stripe_repair_command + ["exec", "-T", "api", "node", "--input-type=module", "-e", stripe_repair_probe] }}' 
         chdir: '{{ stripe_repair_compose }}'
       changed_when: false
       when: not ansible_check_mode
