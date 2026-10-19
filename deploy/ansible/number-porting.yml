@@ -12,24 +12,28 @@
         argv: [python3, '{{ porting_repo }}/tools/install_number_porting.py', --repo, '{{ porting_repo }}', --check]
       changed_when: false
       check_mode: false
-    - name: Read all runtime Compose override paths
+    - name: Read runtime container metadata
       ansible.builtin.command:
-        argv: [docker, inspect, --format, '{{ "{{index .Config.Labels \"com.docker.compose.project.config_files\"}}" }}', docker-api-1]
+        argv: [docker, inspect, docker-api-1]
       register: porting_runtime_files
       changed_when: false
       check_mode: false
+      no_log: true
+    - name: Extract runtime Compose override paths
+      ansible.builtin.set_fact:
+        porting_runtime_compose_files: '{{ (porting_runtime_files.stdout | from_json)[0].Config.Labels["com.docker.compose.project.config_files"] }}'
     - name: Require a complete runtime Compose file list
       ansible.builtin.assert:
         that:
-          - porting_runtime_files.stdout.startswith('/')
-          - "'compose.yml' in porting_runtime_files.stdout"
+          - porting_runtime_compose_files.startswith('/')
+          - "'compose.yml' in porting_runtime_compose_files"
     - name: Preserve runtime Compose file ordering
       ansible.builtin.set_fact:
         porting_compose: [docker, compose, -p, docker, --env-file, '{{ porting_compose_dir }}/.env']
     - name: Append production override paths
       ansible.builtin.set_fact:
         porting_compose: '{{ porting_compose + ["-f", item] }}'
-      loop: '{{ porting_runtime_files.stdout.split(",") }}'
+      loop: '{{ porting_runtime_compose_files.split(",") }}'
     - name: Install account, migration and worker hooks
       ansible.builtin.command:
         argv: [python3, '{{ porting_repo }}/tools/install_number_porting.py', --repo, '{{ porting_repo }}']
