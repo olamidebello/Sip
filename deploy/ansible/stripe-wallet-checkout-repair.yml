@@ -1,0 +1,104 @@
+---
+- name: Repair Stripe wallet checkout compatibility
+  hosts: switch_nodes
+  become: true
+  gather_facts: false
+  vars:
+    stripe_repair_repo: /opt/olamide/repo
+    stripe_repair_compose: '{{ stripe_repair_repo }}/deployment/docker'
+    stripe_repair_source: '{{ stripe_repair_repo }}/services/api/walletFunding.js'
+    stripe_repair_card_parameter: "'payment_method_types[0]':'card',"
+    stripe_repair_probe: >-
+      import fs from 'node:fs';
+      const s=fs.readFileSync('/app/walletFunding.js','utf8');
+      if(s.includes('payment_method_types'))process.exit(1);
+      console.log('Stripe wallet checkout repair verified');
+  tasks:
+    - name: Read existing wallet funding source
+      ansible.builtin.slurp:
+        src: '{{ stripe_repair_source }}'
+      register: stripe_repair_original
+
+    - name: Refuse unknown payment method configurations
+      ansible.builtin.assert:
+        that:
+          - "'payment_method_types' not in ((stripe_repair_original.content | b64decode) | replace(stripe_repair_card_parameter, ''))"
+        fail_msg: Unrecognized payment method configuration; source was not changed.
+
+    - name: Remove unsupported explicit card parameter with backup
+      ansible.builtin.replace:
+        path: '{{ stripe_repair_source }}'
+        regexp: '{{ stripe_repair_card_parameter | regex_escape }}'
+        replace: ''
+        backup: true
+      register: stripe_repair_patch
+
+    - name: Inspect current API container
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - exec
+          - -T
+          - api
+          - node
+          - --input-type=module
+          - -e
+          - '{{ stripe_repair_probe }}'
+        chdir: '{{ stripe_repair_compose }}'
+      register: stripe_repair_runtime
+      changed_when: false
+      failed_when: false
+      when: not ansible_check_mode
+
+    - name: Build repaired API image
+      ansible.builtin.command:
+        argv: [docker, compose, build, api]
+        chdir: '{{ stripe_repair_compose }}'
+      changed_when: true
+      when:
+        - not ansible_check_mode
+        - stripe_repair_patch.changed or stripe_repair_runtime.rc != 0
+
+    - name: Deploy repaired API without restarting dependencies
+      ansible.builtin.command:
+        argv: [docker, compose, up, -d, --no-deps, api]
+        chdir: '{{ stripe_repair_compose }}'
+      changed_when: true
+      when:
+        - not ansible_check_mode
+        - stripe_repair_patch.changed or stripe_repair_runtime.rc != 0
+
+    - name: Verify deployed source syntax
+      ansible.builtin.command:
+        argv: [docker, compose, exec, -T, api, node, --check, /app/walletFunding.js]
+        chdir: '{{ stripe_repair_compose }}'
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Verify unsupported parameter is absent in running API
+      ansible.builtin.command:
+        argv: [docker, compose, exec, -T, api, node, --input-type=module, -e, '{{ stripe_repair_probe }}']
+        chdir: '{{ stripe_repair_compose }}'
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Wait for public account API to respond
+      ansible.builtin.uri:
+        url: https://sip.dobhrap.com/api/me
+        status_code: [200, 401]
+        return_content: false
+        timeout: 10
+        follow_redirects: none
+      register: stripe_repair_health
+      retries: 12
+      delay: 5
+      until: stripe_repair_health is succeeded
+      when: not ansible_check_mode
+
+    - name: Report repair scope
+      ansible.builtin.debug:
+        msg: >-
+          Repair checks completed. Payment methods are managed in Stripe Dashboard.
+          This playbook does not create payments, change credentials, modify wallet balances,
+          or push Git commits. In check mode no container is rebuilt or verified.
