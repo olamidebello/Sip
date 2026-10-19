@@ -118,8 +118,16 @@ export async function handleNumberPorting({req,res,path,user,pool,send,readJson,
   if(path.startsWith('/api/admin/number-porting')){
    if(user.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
    if(path==='/api/admin/number-porting'&&req.method==='GET'){
-    const rows=await pool.query('SELECT * FROM number_porting_requests WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200',[user.tenant_id]);return send(res,200,{requests:rows.rows.map(publicRow)});
+    const rows=await pool.query('SELECT * FROM number_porting_requests WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200',[user.tenant_id]);return send(res,200,{requests:rows.rows.map(r=>({...publicRow(r),userId:r.user_id})),configured:!!masterKey()});
    }
+   const refresh=/^\/api\/admin\/number-porting\/([a-f0-9-]{36})\/refresh$/i.exec(path);
+   if(refresh&&req.method==='POST')return await lock(pool,refresh[1],async db=>{
+    const r=(await db.query('SELECT * FROM number_porting_requests WHERE id=$1 AND tenant_id=$2',[refresh[1],user.tenant_id])).rows[0];
+    if(!r)throw fail('Port request not found',404);
+    if(terminal.has(r.status)||['draft','submitting','submission_unknown','loa_submitting','loa_unknown'].includes(r.status))throw fail('This request cannot be retried automatically; review its current stage',409);
+    await db.query('UPDATE number_porting_requests SET next_at=UTC_TIMESTAMP(3) WHERE id=$1',[r.id]);
+    return send(res,202,{queued:true});
+   });
    const m=/^\/api\/admin\/number-porting\/([a-f0-9-]{36})\/reconcile$/i.exec(path);
    if(!m||req.method!=='POST')throw fail('Operation unavailable',404);
    if(!masterKey())throw fail('Provider credential encryption unavailable',503);
