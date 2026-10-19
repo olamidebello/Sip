@@ -1,0 +1,58 @@
+name: Android Play preparation
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/android-play.yml']
+permissions:
+  contents: read
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v4
+      - name: Generate existing Android app
+        working-directory: apps/mobile
+        run: npm install --no-audit --no-fund && npx cap add android && npx cap sync android && bash install-carrier-native.sh
+      - name: Build APK and release bundle
+        working-directory: apps/mobile/android
+        run: ./gradlew assembleDebug bundleRelease
+      - name: Sign bundle only with configured release key
+        id: signing
+        working-directory: apps/mobile/android
+        env:
+          CARRIER_KEYSTORE_B64: ${{ secrets.CARRIER_KEYSTORE_B64 }}
+          CARRIER_KEY_ALIAS: ${{ secrets.CARRIER_KEY_ALIAS }}
+          CARRIER_KEYSTORE_PASSWORD: ${{ secrets.CARRIER_KEYSTORE_PASSWORD }}
+          CARRIER_KEY_PASSWORD: ${{ secrets.CARRIER_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p play-output
+          cp app/build/outputs/apk/debug/app-debug.apk play-output/Olamide-debug.apk
+          if [[ -n "$CARRIER_KEYSTORE_B64" && -n "$CARRIER_KEY_ALIAS" && -n "$CARRIER_KEYSTORE_PASSWORD" && -n "$CARRIER_KEY_PASSWORD" ]]; then
+            umask 077
+            trap 'rm -f "$RUNNER_TEMP/play-upload.jks"' EXIT
+            printf '%s' "$CARRIER_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/play-upload.jks"
+            jarsigner -keystore "$RUNNER_TEMP/play-upload.jks" -storepass:env CARRIER_KEYSTORE_PASSWORD -keypass:env CARRIER_KEY_PASSWORD -signedjar play-output/Olamide-release.aab app/build/outputs/bundle/release/app-release.aab "$CARRIER_KEY_ALIAS"
+            jarsigner -verify play-output/Olamide-release.aab
+            echo 'Release bundle signed with configured carrier key. Verify this key matches the Play upload certificate before submitting.' > play-output/STATUS.txt
+          else
+            cp app/build/outputs/bundle/release/app-release.aab play-output/Olamide-UNSIGNED.aab
+            echo 'Signing key not configured. Debug APK is for testing only. UNSIGNED bundle cannot be submitted to Google Play.' > play-output/STATUS.txt
+          fi
+          cat play-output/STATUS.txt >> "$GITHUB_STEP_SUMMARY"
+          cd play-output && sha256sum *.apk *.aab > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: olamide-android-play-preparation
+          path: apps/mobile/android/play-output/
+          if-no-files-found: error
