@@ -15,6 +15,10 @@ export function showNumberPorting({document,get,request,user}){
  <button type="submit">Save port request</button></form>
  <p>After saving, upload your latest carrier bill, confirm submission, then review and electronically sign Flowroute’s Letter of Agency. Status updates are checked automatically.</p>
  <button type="button" data-refresh>Refresh port requests</button><p data-status role="status" aria-live="polite"></p><div data-orders></div>`;
+ parent.querySelector('[data-port-navigation]')?.remove();
+ const nav=document.createElement('nav');nav.dataset.portNavigation='true';nav.setAttribute('aria-label','Number porting');
+ const link=document.createElement('a');link.href='#account';link.textContent='Port my number';link.onclick=()=>{root.open=true;root.scrollIntoView?.({block:'start'});};nav.append(link);parent.prepend(nav);
+ showPortingAdmin({document,get,request,user,nav});
  parent.append(root);const $=s=>root.querySelector(s),form=$('[data-port-form]'),status=$('[data-status]');let requestKey=crypto.randomUUID(),busy=false;
  const active=()=>root.isConnected&&document.querySelector('#number-porting')===root;
  for(const [name,label] of Object.entries(labels)){
@@ -55,4 +59,29 @@ export function showNumberPorting({document,get,request,user}){
  root.addEventListener('toggle',()=>{if(root.open)void refresh().catch(e=>{if(active())status.textContent=e.message;});});
  const timer=setInterval(()=>{if(!active()){clearInterval(timer);return;}if(root.open&&!root.closest('[hidden]'))void refresh().catch(()=>{});},30000);
  return {refresh,stop(){clearInterval(timer);root.remove();}};
+}
+
+
+function showPortingAdmin({document,get,request,user,nav}){
+ document.querySelector('#number-porting-admin')?.remove();
+ if(user.role!=='super_admin')return;
+ const root=document.createElement('details');root.id='number-porting-admin';
+ root.innerHTML='<summary>Manage number porting</summary><p>Manage requests in your current tenant. Carrier approval, routing activation and billing commissioning remain separate steps. Uncertain submissions require verified reconciliation to prevent duplicate orders.</p><button type="button" data-refresh>Refresh requests</button><label>Filter requests <input type="search" data-filter placeholder="Number, owner or status"></label><p role="status" data-status></p><div data-list></div>';
+ document.querySelector('#signed-in-profile').append(root);
+ const link=document.createElement('a');link.href='#account';link.textContent='Manage number porting';link.onclick=()=>{root.open=true;root.scrollIntoView?.({block:'start'});};nav.append(document.createTextNode(' · '),link);
+ const status=root.querySelector('[data-status]'),list=root.querySelector('[data-list]');let records=[];
+ function action(text,fn){const b=document.createElement('button');b.type='button';b.textContent=text;b.onclick=async()=>{b.disabled=true;try{await fn();await refresh();}catch(e){status.textContent=e.message;}finally{b.disabled=false;}};return b;}
+ function render(){list.replaceChildren();const q=root.querySelector('[data-filter]').value.toLowerCase();
+ for(const r of records.filter(r=>[r.number,r.userId,r.status,r.providerOrderId].join(' ').toLowerCase().includes(q))){
+ const card=document.createElement('section'),title=document.createElement('h4'),info=document.createElement('p');title.textContent=r.number;info.textContent='Owner: '+r.userId+' · '+r.status+' · Carrier: '+(r.carrierStatus||'pending')+' · Order: '+(r.providerOrderId||'not assigned');card.append(title,info);
+ if(r.lastError){const error=document.createElement('p');error.textContent=r.lastError;card.append(error);}
+ const uncertain=['submitting','submission_unknown','loa_submitting','loa_unknown'].includes(r.status);
+ if(uncertain){const l=document.createElement('label'),id=document.createElement('input');id.inputMode='numeric';id.pattern='[0-9]{1,32}';l.textContent='Existing Flowroute order ID ';l.append(id);card.append(l,action('Verify and reconcile existing order',async()=>{if(!/^[0-9]{1,32}$/.test(id.value))throw Error('Enter the existing carrier order ID');await request('/api/admin/number-porting/'+r.id+'/reconcile',{providerOrderId:id.value});}));}
+ else if(!['draft','completed','canceled','abandoned','hard_canceled'].includes(r.status))card.append(action('Queue processing / status check',()=>request('/api/admin/number-porting/'+r.id+'/refresh',{})));
+ list.append(card);
+ }if(!list.children.length)list.textContent='No matching port requests.';}
+ async function refresh(){const data=await get('/api/admin/number-porting');if(!root.isConnected)return;records=data.requests;status.textContent=data.configured?'Provider encryption configured.':'Provider encryption requires setup in Carrier credentials.';render();}
+ root.querySelector('[data-refresh]').onclick=()=>refresh().catch(e=>status.textContent=e.message);
+ root.querySelector('[data-filter]').oninput=render;
+ root.addEventListener('toggle',()=>{if(root.open)refresh().catch(e=>status.textContent=e.message);});
 }
