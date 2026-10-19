@@ -93,3 +93,8 @@ test('request listings do not expose encrypted carrier account details or PINs',
  await handleNumberPorting({req:{method:'GET'},res:{},path:'/api/account/number-porting',user:{id:userId,tenant_id:tenant,features:{billing:true}},pool:{query:async()=>({rows:[f.r]})},send:(_res,status,body)=>{result={status,body};}});
  assert.equal(result.status,200);assert.equal(result.body.requests[0].payload_cipher,undefined);assert.equal(result.body.requests[0].provider_account,undefined);
 });
+test('administrative controls refuse ordinary users before database access',async()=>{
+ let result;
+ await handleNumberPorting({req:{method:'POST'},res:{},path:'/api/admin/number-porting/'+id+'/refresh',user:{id:userId,tenant_id:tenant,role:'user'},pool:{query(){throw Error('Unexpected database access');}},send:(_r,status,body)=>result={status,body}});
+ assert.equal(result.status,403);
+});
