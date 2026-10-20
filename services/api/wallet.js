@@ -1,3 +1,4 @@
+import {migrateWalletPurchases,handleWalletPurchase} from './walletPurchases.js';
 import {migrateMoneyRequests,handleMoneyRequests} from './moneyRequests.js';
 import {paymentCapabilities} from './payments.js';
 import {randomUUID} from "node:crypto";
@@ -23,6 +24,7 @@ export async function migrateWallet(pool) {
     FOREIGN KEY(transfer_id) REFERENCES wallet_transfers(id),FOREIGN KEY(user_id) REFERENCES users(id),
     UNIQUE KEY wallet_transfer_user(transfer_id,user_id),INDEX wallet_entries_user(user_id,created_at)) ENGINE=InnoDB`);
   await migrateMoneyRequests(pool);
+  await migrateWalletPurchases(pool);
 }
 export function validateTransfer(input) {
   const email=String(input?.recipientEmail??"").trim().toLowerCase();
@@ -33,13 +35,15 @@ export function validateTransfer(input) {
 }
 export async function handleWallet({req,res,path,user,pool,send,readJson}) {
   if (!user.features.billing) return send(res,403,{error:"Billing access unavailable"});
+  if(path==='/api/wallet/purchases')return handleWalletPurchase({req,res,user,pool,send,readJson});
   if(path==='/api/wallet/payment-card'&&req.method==='GET')return send(res,200,{type:'olamide-payment-profile',name:user.display_name||user.name||'Olamide user',email:user.email,currency:'USD'});
   if(path.startsWith('/api/wallet/requests'))return handleMoneyRequests({req,res,path,user,pool,send,readJson});
   if(path==='/api/wallet/capabilities'&&req.method==='GET')return send(res,200,await paymentCapabilities(pool,user.tenant_id));
   if (path==="/api/wallet" && req.method==="GET") {
     const account=await pool.query("SELECT balance_cents,currency FROM wallet_accounts WHERE user_id=$1 AND tenant_id=$2",[user.id,user.tenant_id]);
     const entries=await pool.query("SELECT e.id,e.delta_cents,e.balance_after_cents,e.created_at,t.sender_id,t.recipient_id FROM wallet_entries e JOIN wallet_transfers t ON t.id=e.transfer_id WHERE e.user_id=$1 AND e.tenant_id=$2 ORDER BY e.created_at DESC,e.id DESC LIMIT 50",[user.id,user.tenant_id]);
-    return send(res,200,{balanceCents:Number(account.rows[0]?.balance_cents||0),currency:"USD",entries:entries.rows,
+    const purchases=await pool.query('SELECT id,invoice_id,amount_cents,balance_after_cents,created_at FROM wallet_purchases WHERE user_id=$1 AND tenant_id=$2 ORDER BY created_at DESC LIMIT 50',[user.id,user.tenant_id]);
+    return send(res,200,{purchases:purchases.rows,balanceCents:Number(account.rows[0]?.balance_cents||0),currency:"USD",entries:entries.rows,
       fundingAvailable:false,payoutAvailable:false,note:"No payment provider or funding path is connected."});
   }
   if (path==="/api/wallet/transfers" && req.method==="POST") {

@@ -2085,10 +2085,10 @@ async function refreshBilling() {
     apiGet("/api/billing/subscription"),
     apiGet("/api/porting"),apiGet("/api/wallet")
   ]);
-  $("#wallet-balance").textContent=`Available internal balance: ${money(wallet.balanceCents)} ${wallet.currency}. No funding provider connected.`;
-  $("#wallet-entries").replaceChildren(...wallet.entries.map(entry=>{
+  $("#wallet-balance").textContent=`Available internal balance: ${money(wallet.balanceCents)} ${wallet.currency}.`;
+  $("#wallet-entries").replaceChildren(...[...wallet.entries,...(wallet.purchases||[]).map(p=>({...p,delta_cents:-Number(p.amount_cents),purchase:true}))].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,50).map(entry=>{
     const item=document.createElement("li");
-    item.textContent=`${Number(entry.delta_cents)>=0?"Received":"Sent"} ${money(Math.abs(Number(entry.delta_cents)))} · ${new Date(entry.created_at).toLocaleString()}`;
+    item.textContent=`${entry.purchase?"Purchase":Number(entry.delta_cents)>=0?"Received":"Sent"} ${money(Math.abs(Number(entry.delta_cents)))} · ${new Date(entry.created_at).toLocaleString()}`;
     return item;
   }));
   $("#subscription").textContent = subscription.subscription
@@ -2098,6 +2098,16 @@ async function refreshBilling() {
     const li = document.createElement("li");
     li.textContent = `${invoice.description}: ${money(invoice.amount_cents)} — ${invoice.status} `;
     if(invoice.status==='unpaid'&&invoice.currency==='USD'&&Number(invoice.amount_cents)>0){
+      const payBalance=document.createElement('button');payBalance.type='button';payBalance.textContent='Pay with account balance';
+      payBalance.disabled=Number(wallet.balanceCents)<Number(invoice.amount_cents);
+      if(payBalance.disabled)payBalance.title='Insufficient account balance';
+      payBalance.onclick=async()=>{
+        if(!confirm(`Pay ${money(invoice.amount_cents)} from your account balance?`))return;
+        payBalance.disabled=true;
+        try{await accountRequest('/api/wallet/purchases',{invoiceId:invoice.id});$('#checkout-status').textContent='Paid from account balance.';await refreshBilling();}
+        catch(error){$('#checkout-status').textContent=error.message;payBalance.disabled=false;}
+      };li.append(payBalance);
+
       const button=document.createElement('button');button.type='button';button.textContent='Pay with Stripe';
       button.onclick=async()=>{button.disabled=true;try{const result=await accountRequest('/api/payments/checkout',{invoiceId:invoice.id});
         const dest=new URL(result.url);if(dest.protocol!=='https:'||dest.hostname!=='checkout.stripe.com')throw new Error('Invalid checkout URL');
