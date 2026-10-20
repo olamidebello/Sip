@@ -71,6 +71,16 @@ def install(root):
                 pending[path]=incoming;continue
             if ours is None:raise RuntimeError('Local file missing: '+path)
             if ours==incoming:continue
+            # New imports at line one overlap production-only imports. Add just
+            # our import to the local side and merge all remaining edits normally.
+            imports={
+                'apps/web/src/main.js': b"import {setupGeofenceLocation} from './geofenceLocation.js';\n",
+                'services/api/server.js': b"import {handleGeofenceAddress} from './geofenceAddress.js';\n",
+            }
+            added=imports.get(path)
+            if added:
+                incoming=incoming.replace(added,b'',1)
+                if added not in ours:ours=added+ours
             files=[Path(work)/name for name in ('ours','base','incoming')]
             for file,data in zip(files,(ours,base_run.stdout,incoming)):file.write_bytes(data)
             merged=subprocess.run(['git','merge-file','-p',*map(str,files)],capture_output=True)
