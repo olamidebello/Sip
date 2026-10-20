@@ -1,3 +1,4 @@
+import {setupLocationReports} from './locationReports.js';
 import {setupGeofenceLocation} from './geofenceLocation.js';
 import {setupLocationHistory} from './locationHistory.js';
 import {setupModuleReadiness} from './moduleReadiness.js';
@@ -1329,7 +1330,7 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   return true;
 }
 function resetWorkspace() {
-  locationHistory.stop();
+  locationHistory.stop();locationReports.stop();
   marketplaceControl.reset();
   productStore.stop();
   moduleReadiness.stop();
@@ -1460,6 +1461,7 @@ const contactCard=setupContactCard({document,get:apiGet,request:accountRequest,c
 const dialerContacts=setupDialerContacts({document,get:apiGet,input:dialForm.elements.target,openContact:c=>void contactCard.open(c),inCall:()=>onCall,onStatus:message=>status(message)});
 $('#dialpad-video').innerHTML=icon('video');$('#dial .dialpad-call').innerHTML=icon('calls');
 $('#dialpad-video').onclick=()=>{callsScreen.stop();if(!showWorkspace('meetings')){status('Video meetings are not enabled for this account');return;}$('#meeting-create input').value='Video call with '+(dialForm.elements.target.value||'contact');$('#meeting-create input').focus();};
+const locationReports=setupLocationReports({document,get:apiGet,request:accountRequest});
 const locationHistory=setupLocationHistory({document,get:apiGet,request:accountRequest});
 const meetings = setupMeetings();
 const dashboard=setupDashboard({get:path=>apiGet(path),request:(path,body,method)=>accountRequest(path,body,method)});
@@ -1912,7 +1914,7 @@ function signedIn(user) {
     $('#account-status').textContent=user.passkeySigninRequired?'Sign out and use passkey sign-in to continue.':'Register a passkey, then sign out and use passkey sign-in.';
     showWorkspace('account');return;
   }
-  void locationHistory.start(user);
+  void locationHistory.start(user);locationReports.start(user);
   $("#signed-in-profile").hidden=false;
   $("#profile-name").value=user.name || "";
   $("#profile-email").value=user.email || "";

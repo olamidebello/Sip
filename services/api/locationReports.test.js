@@ -1,0 +1,8 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {handleLocationReports} from './locationReports.js';
+const run=opts=>handleLocationReports({req:{method:'GET',url:'/api/admin/location-reports'},user:{role:'super_admin',id:'actor',tenant_id:'tenant'},pool:{query:async()=>({rows:[]})},send:(_,status,body)=>({status,body}),...opts});
+test('ordinary users and tenant admins cannot read location reports',async()=>{for(const role of ['user','admin'])assert.equal((await run({user:{role},pool:{query:()=>{throw Error('must not query')}}})).status,403);});
+test('reports and audit are scoped to authenticated tenant',async()=>{const calls=[];const r=await run({pool:{query:async(sql,args)=>{calls.push([sql,args]);return {rows:[]};}}});assert.equal(r.status,200);assert.equal(calls.find(([s])=>s.includes('JOIN users'))[1][0],'tenant');assert.ok(calls.some(([s,a])=>s.includes('security_events')&&a.includes('location_report_viewed')));});
+test('invalid retention cannot alter data',async()=>{for(const retentionDays of [0,31,1.5]){const r=await run({req:{method:'PUT',url:'/api/admin/location-reports/policy'},readJson:async()=>({enabled:true,retentionDays}),pool:{query:()=>{throw Error('must not write')}}});assert.equal(r.status,400);}});
+test('clear request always scopes target to current tenant',async()=>{const calls=[];await run({req:{method:'DELETE',url:'/api/admin/location-reports'},readJson:async()=>({userId:'00000000-0000-4000-8000-000000000000',tenantId:'other'}),pool:{query:async(s,a)=>{calls.push([s,a]);return {rows:[]};}}});assert.equal(calls[0][1][0],'tenant');assert.match(calls[0][0],/tenant_id=\$1 AND user_id=\$2/);});
