@@ -1,0 +1,51 @@
+---
+- name: Deploy wallet payments and location geofencing while preserving local fixes
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    application_repo: /opt/olamide/repo
+  tasks:
+    - name: Back up, fetch reviewed patches, build and verify application
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        test -f deployment/docker/.env
+        test -z "$(git ls-files -u)" || { echo 'Resolve existing merge conflicts first'; exit 1; }
+        backup_dir="/opt/olamide/backups/wallet-geofence-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup_dir"
+        git rev-parse HEAD > "$backup_dir/commit.txt"
+        git diff --binary HEAD > "$backup_dir/local-changes.patch"
+        tar --exclude=.git --exclude=node_modules --exclude=dist -czf "$backup_dir/source.tar.gz" .
+        git fetch origin main </dev/null
+        for release in f8c49616f006fbee2986cee62e2d97d3e9add4e4 4dd4bdbb5debc504c82bd0af45387c9be7ccc17b; do
+          git merge-base --is-ancestor "$release" origin/main
+          git diff "$release^" "$release" > "$backup_dir/$release.patch"
+          if git apply --reverse --check "$backup_dir/$release.patch" 2>/dev/null; then
+            echo "Already applied: $release"
+          else
+            git apply --check "$backup_dir/$release.patch" || { echo "Patch conflict: $release. Local files preserved; backup: $backup_dir"; exit 1; }
+            git apply "$backup_dir/$release.patch"
+          fi
+        done
+        cd deployment/docker
+        docker compose config --quiet </dev/null
+        docker compose exec -T mysql sh -c 'exec mysqldump --single-transaction --hex-blob -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' </dev/null 2>"$backup_dir/database-backup.log" | gzip > "$backup_dir/database.sql.gz"
+        gzip -t "$backup_dir/database.sql.gz"
+        gzip -cd "$backup_dir/database.sql.gz" | tail -n 10 | grep -q 'Dump completed'
+        docker compose build api web </dev/null
+        docker compose up -d --no-deps api web </dev/null
+        curl --fail --silent --show-error --max-time 15 --retry 12 --retry-all-errors --retry-delay 3 \
+          https://sip.dobhrap.com/api/health -o "$backup_dir/public-health.json"
+        docker compose ps api web
+        echo "Deployment completed. Backup: $backup_dir"
+      args:
+        executable: /bin/bash
+      register: deployment_result
+      changed_when: true
+    - name: Show deployment result
+      ansible.builtin.debug:
+        var: deployment_result.stdout_lines
