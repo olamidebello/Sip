@@ -1,3 +1,4 @@
+import {handleGeofenceAddress} from './geofenceAddress.js';
 import {handleLocationHistory} from './locationHistory.js';
 import {handleModuleAudit} from './moduleAudit.js';
 import {handleCdrArchives,startCdrArchives} from './cdrArchive.js';
@@ -363,6 +364,7 @@ async function handler(req, res) {
       if(path==='/api/softphone/access'||path==='/api/softphone/authorize')return await handleCallAccess({req,res,path,user,pool,send,readJson});
       if (path.startsWith("/api/softphone/"))
         return await handleSoftphoneState({req,res,path,user,pool,send,readJson});
+      if(path==="/api/admin/geofence/address")return await handleGeofenceAddress({req,res,user,pool,send,readJson});
       if (path==="/api/geofence" || path==="/api/admin/geofence")
         return await handleGeofencePolicy({req,res,path,user,pool,send,readJson});
       if (path==="/api/wallet" || path.startsWith("/api/wallet/"))

@@ -1,3 +1,4 @@
+import {setupGeofenceLocation} from './geofenceLocation.js';
 import {setupLocationHistory} from './locationHistory.js';
 import {setupModuleReadiness} from './moduleReadiness.js';
 import {setupMarketplaceControl} from './marketplaceControl.js';
@@ -564,6 +565,13 @@ root.innerHTML = `
       <p>Allowed circles are checked by the browser before outgoing calls. The SIP switch must enforce its own location policy.</p>
       <label><input id="geofence-enabled" type="checkbox"> Require a location within an allowed zone</label>
       <label>Maximum location uncertainty (meters) <input id="geofence-accuracy" type="number" min="1" max="10000" value="100"></label>
+      <div id="geofence-address-tools" hidden>
+        <label>Center address <input id="geofence-address" maxlength="300" placeholder="Street, city, country"></label>
+        <button id="geofence-find-address" type="button">Find address</button>
+        <p>Address searches are sent to the configured location provider. Select the correct result before adding the area.</p>
+        <ul id="geofence-address-results"></ul>
+      </div>
+      <button id="geofence-use-location" type="button">Use my current location</button>
       <form id="geofence-zone-add">
         <label>Latitude <input name="latitude" type="number" min="-90" max="90" step="any" required></label>
         <label>Longitude <input name="longitude" type="number" min="-180" max="180" step="any" required></label>
@@ -1640,7 +1648,9 @@ function renderGeofenceZones() {
     item.textContent=`${zone.latitude}, ${zone.longitude} — ${zone.radiusMeters} m `;
     button.type="button";button.textContent="Remove";
     button.onclick=()=>{geofenceZones.splice(index,1);renderGeofenceZones();};
-    item.append(button);list.append(item);
+    const edit=document.createElement('button');edit.type='button';edit.textContent='Edit';
+    edit.onclick=()=>{const form=$('#geofence-zone-add');for(const key of ['latitude','longitude','radiusMeters'])form.elements[key].value=zone[key];geofenceZones.splice(index,1);renderGeofenceZones();form.scrollIntoView({block:'center'});};
+    item.append(edit,button);list.append(item);
   });
 }
 async function loadGeofencePolicy() {
@@ -1657,10 +1667,12 @@ async function loadGeofencePolicy() {
 }
 async function loadGeofenceAdmin() {
   const policy=await apiGet("/api/admin/geofence");
+  $("#geofence-address-tools").hidden=activeRole!=="super_admin";
   $("#geofence-enabled").checked=policy.enabled;
   $("#geofence-accuracy").value=policy.maxAccuracyMeters;
   geofenceZones=policy.zones;renderGeofenceZones();
 }
+setupGeofenceLocation({document,request:accountRequest});
 $("#geofence-zone-add").onsubmit=event=>{
   event.preventDefault();
   const data=Object.fromEntries(new FormData(event.currentTarget));

@@ -47,6 +47,7 @@ services:
       PUBLIC_ORIGIN: https://${DOMAIN:?set domain}
       LISTEN_ADDR: 0.0.0.0
       PORT: "8080"
+      GEOFENCE_GEOCODER_URL: ${GEOFENCE_GEOCODER_URL:-}
       LANGUAGE_TOOLS_ENABLED: ${LANGUAGE_TOOLS_ENABLED:-false}
       NODE_ENV: production
       APP_RELEASE: ${APP_RELEASE:-}
