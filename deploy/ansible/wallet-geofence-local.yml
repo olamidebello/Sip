@@ -21,16 +21,8 @@
         git diff --binary HEAD > "$backup_dir/local-changes.patch"
         tar --exclude=.git --exclude=node_modules --exclude=dist -czf "$backup_dir/source.tar.gz" .
         git fetch origin main </dev/null
-        for release in f8c49616f006fbee2986cee62e2d97d3e9add4e4 4dd4bdbb5debc504c82bd0af45387c9be7ccc17b; do
-          git merge-base --is-ancestor "$release" origin/main
-          git diff "$release^" "$release" > "$backup_dir/$release.patch"
-          if git apply --reverse --check "$backup_dir/$release.patch" 2>/dev/null; then
-            echo "Already applied: $release"
-          else
-            git apply --check "$backup_dir/$release.patch" || { echo "Patch conflict: $release. Local files preserved; backup: $backup_dir"; exit 1; }
-            git apply "$backup_dir/$release.patch"
-          fi
-        done
+        git show origin/main:tools/install-wallet-geofence-local.py > "$backup_dir/install-wallet-geofence-local.py"
+        python3 "$backup_dir/install-wallet-geofence-local.py"
         cd deployment/docker
         docker compose config --quiet </dev/null
         docker compose exec -T mysql sh -c 'exec mysqldump --single-transaction --hex-blob -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' </dev/null 2>"$backup_dir/database-backup.log" | gzip > "$backup_dir/database.sql.gz"
