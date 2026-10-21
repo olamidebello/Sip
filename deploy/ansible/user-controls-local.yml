@@ -1,0 +1,45 @@
+---
+- name: Deploy complete supported super admin user controls
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Back up local web files and rebuild user controls
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another update is running'; exit 1; }
+        test -f services/api/superAdminControl.js
+        test -f apps/web/src/callerIdentityAdmin.js
+        grep -q 'setupCallerIdentityAdmin({document' apps/web/src/main.js
+        backup_dir="/opt/olamide/backups/user-controls-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup_dir"
+        git fetch origin main </dev/null
+        git merge-base --is-ancestor 1eba6a34f04b37e4bc946a7b1e293553b1e7fefd origin/main
+        for name in callerIdentityAdmin.js userProvisionControls.js; do
+          if test -f "apps/web/src/$name"; then cp -p "apps/web/src/$name" "$backup_dir/$name.previous"; fi
+          git show "1eba6a34f04b37e4bc946a7b1e293553b1e7fefd:apps/web/src/$name" > "$backup_dir/$name.mjs"
+          chmod 0644 "$backup_dir/$name.mjs"
+          (cd deployment/docker && docker compose run --rm --no-deps -T -v "$backup_dir/$name.mjs:/tmp/check.mjs:ro" --entrypoint node api --check /tmp/check.mjs </dev/null)
+        done
+        for name in callerIdentityAdmin.js userProvisionControls.js; do cp "$backup_dir/$name.mjs" "apps/web/src/$name"; done
+        cd deployment/docker
+        if ! docker compose build web </dev/null; then
+          for name in callerIdentityAdmin.js userProvisionControls.js; do
+            if test -f "$backup_dir/$name.previous"; then cp -p "$backup_dir/$name.previous" "../../apps/web/src/$name"; else rm -f "../../apps/web/src/$name"; fi
+          done
+          echo 'Build failed. Source restored; running services unchanged.'
+          exit 1
+        fi
+        docker compose up -d --no-deps web </dev/null
+        curl -fsS --max-time 10 --retry 8 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        echo "User controls deployed. Backup: $backup_dir"
+      args:
+        executable: /bin/bash
+      register: controls_result
+      changed_when: true
+    - name: Show deployment result
+      ansible.builtin.debug:
+        var: controls_result.stdout_lines
