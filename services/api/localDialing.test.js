@@ -13,7 +13,7 @@ test('international country-code numbers are unchanged',()=>{
  assert.throws(()=>expand('abc','NG'),/phone number/);
 });
 test('profile lookup is scoped to authenticated tenant',async()=>{
- const db={query:async(sql,args)=>{assert.match(sql,/u.tenant_id=\$2/);assert.deepEqual(args,['user','tenant']);return {rows:[{country:'NG'}]};}};
+ const db={query:async(sql,args)=>{if(sql.includes('FROM dialing_policies'))return {rows:[]};assert.match(sql,/u.tenant_id=\$2/);assert.deepEqual(args,['user','tenant']);return {rows:[{country:'NG'}]};}};
  assert.equal(await profileDestination(db,'tenant','user','123456789'),'234123456789');
  assert.equal(await profileDestination({query:async()=>({rows:[{country:'US'}]})},'tenant','user','19452205026'),'19452205026');
 });
@@ -52,6 +52,6 @@ test('seven digits use country plus first three national profile-phone digits',a
  assert.equal(expand('1234567','GB','+442079460000'),'442071234567');
  assert.throws(()=>expand('9515282','US',''),/profile phone/);
  assert.throws(()=>expand('9515282','NG','+13105550123'),/matching/);
- const db={query:async(sql,args)=>{assert.match(sql,/p.phone_e164/);assert.deepEqual(args,['u','t']);return {rows:[{country:'US',phone_e164:'+13105550123'}]};}};
+ const db={query:async(sql,args)=>{if(sql.includes('FROM dialing_policies'))return {rows:[]};assert.match(sql,/p.phone_e164/);assert.deepEqual(args,['u','t']);return {rows:[{country:'US',phone_e164:'+13105550123'}]};}};
  assert.equal(await profileDestination(db,'t','u','9515282'),'13109515282');
 });

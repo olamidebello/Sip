@@ -1,3 +1,4 @@
+import {setupDialingAdmin} from './dialingAdmin.js';
 import {setupUserProvisionControls} from './userProvisionControls.js';
 export function setupCallerIdentityAdmin({document,get,request,isSuper,show}){
  const parent=document.getElementById('admin');if(!parent)return;
@@ -14,6 +15,7 @@ export function setupCallerIdentityAdmin({document,get,request,isSuper,show}){
  <button type="button" data-approve>Authorize profile number</button><button type="button" data-block>Block outbound caller ID</button>
  <button type="button" data-user-refresh>Refresh selected user</button><p data-user-status role="status"></p>
  <p data-list-status role="status"></p><h4>Recent administrative activity</h4><ul data-events></ul>`;
+ const dialing=setupDialingAdmin({document,parent:panel,get,request,isSuper});
  parent.prepend(panel);
  const shortcut=document.createElement('a');shortcut.href='/?caller-id=1#admin';shortcut.textContent='User & caller ID controls';shortcut.className='button-link';shortcut.dataset.callerIdShortcut='true';shortcut.hidden=true;
  const topLink=shortcut.cloneNode(true);parent.insertBefore(topLink,panel);
@@ -43,7 +45,7 @@ export function setupCallerIdentityAdmin({document,get,request,isSuper,show}){
  shortcut.onclick=open;topLink.onclick=open;panel.ontoggle=()=>{if(panel.open&&isSuper())void Promise.all([loadPolicy(),loadUsers()]);};
  function visibility(){const permitted=isSuper();if(panel.hidden===permitted)panel.hidden=!permitted;if(shortcut.hidden===permitted)shortcut.hidden=!permitted;if(topLink.hidden===permitted)topLink.hidden=!permitted;
  const nav=document.getElementById('app-nav');if(nav&&shortcut.parentNode!==nav)nav.append(shortcut);
- if(wasSuper&&!permitted){epoch++;loaded=false;users=[];clearUser();panel.open=false;status.textContent='';$('[data-user]').replaceChildren();$('[data-events]').replaceChildren();$('[data-list-status]').textContent='';}
+ if(wasSuper&&!permitted){dialing.clear();epoch++;loaded=false;users=[];clearUser();panel.open=false;status.textContent='';$('[data-user]').replaceChildren();$('[data-events]').replaceChildren();$('[data-list-status]').textContent='';}
  wasSuper=permitted;if(permitted&&!deepOpened&&new URL(document.defaultView.location.href).searchParams.get('caller-id')==='1'){deepOpened=true;open();}}
  const observer=new document.defaultView.MutationObserver(visibility);observer.observe(document.body,{attributes:true,childList:true,subtree:true,attributeFilter:['hidden','class']});visibility();controls();
  return {open,dispose(){epoch++;observer.disconnect();shortcut.remove();topLink.remove();panel.remove();}};

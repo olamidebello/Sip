@@ -1,3 +1,4 @@
+import {handleDialingPolicy} from './dialingPolicy.js';
 import {handleLocationReports} from './locationReports.js';
 import {handleGeofenceAddress} from './geofenceAddress.js';
 import {handleLocationHistory} from './locationHistory.js';
@@ -363,6 +364,7 @@ async function handler(req, res) {
         const number=/^\+?[0-9*#]+$/.test(match[1])?match[1]:'';
         return send(res,200,{label:person?(person.name?.trim()||person.phone||'Registered SIP user'):(number||'Unknown caller')});
       }
+      if(path.startsWith('/api/admin/dialing-policy'))return await handleDialingPolicy({req,res,path,user,pool,send,readJson});
       if(path==='/api/softphone/access'||path==='/api/softphone/authorize')return await handleCallAccess({req,res,path,user,pool,send,readJson});
       if (path.startsWith("/api/softphone/"))
         return await handleSoftphoneState({req,res,path,user,pool,send,readJson});

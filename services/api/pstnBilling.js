@@ -1,3 +1,4 @@
+import {migrateDialingPolicies} from './dialingPolicy.js';
 import {profileDestination} from './localDialing.js';
 import {loadTelecomPolicies,normalizeDestination,selectPolicyRate,assertCallingWindow,internationalAllowance,selectShadowRate,selectCallType} from './telecomPolicies.js';
 import {loadPolicy,assignedIdentity} from './outboundDids.js';
@@ -11,6 +12,7 @@ export function callCharge(rate,seconds,first,step){
  return Number((micros*BigInt(billed)+599999n)/600000n); // USD micro-units -> cents, rounded up.
 }
 export async function migratePstnBilling(pool){
+ await migrateDialingPolicies(pool);
  const db=await pool.connect();let locked=false;
  try{
   locked=Number((await db.query("SELECT GET_LOCK('olamide_pstn_schema_migration',60) AS acquired")).rows[0]?.acquired)===1;
