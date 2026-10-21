@@ -1,3 +1,4 @@
+import {profileDestination} from './localDialing.js';
 import {loadTelecomPolicies,normalizeDestination,selectPolicyRate,assertCallingWindow,internationalAllowance,selectShadowRate,selectCallType} from './telecomPolicies.js';
 import {loadPolicy,assignedIdentity} from './outboundDids.js';
 import {flowrouteTrunk,adapterTrunk} from './flowrouteTrunk.js';
@@ -45,7 +46,7 @@ export async function reservePstn(pool,data){
   if(Number((await db.query('SELECT GET_LOCK($1,5) AS acquired',[tenantLock])).rows[0]?.acquired)!==1)throw Error('Billing busy');
   await db.query('START TRANSACTION');
   const policies=await loadTelecomPolicies(db,actor.tenant_id);
-  destination=normalizeDestination(data.destination,policies);
+  destination=normalizeDestination(await profileDestination(db,actor.tenant_id,actor.user_id,data.destination),policies);
   const identity=assignedIdentity(loadPolicy(),actor.tenant_id,actor.user_id);
   const provider=identity?.provider||'flowroute';
   const wallet=(await db.query('SELECT balance_cents,currency FROM wallet_accounts WHERE user_id=$1 AND tenant_id=$2 FOR UPDATE',[actor.user_id,actor.tenant_id])).rows[0];
