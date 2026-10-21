@@ -1,3 +1,4 @@
+import {profileDestination} from './localDialing.js';
 import {onlineNumberTarget} from './subscriberRouting.js';
 export async function activeSubscription(pool,user) {
   const result=await pool.query(`SELECT 1 FROM subscriptions s JOIN plans p ON p.id=s.plan_id
@@ -33,6 +34,14 @@ export async function callAccess(pool,user,target) {
   }
   // Never send an unknown local identity to a carrier route.
   const local=await pool.query('SELECT 1 FROM sip_accounts WHERE domain=$1 LIMIT 1',[address.domain]);
+  if(local.rowCount && /^\+?\d{3,20}$/.test(address.username)) {
+    try {
+      const number=String(await profileDestination(pool,user.tenant_id,user.id,address.username)).replace(/^\+/,'');
+      if(!/^[1-9]\d{7,14}$/.test(number))return {allowed:false,error:'Enter a complete phone number'};
+      if(!await activeSubscription(pool,user))return {allowed:false,error:'An active subscription is required for external calls',configurationUrl:'/#billing'};
+      return {allowed:true,scope:'external',target:`sip:+${number}@${address.domain}`};
+    }catch(error){return {allowed:false,error:error.message};}
+  }
   if(local.rowCount && !/^\+?[1-9][0-9]{6,14}$/.test(address.username))return {allowed:false,error:'This SIP user is unavailable'};
   return await activeSubscription(pool,user)?{allowed:true,scope:'external'}:
     {allowed:false,error:'An active subscription is required for external calls',configurationUrl:'/#billing'};
