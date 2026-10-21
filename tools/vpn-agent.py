@@ -74,7 +74,7 @@ class Agent:
   elif op not in ('provision','config'):raise ValueError('Unknown VPN operation')
   p=self.db.execute('SELECT * FROM peers WHERE tenant=? AND user=?',(tenant,user)).fetchone()
   if not p:return {'provisioned':False,'enabled':False}
-  result=public_peer(p,self.stats())|{'provisioned':True,'serverEnabled':bool(settings['enabled'])}
+  result=public_peer(p,self.stats())|{'provisioned':True,'serverEnabled':bool(settings['enabled']),'automatic':bool(settings['automatic'])}
   if op=='config':
    if not settings['enabled'] or not p['enabled']:raise ValueError('VPN disabled by administrator')
    result['config']='[Interface]\nPrivateKey = '+p['private_key']+'\nAddress = '+p['address']+'/32\nDNS = 1.1.1.1\nMTU = 1280\n\n[Peer]\nPublicKey = '+self.config['publicKey']+'\nEndpoint = '+self.config['endpoint']+':51820\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 25\n'

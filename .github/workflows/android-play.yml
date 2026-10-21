@@ -22,7 +22,7 @@ jobs:
       - uses: android-actions/setup-android@v4
       - name: Generate existing Android app
         working-directory: apps/mobile
-        run: npm install --no-audit --no-fund && npx cap add android && npx cap sync android && bash install-carrier-native.sh
+        run: npm install --no-audit --no-fund && npx cap add android && npx cap sync android && bash install-carrier-native.sh && python3 install-vpn-native.py
       - name: Apply original Olamide logo to Android and Play artwork
         run: python3 -m pip install Pillow==11.3.0 && python3 apps/mobile/generate-brand-artwork.py
       - uses: actions/upload-artifact@v4
