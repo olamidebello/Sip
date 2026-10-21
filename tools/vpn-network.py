@@ -47,5 +47,10 @@ def apply():
  for family,name in [('inet','olamide_vpn'),('ip','olamide_vpn_nat')]:
   if run(['nft','list','table',family,name],check=False).returncode==0:prefix+=f'delete table {family} {name}\n'
  run(['nft','-c','-f','-'],prefix+rules+nat);run(['nft','-f','-'],prefix+rules+nat)
+ # Docker's later iptables FORWARD policy can drop an nftables accept.
+ # Use Docker's documented operator chain after our private-network drops.
+ if run(['iptables','-S','DOCKER-USER'],check=False).returncode==0:
+  for args in [['-i','wg-olamide','-j','ACCEPT'],['-o','wg-olamide','-m','conntrack','--ctstate','ESTABLISHED,RELATED','-j','ACCEPT']]:
+   if run(['iptables','-C','DOCKER-USER',*args],check=False).returncode!=0:run(['iptables','-I','DOCKER-USER','1',*args])
  run(['sysctl','-w','net.ipv4.ip_forward=1'])
 if __name__=='__main__':apply()

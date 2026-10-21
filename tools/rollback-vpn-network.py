@@ -7,3 +7,6 @@ for chain in ['input','forward']:
  for item in json.loads(p.stdout)['nftables']:
   r=item.get('rule',{})
   if r.get('comment','').startswith('olamide-vpn-'):subprocess.run(['nft','delete','rule','inet','olamide_guard',chain,'handle',str(r['handle'])],capture_output=True)
+
+for args in [['-i','wg-olamide','-j','ACCEPT'],['-o','wg-olamide','-m','conntrack','--ctstate','ESTABLISHED,RELATED','-j','ACCEPT']]:
+ subprocess.run(['iptables','-D','DOCKER-USER',*args],capture_output=True)
