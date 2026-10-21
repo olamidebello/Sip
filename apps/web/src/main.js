@@ -1,3 +1,4 @@
+import {softphoneMediaOptions} from './softphoneMedia.js';
 import {setupLiveCallsUi} from './liveCallsUi.js';
 import {setupVoicemailUi} from './voicemailUi.js';
 import {setupNativeEmergency} from './nativeEmergency.js';
@@ -2691,11 +2692,16 @@ async function registerSip(data,shouldContinue=()=>true) {
     status("Enter a valid sip:user@domain and wss:// URL.");
     return;
   }
+  // OLAMIDE_SOFTPHONE_ICE_V1
+  const mediaOptions=softphoneMediaOptions(await apiGet('/api/softphone/media-config'));
+  if(!current())return;
+  const refreshMedia=setInterval(async()=>{if(!current()){clearInterval(refreshMedia);return;}try{const next=softphoneMediaOptions(await apiGet('/api/softphone/media-config'));if(current())mediaOptions.peerConnectionConfiguration.iceServers=next.peerConnectionConfiguration.iceServers;}catch{}},20*60*1000);
   const candidate = new SimpleUser(server, {
     aor,
     reconnectionAttempts:8,reconnectionDelay:4,registererOptions:{expires:300,refreshFrequency:80},
     media: { remote: { audio: $("#remote") } },
     userAgentOptions: {
+      sessionDescriptionHandlerFactoryOptions:mediaOptions,
       transportOptions:{server,keepAliveInterval:30,keepAliveDebounce:10},
       authorizationUsername: String(data.get("username")),
       authorizationPassword: String(data.get("password"))

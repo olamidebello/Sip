@@ -424,6 +424,11 @@ async function handler(req, res) {
       if ((path.startsWith("/api/billing/") || path.startsWith("/api/numbers") ||
            path.startsWith("/api/porting")) && !user.features.billing)
         return send(res, 403, { error: "Billing unavailable for your groups" });
+      // OLAMIDE_SOFTPHONE_ICE_V1
+      if(path==='/api/softphone/media-config'&&req.method==='GET'){
+        res.setHeader('Cache-Control','no-store');
+        return send(res,200,{iceServers:[...meetingIceServers,...(turnSecret?[turnIceServer({secret:turnSecret,host:turnHost,userId:user.id})]:[])]});
+      }
       if (path === "/api/meetings/config" && req.method === "GET")
         return send(res, 200, { iceServers: [...meetingIceServers,...(turnSecret?[turnIceServer({secret:turnSecret,host:turnHost,userId:user.id})]:[])], maxParticipants: 4,
           features:user.features });
