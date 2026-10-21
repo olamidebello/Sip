@@ -1,0 +1,46 @@
+---
+- name: Add voicemail directly to user Settings
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Preserve local web fixes and rebuild voicemail navigation
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        backup_dir="/opt/olamide/backups/voicemail-menu-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup_dir"
+        cp -p apps/web/src/main.js "$backup_dir/main.js"
+        cp -p apps/web/src/voicemailUi.js "$backup_dir/voicemailUi.previous.js"
+        git fetch origin main </dev/null
+        release=feb7a754718b9a498fc01809d193b76462829bbd
+        git merge-base --is-ancestor "$release" origin/main
+        git show "$release:tools/repair-voicemail-menu.py" > "$backup_dir/repair.py"
+        git show "$release:apps/web/src/voicemailUi.js" > "$backup_dir/voicemailUi.js"
+        restore_source() {
+          trap - ERR
+          cp -p "$backup_dir/main.js" /opt/olamide/repo/apps/web/src/main.js
+          cp -p "$backup_dir/voicemailUi.previous.js" /opt/olamide/repo/apps/web/src/voicemailUi.js
+          echo "Web checks failed; source restored. Backup: $backup_dir"
+        }
+        trap restore_source ERR
+        python3 "$backup_dir/repair.py"
+        install -m 0644 "$backup_dir/voicemailUi.js" apps/web/src/voicemailUi.js
+        cd deployment/docker
+        docker compose config --quiet </dev/null
+        docker compose build web </dev/null
+        trap - ERR
+        docker compose up -d --no-deps web </dev/null
+        docker compose exec -T web sh -c 'grep -l "data-voicemail-settings" /srv/assets/*.js >/dev/null' </dev/null
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        echo "Voicemail menu repaired. Reload the browser. Open Settings then Voicemail. Backup: $backup_dir"
+      args:
+        executable: /bin/bash
+      register: menu_result
+      changed_when: true
+    - name: Show result
+      ansible.builtin.debug:
+        var: menu_result.stdout_lines
