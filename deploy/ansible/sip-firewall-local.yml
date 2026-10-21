@@ -1,0 +1,93 @@
+---
+- name: Protect the SIP host and Docker platform with a rollback checkpoint
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Install and verify firewall tools, secure edge and stage network policy
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        test -n "${SSH_CONNECTION:-}" || { echo 'Run from an SSH session'; exit 1; }
+        curl -fsS --max-time 15 https://sip.dobhrap.com/api/health
+        backup_dir="/opt/olamide/backups/firewall-install-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup_dir"
+        git fetch origin main </dev/null
+        release=b9f3223c0a194214860b92ce0837129630d716b1
+        git merge-base --is-ancestor "$release" origin/main
+        for name in olamide-firewall.py harden-sip-edge.py test_sip_firewall.py; do
+          git show "$release:tools/$name" > "$backup_dir/$name"
+        done
+        python3 "$backup_dir/test_sip_firewall.py"
+        # Detect incompatible networking before installing or activating anything.
+        python3 "$backup_dir/olamide-firewall.py" plan > "$backup_dir/allowed-ports.json"
+        new_fail2ban=0
+        if ! dpkg-query -W -f='${Status}' fail2ban 2>/dev/null | grep -q 'install ok installed'; then
+          new_fail2ban=1
+          systemctl mask --runtime fail2ban.service
+        fi
+        new_nftables=0
+        if ! dpkg-query -W -f='${Status}' nftables 2>/dev/null | grep -q 'install ok installed'; then
+          if systemctl is-active --quiet nftables.service; then echo 'A manually installed nftables service is active; review before package installation'; exit 1; fi
+          new_nftables=1
+          systemctl mask --runtime nftables.service
+        fi
+        export DEBIAN_FRONTEND=noninteractive
+        if ! apt-get update -q > "$backup_dir/packages.log" 2>&1 ||
+           ! apt-get install -y --no-upgrade --no-install-recommends nftables fail2ban python3-systemd iproute2 ca-certificates curl >> "$backup_dir/packages.log" 2>&1; then
+          if test "$new_fail2ban" = 1; then systemctl unmask --runtime fail2ban.service; systemctl disable --now fail2ban.service 2>/dev/null || true; fi
+          if test "$new_nftables" = 1; then systemctl unmask --runtime nftables.service; systemctl disable nftables.service 2>/dev/null || true; fi
+          echo "Package installation stopped. See $backup_dir/packages.log"; exit 1
+        fi
+        if test "$new_fail2ban" = 1; then systemctl unmask --runtime fail2ban.service; systemctl disable --now fail2ban.service; fi
+        if test "$new_nftables" = 1; then systemctl unmask --runtime nftables.service; systemctl disable nftables.service; fi
+        # Do not start/restart the distribution nftables service: it may flush Docker's rules.
+        install -m 0755 "$backup_dir/olamide-firewall.py" /usr/local/sbin/olamide-firewall
+        cat > /etc/systemd/system/olamide-firewall.service <<'UNIT'
+        [Unit]
+        Description=Olamide SIP host and Docker ingress firewall
+        DefaultDependencies=no
+        Wants=network-pre.target
+        After=local-fs.target systemd-modules-load.service systemd-sysctl.service nftables.service
+        Before=network-pre.target docker.service kamailio.service fail2ban.service shutdown.target
+        Conflicts=shutdown.target
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart=/usr/local/sbin/olamide-firewall boot
+        [Install]
+        WantedBy=multi-user.target
+        UNIT
+        systemctl daemon-reload
+        cp -p deployment/docker/Caddyfile "$backup_dir/Caddyfile"
+        python3 "$backup_dir/harden-sip-edge.py" deployment/docker/Caddyfile
+        cd deployment/docker
+        restore_edge_source() {
+          trap - ERR
+          cp -p "$backup_dir/Caddyfile" /opt/olamide/repo/deployment/docker/Caddyfile
+          echo "Edge build/validation stopped; source restored. Backup: $backup_dir"
+        }
+        trap restore_edge_source ERR
+        docker compose config --quiet </dev/null
+        docker compose build web </dev/null
+        docker compose run --rm --no-deps -T --entrypoint caddy web validate --config /etc/caddy/Caddyfile --adapter caddyfile </dev/null
+        trap - ERR
+        docker compose up -d --no-deps web </dev/null
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        test "$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' https://sip.dobhrap.com/api/switch/kamailio/auth)" = 404
+        curl -fsSI --max-time 10 https://sip.dobhrap.com/ > "$backup_dir/public-headers.txt"
+        grep -qi '^x-content-type-options: nosniff' "$backup_dir/public-headers.txt"
+        /usr/local/sbin/olamide-firewall apply
+        /usr/local/sbin/olamide-firewall status
+      args:
+        executable: /bin/bash
+      environment:
+        SSH_CONNECTION: "{{ lookup('env','SSH_CONNECTION') }}"
+      register: firewall_result
+      changed_when: true
+    - name: Show checkpoint instructions
+      ansible.builtin.debug:
+        msg: "{{ firewall_result.stdout_lines[-20:] }}"
