@@ -12,7 +12,8 @@ export function expandLocalDestination(raw,country){
   if(!/^[1-9]\d{7,14}$/.test(international))throw Error('Enter a complete international number after the IDD prefix');
   return international;
  }
- if(value.length>=10)return value;
+ // Preserve explicit international digits so country codes are never doubled.
+ if(value.length===10 || value.length>10&&Object.values(countries).some(r=>value.startsWith(r.code)))return value;
  if(!region)throw Error('Set your profile country before dialing a local number');
  let national=value;
  if(region.trunk!==region.code&&region.trunk&&national.startsWith(region.trunk))national=national.slice(region.trunk.length);
