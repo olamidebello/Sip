@@ -1,0 +1,64 @@
+- name: Enable authenticated TURN for mobile audio relay fallback
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Preserve environment and activate TURN
+    ansible.builtin.shell: 'set -euo pipefail
+
+      umask 077
+
+      cd /opt/olamide/repo
+
+      exec 9>/run/olamide-update.lock
+
+      flock -n 9 || { echo ''Another deployment is running''; exit 1; }
+
+      git fetch origin main </dev/null
+
+      release=94268af82fc4b70516fe13535ecdc01edd04883b
+
+      git merge-base --is-ancestor "$release" origin/main
+
+      install -d -m 0755 /usr/local/lib/olamide-vpn
+
+      git show "$release:tools/enable-turn-local.py" > /usr/local/lib/olamide-vpn/enable-turn-local.py
+
+      chmod 0755 /usr/local/lib/olamide-vpn/enable-turn-local.py
+
+      python3 /usr/local/lib/olamide-vpn/enable-turn-local.py
+
+      cat > /etc/systemd/system/olamide-turn-firewall.service <<''UNIT''
+
+      [Unit]
+
+      Description=Preserve authenticated TURN ingress in Olamide firewall
+
+      After=olamide-firewall.service docker.service
+
+      [Service]
+
+      Type=oneshot
+
+      RemainAfterExit=yes
+
+      ExecStart=/usr/bin/python3 /usr/local/lib/olamide-vpn/enable-turn-local.py firewall
+
+      [Install]
+
+      WantedBy=multi-user.target
+
+      UNIT
+
+      systemctl daemon-reload
+
+      systemctl enable --now olamide-turn-firewall.service
+
+      '
+    args:
+      executable: /bin/bash
+    register: turn_result
+    changed_when: true
+  - name: Show result
+    ansible.builtin.debug:
+      msg: '{{ turn_result.stdout_lines[-10:] }}'
