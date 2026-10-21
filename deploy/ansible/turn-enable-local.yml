@@ -16,7 +16,7 @@
 
       git fetch origin main </dev/null
 
-      release=94268af82fc4b70516fe13535ecdc01edd04883b
+      release=a4b30e71a9c97b7f3bfb929427f76cc5b602eec6
 
       git merge-base --is-ancestor "$release" origin/main
 
@@ -24,7 +24,9 @@
 
       git show "$release:tools/enable-turn-local.py" > /usr/local/lib/olamide-vpn/enable-turn-local.py
 
-      chmod 0755 /usr/local/lib/olamide-vpn/enable-turn-local.py
+      git show "$release:tools/vpn-ufw.py" > /usr/local/lib/olamide-vpn/vpn-ufw.py
+
+      chmod 0755 /usr/local/lib/olamide-vpn/enable-turn-local.py /usr/local/lib/olamide-vpn/vpn-ufw.py
 
       python3 /usr/local/lib/olamide-vpn/enable-turn-local.py
 
@@ -34,7 +36,7 @@
 
       Description=Preserve authenticated TURN ingress in Olamide firewall
 
-      After=olamide-firewall.service docker.service
+      After=ufw.service olamide-firewall.service docker.service
 
       [Service]
 
