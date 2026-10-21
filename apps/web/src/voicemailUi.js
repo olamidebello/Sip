@@ -14,6 +14,12 @@ export function setupVoicemailUi({document,get,request,isSignedIn,isSuper,call,s
  provision.onclick=async()=>{if(!isSuper())return;try{await request('/api/admin/voicemail/provision',{});manager.querySelector('[data-status]').textContent='Mailbox provisioning queued. Refresh after 30 seconds.';}catch(e){manager.querySelector('[data-status]').textContent=e.message;}};manager.ontoggle=()=>{if(manager.open&&isSuper())users.click();};}
  function openPanel(panel,workspace){show(workspace);panel.open=true;panel.scrollIntoView?.({block:'start'});}
  function navigation(){
+  const settings=document.querySelector('.messenger-settings-menu');
+  if(settings){
+   let entry=settings.querySelector('[data-voicemail-settings]');
+   if(!entry){entry=document.createElement('button');entry.type='button';entry.dataset.voicemailSettings='true';entry.innerHTML='<span aria-hidden="true">☎</span><span><strong>Voicemail</strong><small>Listen to messages and manage your greeting</small></span>';entry.onclick=()=>{if(isSignedIn())openPanel(own,'account');};settings.prepend(entry);}
+   if(entry.hidden===isSignedIn())entry.hidden=!isSignedIn();
+  }
   const heading=document.querySelector('#app-nav .menu-heading');if(!heading)return;
   for(const [kind,label,allowed,panel,workspace] of [
    ['own','Voicemail',isSignedIn(),own,'account'],
@@ -26,5 +32,5 @@ export function setupVoicemailUi({document,get,request,isSignedIn,isSuper,call,s
  let wasSignedIn=null,wasSuper=null;const adminShortcut=admin?.querySelector('button');
  function visibility(){navigation();if(own.hidden===isSignedIn())own.hidden=!isSignedIn();if(manager&&manager.hidden===isSuper())manager.hidden=!isSuper();if(adminShortcut&&adminShortcut.hidden===isSuper())adminShortcut.hidden=!isSuper();if(wasSignedIn!==isSignedIn()&&!isSignedIn())mine.clear();if(manager&&wasSuper!==isSuper()&&!isSuper())manage.clear();wasSignedIn=isSignedIn();wasSuper=isSuper();}
  const observer=new document.defaultView.MutationObserver(visibility);observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','class']});visibility();
- return {dispose(){observer.disconnect();document.querySelectorAll('[data-voicemail-nav]').forEach(n=>n.remove());own.remove();manager?.remove();adminShortcut?.remove();}};
+ return {dispose(){observer.disconnect();document.querySelectorAll('[data-voicemail-nav],[data-voicemail-settings]').forEach(n=>n.remove());own.remove();manager?.remove();adminShortcut?.remove();}};
 }

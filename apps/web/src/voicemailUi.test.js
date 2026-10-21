@@ -26,3 +26,14 @@ test('main voicemail wiring reads the actual application role',async()=>{
  const setRole=new Function('setupVoicemailUi','document','showWorkspace','apiGet','accountRequest','dialForm',`let activeRole=null;${line};return role=>activeRole=role;`)(o=>options=o,{},()=>{},()=>{},()=>{},{});
  assert.equal(options.isSignedIn(),false);setRole('user');assert.equal(options.isSignedIn(),true);assert.equal(options.isSuper(),false);setRole('super_admin');assert.equal(options.isSuper(),true);setRole('pending_passkey');assert.equal(options.isSignedIn(),false);
 });
+
+test('regular user sees Voicemail inside Settings without a navigation header',async()=>{
+ const dom=new JSDOM('<body><section id="messenger-settings"><div class="messenger-settings-menu"></div></section><section id="account"></section><section id="admin"></section></body>');let signed=true,destinations=[];
+ const ui=setupVoicemailUi({document:dom.window.document,isSignedIn:()=>signed,isSuper:()=>false,show:x=>destinations.push(x),get:async()=>({enabled:true,maxSeconds:120,revision:1,provisioned:true}),request:async()=>{},call:()=>{}});
+ const doc=dom.window.document,entry=doc.querySelector('.messenger-settings-menu [data-voicemail-settings]');assert.ok(entry);assert.equal(entry.hidden,false);assert.match(entry.textContent,/Voicemail/);entry.click();assert.deepEqual(destinations,['account']);assert.equal(doc.querySelector('#voicemail-settings').open,true);
+ signed=false;doc.body.classList.add('logged-out');await new Promise(r=>setTimeout(r,20));assert.equal(entry.hidden,true);ui.dispose();assert.equal(doc.querySelector('[data-voicemail-settings]'),null);dom.window.close();
+});
+test('Voicemail row attaches when Settings is created after setup',async()=>{
+ const dom=new JSDOM('<body><section id="account"></section></body>');const ui=setupVoicemailUi({document:dom.window.document,isSignedIn:()=>true,isSuper:()=>false,get:async()=>({}),request:async()=>{},call:()=>{}});
+ dom.window.document.body.insertAdjacentHTML('beforeend','<div class="messenger-settings-menu"></div>');await new Promise(r=>setTimeout(r,20));assert.equal(dom.window.document.querySelectorAll('[data-voicemail-settings]').length,1);dom.window.document.body.classList.add('other');await new Promise(r=>setTimeout(r,20));assert.equal(dom.window.document.querySelectorAll('[data-voicemail-settings]').length,1);ui.dispose();dom.window.close();
+});
