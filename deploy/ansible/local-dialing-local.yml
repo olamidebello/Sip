@@ -1,0 +1,48 @@
+---
+- name: Deploy profile country dialing while preserving local API fixes
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Back up, integrate, test and deploy local number expansion
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another update is running'; exit 1; }
+        backup_dir="/opt/olamide/backups/local-dialing-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup_dir"
+        cp -p services/api/pstnBilling.js "$backup_dir/pstnBilling.js"
+        git fetch origin main </dev/null
+        release=a8ec95011f15686b3ee842a2658234dc6125a084
+        git merge-base --is-ancestor "$release" origin/main
+        for name in localDialing.js dialingCountries.json localDialing.test.js; do
+          if test -f "services/api/$name"; then cp -p "services/api/$name" "$backup_dir/$name.previous"; fi
+          git show "$release:services/api/$name" > "$backup_dir/$name"
+        done
+        git show "$release:tools/install-local-dialing.py" > "$backup_dir/install.py"
+        python3 "$backup_dir/install.py"
+        for name in localDialing.js dialingCountries.json localDialing.test.js; do install -m 0644 "$backup_dir/$name" "services/api/$name"; done
+        cd deployment/docker
+        docker compose config --quiet </dev/null
+        if ! docker compose run --rm --no-deps -T -v /opt/olamide/repo/services/api:/dialing:ro --entrypoint node api --test /dialing/localDialing.test.js </dev/null ||
+           ! docker compose run --rm --no-deps -T -v /opt/olamide/repo/services/api:/dialing:ro --entrypoint node api --check /dialing/pstnBilling.js </dev/null ||
+           ! docker compose build api </dev/null; then
+          cp -p "$backup_dir/pstnBilling.js" ../../services/api/pstnBilling.js
+          for name in localDialing.js dialingCountries.json localDialing.test.js; do
+            if test -f "$backup_dir/$name.previous"; then cp -p "$backup_dir/$name.previous" "../../services/api/$name"; else rm -f "../../services/api/$name"; fi
+          done
+          echo "Checks failed; source restored. Backup: $backup_dir"
+          exit 1
+        fi
+        docker compose up -d --no-deps api </dev/null
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        echo "Country dialing deployed. Backup: $backup_dir"
+      args:
+        executable: /bin/bash
+      register: dialing_result
+      changed_when: true
+    - name: Show result
+      ansible.builtin.debug:
+        var: dialing_result.stdout_lines
