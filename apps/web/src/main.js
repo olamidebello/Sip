@@ -1,3 +1,4 @@
+import {setupNativeEmergency} from './nativeEmergency.js';
 import {setupLocationReports} from './locationReports.js';
 import {setupGeofenceLocation} from './geofenceLocation.js';
 import {setupLocationHistory} from './locationHistory.js';
@@ -2746,6 +2747,7 @@ connectForm.addEventListener("submit",async event=>{event.preventDefault();if(co
 const advancedCalling=setupAdvancedCalling({document,getPhone:()=>phone,isActive:()=>onCall,isRegistered:()=>sipRegistered,getCall:()=>currentCall});
 let lastDialedTarget='',dialing=false;
 dialForm.noValidate=true;
+setupNativeEmergency({document,form:dialForm,input:dialForm.elements.target});
 $('#dialpad-redial').onclick=()=>{if(onCall)return status('Finish the active call before redialing.');if(!lastDialedTarget)return status('No number dialed in this session.');dialForm.elements.target.value=lastDialedTarget;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));dialForm.elements.target.focus();status('Last number loaded. Tap Call to dial.');};
 $('#call-volume').oninput=event=>{$('#remote').volume=Number(event.target.value);};
 setupDialpad({root:$('#dialpad'),input:dialForm.elements.target,openContact:c=>void contactCard.open(c),inCall:()=>onCall,
