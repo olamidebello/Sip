@@ -1,3 +1,4 @@
+import {setupVpnUi} from './vpnUi.js';
 import {softphoneMediaOptions} from './softphoneMedia.js';
 import {setupLiveCallsUi} from './liveCallsUi.js';
 import {setupVoicemailUi} from './voicemailUi.js';
@@ -2757,6 +2758,7 @@ let lastDialedTarget='',dialing=false;
 dialForm.noValidate=true;
 // OLAMIDE_VOICEMAIL_UI_V1
 setupLiveCallsUi({document,get:apiGet,isSuper:()=>activeRole==='super_admin',show:showWorkspace});
+setupVpnUi({document,get:apiGet,request:accountRequest,isSignedIn:()=>['user','admin','super_admin'].includes(activeRole),isSuper:()=>activeRole==='super_admin',getUserId:()=>softphoneUserId,show:showWorkspace});
 setupVoicemailUi({document,show:showWorkspace,get:apiGet,request:accountRequest,isSignedIn:()=>['user','admin','super_admin'].includes(activeRole),isSuper:()=>activeRole==='super_admin',call:number=>{dialForm.elements.target.value=number;delete dialForm.elements.target.dataset.routeTarget;showWorkspace('calling-workspace');dialForm.requestSubmit();}});
 setupNativeEmergency({document,form:dialForm,input:dialForm.elements.target});
 $('#dialpad-redial').onclick=()=>{if(onCall)return status('Finish the active call before redialing.');if(!lastDialedTarget)return status('No number dialed in this session.');dialForm.elements.target.value=lastDialedTarget;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));dialForm.elements.target.focus();status('Last number loaded. Tap Call to dial.');};
@@ -2947,5 +2949,6 @@ $('#routing-refresh').onclick=()=>refreshSubscriberRouting().catch(e=>{$('#routi
 $('#subscriber-routing').onsubmit=async event=>{event.preventDefault();try{const body={};for(const key of routingFlags)body[key]=event.currentTarget.elements[key].checked;await accountRequest('/api/account/subscriber-routing',body,'PUT');await refreshSubscriberRouting();}catch(e){$('#routing-status').textContent=e.message;}};
 $('#routing-email-code').onclick=async()=>{try{await accountRequest('/api/account/subscriber-routing/email-code',{});$('#routing-status').textContent='Verification code sent to your profile email.';}catch(e){$('#routing-status').textContent=e.message;}};
 $('#routing-verify').onsubmit=async event=>{event.preventDefault();try{await accountRequest('/api/account/subscriber-routing/verify-email',{code:event.currentTarget.elements.code.value});event.currentTarget.reset();await refreshSubscriberRouting();}catch(e){$('#routing-status').textContent=e.message;}};
+
 
 

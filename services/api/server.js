@@ -1,3 +1,4 @@
+import {handleVpn} from './vpn.js';
 import {handleLiveCalls} from './liveCalls.js';
 import {handleVoicemail} from './voicemail.js';
 import {handleDialingPolicy} from './dialingPolicy.js';
@@ -277,7 +278,7 @@ async function handler(req, res) {
         path.startsWith("/api/numbers") || path.startsWith("/api/porting") ||
         path.startsWith("/api/inhouse/") || path.startsWith("/api/admin/inhouse/") ||
         path.startsWith("/api/nigeria/") || path.startsWith("/api/admin/nigeria/") ||
-        path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") || path.startsWith("/api/native-push/") ||
+        path.startsWith("/api/vpn") || path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") || path.startsWith("/api/native-push/") ||
         path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path==="/api/admin/google-contacts" || path.startsWith("/api/dashboard") || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
         path === "/api/admin/cdr" || path.startsWith('/api/marketplace/') || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
       const user = await currentUser(req);
@@ -369,6 +370,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/dialing-policy'))return await handleDialingPolicy({req,res,path,user,pool,send,readJson});
       // OLAMIDE_VOICEMAIL_HTTP_V1
       if(path==='/api/admin/live-calls')return await handleLiveCalls({req,res,user,pool,send});
+      if(path==='/api/vpn'||path.startsWith('/api/vpn/')||path.startsWith('/api/admin/vpn'))return await handleVpn({req,res,path,user,pool,send,readJson});
       if(path==='/api/voicemail'||path.startsWith('/api/admin/voicemail'))return await handleVoicemail({req,res,path,user,pool,send,readJson});
       // OLAMIDE_SOFTPHONE_ICE_V1
       if(path==='/api/softphone/media-config'&&req.method==='GET'){
@@ -875,4 +877,5 @@ server.on("close",stopStoreRenewals);
 meetingSignaling = attachMeetingSignaling(server, { pool, origin, currentUser });
 server.listen(port, address, () =>
   console.log(`Account API listening on ${address}:${port}`));
+
 

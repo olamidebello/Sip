@@ -8,6 +8,8 @@ export function bridgeAuthorized(header,token){
  return actual.length===expected.length&&timingSafeEqual(actual,expected);
 }
 export async function bridgeLookup(pool,path,data){
+ // OLAMIDE_VPN_ACCOUNTS_V1
+ if(path==='/api/switch/kamailio/vpn-accounts')return [200,{users:(await pool.query("SELECT u.id,u.tenant_id FROM users u JOIN tenants t ON t.id=u.tenant_id WHERE u.status='active' AND t.status='active'")).rows}];
  // OLAMIDE_VOICEMAIL_LOOKUP_V1
  if(path==='/api/switch/kamailio/voicemail')return lookupVoicemail(pool,data);
  const identity=/^[a-zA-Z0-9]{2,64}$/;
@@ -49,4 +51,5 @@ export function startKamailioHttpBridge(pool){
  server.listen(8081,process.env.LISTEN_ADDR||'127.0.0.1');
  return server;
 }
+
 
