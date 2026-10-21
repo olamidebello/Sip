@@ -1,0 +1,68 @@
+---
+- name: Deploy live outbound call monitoring without replacing local integrations
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Back up, integrate, test and deploy monitoring
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        backup_dir="/opt/olamide/backups/live-calls-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup_dir"
+        git fetch origin main </dev/null
+        release=6f069244093d1c5fc8bf3fadb5d722ac9424135e
+        git merge-base --is-ancestor "$release" origin/main
+        files=(services/api/server.js apps/web/src/main.js services/api/liveCalls.js services/api/liveCalls.test.js apps/web/src/liveCallsUi.js)
+        for file in "${files[@]}"; do
+          mkdir -p "$backup_dir/$(dirname "$file")"
+          if test -f "$file"; then cp -p "$file" "$backup_dir/$file"; fi
+        done
+        restore_source() {
+          for file in "${files[@]}"; do
+            if test -f "$backup_dir/$file"; then cp -p "$backup_dir/$file" "/opt/olamide/repo/$file"; else rm -f "/opt/olamide/repo/$file"; fi
+          done
+        }
+        recover() {
+          trap - ERR
+          restore_source
+          if test -f "$backup_dir/rollback.yml"; then
+            cd /opt/olamide/repo/deployment/docker
+            docker compose -f compose.yml -f "$backup_dir/rollback.yml" up -d --no-deps api web </dev/null || true
+          fi
+          echo "Monitoring deployment failed; restored prior source/images where available. Backup: $backup_dir"
+          exit 1
+        }
+        trap recover ERR
+        git show "$release:tools/install-live-calls.py" > "$backup_dir/install.py"
+        python3 "$backup_dir/install.py"
+        for file in services/api/liveCalls.js services/api/liveCalls.test.js apps/web/src/liveCallsUi.js; do
+          git show "$release:$file" > "$file"
+        done
+        cd deployment/docker
+        docker compose config --quiet </dev/null
+        suffix=$(date +%s)-$$
+        api_id=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$(docker compose ps -q api)")
+        web_id=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$(docker compose ps -q web)")
+        docker tag "$api_id" "olamide-api:before-live-$suffix"
+        docker tag "$web_id" "olamide-web:before-live-$suffix"
+        printf 'services:\n  api:\n    image: olamide-api:before-live-%s\n  web:\n    image: olamide-web:before-live-%s\n' "$suffix" "$suffix" > "$backup_dir/rollback.yml"
+        docker compose build api web </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --test /app/liveCalls.test.js </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --check /app/server.js </dev/null
+        docker compose up -d --no-deps api web </dev/null
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        code=$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' https://sip.dobhrap.com/api/admin/live-calls)
+        test "$code" = 401 -o "$code" = 403
+        trap - ERR
+        echo "Live calls deployed. Super admin: Administrator > Live calls. Scope: outbound carrier calls. Backup: $backup_dir"
+      args:
+        executable: /bin/bash
+      register: monitor_result
+      changed_when: true
+    - name: Show result
+      ansible.builtin.debug:
+        msg: "{{ monitor_result.stdout_lines[-20:] }}"
