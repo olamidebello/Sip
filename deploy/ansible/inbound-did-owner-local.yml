@@ -1,0 +1,57 @@
+---
+- name: Route inbound DID calls to the assigned user
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Preserve local carrier routing and rebuild API
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        test -f services/api/flowrouteDidRouting.js
+        test -f services/api/didIngress.js
+        backup_dir="/opt/olamide/backups/inbound-did-owner-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup_dir"
+        cp -p services/api/flowrouteDidRouting.js "$backup_dir/flowrouteDidRouting.js"
+        for name in inboundDidOwner.js inboundDidOwner.test.js; do
+          if test -f "services/api/$name"; then cp -p "services/api/$name" "$backup_dir/$name.previous"; fi
+        done
+        git fetch origin main </dev/null
+        release=8ca53464759f6be1973094b44359b7af18bf5e0c
+        git merge-base --is-ancestor "$release" origin/main
+        git show "$release:tools/install-inbound-did-owner.py" > "$backup_dir/install.py"
+        for name in inboundDidOwner.js inboundDidOwner.test.js; do
+          git show "$release:services/api/$name" > "$backup_dir/$name"
+        done
+        restore_source() {
+          cd /opt/olamide/repo
+          cp -p "$backup_dir/flowrouteDidRouting.js" services/api/flowrouteDidRouting.js
+          for name in inboundDidOwner.js inboundDidOwner.test.js; do
+            if test -f "$backup_dir/$name.previous"; then cp -p "$backup_dir/$name.previous" "services/api/$name"; else rm -f "services/api/$name"; fi
+          done
+          echo "Checks stopped deployment; source restored. Backup: $backup_dir"
+        }
+        trap restore_source ERR
+        python3 "$backup_dir/install.py"
+        for name in inboundDidOwner.js inboundDidOwner.test.js; do install -m 0644 "$backup_dir/$name" "services/api/$name"; done
+        cd deployment/docker
+        docker compose config --quiet </dev/null
+        docker compose build api </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --test /app/inboundDidOwner.test.js </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --check /app/flowrouteDidRouting.js </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --input-type=module -e 'import {createDatabase} from "./db.js"; const db=createDatabase(process.env.MYSQL_URL); try { for(const [table,columns] of [["flowroute_sms_numbers","user_id,tenant_id,number_e164,enabled"],["inhouse_dids","user_id,tenant_id,number_e164,status"],["did_shop_orders","user_id,tenant_id,number_e164,status,rental_until"],["did_quotes","user_id,provider,number_e164,status"]]) await db.query("SELECT "+columns+" FROM "+table+" LIMIT 0"); console.log("Inbound DID schema checks passed"); } finally {await db.end();}' </dev/null
+        trap - ERR
+        docker compose up -d --no-deps api </dev/null
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        docker compose ps api
+        echo "Inbound DID owner routing deployed. Backup: $backup_dir"
+      args:
+        executable: /bin/bash
+      register: inbound_result
+      changed_when: true
+    - name: Show result
+      ansible.builtin.debug:
+        var: inbound_result.stdout_lines
