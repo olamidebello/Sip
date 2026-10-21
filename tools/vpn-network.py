@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Owns only olamide_vpn NAT/filter tables and named accept rules in our guard."""
-import json,subprocess,sys
+import importlib.util,json,subprocess,sys
 from pathlib import Path
 
 def run(args,data=None,check=True):
@@ -20,6 +20,8 @@ def apply():
  portset='{ '+', '.join(ports)+' }'
  public=config['endpoint']
  if not all(c.isdigit() or c=='.' for c in public):raise SystemExit('Public IPv4 required')
+ spec=importlib.util.spec_from_file_location('vpn_ufw',Path(__file__).with_name('vpn-ufw.py'));ufw=importlib.util.module_from_spec(spec);spec.loader.exec_module(ufw)
+ ufw.apply('vpn',public,ports)
  route=json.loads(run(['ip','-j','route','get','1.1.1.1']).stdout)[0];dev=route['dev']
  if not dev.replace('-','').replace('.','').replace('_','').isalnum():raise SystemExit('Unknown public interface')
  guard_add('input',['udp','dport','51820','accept'],'olamide-vpn-listen')

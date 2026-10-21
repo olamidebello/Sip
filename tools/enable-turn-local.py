@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-import json,os,secrets,subprocess,sys,time
+import importlib.util,json,os,secrets,subprocess,sys,time
 from pathlib import Path
 ROOT=Path('/opt/olamide/repo/deployment/docker')
 def run(args,**kw):return subprocess.run(args,cwd=ROOT,text=True,check=True,**kw)
 def guard():
+ spec=importlib.util.spec_from_file_location('vpn_ufw',Path(__file__).with_name('vpn-ufw.py'));ufw=importlib.util.module_from_spec(spec);spec.loader.exec_module(ufw)
+ ufw.apply('turn','154.29.77.102')
  p=subprocess.run(['nft','-j','list','chain','inet','olamide_guard','input'],text=True,capture_output=True)
  if p.returncode:return
  for proto,ports,label in [('tcp','3478','olamide-turn-tcp'),('udp','{ 3478, 49160-49260 }','olamide-turn-udp')]:
