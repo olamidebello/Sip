@@ -1,3 +1,4 @@
+import {applyFlowrouteCustomerRate} from './flowrouteCustomerRate.js';
 import {migrateVoicemail} from './voicemail.js';
 import {migrateDialingPolicies} from './dialingPolicy.js';
 import {profileDestination} from './localDialing.js';
@@ -75,7 +76,9 @@ export async function reservePstn(pool,data){
   const config=provider==='flowroute'?adapterTrunk(await flowrouteTrunk(db,actor.tenant_id)):{authenticationMode:'ip'};
   const callerId=identity?.callerId||config.callerId;
   const override=selectPolicyRate(policies,{userId:actor.user_id,callerId,destination});
-  if(override)Object.assign(rate,{price_usd_per_minute:override.data.rate,first_interval:override.data.first,sub_interval:override.data.step});
+  if(override&&provider!=='flowroute')Object.assign(rate,{price_usd_per_minute:override.data.rate,first_interval:override.data.first,sub_interval:override.data.step});
+// OLAMIDE_FLOWROUTE_COST_PLUS_30_V1
+  if(provider==='flowroute')Object.assign(rate,applyFlowrouteCustomerRate(rate));
   const shadow=selectShadowRate(policies,destination);
   const allowance=await internationalAllowance(db,policies,{tenantId:actor.tenant_id,userId:actor.user_id,destination});
   let maxSeconds=3600;const balance=Number(wallet.balance_cents),budget=Math.min(balance,allowance);
