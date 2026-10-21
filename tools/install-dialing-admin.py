@@ -43,4 +43,19 @@ if call not in s:
     if s.count(anchor)!=1 or s.count(clear)!=1:raise RuntimeError('Unexpected admin UI integration; no files written')
     s="import {setupDialingAdmin} from './dialingAdmin.js';\n"+s.replace(anchor,' '+call+'\n'+anchor).replace(clear,'if(wasSuper&&!permitted){dialing.clear();epoch++;')
 updates[p]=s
+
+p=root/'apps/web/src/callerIdentityAdmin.js'
+s=updates[p]
+if 'const dialLink=document.createElement' not in s:
+    changes=[
+     (" const $=s=>panel.querySelector(s)"," const dialLink=document.createElement('a');dialLink.href='/?caller-id=1&dialing=1#admin';dialLink.textContent='Dialing rules & provisioning';dialLink.className='button-link';dialLink.hidden=true;parent.insertBefore(dialLink,panel);dialLink.onclick=event=>{open(event);dialing.open();};\n const $=s=>panel.querySelector(s)"),
+     ("if(topLink.hidden===permitted)topLink.hidden=!permitted;","if(topLink.hidden===permitted)topLink.hidden=!permitted;if(dialLink.hidden===permitted)dialLink.hidden=!permitted;"),
+     ("deepOpened=true;open();","deepOpened=true;open();if(new URL(document.defaultView.location.href).searchParams.get('dialing')==='1')dialing.open();"),
+     ("topLink.remove();panel.remove();","topLink.remove();dialLink.remove();panel.remove();")
+    ]
+    for old,new in changes:
+        if s.count(old)!=1:raise RuntimeError('Unexpected admin menu integration; no files written')
+        s=s.replace(old,new)
+updates[p]=s
+
 for p,s in updates.items():p.write_text(s)

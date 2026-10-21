@@ -19,6 +19,7 @@ export function setupCallerIdentityAdmin({document,get,request,isSuper,show}){
  parent.prepend(panel);
  const shortcut=document.createElement('a');shortcut.href='/?caller-id=1#admin';shortcut.textContent='User & caller ID controls';shortcut.className='button-link';shortcut.dataset.callerIdShortcut='true';shortcut.hidden=true;
  const topLink=shortcut.cloneNode(true);parent.insertBefore(topLink,panel);
+ const dialLink=document.createElement('a');dialLink.href='/?caller-id=1&dialing=1#admin';dialLink.textContent='Dialing rules & provisioning';dialLink.className='button-link';dialLink.hidden=true;parent.insertBefore(dialLink,panel);dialLink.onclick=event=>{open(event);dialing.open();};
  const $=s=>panel.querySelector(s),status=$('[data-policy-status]'),userStatus=$('[data-user-status]'),input=$('[data-required]'),save=$('[data-save]');
  const management=setupUserProvisionControls({document,parent:panel,get,request,isSuper,onChanged:async()=>{await loadUser();await loadUsers();}});
  let loaded=false,users=[],selected=null,epoch=0,selection=0,busy=false,wasSuper=false,deepOpened=false;
@@ -43,10 +44,10 @@ export function setupCallerIdentityAdmin({document,get,request,isSuper,show}){
  $('[data-load]').onclick=loadPolicy;$('[data-users]').onclick=loadUsers;$('[data-search]').oninput=renderUsers;$('[data-user]').onchange=loadUser;$('[data-user-refresh]').onclick=loadUser;$('[data-use-profile]').onclick=()=>{if(selected){$('[data-number]').value=selected.phone_e164||'';controls();}};$('[data-approve]').onclick=()=>update(true);$('[data-block]').onclick=()=>update(false);
  function open(event){event?.preventDefault();if(!isSuper())return;if(show)show();else document.defaultView.location.hash='admin';panel.open=true;void Promise.all([loadPolicy(),loadUsers()]);panel.scrollIntoView?.({block:'start',behavior:'smooth'});}
  shortcut.onclick=open;topLink.onclick=open;panel.ontoggle=()=>{if(panel.open&&isSuper())void Promise.all([loadPolicy(),loadUsers()]);};
- function visibility(){const permitted=isSuper();if(panel.hidden===permitted)panel.hidden=!permitted;if(shortcut.hidden===permitted)shortcut.hidden=!permitted;if(topLink.hidden===permitted)topLink.hidden=!permitted;
+ function visibility(){const permitted=isSuper();if(panel.hidden===permitted)panel.hidden=!permitted;if(shortcut.hidden===permitted)shortcut.hidden=!permitted;if(topLink.hidden===permitted)topLink.hidden=!permitted;if(dialLink.hidden===permitted)dialLink.hidden=!permitted;
  const nav=document.getElementById('app-nav');if(nav&&shortcut.parentNode!==nav)nav.append(shortcut);
  if(wasSuper&&!permitted){dialing.clear();epoch++;loaded=false;users=[];clearUser();panel.open=false;status.textContent='';$('[data-user]').replaceChildren();$('[data-events]').replaceChildren();$('[data-list-status]').textContent='';}
- wasSuper=permitted;if(permitted&&!deepOpened&&new URL(document.defaultView.location.href).searchParams.get('caller-id')==='1'){deepOpened=true;open();}}
+ wasSuper=permitted;if(permitted&&!deepOpened&&new URL(document.defaultView.location.href).searchParams.get('caller-id')==='1'){deepOpened=true;open();if(new URL(document.defaultView.location.href).searchParams.get('dialing')==='1')dialing.open();}}
  const observer=new document.defaultView.MutationObserver(visibility);observer.observe(document.body,{attributes:true,childList:true,subtree:true,attributeFilter:['hidden','class']});visibility();controls();
- return {open,dispose(){epoch++;observer.disconnect();shortcut.remove();topLink.remove();panel.remove();}};
+ return {open,dispose(){epoch++;observer.disconnect();shortcut.remove();topLink.remove();dialLink.remove();panel.remove();}};
 }
