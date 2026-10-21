@@ -11,7 +11,7 @@ function db({country='US',paid=true,internal=false}={}){return {query:async(sql)
  return {rows,rowCount:rows.length};
 }};}
 test('IDD, bare international, explicit plus and short local numbers reach external authorization',async()=>{
- for(const [input,country,expected] of [['011234805875044','US','234805875044'],['234805875044','US','234805875044'],['+234805875044','US','234805875044'],['123456789','NG','234123456789']]){
+ for(const [input,country,expected] of [['3109515282','US','13109515282'],['011234805875044','US','234805875044'],['234805875044','US','234805875044'],['+234805875044','US','234805875044'],['123456789','NG','234123456789']]){
  assert.deepEqual(await callAccess(db({country}),user,`sip:${input}@sip.example`),{allowed:true,scope:'external',target:`sip:+${expected}@sip.example`});
  }
 });
