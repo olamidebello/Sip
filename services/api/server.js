@@ -1,3 +1,4 @@
+import {handleVoicemail} from './voicemail.js';
 import {handleDialingPolicy} from './dialingPolicy.js';
 import {handleLocationReports} from './locationReports.js';
 import {handleGeofenceAddress} from './geofenceAddress.js';
@@ -365,6 +366,8 @@ async function handler(req, res) {
         return send(res,200,{label:person?(person.name?.trim()||person.phone||'Registered SIP user'):(number||'Unknown caller')});
       }
       if(path.startsWith('/api/admin/dialing-policy'))return await handleDialingPolicy({req,res,path,user,pool,send,readJson});
+      // OLAMIDE_VOICEMAIL_HTTP_V1
+      if(path==='/api/voicemail'||path.startsWith('/api/admin/voicemail'))return await handleVoicemail({req,res,path,user,pool,send,readJson});
       if(path==='/api/softphone/access'||path==='/api/softphone/authorize')return await handleCallAccess({req,res,path,user,pool,send,readJson});
       if (path.startsWith("/api/softphone/"))
         return await handleSoftphoneState({req,res,path,user,pool,send,readJson});
@@ -865,3 +868,4 @@ server.on("close",stopStoreRenewals);
 meetingSignaling = attachMeetingSignaling(server, { pool, origin, currentUser });
 server.listen(port, address, () =>
   console.log(`Account API listening on ${address}:${port}`));
+

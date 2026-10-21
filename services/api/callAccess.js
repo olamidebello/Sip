@@ -1,3 +1,4 @@
+import {authorizeVoicemailAccess} from './voicemail.js';
 import {profileDestination} from './localDialing.js';
 import {onlineNumberTarget} from './subscriberRouting.js';
 export async function activeSubscription(pool,user) {
@@ -10,6 +11,9 @@ export function parseSipTarget(value) {
   return match?{username:match[1],domain:match[2].toLowerCase()}:null;
 }
 export async function callAccess(pool,user,target) {
+  // OLAMIDE_VOICEMAIL_ACCESS_V1
+  const voicemail=/^sip:\*98@([a-z0-9.-]{1,253})$/i.exec(target||'');
+  if(voicemail)return authorizeVoicemailAccess(pool,user,voicemail[1].toLowerCase());
   const address=parseSipTarget(target);
   if(!address)return {allowed:false,error:'Enter a valid SIP address'};
   const routed=await onlineNumberTarget(pool,user,address.username);
@@ -57,3 +61,4 @@ export async function handleCallAccess({req,res,path,user,pool,send,readJson}) {
   }
   return send(res,404,{error:'Call access route unavailable'});
 }
+

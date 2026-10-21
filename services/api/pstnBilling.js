@@ -1,3 +1,4 @@
+import {migrateVoicemail} from './voicemail.js';
 import {migrateDialingPolicies} from './dialingPolicy.js';
 import {profileDestination} from './localDialing.js';
 import {loadTelecomPolicies,normalizeDestination,selectPolicyRate,assertCallingWindow,internationalAllowance,selectShadowRate,selectCallType} from './telecomPolicies.js';
@@ -12,6 +13,8 @@ export function callCharge(rate,seconds,first,step){
  return Number((micros*BigInt(billed)+599999n)/600000n); // USD micro-units -> cents, rounded up.
 }
 export async function migratePstnBilling(pool){
+ // OLAMIDE_VOICEMAIL_MIGRATION_V1
+ await migrateVoicemail(pool);
  await migrateDialingPolicies(pool);
  const db=await pool.connect();let locked=false;
  try{
@@ -121,3 +124,4 @@ export async function settlePstn(pool,data){
   await db.query('COMMIT');return [200,{settled:true,chargedCents:charge,refundedCents:refund}];
  }catch{await db.query('ROLLBACK');return [409,{error:'Settlement deferred for reconciliation'}];}finally{db.release();}
 }
+

@@ -1,3 +1,4 @@
+import {lookupVoicemail} from './voicemail.js';
 import http from 'node:http';
 import {reservePstn,settlePstn} from './pstnBilling.js';
 import {timingSafeEqual} from 'node:crypto';
@@ -7,6 +8,8 @@ export function bridgeAuthorized(header,token){
  return actual.length===expected.length&&timingSafeEqual(actual,expected);
 }
 export async function bridgeLookup(pool,path,data){
+ // OLAMIDE_VOICEMAIL_LOOKUP_V1
+ if(path==='/api/switch/kamailio/voicemail')return lookupVoicemail(pool,data);
  const identity=/^[a-zA-Z0-9]{2,64}$/;
  if(path==='/api/switch/kamailio/billing-event')return settlePstn(pool,data);
 
@@ -46,3 +49,4 @@ export function startKamailioHttpBridge(pool){
  server.listen(8081,process.env.LISTEN_ADDR||'127.0.0.1');
  return server;
 }
+
