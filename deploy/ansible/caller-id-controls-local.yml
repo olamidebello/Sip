@@ -1,0 +1,41 @@
+---
+- name: Deploy visible super admin caller ID controls
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Preserve local source and rebuild only the web application
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another update is running'; exit 1; }
+        test -f services/api/superAdminControl.js
+        test -f apps/web/src/callerIdentityAdmin.js
+        grep -q 'setupCallerIdentityAdmin({document' apps/web/src/main.js
+        backup_dir="/opt/olamide/backups/caller-id-controls-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup_dir"
+        cp -p apps/web/src/callerIdentityAdmin.js "$backup_dir/previous.js"
+        git fetch origin main </dev/null
+        git merge-base --is-ancestor 7595934d9cebaaeec40ccee0ac6bcce8229ab1e8 origin/main
+        git show 7595934d9cebaaeec40ccee0ac6bcce8229ab1e8:apps/web/src/callerIdentityAdmin.js > "$backup_dir/candidate.mjs"
+        chmod 0644 "$backup_dir/candidate.mjs"
+        cd deployment/docker
+        docker compose run --rm --no-deps -T -v "$backup_dir/candidate.mjs:/tmp/check.mjs:ro" --entrypoint node api --check /tmp/check.mjs </dev/null
+        cp "$backup_dir/candidate.mjs" ../../apps/web/src/callerIdentityAdmin.js
+        if ! docker compose build web </dev/null; then
+          cp -p "$backup_dir/previous.js" ../../apps/web/src/callerIdentityAdmin.js
+          echo 'Web build failed; source restored. Running services were not changed.'
+          exit 1
+        fi
+        docker compose up -d --no-deps web </dev/null
+        curl -fsS --max-time 10 --retry 8 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        echo "Caller ID controls deployed. Backup: $backup_dir"
+      args:
+        executable: /bin/bash
+      register: caller_id_controls
+      changed_when: true
+    - name: Show result
+      ansible.builtin.debug:
+        var: caller_id_controls.stdout_lines
