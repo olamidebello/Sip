@@ -1,0 +1,70 @@
+---
+- name: Deploy super admin dialing policy provisioning
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Back up database, integrate local source, migrate and deploy
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        test -f deployment/docker/.env
+        test -f apps/web/src/callerIdentityAdmin.js
+        grep -q 'setupCallerIdentityAdmin({document' apps/web/src/main.js
+        backup_dir="/opt/olamide/backups/dialing-admin-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup_dir"
+        paths=(services/api/server.js services/api/pstnBilling.js services/api/callAccess.js services/api/localDialing.js services/api/dialingPolicy.js services/api/dialingCountries.json services/api/localDialing.test.js services/api/dialingPolicy.test.js services/api/callAccessDialing.test.js apps/web/src/callerIdentityAdmin.js apps/web/src/dialingAdmin.js)
+        : > "$backup_dir/present.txt"
+        : > "$backup_dir/absent.txt"
+        for path in "${paths[@]}"; do
+          if test -f "$path"; then echo "$path" >> "$backup_dir/present.txt"; else echo "$path" >> "$backup_dir/absent.txt"; fi
+        done
+        tar -czf "$backup_dir/source.tar.gz" -T "$backup_dir/present.txt"
+        git diff --binary HEAD > "$backup_dir/local-changes.patch"
+        git rev-parse HEAD > "$backup_dir/commit.txt"
+        (cd deployment/docker && docker compose config --quiet </dev/null)
+        (cd deployment/docker && docker compose exec -T mysql sh -c 'exec mysqldump --single-transaction --no-tablespaces --set-gtid-purged=OFF --hex-blob -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' </dev/null 2>"$backup_dir/database-backup.log") | gzip > "$backup_dir/database.sql.gz"
+        python3 - "$backup_dir/database.sql.gz" <<'PY'
+        import gzip,sys
+        from collections import deque
+        with gzip.open(sys.argv[1],'rt') as f: tail=deque(f,maxlen=15)
+        if not any('Dump completed' in line for line in tail):raise RuntimeError('Database backup incomplete; no source changed')
+        PY
+        git fetch origin main </dev/null
+        release=326dbdaff1cbc51bf3bd8678c5084f18914098bd
+        git merge-base --is-ancestor "$release" origin/main
+        git show "$release:tools/install-dialing-admin.py" > "$backup_dir/install.py"
+        restore_source() {
+          cd /opt/olamide/repo
+          tar -xzf "$backup_dir/source.tar.gz"
+          while IFS= read -r path; do rm -f -- "$path"; done < "$backup_dir/absent.txt"
+          echo "Deployment stopped before restart; source restored. Backup: $backup_dir"
+        }
+        trap restore_source ERR
+        python3 "$backup_dir/install.py"
+        for name in localDialing.js dialingPolicy.js dialingCountries.json localDialing.test.js dialingPolicy.test.js callAccessDialing.test.js; do
+          git show "$release:services/api/$name" > "$backup_dir/$name"
+          install -m 0644 "$backup_dir/$name" "services/api/$name"
+        done
+        git show "$release:apps/web/src/dialingAdmin.js" > "$backup_dir/dialingAdmin.js"
+        install -m 0644 "$backup_dir/dialingAdmin.js" apps/web/src/dialingAdmin.js
+        cd deployment/docker
+        docker compose build api web </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --test /app/dialingPolicy.test.js /app/localDialing.test.js /app/callAccessDialing.test.js </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --check /app/server.js </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --input-type=module -e 'import {createDatabase} from "./db.js"; import {migrateDialingPolicies} from "./dialingPolicy.js"; const db=createDatabase(process.env.MYSQL_URL); try {await migrateDialingPolicies(db);} finally {await db.end();}' </dev/null
+        trap - ERR
+        docker compose up -d --no-deps api web </dev/null
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        docker compose ps api web
+        echo "Dialing admin controls deployed. Backup: $backup_dir"
+      args:
+        executable: /bin/bash
+      register: dialing_admin_result
+      changed_when: true
+    - name: Show result
+      ansible.builtin.debug:
+        var: dialing_admin_result.stdout_lines
