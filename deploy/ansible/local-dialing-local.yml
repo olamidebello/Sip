@@ -14,23 +14,25 @@
         backup_dir="/opt/olamide/backups/local-dialing-$(date -u +%Y%m%dT%H%M%S)-$$"
         install -d -m 0700 "$backup_dir"
         cp -p services/api/pstnBilling.js "$backup_dir/pstnBilling.js"
+        cp -p services/api/callAccess.js "$backup_dir/callAccess.js"
         git fetch origin main </dev/null
-        release=34d94babd2abe76fb395db16a2b15566ca7dff7c
+        release=fbbea8da3b7e4b7ab4a3768a7a0cf873c062d895
         git merge-base --is-ancestor "$release" origin/main
-        for name in localDialing.js dialingCountries.json localDialing.test.js; do
+        for name in localDialing.js dialingCountries.json localDialing.test.js callAccessDialing.test.js; do
           if test -f "services/api/$name"; then cp -p "services/api/$name" "$backup_dir/$name.previous"; fi
           git show "$release:services/api/$name" > "$backup_dir/$name"
         done
         git show "$release:tools/install-local-dialing.py" > "$backup_dir/install.py"
         python3 "$backup_dir/install.py"
-        for name in localDialing.js dialingCountries.json localDialing.test.js; do install -m 0644 "$backup_dir/$name" "services/api/$name"; done
+        for name in localDialing.js dialingCountries.json localDialing.test.js callAccessDialing.test.js; do install -m 0644 "$backup_dir/$name" "services/api/$name"; done
         cd deployment/docker
         docker compose config --quiet </dev/null
         if ! docker compose build api </dev/null ||
-           ! docker compose run --rm --no-deps -T --entrypoint node api --test /app/localDialing.test.js </dev/null ||
+           ! docker compose run --rm --no-deps -T --entrypoint node api --test /app/localDialing.test.js /app/callAccessDialing.test.js </dev/null ||
            ! docker compose run --rm --no-deps -T --entrypoint node api --check /app/pstnBilling.js </dev/null; then
           cp -p "$backup_dir/pstnBilling.js" ../../services/api/pstnBilling.js
-          for name in localDialing.js dialingCountries.json localDialing.test.js; do
+          cp -p "$backup_dir/callAccess.js" ../../services/api/callAccess.js
+          for name in localDialing.js dialingCountries.json localDialing.test.js callAccessDialing.test.js; do
             if test -f "$backup_dir/$name.previous"; then cp -p "$backup_dir/$name.previous" "../../services/api/$name"; else rm -f "../../services/api/$name"; fi
           done
           echo "Checks failed; source restored. Backup: $backup_dir"
