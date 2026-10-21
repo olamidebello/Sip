@@ -9,6 +9,6 @@ block='''      // OLAMIDE_SOFTPHONE_ICE_V1
 anchor="      if(path==='/api/softphone/access'||path==='/api/softphone/authorize')"
 if s.count(block)!=1 or s.count(anchor)!=1:raise SystemExit('Expected media integration missing or changed; source unchanged')
 s=s.replace(block,'').replace(anchor,block+anchor)
-assert s.index("path==='/api/softphone/media-config'")<s.index('path.startsWith("/api/softphone/")')
+assert s.index("path==='/api/softphone/media-config'")<s.index('      if (path.startsWith("/api/softphone/"))')
 p.write_text(s)
 print('Media route now precedes the general softphone handler.')
