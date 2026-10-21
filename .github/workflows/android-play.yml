@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths: ['.github/workflows/android-play.yml', 'apps/mobile/**', 'apps/web/public/olamide-logo.jpg']
 permissions:
-  contents: read
+  contents: write
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -62,3 +62,25 @@ jobs:
           name: olamide-android-play-preparation
           path: apps/mobile/android/play-output/
           if-no-files-found: error
+
+      - name: Verify embedded VPN and publish Android development download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p vpn-output
+          cp apps/mobile/android/play-output/Olamide-debug.apk vpn-output/Olamide-VPN-preview.apk
+          python3 - <<'PY'
+          import zipfile
+          from pathlib import Path
+          p=Path('vpn-output/Olamide-VPN-preview.apk')
+          with zipfile.ZipFile(p) as z:
+              assert any(n.endswith('libwg-go.so') for n in z.namelist()), 'WireGuard native engine missing'
+              assert any(b'OlamideVpnPlugin' in z.read(n) for n in z.namelist() if n.endswith('.dex')), 'VPN plugin missing'
+          PY
+          printf '%s\n' "$GITHUB_SHA" > vpn-output/SOURCE_COMMIT.txt
+          cd vpn-output
+          sha256sum Olamide-VPN-preview.apk > SHA256SUMS
+          printf '%s\n' 'Android development APK with embedded WireGuard. Android VPN permission is required. Server VPN provisioning must be installed first. Debug signing is for testing; store release requires the configured production signing key.' > NOTES.txt
+          gh release view vpn-preview --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create vpn-preview --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title 'Olamide embedded VPN — Android development preview' --notes-file NOTES.txt
+          gh release upload vpn-preview ./* --repo "$GITHUB_REPOSITORY" --clobber

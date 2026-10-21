@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {createVpnNativeClient} from './vpnNativeClient.js';
+test('browser never pretends to start system VPN',async()=>{const c=createVpnNativeClient({plugin:()=>undefined,getConfig:()=>assert.fail()});await c.login('a');assert.equal(c.available(),false);});
+test('configuration is fetched after login and sent to embedded client once',async()=>{let n=0;const c=createVpnNativeClient({plugin:()=>({connect:async args=>{assert.equal(args.userId,'a');assert.equal(args.config,'private');n++;}}),getConfig:async()=>({config:'private'})});await c.login('a');await c.login('a');assert.equal(n,1);});
+test('logout cancels pending setup fetch before device activation',async()=>{let done;const p={connect:()=>assert.fail(),disconnect:async()=>{}};const c=createVpnNativeClient({plugin:()=>p,getConfig:()=>new Promise(r=>done=r)});const pending=c.login('a');await c.logout();done({config:'private'});await pending;});
+test('denied permission reported, manual retry allowed',async()=>{let n=0;const messages=[];const c=createVpnNativeClient({plugin:()=>({connect:async()=>{n++;throw Error('Declined');}}),getConfig:async()=>({config:'private'}),onStatus:m=>messages.push(m)});await c.login('a');assert.deepEqual(messages,['Declined']);await c.retry('a');assert.equal(n,2);});

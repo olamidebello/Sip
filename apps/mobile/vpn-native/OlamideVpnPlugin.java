@@ -32,29 +32,33 @@ public class OlamideVpnPlugin extends Plugin {
         @Override public void onStateChange(Tunnel.State next) { state = next; }
     };
     @Override public void load() { backend = new GoBackend(getContext().getApplicationContext()); }
-    private boolean trusted(PluginCall call) {
-        Uri url = Uri.parse(getBridge().getWebView().getUrl());
-        if (!"https".equals(url.getScheme()) || !"sip.dobhrap.com".equals(url.getHost()) || (url.getPort()!=-1 && url.getPort()!=443)) {
-            call.reject("VPN control is only available inside the Olamide platform"); return false;
-        }
-        return true;
+    private void withTrusted(PluginCall call, Runnable action) {
+        getActivity().runOnUiThread(()->{
+            Uri url = Uri.parse(getBridge().getWebView().getUrl());
+            if (!"https".equals(url.getScheme()) || !"sip.dobhrap.com".equals(url.getHost()) || (url.getPort()!=-1 && url.getPort()!=443)) {
+                call.reject("VPN control is only available inside the Olamide platform"); return;
+            }
+            action.run();
+        });
     }
     @PluginMethod public void status(PluginCall call) {
-        if (!trusted(call)) return;
+        withTrusted(call,()->{
         JSObject result=new JSObject(); result.put("state",state==Tunnel.State.UP?"up":"down"); result.put("userId",owner); call.resolve(result);
+        });
     }
     @PluginMethod public void connect(PluginCall call) {
-        if (!trusted(call)) return;
+        withTrusted(call,()->{
         String user=call.getString("userId", ""), config=call.getString("config", "");
         if (!user.matches("[a-fA-F0-9-]{36}") || config.length()>8192 || config.isEmpty()) { call.reject("Valid account VPN configuration required"); return; }
         call.getData().put("generation",generation.incrementAndGet());
         Intent permission=VpnService.prepare(getContext());
         if (permission!=null) startActivityForResult(call,permission,"vpnPermissionResult"); else startTunnel(call);
+        });
     }
     @ActivityCallback private void vpnPermissionResult(PluginCall call, ActivityResult result) {
         if (call==null) return;
         if (result.getResultCode()!=Activity.RESULT_OK) { call.reject("VPN permission was declined. You can connect later from My VPN."); return; }
-        startTunnel(call);
+        withTrusted(call,()->startTunnel(call));
     }
     private void startTunnel(PluginCall call) {
         long seq=call.getData().optLong("generation",-1);
@@ -70,7 +74,8 @@ public class OlamideVpnPlugin extends Plugin {
         });
     }
     @PluginMethod public void disconnect(PluginCall call) {
-        if(!trusted(call))return;generation.incrementAndGet();
+        withTrusted(call,()->{generation.incrementAndGet();
         worker.execute(()->{try{backend.setState(tunnel,Tunnel.State.DOWN,null);owner="";call.resolve();}catch(Exception error){call.reject("Unable to stop VPN");}});
+        });
     }
 }
