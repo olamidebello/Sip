@@ -1,0 +1,106 @@
+---
+- name: Install private voicemail with user and super admin controls
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Back up, validate, install recorder and enable reviewed SIP fallbacks
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        test -z "$(git ls-files -u)" || { echo 'Resolve existing merge conflicts first'; exit 1; }
+        test -f /etc/kamailio/kamailio.cfg
+        test -f deployment/docker/.env
+        kam_version=$(kamailio -V)
+        [[ "$kam_version" == *'kamailio 5.6.'* ]] || { echo 'This installer requires Kamailio 5.6'; exit 1; }
+        test "$(uname -m)" = x86_64
+        backup_dir="/opt/olamide/backups/voicemail-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup_dir"
+        cp -p /etc/kamailio/kamailio.cfg "$backup_dir/kamailio.cfg"
+        git diff --binary HEAD > "$backup_dir/local-changes.patch"
+        tar --exclude=.git --exclude=node_modules --exclude=dist -czf "$backup_dir/source.tar.gz" .
+        git fetch origin main </dev/null
+        release=497f3457cf7ae39e92c8809b8b8da40a4fc796e2
+        git merge-base --is-ancestor "$release" origin/main
+        for name in install-voicemail-local.py patch-voicemail-kamailio.py install-voicemail-recorder.sh voicemail-sync.py test_voicemail_tools.py; do
+          git show "$release:tools/$name" > "$backup_dir/$name"
+        done
+        for name in voicemail.js voicemail.test.js voicemailExport.mjs; do
+          git show "$release:services/api/$name" > "$backup_dir/$name"
+        done
+        for name in voicemailUi.js voicemailUi.test.js; do
+          git show "$release:apps/web/src/$name" > "$backup_dir/$name"
+        done
+        python3 "$backup_dir/test_voicemail_tools.py"
+        python3 - "$backup_dir" <<'PY'
+        import json,shutil,sys
+        from pathlib import Path
+        b=Path(sys.argv[1]);root=Path('/opt/olamide/repo')
+        paths=['services/api/'+n for n in ['server.js','kamailioHttpBridge.js','pstnBilling.js','callAccess.js','voicemail.js','voicemail.test.js','voicemailExport.mjs']]+['apps/web/src/'+n for n in ['main.js','voicemailUi.js','voicemailUi.test.js']]
+        manifest={}
+        for name in paths:
+            p=root/name;manifest[name]=p.exists()
+            if p.exists():
+                dest=b/'source-files'/name;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,dest)
+        (b/'source-manifest.json').write_text(json.dumps(manifest))
+        PY
+        restore_source() {
+          trap - ERR
+          python3 - "$backup_dir" <<'PY'
+        import json,shutil,sys
+        from pathlib import Path
+        b=Path(sys.argv[1]);root=Path('/opt/olamide/repo')
+        for name,existed in json.loads((b/'source-manifest.json').read_text()).items():
+            if existed:shutil.copy2(b/'source-files'/name,root/name)
+            else:(root/name).unlink(missing_ok=True)
+        PY
+          echo "Deployment stopped before application restart; source restored. Backup: $backup_dir"
+        }
+        trap restore_source ERR
+        python3 "$backup_dir/install-voicemail-local.py"
+        for name in voicemail.js voicemail.test.js voicemailExport.mjs; do install -m 0644 "$backup_dir/$name" "services/api/$name"; done
+        for name in voicemailUi.js voicemailUi.test.js; do install -m 0644 "$backup_dir/$name" "apps/web/src/$name"; done
+        python3 "$backup_dir/patch-voicemail-kamailio.py" /etc/kamailio/kamailio.cfg "$backup_dir/kamailio.candidate.cfg"
+        if ! kamailio -c -f "$backup_dir/kamailio.candidate.cfg" > "$backup_dir/kamailio-check.log" 2>&1; then
+          echo "Kamailio candidate rejected; see root-private $backup_dir/kamailio-check.log"; false
+        fi
+        cd deployment/docker
+        docker compose config --quiet </dev/null
+        docker compose exec -T mysql sh -c 'exec mysqldump --single-transaction --hex-blob -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' </dev/null 2>"$backup_dir/database-backup.log" | gzip > "$backup_dir/database.sql.gz"
+        gzip -t "$backup_dir/database.sql.gz"
+        gzip -cd "$backup_dir/database.sql.gz" | tail -n 10 | grep -q 'Dump completed'
+        docker compose build api web </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --test /app/voicemail.test.js </dev/null
+        for name in server.js kamailioHttpBridge.js pstnBilling.js callAccess.js voicemailExport.mjs; do
+          docker compose run --rm --no-deps -T --entrypoint node api --check "/app/$name" </dev/null
+        done
+        systemctl stop olamide-voicemail-sync.timer olamide-voicemail-sync.service 2>/dev/null || true
+        if ! bash "$backup_dir/install-voicemail-recorder.sh" "$backup_dir" > "$backup_dir/recorder-install.log" 2>&1; then
+          echo "Recorder installation stopped. See $backup_dir/recorder-install.log; Kamailio was not changed."; false
+        fi
+        trap 'echo "Deployment stopped. Existing source, database and SIP configuration backups: $backup_dir"' ERR
+        docker compose run --rm --no-deps -T --entrypoint node api /app/voicemailExport.mjs --migrate </dev/null
+        docker compose up -d --no-deps api web </dev/null
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        systemctl start olamide-voicemail-sync.service
+        /opt/olamide/asterisk-22.11.0/sbin/asterisk -C /etc/olamide/voicemail/asterisk.conf -rx 'pjsip show transport loopback' | grep -q '127.0.0.1:5062'
+        cp -p /etc/kamailio/kamailio.cfg /etc/kamailio/.olamide-voicemail-new.cfg
+        cat "$backup_dir/kamailio.candidate.cfg" > /etc/kamailio/.olamide-voicemail-new.cfg
+        mv -f /etc/kamailio/.olamide-voicemail-new.cfg /etc/kamailio/kamailio.cfg
+        if ! systemctl restart kamailio || ! systemctl is-active --quiet kamailio; then
+          cp -p "$backup_dir/kamailio.cfg" /etc/kamailio/kamailio.cfg
+          systemctl restart kamailio
+          echo 'Kamailio start failed; previous configuration restored.'; exit 1
+        fi
+        systemctl enable --now olamide-voicemail-sync.timer
+        echo "Voicemail installed. Account settings: Voicemail. Administrator: Voicemail button. Dial *98 for your inbox. Backup: $backup_dir"
+      args:
+        executable: /bin/bash
+      register: voicemail_result
+      changed_when: true
+    - name: Show voicemail installation result
+      ansible.builtin.debug:
+        msg: "{{ voicemail_result.stdout_lines[-30:] }}"
