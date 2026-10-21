@@ -14,3 +14,15 @@ test('super admin has visible shortcut, per-user controls and provisioning',asyn
  const panel=admin.querySelector('details');assert.equal(panel.open,true);assert.equal(panel.querySelector('select').value,'one');assert.equal(panel.querySelector('[data-save]').disabled,false);
  [...panel.querySelectorAll('button')].find(b=>b.textContent==='Provision missing mailboxes').click();await new Promise(r=>setTimeout(r,10));assert.deepEqual(requests[0],['/api/admin/voicemail/provision',{}]);ui.dispose();dom.window.close();
 });
+
+test('navigation shortcuts open user and admin panels and survive menu rebuilds',async()=>{
+ const dom=new JSDOM('<body><nav id="app-nav"><div class="menu-heading"></div></nav><section id="account"></section><section id="admin"></section></body>');let destinations=[];
+ const ui=setupVoicemailUi({document:dom.window.document,isSignedIn:()=>true,isSuper:()=>true,show:x=>destinations.push(x),get:async p=>p==='/api/admin/voicemail'?{users:[]}:{enabled:true,maxSeconds:120,revision:1,provisioned:true},request:async()=>{},call:()=>{}});
+ const doc=dom.window.document;doc.querySelector('[data-voicemail-nav="own"]').click();doc.querySelector('[data-voicemail-nav="manage"]').click();assert.deepEqual(destinations,['account','admin']);
+ doc.querySelector('#app-nav').innerHTML='<div class="menu-heading"></div>';await new Promise(r=>setTimeout(r,20));assert.equal(doc.querySelectorAll('[data-voicemail-nav]').length,2);ui.dispose();dom.window.close();
+});
+test('main voicemail wiring reads the actual application role',async()=>{
+ const {readFile}=await import('node:fs/promises');const source=await readFile(new URL('./main.js',import.meta.url),'utf8');const line=source.split('\n').find(l=>l.startsWith('setupVoicemailUi('));assert.ok(line);let options;
+ const setRole=new Function('setupVoicemailUi','document','showWorkspace','apiGet','accountRequest','dialForm',`let activeRole=null;${line};return role=>activeRole=role;`)(o=>options=o,{},()=>{},()=>{},()=>{},{});
+ assert.equal(options.isSignedIn(),false);setRole('user');assert.equal(options.isSignedIn(),true);assert.equal(options.isSuper(),false);setRole('super_admin');assert.equal(options.isSuper(),true);setRole('pending_passkey');assert.equal(options.isSignedIn(),false);
+});

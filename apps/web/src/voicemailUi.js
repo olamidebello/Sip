@@ -1,4 +1,4 @@
-export function setupVoicemailUi({document,get,request,isSignedIn,isSuper,call}){
+export function setupVoicemailUi({document,get,request,isSignedIn,isSuper,call,show=()=>{}}){
  const account=document.getElementById('account'),admin=document.getElementById('admin');if(!account)return;
  function panel(parent,title){const d=document.createElement('details');d.hidden=true;d.innerHTML=`<summary>${title}</summary><p>Unanswered and offline calls can leave a message. Dial *98 to listen, delete messages, or record your greeting. Mailbox changes synchronize within 30 seconds.</p><label><input type="checkbox" data-enabled> Enable voicemail</label><label>Maximum message seconds <input type="number" data-seconds min="30" max="180" value="120"></label><button type="button" data-refresh>Refresh</button><button type="button" data-save disabled>Save</button><p data-status role="status"></p>`;parent.append(d);return d;}
  const own=panel(account,'Voicemail'),manager=admin?panel(admin,'Voicemail provisioning & control'):null;
@@ -12,8 +12,19 @@ export function setupVoicemailUi({document,get,request,isSignedIn,isSuper,call})
  manage=wire(manager,()=>'/api/admin/voicemail/users/'+encodeURIComponent(select.value),()=>isSuper()&&!!select.value);select.onchange=manage.load;
  users.onclick=async()=>{if(!isSuper())return;try{const r=await get('/api/admin/voicemail');if(!isSuper())return;select.replaceChildren();for(const u of r.users){const o=document.createElement('option');o.value=u.id;o.textContent=(u.display_name||u.email)+' · '+u.email;select.append(o);}await manage.load();}catch(e){manager.querySelector('[data-status]').textContent=e.message;}};
  provision.onclick=async()=>{if(!isSuper())return;try{await request('/api/admin/voicemail/provision',{});manager.querySelector('[data-status]').textContent='Mailbox provisioning queued. Refresh after 30 seconds.';}catch(e){manager.querySelector('[data-status]').textContent=e.message;}};manager.ontoggle=()=>{if(manager.open&&isSuper())users.click();};}
+ function openPanel(panel,workspace){show(workspace);panel.open=true;panel.scrollIntoView?.({block:'start'});}
+ function navigation(){
+  const heading=document.querySelector('#app-nav .menu-heading');if(!heading)return;
+  for(const [kind,label,allowed,panel,workspace] of [
+   ['own','Voicemail',isSignedIn(),own,'account'],
+   ['manage','Manage voicemail',isSuper(),manager,'admin']]){
+   let button=heading.querySelector('[data-voicemail-nav="'+kind+'"]');
+   if(!button){button=document.createElement('button');button.type='button';button.dataset.voicemailNav=kind;button.textContent=label;button.onclick=()=>{if(kind==='manage'?!isSuper():!isSignedIn())return;openPanel(panel,workspace);};heading.append(button);}
+   if(button.hidden===allowed)button.hidden=!allowed;
+  }
+ }
  let wasSignedIn=null,wasSuper=null;const adminShortcut=admin?.querySelector('button');
- function visibility(){if(own.hidden===isSignedIn())own.hidden=!isSignedIn();if(manager&&manager.hidden===isSuper())manager.hidden=!isSuper();if(adminShortcut&&adminShortcut.hidden===isSuper())adminShortcut.hidden=!isSuper();if(wasSignedIn!==isSignedIn()&&!isSignedIn())mine.clear();if(manager&&wasSuper!==isSuper()&&!isSuper())manage.clear();wasSignedIn=isSignedIn();wasSuper=isSuper();}
+ function visibility(){navigation();if(own.hidden===isSignedIn())own.hidden=!isSignedIn();if(manager&&manager.hidden===isSuper())manager.hidden=!isSuper();if(adminShortcut&&adminShortcut.hidden===isSuper())adminShortcut.hidden=!isSuper();if(wasSignedIn!==isSignedIn()&&!isSignedIn())mine.clear();if(manager&&wasSuper!==isSuper()&&!isSuper())manage.clear();wasSignedIn=isSignedIn();wasSuper=isSuper();}
  const observer=new document.defaultView.MutationObserver(visibility);observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','class']});visibility();
- return {dispose(){observer.disconnect();own.remove();manager?.remove();adminShortcut?.remove();}};
+ return {dispose(){observer.disconnect();document.querySelectorAll('[data-voicemail-nav]').forEach(n=>n.remove());own.remove();manager?.remove();adminShortcut?.remove();}};
 }

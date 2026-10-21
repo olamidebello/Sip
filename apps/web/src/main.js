@@ -2749,7 +2749,7 @@ const advancedCalling=setupAdvancedCalling({document,getPhone:()=>phone,isActive
 let lastDialedTarget='',dialing=false;
 dialForm.noValidate=true;
 // OLAMIDE_VOICEMAIL_UI_V1
-setupVoicemailUi({document,get:apiGet,request:accountRequest,isSignedIn:()=>!!accountUser,isSuper:()=>accountUser?.role==='super_admin',call:number=>{dialForm.elements.target.value=number;delete dialForm.elements.target.dataset.routeTarget;showWorkspace('calling-workspace');dialForm.requestSubmit();}});
+setupVoicemailUi({document,show:showWorkspace,get:apiGet,request:accountRequest,isSignedIn:()=>['user','admin','super_admin'].includes(activeRole),isSuper:()=>activeRole==='super_admin',call:number=>{dialForm.elements.target.value=number;delete dialForm.elements.target.dataset.routeTarget;showWorkspace('calling-workspace');dialForm.requestSubmit();}});
 setupNativeEmergency({document,form:dialForm,input:dialForm.elements.target});
 $('#dialpad-redial').onclick=()=>{if(onCall)return status('Finish the active call before redialing.');if(!lastDialedTarget)return status('No number dialed in this session.');dialForm.elements.target.value=lastDialedTarget;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));dialForm.elements.target.focus();status('Last number loaded. Tap Call to dial.');};
 $('#call-volume').oninput=event=>{$('#remote').volume=Number(event.target.value);};
