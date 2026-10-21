@@ -12,8 +12,19 @@ test('explicit international and ten or more digits are unchanged',()=>{
  assert.throws(()=>expand('1234567',''),/profile country/);
  assert.throws(()=>expand('abc','NG'),/phone number/);
 });
-test('profile lookup is scoped to authenticated tenant and skipped for international input',async()=>{
+test('profile lookup is scoped to authenticated tenant',async()=>{
  const db={query:async(sql,args)=>{assert.match(sql,/u.tenant_id=\$2/);assert.deepEqual(args,['user','tenant']);return {rows:[{country:'NG'}]};}};
  assert.equal(await profileDestination(db,'tenant','user','123456789'),'234123456789');
- assert.equal(await profileDestination({},'tenant','user','19452205026'),'19452205026');
+ assert.equal(await profileDestination({query:async()=>({rows:[{country:'US'}]})},'tenant','user','19452205026'),'19452205026');
+});
+
+test('removes only the saved country IDD and never adds home country afterward',()=>{
+ assert.equal(expand('0112348031234567','US'),'2348031234567');
+ assert.equal(expand('00919452205026','NG'),'19452205026');
+ assert.equal(expand('00112348031234567','AU'),'2348031234567');
+ assert.equal(expand('01019452205026','JP'),'19452205026');
+ assert.equal(expand('81019452205026','RU'),'19452205026');
+ assert.equal(expand('+19452205026','NG'),'+19452205026');
+ assert.throws(()=>expand('011123','US'),/complete international/);
+ assert.equal(expand('01123456789','NG'),'01123456789');
 });
