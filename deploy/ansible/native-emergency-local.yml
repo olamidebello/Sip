@@ -1,0 +1,45 @@
+---
+- name: Deploy native emergency dialer handoff
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Preserve local web changes and build native handoff
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another update is running'; exit 1; }
+        backup_dir="/opt/olamide/backups/native-emergency-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup_dir"
+        cp -p apps/web/src/main.js "$backup_dir/main.js"
+        git fetch origin main </dev/null
+        release=39f3f73625b570abfb5e5cca06ea6e2ecdf8548c
+        git merge-base --is-ancestor "$release" origin/main
+        for name in nativeEmergency.js emergencyPatterns.json; do
+          if test -f "apps/web/src/$name"; then cp -p "apps/web/src/$name" "$backup_dir/$name.previous"; fi
+          git show "$release:apps/web/src/$name" > "$backup_dir/$name"
+        done
+        git show "$release:tools/install-native-emergency.py" > "$backup_dir/install.py"
+        python3 "$backup_dir/install.py"
+        for name in nativeEmergency.js emergencyPatterns.json; do install -m 0644 "$backup_dir/$name" "apps/web/src/$name"; done
+        cd deployment/docker
+        if ! docker compose build web </dev/null; then
+          cp -p "$backup_dir/main.js" ../../apps/web/src/main.js
+          for name in nativeEmergency.js emergencyPatterns.json; do
+            if test -f "$backup_dir/$name.previous"; then cp -p "$backup_dir/$name.previous" "../../apps/web/src/$name"; else rm -f "../../apps/web/src/$name"; fi
+          done
+          echo "Build failed; source restored. Backup: $backup_dir"
+          exit 1
+        fi
+        docker compose up -d --no-deps web </dev/null
+        curl -fsS --max-time 10 --retry 8 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/ -o /dev/null
+        echo "Native dialer handoff deployed. Backup: $backup_dir"
+      args:
+        executable: /bin/bash
+      register: emergency_result
+      changed_when: true
+    - name: Show deployment result
+      ansible.builtin.debug:
+        var: emergency_result.stdout_lines
