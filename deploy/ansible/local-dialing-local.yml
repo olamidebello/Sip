@@ -16,7 +16,7 @@
         cp -p services/api/pstnBilling.js "$backup_dir/pstnBilling.js"
         cp -p services/api/callAccess.js "$backup_dir/callAccess.js"
         git fetch origin main </dev/null
-        release=bd15a148e46b6ff7e8afe65bd227c4f5ad546148
+        release=74f7e5a8aacc07ec95ca4933ca1db97e236ae6b6
         git merge-base --is-ancestor "$release" origin/main
         for name in localDialing.js dialingCountries.json localDialing.test.js callAccessDialing.test.js; do
           if test -f "services/api/$name"; then cp -p "services/api/$name" "$backup_dir/$name.previous"; fi
