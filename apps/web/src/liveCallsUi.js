@@ -1,0 +1,16 @@
+export function setupLiveCallsUi({document,get,isSuper,show}){
+ const admin=document.getElementById('admin');if(!admin)return;
+ const panel=document.createElement('details');panel.id='live-calls-monitor';panel.hidden=true;
+ panel.innerHTML='<summary>Live calls monitoring</summary><p>Outbound carrier calls in your workspace. Internal and inbound calls are not included. Status is based on switch billing events.</p><label>Search caller, destination or user <input data-search type="search"></label><label><input data-auto type="checkbox" checked> Refresh every 5 seconds</label><button type="button" data-refresh>Refresh now</button><p data-status role="status"></p><div data-list></div>';
+ const shortcut=document.createElement('button');shortcut.type='button';shortcut.textContent='Live calls';shortcut.hidden=true;shortcut.onclick=()=>{if(!isSuper())return;show('admin');panel.open=true;panel.scrollIntoView?.({block:'start'});};
+ admin.prepend(shortcut,panel);
+ const $=s=>panel.querySelector(s);let calls=[],busy=false,generation=0,lastRole=false;
+ function render(){const list=$('[data-list]');list.replaceChildren();const term=$('[data-search]').value.toLowerCase();for(const c of calls.filter(c=>[c.user,c.caller,c.destination,c.provider,c.state].join(' ').toLowerCase().includes(term))){const row=document.createElement('p');row.textContent=`${c.user} · ${c.caller} → ${c.destination} · ${c.provider} · ${c.state==='uncertain'?'Status uncertain — overdue switch event':c.state} · ${c.durationSeconds}s connected · limit ${c.maxSeconds}s`;list.append(row);}if(!list.childNodes.length)list.textContent=term?'No matching calls.':'No unsettled outbound carrier calls.';}
+ async function refresh(){if(busy||!isSuper()||!panel.open||admin.hidden||document.hidden)return;busy=true;const seq=generation;$('[data-refresh]').disabled=true;try{const r=await get('/api/admin/live-calls');if(seq!==generation||!isSuper())return;calls=r.calls;render();$('[data-status]').textContent=`${r.counts.connected} connected · ${r.counts.connecting} connecting · ${r.counts.uncertain} uncertain · Updated ${new Date(r.updatedAt).toLocaleTimeString()}${r.truncated?' · Showing newest 500; more records exist':''}`;}catch(e){if(seq===generation){calls=[];render();$('[data-status]').textContent='Live status unavailable: '+e.message;}}finally{busy=false;$('[data-refresh]').disabled=false;}}
+ function visibility(){const allowed=isSuper();if(panel.hidden===allowed)panel.hidden=!allowed;if(shortcut.hidden===allowed)shortcut.hidden=!allowed;if(!allowed&&lastRole){generation++;calls=[];render();$('[data-status]').textContent='';panel.open=false;}lastRole=allowed;}
+ const observer=new document.defaultView.MutationObserver(visibility);observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['hidden','class']});
+ // Role changes can happen while the admin workspace remains hidden.
+ const timer=setInterval(()=>{visibility();if($('[data-auto]').checked)void refresh();},5000);
+ $('[data-search]').oninput=render;$('[data-refresh]').onclick=refresh;panel.ontoggle=()=>{if(panel.open)void refresh();};document.addEventListener('visibilitychange',refresh);visibility();
+ return {dispose(){clearInterval(timer);observer.disconnect();document.removeEventListener('visibilitychange',refresh);generation++;panel.remove();shortcut.remove();}};
+}

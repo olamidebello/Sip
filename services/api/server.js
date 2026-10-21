@@ -1,3 +1,4 @@
+import {handleLiveCalls} from './liveCalls.js';
 import {handleVoicemail} from './voicemail.js';
 import {handleDialingPolicy} from './dialingPolicy.js';
 import {handleLocationReports} from './locationReports.js';
@@ -367,6 +368,7 @@ async function handler(req, res) {
       }
       if(path.startsWith('/api/admin/dialing-policy'))return await handleDialingPolicy({req,res,path,user,pool,send,readJson});
       // OLAMIDE_VOICEMAIL_HTTP_V1
+      if(path==='/api/admin/live-calls')return await handleLiveCalls({req,res,user,pool,send});
       if(path==='/api/voicemail'||path.startsWith('/api/admin/voicemail'))return await handleVoicemail({req,res,path,user,pool,send,readJson});
       if(path==='/api/softphone/access'||path==='/api/softphone/authorize')return await handleCallAccess({req,res,path,user,pool,send,readJson});
       if (path.startsWith("/api/softphone/"))
