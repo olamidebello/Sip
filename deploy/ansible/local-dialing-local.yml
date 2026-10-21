@@ -15,7 +15,7 @@
         install -d -m 0700 "$backup_dir"
         cp -p services/api/pstnBilling.js "$backup_dir/pstnBilling.js"
         git fetch origin main </dev/null
-        release=a8ec95011f15686b3ee842a2658234dc6125a084
+        release=34d94babd2abe76fb395db16a2b15566ca7dff7c
         git merge-base --is-ancestor "$release" origin/main
         for name in localDialing.js dialingCountries.json localDialing.test.js; do
           if test -f "services/api/$name"; then cp -p "services/api/$name" "$backup_dir/$name.previous"; fi
