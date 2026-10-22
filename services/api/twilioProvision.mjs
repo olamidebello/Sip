@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 import {isIP} from 'node:net';
 
 const sid=(v,p)=>typeof v==='string'&&new RegExp('^'+p+'[a-f0-9]{32}$','i').test(v);
+export function verifyServiceNames(tenant){const tag=createHash('sha256').update(tenant).digest('hex').slice(0,20).replace(/[0-9a-f]/g,c=>String.fromCharCode(97+parseInt(c,16)));return {caller:'SM '+tag+' Caller',account:'SM '+tag+' Login'};}
 export function validateProvision(config){
  if(!config||!/^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i.test(config.tenantId||''))throw Error('Explicit tenant UUID required');
  if(isIP(config.publicIp)!==4||/^(0|10|127|169\.254|192\.168)\./.test(config.publicIp)||/^172\.(1[6-9]|2\d|3[01])\./.test(config.publicIp))throw Error('Public IPv4 SIP egress address required');
@@ -20,14 +21,14 @@ export function client(credentials,fetcher=fetch){
   let response;
   try{response=await fetcher('https://'+base+'.twilio.com'+path,{method:form?'POST':'GET',headers:{Authorization:'Basic '+Buffer.from(pair.join(':')).toString('base64'),...(form?{'Content-Type':'application/x-www-form-urlencoded'}:{})},body:form?new URLSearchParams(form).toString():undefined,redirect:'error',signal:AbortSignal.timeout(15000)});}catch{throw Error('Twilio response uncertain; reconcile remote resource before retrying');}
   let data;try{data=await response.json();}catch{throw Error('Unreadable Twilio response; reconcile before retrying');}
-  if(!response.ok){const e=Error('Twilio HTTP '+response.status+(Number.isInteger(data?.code)?' code '+data.code:''));e.status=response.status;throw e;}
+  if(!response.ok){const operation=base+' '+(form?'POST':'GET')+' '+path.split('?')[0].replace(/\b[A-Z]{2}[a-f0-9]{32}\b/gi,'{SID}');const invalid=/^Invalid parameter:\s*([A-Za-z][A-Za-z0-9_]{0,39})\s*$/.exec(data?.message||'');const field=invalid&&['FriendlyName','PageSize','ServiceSid','UniqueName','CodeLength','DomainName','To','Channel'].includes(invalid[1])?' invalid '+invalid[1]:'';const e=Error(operation+': Twilio HTTP '+response.status+(Number.isInteger(data?.code)?' code '+data.code:'')+field);e.status=response.status;e.providerCode=data?.code;throw e;}
   return data;
  };
 }
 
 // The caller holds a tenant advisory lock. A persisted starting/unknown job is never replayed.
 export async function ensureResource({db,tenant,account,name,base,path,listKey,identity,form,request,apply,changes}){
- const listing=await request(base,path+(path.includes('?')?'&':'?')+'PageSize=1000');
+ let listing;try{listing=await request(base,path+(path.includes('?')?'&':'?')+'PageSize=50');}catch(e){throw Error(name+' inventory lookup: '+e.message);}
  if(listing.next_page_uri||listing.meta?.next_page_url)throw Error('Resource listing is incomplete; narrow inventory before provisioning');
  if(!Array.isArray(listing[listKey]))throw Error('Unexpected resource listing: '+name);
  const matches=listing[listKey].filter(identity);
@@ -55,10 +56,11 @@ export async function provisionResources({db,config,credentials,apply=false,fetc
  const account=await request('api','/2010-04-01/Accounts/'+credentials.accountSid+'.json');
  if(account.sid!==credentials.accountSid||account.status!=='active')throw Error('Active matching Twilio account required');
  const prefix='Smooth '+c.tenantId;
+ const names=verifyServiceNames(c.tenantId);
  const ensure=(options)=>ensureResource({db,tenant:c.tenantId,account:credentials.accountSid,request,apply,changes,...options});
- const verify=credentials.verifyServiceSid?await request('verify','/v2/Services/'+credentials.verifyServiceSid):await ensure({name:'Verify Service',base:'verify',path:'/v2/Services',listKey:'services',identity:r=>r.friendly_name===prefix+' Verify',form:{FriendlyName:prefix+' Verify',CodeLength:'6'}});
+ const verify=credentials.verifyServiceSid?await request('verify','/v2/Services/'+credentials.verifyServiceSid):await ensure({name:'Verify Service',base:'verify',path:'/v2/Services',listKey:'services',identity:r=>[names.caller,prefix+' Verify'].includes(r.friendly_name),form:{FriendlyName:names.caller,CodeLength:'6'}});
  const messaging=credentials.messagingServiceSid?await request('messaging','/v1/Services/'+credentials.messagingServiceSid):await ensure({name:'Messaging Service',base:'messaging',path:'/v1/Services',listKey:'services',identity:r=>r.friendly_name===prefix+' SMS',form:{FriendlyName:prefix+' SMS'}});
- const accountVerify=await ensure({name:'Account Verify Service',base:'verify',path:'/v2/Services',listKey:'services',identity:r=>r.friendly_name===prefix+' Account',form:{FriendlyName:prefix+' Account',CodeLength:'6'}});
+ const accountVerify=await ensure({name:'Account Verify Service',base:'verify',path:'/v2/Services',listKey:'services',identity:r=>[names.account,prefix+' Account'].includes(r.friendly_name),form:{FriendlyName:names.account,CodeLength:'6'}});
  if(!accountVerify.planned&&(!sid(accountVerify.sid,'VA')||accountVerify.account_sid!==credentials.accountSid))throw Error('Account Verify Service ownership mismatch');
  for(const [resource,type] of [[verify,'VA'],[messaging,'MG']])if(!resource.planned&&(!sid(resource.sid,type)||resource.account_sid!==credentials.accountSid))throw Error('Service account mismatch');
  const trunk=await ensure({name:'SIP trunk',base:'trunking',path:'/v1/Trunks',listKey:'trunks',identity:r=>r.domain_name===c.domain,form:{FriendlyName:prefix+' SIP',DomainName:c.domain}});
