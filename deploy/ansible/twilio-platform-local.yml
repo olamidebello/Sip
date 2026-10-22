@@ -1,0 +1,95 @@
+- name: Build installed Twilio integrations and report commissioning blockers
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    twilio_provision_resources: false
+    twilio_tenant_id: 00000000-0000-4000-8000-000000000000
+    twilio_public_ip: 154.29.77.102
+    twilio_domain: "smooth-{{ twilio_tenant_id | replace('-', '') }}.pstn.twilio.com"
+    twilio_require_all_live: false
+  tasks:
+    - name: Validate explicit workflow options
+      ansible.builtin.assert:
+        that:
+          - twilio_provision_resources | type_debug == 'bool'
+          - twilio_require_all_live | type_debug == 'bool'
+    - name: Create private workflow directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: twilio-platform-
+      register: twilio_work
+    - name: Build reviewed integrations and readiness GUI
+      block:
+        - name: Load pinned child playbooks and sources
+          ansible.builtin.shell: |
+            set -euo pipefail
+            umask 077
+            cd /opt/olamide/repo
+            git fetch origin main </dev/null
+            release=9d6d5c16aa634d631f21e157eaf2a4b79b134295
+            git merge-base --is-ancestor "$release" origin/main
+            for file in twilio-provider-roles-local.yml twilio-account-auth-local.yml twilio-provision-local.yml; do git show "$release:deploy/ansible/$file" > "{{ twilio_work.path }}/$file"; done
+            git show "$release:tools/deploy-twilio-readiness.sh" > "{{ twilio_work.path }}/readiness.sh"
+          args:
+            executable: /bin/bash
+          changed_when: false
+        - name: Build existing provider and account verification modules with their tests
+          ansible.builtin.shell: |
+            set -euo pipefail
+            umask 077
+            install -d -m 0700 /opt/olamide/reports
+            for stage in twilio-provider-roles-local twilio-account-auth-local; do
+              log="/opt/olamide/reports/$stage-$(date -u +%Y%m%dT%H%M%S)-$$.log"
+              if ! ansible-playbook -i localhost, -c local "{{ twilio_work.path }}/$stage.yml" > "$log" 2>&1; then
+                echo "Stage failed; inspect $log. Later stages were not run."
+                exit 1
+              fi
+              echo "Completed reviewed code installation: $stage. Log: $log"
+            done
+          args:
+            executable: /bin/bash
+          register: twilio_build
+        - name: Build readiness API and super-admin feature status panel
+          ansible.builtin.command:
+            argv:
+              - /bin/bash
+              - "{{ twilio_work.path }}/readiness.sh"
+          register: twilio_readiness_install
+        - name: Save nonsecret remote provisioning options
+          ansible.builtin.copy:
+            dest: "{{ twilio_work.path }}/provision-vars.json"
+            mode: '0600'
+            content: "{{ {'twilio_apply':true,'twilio_tenant_id':twilio_tenant_id,'twilio_public_ip':twilio_public_ip,'twilio_domain':twilio_domain} | to_nice_json }}"
+          when: twilio_provision_resources
+        - name: Provision supported remote resources using saved encrypted keys
+          ansible.builtin.command:
+            argv:
+              - ansible-playbook
+              - -i
+              - localhost,
+              - -c
+              - local
+              - "{{ twilio_work.path }}/twilio-provision-local.yml"
+              - -e
+              - "@{{ twilio_work.path }}/provision-vars.json"
+          when: twilio_provision_resources
+          register: twilio_remote
+        - name: Report scope honestly
+          ansible.builtin.debug:
+            msg:
+              - 'Implemented Twilio hub, provider-role controls, account PIN/OTP and readiness GUI built and tested.'
+              - 'Super admin > Providers & Routing > Twilio > Twilio feature readiness and controls.'
+              - 'Remote resource provisioning requested: {{ twilio_provision_resources }}. Saved credentials and account permissions are required.'
+              - 'Not commissioned: Twilio SIP termination, automatic DID purchase/allocation, customer SMS/WhatsApp or least-cost routing. Runtime adapters are still missing.'
+              - 'Business PBX/call-center onboarding and single-entry sign-in navigation remain separate implementation work.'
+              - 'No customer call, message or DID purchase is performed by this workflow.'
+        - name: Enforce full live acceptance when explicitly required
+          ansible.builtin.fail:
+            msg: 'Full-live requirement is unmet. Readiness explicitly reports missing runtime adapters; configuration cannot substitute for live acceptance.'
+          when: twilio_require_all_live
+      always:
+        - name: Remove temporary workflow files
+          ansible.builtin.file:
+            path: "{{ twilio_work.path }}"
+            state: absent
