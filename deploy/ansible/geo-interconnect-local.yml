@@ -1,0 +1,65 @@
+- name: Deploy geographic interconnect and area rate controls
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Preserve local integrations, test and deploy geographic controls
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        for file in services/api/locationPolicy.js services/api/countryBoundaries.js services/api/dialingCountries.json; do test -f "$file" || { echo "Required existing location integration missing: $file"; exit 1; }; done
+        backup_dir="/opt/olamide/backups/geo-interconnect-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup_dir"
+        git fetch origin main </dev/null
+        release=72ad022fd89c66353f225e9b1fb8dc2e5a74d3dd
+        git merge-base --is-ancestor "$release" origin/main
+        files=(services/api/server.js services/api/locationPolicy.js services/api/pstnBilling.js services/api/flowrouteRates.js services/api/geoCalling.js services/api/geoCalling.test.js services/api/hpInterconnect.js services/api/hpInterconnect.test.js apps/web/src/main.js apps/web/src/geoCallingUi.js apps/web/src/geoCallingUi.test.js apps/web/src/hpInterconnectUi.js apps/web/src/hpInterconnectUi.test.js)
+        for file in "${files[@]}"; do
+         mkdir -p "$backup_dir/source/$(dirname "$file")"
+         if test -f "$file"; then cp -p "$file" "$backup_dir/source/$file"; fi
+        done
+        recover() {
+         trap - ERR
+         for file in "${files[@]}"; do
+          if test -f "$backup_dir/source/$file"; then cp -p "$backup_dir/source/$file" "/opt/olamide/repo/$file"; else rm -f "/opt/olamide/repo/$file"; fi
+         done
+         if test -f "$backup_dir/rollback.yml"; then
+          cd /opt/olamide/repo/deployment/docker
+          docker compose -f compose.yml -f "$backup_dir/rollback.yml" up -d --no-deps api web </dev/null || true
+         fi
+         echo "Geographic deployment stopped; prior source/images restored where available. Backup: $backup_dir"
+         exit 1
+        }
+        trap recover ERR
+        git show "$release:tools/install-geo-calling.py" > "$backup_dir/install.py"
+        python3 "$backup_dir/install.py"
+        for file in services/api/geoCalling.js services/api/geoCalling.test.js services/api/hpInterconnect.js services/api/hpInterconnect.test.js apps/web/src/geoCallingUi.js apps/web/src/geoCallingUi.test.js apps/web/src/hpInterconnectUi.js apps/web/src/hpInterconnectUi.test.js; do git show "$release:$file" > "$file"; done
+        cd deployment/docker
+        docker compose config --quiet </dev/null
+        suffix=$(date +%s)-$$
+        api_id=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$(docker compose ps -q api)")
+        web_id=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$(docker compose ps -q web)")
+        docker tag "$api_id" "olamide-api:before-geo-$suffix"
+        docker tag "$web_id" "olamide-web:before-geo-$suffix"
+        printf 'services:\n  api:\n    image: olamide-api:before-geo-%s\n  web:\n    image: olamide-web:before-geo-%s\n' "$suffix" "$suffix" > "$backup_dir/rollback.yml"
+        docker compose build api </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --test /app/geoCalling.test.js /app/hpInterconnect.test.js </dev/null
+        for file in server.js locationPolicy.js pstnBilling.js flowrouteRates.js; do docker compose run --rm --no-deps -T --entrypoint node api --check "/app/$file" </dev/null; done
+        cd ../..
+        docker build -f deployment/docker/web.Dockerfile --target build -t olamide-geo-ui-check . </dev/null
+        docker run --rm --entrypoint node olamide-geo-ui-check --test /app/src/geoCallingUi.test.js /app/src/hpInterconnectUi.test.js </dev/null
+        cd deployment/docker
+        docker compose build web </dev/null
+        docker compose up -d --no-deps api web </dev/null
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        trap - ERR
+        echo "Geographic controls installed: Administrator > Geographic trunks & rates; HP Inc Nigeria interconnect. Defaults disabled; refresh user location after enabling. HP Inc live termination is NOT commissioned. Backup: $backup_dir"
+      args:
+        executable: /bin/bash
+      register: geo_install
+    - name: Show geographic controls result
+      ansible.builtin.debug:
+        msg: "{{ geo_install.stdout_lines[-24:] }}"
