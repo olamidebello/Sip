@@ -1,6 +1,6 @@
 export function setupAccountAuthUi({document,get,request,getUserId,isSuper}){
  const login=document.getElementById('login'),signup=document.getElementById('signup'),account=document.getElementById('account');if(!login||!signup||!account)return {};
- function field(form,name,label,{hidden=false,required=false}={}){const l=document.createElement('label');l.textContent=label;const input=document.createElement('input');input.name=name;input.type=hidden?'hidden':'password';input.inputMode='numeric';input.autocomplete=name==='authCode'?'one-time-code':'off';input.maxLength=name==='authChallenge'?64:10;input.required=required;l.hidden=hidden;l.append(input);form.append(l);return input;}
+ function field(form,name,label,{hidden=false,required=false}={}){const l=document.createElement('label');l.textContent=label;const input=document.createElement('input');input.name=name;input.type=hidden?'hidden':'password';input.inputMode='numeric';input.autocomplete=name==='authCode'?'one-time-code':'off';input.maxLength=name==='authChallenge'?64:10;input.required=required;l.hidden=hidden;l.append(input);const submit=[...form.querySelectorAll('button')].filter(b=>b.type==='submit').at(-1);if(submit)form.insertBefore(l,submit);else form.append(l);return input;}
  field(signup,'pin','Account PIN (6–8 digits; required when account verification is enabled)');
  field(login,'pin','Account PIN (if enrolled)');const challenge=field(login,'authChallenge','',{hidden:true}),code=field(login,'authCode','Phone verification code');
  code.parentElement.hidden=true;
