@@ -1,0 +1,11 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {hpDefaults,decideHp,validateHpPolicy} from './hpInterconnect.js';
+const now=1000000,p={latitude:6.5,longitude:3.3,accuracy:20,expires_ms:now+45000},policy={...hpDefaults,enabled:true,zones:[{name:'Allowed area',latitude:6.5,longitude:3.3,radiusMeters:1000}],callerDids:['+2348058750440']},call={destination:'+2348099999999',callerId:'+2348058750440',now};
+test('HP Inc requires enabled policy',()=>assert.equal(decideHp(hpDefaults,p,call).allowed,false));
+test('eligible Nigeria call stays staged until carrier commissioned',()=>{const r=decideHp(policy,p,call);assert.equal(r.allowed,true);assert.equal(r.commissioned,false);});
+test('non-Nigeria destination cannot use HP Inc',()=>assert.equal(decideHp(policy,p,{...call,destination:'+19452205026'}).allowed,false));
+test('caller DID must exactly match allowlist',()=>assert.equal(decideHp(policy,p,{...call,callerId:'+2348058750441'}).allowed,false));
+test('outside radius denied',()=>assert.equal(decideHp(policy,{...p,latitude:7},call).allowed,false));
+test('position uncertainty extending outside circle denied',()=>assert.equal(decideHp({...policy,zones:[{...policy.zones[0],radiusMeters:10}]},p,call).allowed,false));
+test('expired location denied',()=>assert.equal(decideHp(policy,{...p,expires_ms:now},call).allowed,false));
+test('enabled HP policy cannot have empty DID or zone allowlist',()=>{assert.throws(()=>validateHpPolicy({...policy,callerDids:[]}),/At least/);assert.throws(()=>validateHpPolicy({...policy,zones:[]}),/At least/);});
+test('invalid radius and malformed caller DID rejected',()=>{assert.throws(()=>validateHpPolicy({...policy,zones:[{...policy.zones[0],radiusMeters:-1}]}),/radius/);assert.throws(()=>validateHpPolicy({...policy,callerDids:['8058750440']}),/Valid HP/);});
