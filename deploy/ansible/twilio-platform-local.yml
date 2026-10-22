@@ -27,7 +27,7 @@
             umask 077
             cd /opt/olamide/repo
             git fetch origin main </dev/null
-            release=9d6d5c16aa634d631f21e157eaf2a4b79b134295
+            release=987574c4f6fe5f86e10b25aa7140c7290b63414d
             git merge-base --is-ancestor "$release" origin/main
             for file in twilio-provider-roles-local.yml twilio-account-auth-local.yml twilio-provision-local.yml; do git show "$release:deploy/ansible/$file" > "{{ twilio_work.path }}/$file"; done
             git show "$release:tools/deploy-twilio-readiness.sh" > "{{ twilio_work.path }}/readiness.sh"
