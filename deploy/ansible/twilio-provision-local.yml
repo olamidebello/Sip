@@ -1,0 +1,83 @@
+- name: Provision Twilio resources and report live adapter blockers
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    twilio_repo: /opt/olamide/repo
+    twilio_tenant_id: 00000000-0000-4000-8000-000000000000
+    twilio_public_ip: 154.29.77.102
+    twilio_domain: "smooth-{{ twilio_tenant_id | replace('-', '') }}.pstn.twilio.com"
+    twilio_origination_uri: ""
+    twilio_apply: false
+    twilio_require_live: false
+  tasks:
+    - name: Validate provisioning mode
+      ansible.builtin.assert:
+        that:
+          - twilio_apply | type_debug == 'bool'
+          - twilio_require_live | type_debug == 'bool'
+        fail_msg: Use JSON extra vars for booleans, for example '{"twilio_apply":true}'
+    - name: Prepare private provisioning directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: twilio-provision-
+      register: twilio_work
+    - name: Provision without restarting or replacing existing services
+      block:
+        - name: Read pinned provisioning sources without changing the working tree
+          ansible.builtin.shell: |
+            set -euo pipefail
+            cd "{{ twilio_repo }}"
+            git fetch origin main </dev/null
+            release=5ef9ef7a2fe0a2601f655279724adf898c32f061
+            git merge-base --is-ancestor "$release" origin/main
+            git show "$release:services/api/twilioProvision.mjs" > "{{ twilio_work.path }}/twilioProvision.mjs"
+            git show "$release:tools/provision-twilio-local.mjs" > "{{ twilio_work.path }}/provision-twilio-local.mjs"
+            git show "$release:services/api/twilioProvision.test.mjs" > "{{ twilio_work.path }}/twilioProvision.test.mjs"
+            chmod 0600 "{{ twilio_work.path }}"/*
+          args:
+            executable: /bin/bash
+          changed_when: false
+        - name: Write nonsecret provisioning parameters
+          ansible.builtin.copy:
+            dest: "{{ twilio_work.path }}/config.json"
+            mode: '0600'
+            content: "{{ {'tenantId':twilio_tenant_id,'publicIp':twilio_public_ip,'domain':twilio_domain,'originationUri':twilio_origination_uri,'apply':twilio_apply} | to_nice_json }}"
+        - name: Check provisioning logic in the installed API image
+          ansible.builtin.shell: |
+            set -euo pipefail
+            cd "{{ twilio_repo }}/deployment/docker"
+            docker compose run --rm --no-deps -T --user 0:0 --volume "{{ twilio_work.path }}:/provision" --entrypoint node api --test /provision/twilioProvision.test.mjs </dev/null
+          args:
+            executable: /bin/bash
+          changed_when: false
+        - name: Provision saved account resources using encrypted GUI credentials
+          ansible.builtin.shell: |
+            set -euo pipefail
+            exec 9>/run/olamide-update.lock
+            flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+            cd "{{ twilio_repo }}/deployment/docker"
+            docker compose run --rm --no-deps -T --user 0:0 --volume "{{ twilio_work.path }}:/provision" --entrypoint node api /provision/provision-twilio-local.mjs </dev/null
+          args:
+            executable: /bin/bash
+          register: twilio_provision_result
+          changed_when: twilio_apply
+        - name: Explain activation status
+          ansible.builtin.debug:
+            msg: "{{ twilio_provision_result.stdout_lines }}"
+        - name: Require completed live commissioning when requested
+          ansible.builtin.fail:
+            msg: 'Resources are provisioned but live adapters are not installed by this playbook. Trunk termination, transactional DID purchase/allocation, customer SMS billing/reconciliation and LCR integration remain blockers. No traffic has been activated.'
+          when: twilio_require_live
+      always:
+        - name: Preserve sanitized provisioning report
+          ansible.builtin.shell: |
+            if test -f "{{ twilio_work.path }}/report.json"; then
+              install -d -m 0700 /opt/olamide/reports
+              install -m 0600 "{{ twilio_work.path }}/report.json" "/opt/olamide/reports/twilio-provision-{{ twilio_tenant_id }}.json"
+            fi
+          changed_when: false
+        - name: Remove temporary provisioning files
+          ansible.builtin.file:
+            path: "{{ twilio_work.path }}"
+            state: absent

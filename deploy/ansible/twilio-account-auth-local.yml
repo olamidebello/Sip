@@ -1,0 +1,62 @@
+- name: Install opt-in Twilio account PIN and phone verification
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Preserve sources and images, integrate, test and deploy
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        test -f services/api/twilioHub.js || { echo 'Install the Twilio provider hub first'; exit 1; }
+        git fetch origin main </dev/null
+        release=5ef9ef7a2fe0a2601f655279724adf898c32f061
+        git merge-base --is-ancestor "$release" origin/main
+        backup="/opt/olamide/backups/twilio-account-auth-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup"
+        files=(services/api/server.js services/api/onboarding.js apps/web/src/main.js services/api/twilioAccountAuth.js services/api/twilioAccountAuth.test.js apps/web/src/twilioAccountAuthUi.js apps/web/src/twilioAccountAuthUi.test.js)
+        for f in "${files[@]}"; do mkdir -p "$backup/source/$(dirname "$f")"; if test -f "$f"; then cp -p "$f" "$backup/source/$f"; fi; done
+        cd deployment/docker
+        docker compose config --quiet
+        suffix=$(date +%s)-$$
+        for svc in api web; do
+          container=$(docker compose ps -q "$svc")
+          test -n "$container"
+          image=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$container")
+          docker tag "$image" "olamide-$svc:before-account-auth-$suffix"
+        done
+        printf 'services:\n  api:\n    image: olamide-api:before-account-auth-%s\n  web:\n    image: olamide-web:before-account-auth-%s\n' "$suffix" "$suffix" > "$backup/rollback.yml"
+        cd ../..
+        recover() {
+          trap - ERR
+          for f in "${files[@]}"; do if test -f "$backup/source/$f"; then cp -p "$backup/source/$f" "/opt/olamide/repo/$f"; else rm -f "/opt/olamide/repo/$f"; fi; done
+          cd /opt/olamide/repo/deployment/docker
+          docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps api web </dev/null || true
+          echo "Account authentication deployment stopped. Previous sources/images restored where available; additive tables retained. Backup: $backup"
+          exit 1
+        }
+        trap recover ERR
+        for f in services/api/twilioAccountAuth.js services/api/twilioAccountAuth.test.js apps/web/src/twilioAccountAuthUi.js apps/web/src/twilioAccountAuthUi.test.js; do git show "$release:$f" > "$f"; done
+        git show "$release:tools/install-twilio-account-auth.py" > "$backup/install.py"
+        python3 "$backup/install.py"
+        cd deployment/docker
+        docker compose build api </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --test /app/twilioAccountAuth.test.js </dev/null
+        for f in server.js onboarding.js; do docker compose run --rm --no-deps -T --entrypoint node api --check "/app/$f" </dev/null; done
+        cd ../..
+        docker build -f deployment/docker/web.Dockerfile --target build -t olamide-account-auth-ui-check . </dev/null
+        docker run --rm --entrypoint node olamide-account-auth-ui-check --test /app/src/twilioAccountAuthUi.test.js </dev/null
+        cd deployment/docker
+        docker compose build web </dev/null
+        docker compose up -d --no-deps api web </dev/null
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        trap - ERR
+        echo "Account PIN and signup/local-login phone OTP code installed. New policies default OFF; super admin must configure a separate account Verify Service and enable policy. Existing caller-ID verification, passkeys and directory authentication preserved. Actual phone delivery still requires live testing. No call or SMS was sent by this deployment. Backup: $backup"
+      args:
+        executable: /bin/bash
+      register: twilio_account_auth
+    - name: Show account authentication deployment result
+      ansible.builtin.debug:
+        msg: "{{ twilio_account_auth.stdout_lines[-4:] }}"
