@@ -1,0 +1,54 @@
+- name: Deploy super admin inbound call and message routing
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Preserve local handlers, integrate, test and deploy routing
+    ansible.builtin.shell: "set -euo pipefail\numask 077\ncd /opt/olamide/repo\nexec\
+      \ 9>/run/olamide-update.lock\nflock -n 9 || { echo 'Another deployment is running';\
+      \ exit 1; }\nbackup_dir=\"/opt/olamide/backups/inbound-routing-$(date -u +%Y%m%dT%H%M%S)-$$\"\
+      \ninstall -d -m 0700 \"$backup_dir\"\ngit fetch origin main </dev/null\nrelease=b7ec7df9413094b7bc8cd9be01b820242168d496\n\
+      git merge-base --is-ancestor \"$release\" origin/main\nfiles=(services/api/server.js\
+      \ services/api/flowrouteDidRouting.js services/api/messagingWebhooks.js services/api/subscriberRouting.js\
+      \ services/api/inboundRouting.js services/api/inboundRouting.test.js apps/web/src/main.js\
+      \ apps/web/src/inboundRoutingUi.js apps/web/src/inboundRoutingUi.test.js)\n\
+      for file in \"${files[@]}\"; do\n mkdir -p \"$backup_dir/source/$(dirname \"\
+      $file\")\"\n if test -f \"$file\"; then cp -p \"$file\" \"$backup_dir/source/$file\"\
+      ; fi\ndone\nrecover() {\n trap - ERR\n for file in \"${files[@]}\"; do\n  if\
+      \ test -f \"$backup_dir/source/$file\"; then cp -p \"$backup_dir/source/$file\"\
+      \ \"/opt/olamide/repo/$file\"; else rm -f \"/opt/olamide/repo/$file\"; fi\n\
+      \ done\n if test -f \"$backup_dir/rollback.yml\"; then\n  cd /opt/olamide/repo/deployment/docker\n\
+      \  docker compose -f compose.yml -f \"$backup_dir/rollback.yml\" up -d --no-deps\
+      \ api web </dev/null || true\n fi\n echo \"Inbound routing deployment stopped;\
+      \ prior source/images restored where available. Backup: $backup_dir\"\n exit\
+      \ 1\n}\ntrap recover ERR\ngit show \"$release:tools/install-inbound-routing.py\"\
+      \ > \"$backup_dir/install.py\"\npython3 \"$backup_dir/install.py\"\nfor file\
+      \ in services/api/inboundRouting.js services/api/inboundRouting.test.js apps/web/src/inboundRoutingUi.js\
+      \ apps/web/src/inboundRoutingUi.test.js; do git show \"$release:$file\" > \"\
+      $file\"; done\ncd deployment/docker\ndocker compose config --quiet </dev/null\n\
+      suffix=$(date +%s)-$$\napi_id=$(docker inspect --format '{% raw %}{{.Image}}{%\
+      \ endraw %}' \"$(docker compose ps -q api)\")\nweb_id=$(docker inspect --format\
+      \ '{% raw %}{{.Image}}{% endraw %}' \"$(docker compose ps -q web)\")\ndocker\
+      \ tag \"$api_id\" \"olamide-api:before-inbound-$suffix\"\ndocker tag \"$web_id\"\
+      \ \"olamide-web:before-inbound-$suffix\"\nprintf 'services:\\n  api:\\n    image:\
+      \ olamide-api:before-inbound-%s\\n  web:\\n    image: olamide-web:before-inbound-%s\\\
+      n' \"$suffix\" \"$suffix\" > \"$backup_dir/rollback.yml\"\ndocker compose build\
+      \ api </dev/null\ndocker compose run --rm --no-deps -T --entrypoint node api\
+      \ --test /app/inboundRouting.test.js </dev/null\nfor file in server.js flowrouteDidRouting.js\
+      \ messagingWebhooks.js subscriberRouting.js; do docker compose run --rm --no-deps\
+      \ -T --entrypoint node api --check \"/app/$file\" </dev/null; done\ncd ../..\n\
+      docker build -f deployment/docker/web.Dockerfile --target build -t olamide-inbound-ui-check\
+      \ . </dev/null\ndocker run --rm --entrypoint node olamide-inbound-ui-check --test\
+      \ /app/src/inboundRoutingUi.test.js </dev/null\ncd deployment/docker\ndocker\
+      \ compose build web </dev/null\ndocker compose up -d --no-deps api web </dev/null\n\
+      curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health\n\
+      trap - ERR\necho \"Inbound controls deployed: Administrator > Inbound call &\
+      \ message routing. Additive routing/audit tables retained. Backup: $backup_dir\"\
+      \n"
+    args:
+      executable: /bin/bash
+    register: inbound_result
+    changed_when: true
+  - name: Show inbound routing result
+    ansible.builtin.debug:
+      msg: '{{ inbound_result.stdout_lines[-16:] }}'
