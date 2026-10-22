@@ -105,11 +105,8 @@ root.innerHTML = `
   <header class="brand" id="top">
     <a class="brand-mark" href="#top" aria-label="Olamide home"><img src="/olamide-icon.svg" alt="" width="48" height="48"><span>Olamide<span class="brand-dot">.</span></span></a>
     <nav class="public-nav" aria-label="Public navigation"><a href="#experience">Explore</a><a href="#downloads">Downloads</a><a href="#help" id="public-help">Help</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a>
-      <details class="login-menu"><summary id="login-menu-label">Sign in</summary><div class="login-options"><div id="login-options-auth">
-        <button id="signin-user" type="button">User sign in</button><button id="signin-admin" type="button">Administrator sign in</button><button id="signin-super" type="button">Super administrator sign in</button>
-        <a href="/pages/ldap-login">Directory sign in</a><a href="/pages/signup">Create an account</a></div>
-        <div id="login-options-account" hidden><button id="menu-account" type="button">Account settings</button><button id="menu-logout" type="button">Sign out</button></div>
-      </div></details></nav>
+      <a id="login-options-auth" href="/pages/login">Login/SignUp</a>
+      <details class="login-menu" id="login-options-account" hidden><summary id="login-menu-label">My account</summary><div class="login-options"><button id="menu-account" type="button">Account settings</button><button id="menu-logout" type="button">Sign out</button></div></details></nav>
   </header>
   <section class="hero" aria-labelledby="hero-title">
     <div class="hero-copy"><p class="eyebrow"><span class="signal-dot"></span> YOUR CALLING SPACE</p>
@@ -1440,15 +1437,6 @@ document.addEventListener("click",event=>{
 $(".login-menu").addEventListener('click',event=>{if(event.target.closest('button,a'))$(".login-menu").open=false;});
 
 setupWorkspaceNavigation({navigate:showWorkspace,isSignedIn:()=>!!activeRole});
-for(const [id,label] of [["signin-user","user"],["signin-admin","administrator"],["signin-super","super administrator"]]) {
-  $("#"+id).onclick=()=>{
-    if(pageId(location.pathname)!=='login') pageRoutes.go('login');
-    $("#account-login-group").open=true;
-    $("#signin-role-help").textContent=`Sign in with your existing account. ${label[0].toUpperCase()+label.slice(1)} menus appear only if that role is assigned to you.`;
-    $("#login").scrollIntoView({behavior:"smooth",block:"center"});
-    $("#login").elements.email.focus({preventScroll:true});
-  };
-}
 $('#menu-account').onclick=()=>showWorkspace('account');
 $('#menu-logout').onclick=()=>$('#logout').click();
 const connectForm = $("#connect");
@@ -2592,7 +2580,7 @@ $("#logout").onclick = async () => {
     $("#dialplan-marketplace").hidden=true;$("#dialplan-offers").replaceChildren();$("#dialplan-orders").replaceChildren();
     $("#account-password-group").hidden=true;
     activeRole=null;workspaceQuick.clear();resetWorkspace();$("#help-agent").hidden=true;$("#help-admin").hidden=true;$("#signin-role-help").textContent="Your assigned role controls which menus appear after sign-in.";
-    $('#login-menu-label').textContent='Sign in';$('#login-options-auth').hidden=false;$('#login-options-account').hidden=true;
+    $('#login-menu-label').textContent='My account';$('#login-options-auth').hidden=false;$('#login-options-account').hidden=true;
     $("#password-change").hidden = true;
     $("#background-user").hidden = true;
     $("#calling-workspace").hidden=true;

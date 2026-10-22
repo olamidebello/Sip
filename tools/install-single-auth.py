@@ -5,8 +5,17 @@ changes=[]
 def replace(s,a,b):
  if s.count(a)!=1:raise SystemExit('Unknown single-auth integration anchor; no source changed: '+a[:100])
  return s.replace(a,b)
+def header(s):
+ start=s.find('<details class="login-menu">')
+ if start<0:
+  if 'href="/pages/login">Login/SignUp</a>' in s:return s
+  raise SystemExit('Unknown login header; no source changed')
+ end=s.index('</details>',start)+len('</details>')
+ s=s[:start]+'''<a id="login-options-auth" href="/pages/login">Login/SignUp</a>
+      <details class="login-menu" id="login-options-account" hidden><summary id="login-menu-label">My account</summary><div class="login-options"><button id="menu-account" type="button">Account settings</button><button id="menu-logout" type="button">Sign out</button></div></details>'''+s[end:]
+ return s.replace("$('#login-menu-label').textContent='Sign in';","$('#login-menu-label').textContent='My account';")
 def main(s):
- if '// SINGLE_AUTH_MAIN_V1' in s:return s
+ if '// SINGLE_AUTH_MAIN_V1' in s:return header(s)
  s="import {setupSingleAuth} from './singleAuth.js';\n// SINGLE_AUTH_MAIN_V1\n"+s
  old='''        <button id="signin-user" type="button">User sign in</button><button id="signin-admin" type="button">Administrator sign in</button><button id="signin-super" type="button">Super administrator sign in</button>
         <a href="/pages/ldap-login">Directory sign in</a><a href="/pages/signup">Create an account</a>'''
@@ -20,7 +29,7 @@ def main(s):
  s=replace(s,'setupFormGroups();','setupFormGroups();\nsetupSingleAuth(document);')
  s=s.replace('Registration creates an active account and SIP identity immediately. Calling needs an activated switch account; no number or plan is assigned at signup.','Create one account for calling and messaging. Phone verification follows the administrator’s policy. Your assigned role determines the tools you can access.')
  s=s.replace('Your account is created immediately. Email verification is not required.','Complete the required verification steps after creating your account. No number or paid plan is purchased at signup.')
- return s
+ return header(s)
 def routes(s):
  if '// SINGLE_AUTH_ROUTES_V1' in s:return s
  s="import {canonicalAuthPage,isAuthCompanion} from './singleAuth.js';\n// SINGLE_AUTH_ROUTES_V1\n"+s
