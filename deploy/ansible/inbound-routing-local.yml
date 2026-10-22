@@ -7,7 +7,7 @@
     ansible.builtin.shell: "set -euo pipefail\numask 077\ncd /opt/olamide/repo\nexec\
       \ 9>/run/olamide-update.lock\nflock -n 9 || { echo 'Another deployment is running';\
       \ exit 1; }\nbackup_dir=\"/opt/olamide/backups/inbound-routing-$(date -u +%Y%m%dT%H%M%S)-$$\"\
-      \ninstall -d -m 0700 \"$backup_dir\"\ngit fetch origin main </dev/null\nrelease=b7ec7df9413094b7bc8cd9be01b820242168d496\n\
+      \ninstall -d -m 0700 \"$backup_dir\"\ngit fetch origin main </dev/null\nrelease=288ead4c749408badf9fcef64983cb2d5de7586d\n\
       git merge-base --is-ancestor \"$release\" origin/main\nfiles=(services/api/server.js\
       \ services/api/flowrouteDidRouting.js services/api/messagingWebhooks.js services/api/subscriberRouting.js\
       \ services/api/inboundRouting.js services/api/inboundRouting.test.js apps/web/src/main.js\
