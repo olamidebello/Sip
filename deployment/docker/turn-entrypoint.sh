@@ -8,6 +8,8 @@ TURN_SECRET=${TURN_SECRET:-}
 umask 077
 cat > /tmp/olamide-turn.conf <<EOF
 listening-port=3478
+listening-ip=${TURN_PUBLIC_IP}
+relay-ip=${TURN_PUBLIC_IP}
 external-ip=${TURN_PUBLIC_IP}
 realm=${DOMAIN}
 fingerprint
@@ -24,3 +26,4 @@ user-quota=12
 total-quota=120
 EOF
 exec turnserver -c /tmp/olamide-turn.conf --log-file=stdout
+

@@ -1,3 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {appearanceDefaults,validateAppearance,handleUserAppearance} from './userAppearance.js';
 test('personal layout supports accessible themes and bounded values',()=>{assert.equal(validateAppearance({...appearanceDefaults,theme:'light',version:0}).theme,'light');assert.throws(()=>validateAppearance({...appearanceDefaults,accent:'url(javascript:bad)',version:0}));assert.throws(()=>validateAppearance({...appearanceDefaults,fontScale:500,version:0}));});
 test('appearance retrieval always binds the authenticated tenant and user',async()=>{let args;await handleUserAppearance({req:{method:'GET'},res:{setHeader(){}},user:{id:'me',tenant_id:'tenant'},pool:{query:async(_s,a)=>{args=a;return {rows:[]};}},send:()=>{}});assert.deepEqual(args,['tenant','me']);});
+
+test('WhatsApp inspired light and dark can be saved independently',()=>{for(const theme of ['whatsapp-light','whatsapp-dark'])assert.equal(validateAppearance({...appearanceDefaults,theme,version:0}).theme,theme);});
+
