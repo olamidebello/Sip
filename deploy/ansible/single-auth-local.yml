@@ -1,0 +1,102 @@
+- name: Deploy one sign-in and one create-account entry with shared authentication schema
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Prepare private bootstrap directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: single-auth-
+      register: single_auth_work
+    - name: Install shared authentication and unified navigation
+      block:
+        - name: Load the reviewed shared authentication prerequisite
+          ansible.builtin.shell: |
+            set -euo pipefail
+            umask 077
+            cd /opt/olamide/repo
+            git fetch origin main </dev/null
+            release=68bde59a99263580ce74527797facde8b0b64f49
+            git merge-base --is-ancestor "$release" origin/main
+            git show "$release:deploy/ansible/twilio-account-auth-local.yml" > "{{ single_auth_work.path }}/account-auth.yml"
+          args:
+            executable: /bin/bash
+          changed_when: false
+        - name: Build account PIN and phone OTP backend and additive database migrations
+          ansible.builtin.shell: |
+            set -euo pipefail
+            umask 077
+            install -d -m 0700 /opt/olamide/reports
+            log="/opt/olamide/reports/single-auth-prerequisite-$(date -u +%Y%m%dT%H%M%S)-$$.log"
+            if ! ansible-playbook -i localhost, -c local "{{ single_auth_work.path }}/account-auth.yml" > "$log" 2>&1; then
+              echo "Shared authentication installation failed. Inspect $log. Navigation update was not attempted."
+              exit 1
+            fi
+            echo "Shared authentication installed. Log: $log"
+          args:
+            executable: /bin/bash
+        - name: Preserve sources and images, apply unified entry points and verify database
+          ansible.builtin.shell: |
+            set -euo pipefail
+            umask 077
+            cd /opt/olamide/repo
+            exec 9>/run/olamide-update.lock
+            flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+            release=68bde59a99263580ce74527797facde8b0b64f49
+            backup="/opt/olamide/backups/single-auth-$(date -u +%Y%m%dT%H%M%S)-$$"
+            install -d -m 0700 "$backup"
+            files=(apps/web/src/main.js apps/web/src/pageRoutes.js apps/web/src/twilioAccountAuthUi.js services/api/onboarding.js apps/web/src/singleAuth.js apps/web/src/singleAuth.test.js services/api/authSchema.js services/api/authSchema.test.js)
+            for f in "${files[@]}"; do mkdir -p "$backup/source/$(dirname "$f")"; if test -f "$f"; then cp -p "$f" "$backup/source/$f"; fi; done
+            cd deployment/docker
+            suffix=$(date +%s)-$$
+            for svc in api web; do
+              container=$(docker compose ps -q "$svc")
+              test -n "$container"
+              image=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$container")
+              docker tag "$image" "olamide-$svc:before-single-auth-$suffix"
+            done
+            printf 'services:\n  api:\n    image: olamide-api:before-single-auth-%s\n  web:\n    image: olamide-web:before-single-auth-%s\n' "$suffix" "$suffix" > "$backup/rollback.yml"
+            cd ../..
+            recover() {
+              trap - ERR
+              for f in "${files[@]}"; do if test -f "$backup/source/$f"; then cp -p "$backup/source/$f" "/opt/olamide/repo/$f"; else rm -f "/opt/olamide/repo/$f"; fi; done
+              cd /opt/olamide/repo/deployment/docker
+              docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps api web </dev/null || true
+              echo "Unified entry update failed. Previous stage remains installed; this stage's sources/images restored where available. Backup: $backup"
+              exit 1
+            }
+            trap recover ERR
+            for f in apps/web/src/singleAuth.js apps/web/src/singleAuth.test.js services/api/authSchema.js services/api/authSchema.test.js; do git show "$release:$f" > "$f"; done
+            git show "$release:tools/install-single-auth.py" > "$backup/install.py"
+            python3 "$backup/install.py"
+            cd deployment/docker
+            docker compose build api </dev/null
+            docker compose run --rm --no-deps -T --entrypoint node api --test /app/authSchema.test.js /app/twilioAccountAuth.test.js </dev/null
+            docker compose run --rm --no-deps -T --entrypoint node api --check /app/onboarding.js </dev/null
+            cd ../..
+            docker build -f deployment/docker/web.Dockerfile --target build -t olamide-single-auth-ui-check . </dev/null
+            docker run --rm --entrypoint node olamide-single-auth-ui-check --test /app/src/singleAuth.test.js /app/src/pageRoutes.test.js /app/src/twilioAccountAuthUi.test.js </dev/null
+            cd deployment/docker
+            docker compose build web </dev/null
+            docker compose up -d --no-deps api web </dev/null
+            curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+            docker compose exec -T api node --input-type=module <<'JS'
+            import {createDatabase} from './db.js';
+            import {auditAuthSchema} from './authSchema.js';
+            const db=createDatabase(process.env.MYSQL_URL);
+            try { console.log('Authentication schema:',JSON.stringify(await auditAuthSchema(db))); }
+            finally { await db.end(); }
+            JS
+            trap - ERR
+            echo "One Sign in and one Create account entry installed. Roles come from server account records; public signup assigns user role. Directory/passkey methods retained within the common sign-in experience. Shared identity/session/profile/PIN/OTP tables verified. Phone OTP remains opt-in until configured. Backup: $backup"
+          args:
+            executable: /bin/bash
+          register: single_auth_result
+        - name: Show unified sign-in result
+          ansible.builtin.debug:
+            msg: "{{ single_auth_result.stdout_lines[-4:] }}"
+      always:
+        - name: Remove bootstrap files
+          ansible.builtin.file:
+            path: "{{ single_auth_work.path }}"
+            state: absent
