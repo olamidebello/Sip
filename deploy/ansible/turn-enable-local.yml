@@ -4,59 +4,21 @@
   gather_facts: false
   tasks:
   - name: Preserve environment and activate TURN
-    ansible.builtin.shell: 'set -euo pipefail
-
-      umask 077
-
-      cd /opt/olamide/repo
-
-      exec 9>/run/olamide-update.lock
-
-      flock -n 9 || { echo ''Another deployment is running''; exit 1; }
-
-      git fetch origin main </dev/null
-
-      release=a4b30e71a9c97b7f3bfb929427f76cc5b602eec6
-
-      git merge-base --is-ancestor "$release" origin/main
-
-      install -d -m 0755 /usr/local/lib/olamide-vpn
-
-      git show "$release:tools/enable-turn-local.py" > /usr/local/lib/olamide-vpn/enable-turn-local.py
-
-      git show "$release:tools/vpn-ufw.py" > /usr/local/lib/olamide-vpn/vpn-ufw.py
-
-      chmod 0755 /usr/local/lib/olamide-vpn/enable-turn-local.py /usr/local/lib/olamide-vpn/vpn-ufw.py
-
-      python3 /usr/local/lib/olamide-vpn/enable-turn-local.py
-
-      cat > /etc/systemd/system/olamide-turn-firewall.service <<''UNIT''
-
-      [Unit]
-
-      Description=Preserve authenticated TURN ingress in Olamide firewall
-
-      After=ufw.service olamide-firewall.service docker.service
-
-      [Service]
-
-      Type=oneshot
-
-      RemainAfterExit=yes
-
-      ExecStart=/usr/bin/python3 /usr/local/lib/olamide-vpn/enable-turn-local.py firewall
-
-      [Install]
-
-      WantedBy=multi-user.target
-
-      UNIT
-
-      systemctl daemon-reload
-
-      systemctl enable --now olamide-turn-firewall.service
-
-      '
+    ansible.builtin.shell: "set -euo pipefail\numask 077\ncd /opt/olamide/repo\nexec\
+      \ 9>/run/olamide-update.lock\nflock -n 9 || { echo 'Another deployment is running';\
+      \ exit 1; }\ngit fetch origin main </dev/null\nrelease=cd37a5f91454501c12227a34adbcee65a8de5ad5\n\
+      git merge-base --is-ancestor \"$release\" origin/main\nfor f in turn.Dockerfile\
+      \ turn-entrypoint.sh; do\n  if ! test -f \"deployment/docker/$f\"; then\n  \
+      \  git show \"$release:deployment/docker/$f\" > \"deployment/docker/$f\"\n \
+      \ fi\ndone\ninstall -d -m 0755 /usr/local/lib/olamide-vpn\ngit show \"$release:tools/enable-turn-local.py\"\
+      \ > /usr/local/lib/olamide-vpn/enable-turn-local.py\ngit show \"$release:tools/vpn-ufw.py\"\
+      \ > /usr/local/lib/olamide-vpn/vpn-ufw.py\nchmod 0755 /usr/local/lib/olamide-vpn/enable-turn-local.py\
+      \ /usr/local/lib/olamide-vpn/vpn-ufw.py\npython3 /usr/local/lib/olamide-vpn/enable-turn-local.py\n\
+      cat > /etc/systemd/system/olamide-turn-firewall.service <<'UNIT'\n[Unit]\nDescription=Preserve\
+      \ authenticated TURN ingress in Olamide firewall\nAfter=ufw.service olamide-firewall.service\
+      \ docker.service\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/bin/python3\
+      \ /usr/local/lib/olamide-vpn/enable-turn-local.py firewall\n[Install]\nWantedBy=multi-user.target\n\
+      UNIT\nsystemctl daemon-reload\nsystemctl enable --now olamide-turn-firewall.service\n"
     args:
       executable: /bin/bash
     register: turn_result

@@ -1,0 +1,40 @@
+- name: Deploy VPN status and controls in user Settings
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Back up, test and rebuild user Settings
+    ansible.builtin.shell: "set -euo pipefail\numask 077\ncd /opt/olamide/repo\nexec\
+      \ 9>/run/olamide-update.lock\nflock -n 9 || { echo 'Another deployment is running';\
+      \ exit 1; }\nbackup_dir=\"/opt/olamide/backups/vpn-settings-$(date -u +%Y%m%dT%H%M%S)-$$\"\
+      \ninstall -d -m 0700 \"$backup_dir\"\ngit fetch origin main </dev/null\nrelease=cd37a5f91454501c12227a34adbcee65a8de5ad5\n\
+      git merge-base --is-ancestor \"$release\" origin/main\ngrep -q setupVpnUi apps/web/src/main.js\n\
+      files=(vpnUi.js vpnUi.test.js)\nfor f in \"${files[@]}\"; do\n if test -f \"\
+      apps/web/src/$f\"; then cp -p \"apps/web/src/$f\" \"$backup_dir/$f\"; fi\ndone\n\
+      recover() {\n trap - ERR\n for f in \"${files[@]}\"; do\n  if test -f \"$backup_dir/$f\"\
+      ; then cp -p \"$backup_dir/$f\" \"/opt/olamide/repo/apps/web/src/$f\"; else\
+      \ rm -f \"/opt/olamide/repo/apps/web/src/$f\"; fi\n done\n if test -f \"$backup_dir/rollback.yml\"\
+      ; then\n  cd /opt/olamide/repo/deployment/docker\n  docker compose -f compose.yml\
+      \ -f \"$backup_dir/rollback.yml\" up -d --no-deps web </dev/null || true\n fi\n\
+      \ echo \"Settings update stopped; prior source/image restored where available.\
+      \ Backup: $backup_dir\"\n exit 1\n}\ntrap recover ERR\nfor f in \"${files[@]}\"\
+      ; do git show \"$release:apps/web/src/$f\" > \"apps/web/src/$f\"; done\ncd deployment/docker\n\
+      docker compose config --quiet </dev/null\nweb_id=$(docker inspect --format '{%\
+      \ raw %}{{.Image}}{% endraw %}' \"$(docker compose ps -q web)\")\nsuffix=$(date\
+      \ +%s)-$$\ndocker tag \"$web_id\" \"olamide-web:before-vpn-settings-$suffix\"\
+      \nprintf 'services:\\n  web:\\n    image: olamide-web:before-vpn-settings-%s\\\
+      n' \"$suffix\" > \"$backup_dir/rollback.yml\"\ncd ../..\ndocker build -f deployment/docker/web.Dockerfile\
+      \ --target build -t olamide-vpn-settings-check . </dev/null\ndocker run --rm\
+      \ --entrypoint node olamide-vpn-settings-check --test /app/src/vpnUi.test.js\
+      \ </dev/null\ncd deployment/docker\ndocker compose build web </dev/null\ndocker\
+      \ compose up -d --no-deps web </dev/null\ncurl -fsS --max-time 10 --retry 12\
+      \ --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health\ntrap\
+      \ - ERR\necho \"VPN controls deployed. Open user Settings > VPN status & controls.\
+      \ Backup: $backup_dir\"\n"
+    args:
+      executable: /bin/bash
+    register: settings_result
+    changed_when: true
+  - name: Show Settings result
+    ansible.builtin.debug:
+      msg: '{{ settings_result.stdout_lines[-16:] }}'
