@@ -1,0 +1,93 @@
+- name: Deploy grouped administration and personal experience
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Back up, integrate, test and initialize administration
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        for file in services/api/locationPolicy.js services/api/countryBoundaries.js services/api/dialingCountries.json; do test -f "$file" || { echo "Required existing location integration missing: $file"; exit 1; }; done
+        backup_dir="/opt/olamide/backups/administration-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup_dir"
+        git fetch origin main </dev/null
+        release=9163506a26aff8c8855bf354833876dadd767a94
+        geo_release=72ad022fd89c66353f225e9b1fb8dc2e5a74d3dd
+        git merge-base --is-ancestor "$release" origin/main
+        files=(services/api/server.js services/api/locationPolicy.js services/api/pstnBilling.js services/api/flowrouteRates.js services/api/dids.js services/api/subscriberRouting.js services/api/inboundRouting.js apps/web/src/main.js services/api/geoCalling.js services/api/geoCalling.test.js services/api/hpInterconnect.js services/api/hpInterconnect.test.js apps/web/src/geoCallingUi.js apps/web/src/geoCallingUi.test.js apps/web/src/hpInterconnectUi.js apps/web/src/hpInterconnectUi.test.js services/api/smoothDid.js services/api/smoothDid.test.js apps/web/src/smoothDidUi.js apps/web/src/smoothDidUi.test.js services/api/carrierProviders.js services/api/adapterRegistry.js services/api/messagingWebhooks.js services/api/didFlowroute.js services/api/icnInterconnect.js services/api/icnInterconnect.test.js services/api/providerManager.js services/api/providerManager.test.js services/api/callerVerification.js services/api/callerVerification.test.js services/api/userAppearance.js services/api/userAppearance.test.js apps/web/src/icnUi.js apps/web/src/icnUi.test.js apps/web/src/providerManagerUi.js apps/web/src/providerManagerUi.test.js apps/web/src/adminWorkspaceUi.js apps/web/src/adminWorkspaceUi.test.js apps/web/src/callerVerificationUi.js apps/web/src/callerVerificationUi.test.js apps/web/src/userAppearanceUi.js apps/web/src/userAppearanceUi.test.js apps/web/src/appearanceDefaults.js)
+        for file in "${files[@]}"; do
+         mkdir -p "$backup_dir/source/$(dirname "$file")"
+         if test -f "$file"; then cp -p "$file" "$backup_dir/source/$file"; fi
+        done
+        recover() {
+         trap - ERR
+         for file in "${files[@]}"; do
+          if test -f "$backup_dir/source/$file"; then cp -p "$backup_dir/source/$file" "/opt/olamide/repo/$file"; else rm -f "/opt/olamide/repo/$file"; fi
+         done
+         if test -f "$backup_dir/rollback.yml"; then
+          cd /opt/olamide/repo/deployment/docker
+          docker compose -f compose.yml -f "$backup_dir/rollback.yml" up -d --no-deps api web </dev/null || true
+         fi
+         echo "Administration deployment stopped; prior source/images restored where available. Backup: $backup_dir"
+         exit 1
+        }
+        trap recover ERR
+        git show "$geo_release:tools/install-geo-calling.py" > "$backup_dir/install-geo.py"
+        python3 "$backup_dir/install-geo.py"
+        for file in services/api/geoCalling.js services/api/geoCalling.test.js services/api/hpInterconnect.js services/api/hpInterconnect.test.js apps/web/src/geoCallingUi.js apps/web/src/geoCallingUi.test.js apps/web/src/hpInterconnectUi.js apps/web/src/hpInterconnectUi.test.js; do git show "$geo_release:$file" > "$file"; done
+        git show "$release:tools/install-smoothdid.py" > "$backup_dir/install-smoothdid.py"
+        python3 "$backup_dir/install-smoothdid.py"
+        for file in services/api/smoothDid.js services/api/smoothDid.test.js apps/web/src/smoothDidUi.js apps/web/src/smoothDidUi.test.js; do git show "$release:$file" > "$file"; done
+        for file in services/api/icnInterconnect.js services/api/icnInterconnect.test.js services/api/providerManager.js services/api/providerManager.test.js services/api/callerVerification.js services/api/callerVerification.test.js services/api/userAppearance.js services/api/userAppearance.test.js apps/web/src/icnUi.js apps/web/src/icnUi.test.js apps/web/src/providerManagerUi.js apps/web/src/providerManagerUi.test.js apps/web/src/adminWorkspaceUi.js apps/web/src/adminWorkspaceUi.test.js apps/web/src/callerVerificationUi.js apps/web/src/callerVerificationUi.test.js apps/web/src/userAppearanceUi.js apps/web/src/userAppearanceUi.test.js apps/web/src/appearanceDefaults.js; do git show "$release:$file" > "$file"; done
+        git show "$release:tools/install-icn.py" > "$backup_dir/install-icn.py"
+        python3 "$backup_dir/install-icn.py"
+        git show "$release:tools/install-administration.py" > "$backup_dir/install-administration.py"
+        python3 "$backup_dir/install-administration.py"
+        cd deployment/docker
+        docker compose config --quiet </dev/null
+        suffix=$(date +%s)-$$
+        api_id=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$(docker compose ps -q api)")
+        web_id=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$(docker compose ps -q web)")
+        docker tag "$api_id" "olamide-api:before-administration-$suffix"
+        docker tag "$web_id" "olamide-web:before-administration-$suffix"
+        printf 'services:\n  api:\n    image: olamide-api:before-administration-%s\n  web:\n    image: olamide-web:before-administration-%s\n' "$suffix" "$suffix" > "$backup_dir/rollback.yml"
+        docker compose build api </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --test /app/geoCalling.test.js /app/hpInterconnect.test.js /app/smoothDid.test.js /app/icnInterconnect.test.js /app/providerManager.test.js /app/callerVerification.test.js /app/userAppearance.test.js </dev/null
+        for file in server.js locationPolicy.js pstnBilling.js flowrouteRates.js dids.js subscriberRouting.js inboundRouting.js carrierProviders.js adapterRegistry.js messagingWebhooks.js; do docker compose run --rm --no-deps -T --entrypoint node api --check "/app/$file" </dev/null; done
+        cd ../..
+        docker build -f deployment/docker/web.Dockerfile --target build -t olamide-administration-ui-check . </dev/null
+        docker run --rm --entrypoint node olamide-administration-ui-check --test /app/src/geoCallingUi.test.js /app/src/hpInterconnectUi.test.js /app/src/smoothDidUi.test.js /app/src/icnUi.test.js /app/src/providerManagerUi.test.js /app/src/adminWorkspaceUi.test.js /app/src/callerVerificationUi.test.js /app/src/userAppearanceUi.test.js </dev/null
+        cd deployment/docker
+        docker compose build web </dev/null
+        docker compose up -d --no-deps api web </dev/null
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        docker compose exec -T api node --input-type=module <<'JS'
+        import {createDatabase} from './db.js';
+        import {seedSmoothInventory} from './smoothDid.js';
+        import {stageIcnTrunk,adoptIcnPlaceholder} from './icnInterconnect.js';
+        import {ensureVerificationPrincipal} from './callerVerification.js';
+        const db=createDatabase(process.env.MYSQL_URL);
+        try{
+         const indexes=(await db.query('SHOW INDEX FROM inhouse_dids')).rows;
+         const unique=indexes.filter(i=>Number(i.Non_unique)===0).reduce((a,i)=>{(a[i.Key_name]??=[]).push(i.Column_name);return a;},{});
+         if(!Object.values(unique).some(cols=>cols.length===1&&cols[0]==='number_e164'))throw Error('Globally unique DID inventory index required');
+         const admins=(await db.query("SELECT u.id,u.tenant_id FROM users u WHERE u.role='super_admin' AND u.status='active' AND EXISTS(SELECT 1 FROM did_requested_blocks b WHERE b.tenant_id=u.tenant_id AND b.prefix_digits='203150') ORDER BY u.id LIMIT 1")).rows;
+         if(!admins.length)throw Error('Recorded block owner requires an active super admin');
+         console.log('SmoothDID inventory:',JSON.stringify(await seedSmoothInventory(db,admins[0])));
+         console.log('ICN disabled draft:',JSON.stringify(await stageIcnTrunk(db,admins[0])));
+         console.log('SmoothDID ICN placeholder update:',JSON.stringify(await adoptIcnPlaceholder(db,admins[0])));
+         console.log('Restricted DID verification account:',JSON.stringify(await ensureVerificationPrincipal(db,admins[0])));
+         console.log('Groups and inventory:',JSON.stringify((await db.query('SELECT g.prefix_digits,COUNT(m.did_id) AS mapped FROM smooth_did_groups g LEFT JOIN smooth_did_members m ON m.group_id=g.id GROUP BY g.id ORDER BY g.prefix_digits')).rows));
+        }finally{await db.end();}
+        JS
+        trap - ERR
+        echo "Administration installed: grouped tools, provider management, ICN profile, SmoothDID, personal appearance and phone verification settings. ICN remains disabled/uncommissioned; Twilio credentials are required before verification calls. Backup: $backup_dir"
+      args:
+        executable: /bin/bash
+      register: administration_install
+    - name: Show administration result
+      ansible.builtin.debug:
+        msg: "{{ administration_install.stdout_lines[-28:] }}"
