@@ -21,11 +21,20 @@ def voice(s):
 def messages(s):
  if '// INBOUND_ROUTING_SMS_V1' in s:return s
  s="import {resolveInboundRoute} from './inboundRouting.js';\n"+s
- s=replace(s,'[event.recipient,tenant()]) : {rows:[]};',"['+'+event.recipient.replace(/^\\+/,''),tenant()]) : {rows:[]};")
+ # Preserve the server's existing ownership resolver. Supported layouts are
+ # the original messaging-number query and the local shared didOwner lookup.
+ local="const owner = !match[2].endsWith('-dlr') ? await didOwner(pool,tenant(),event.recipient) : null;"
+ if s.count(local)==1:
+  owner_expr='owner?.user_id'
+ elif s.count('[event.recipient,tenant()]) : {rows:[]};')==1:
+  s=replace(s,'[event.recipient,tenant()]) : {rows:[]};',"['+'+event.recipient.replace(/^\\+/,''),tenant()]) : {rows:[]};")
+  owner_expr='owner.rows[0]?.user_id'
+ else:
+  raise SystemExit('Unrecognized inbound message ownership layout; no source written')
  s=replace(s,'    const result = await pool.query(`INSERT IGNORE INTO flowroute_message_events', '''    // INBOUND_ROUTING_SMS_V1
-    const selected = !match[2].endsWith('-dlr') ? await resolveInboundRoute(pool,{tenantId:tenant(),number:'+'+event.recipient.replace(/^\\+/,''),channel:'sms',ownerId:owner.rows[0]?.user_id}) : null;
-    if(selected)owner.rows=selected.userId?[{user_id:selected.userId}]:[];
-    const result = await pool.query(`INSERT IGNORE INTO flowroute_message_events''')
+    const selected = !match[2].endsWith('-dlr') ? await resolveInboundRoute(pool,{tenantId:tenant(),number:'+'+event.recipient.replace(/^\\+/,''),channel:'sms',ownerId:OWNER_EXPRESSION}) : null;
+    const result = await pool.query(`INSERT IGNORE INTO flowroute_message_events'''.replace('OWNER_EXPRESSION',owner_expr))
+ s=replace(s,owner_expr+' || null,event.id',"selected?.userId || null,event.id")
  s=replace(s,"if(match[2]==='sms') await queueSubscriberSms", "if(match[2]==='sms'&&selected?.userId) await queueSubscriberSms")
  return replace(s,"eventKey:`flowroute/${event.id}`});", "eventKey:`flowroute/${event.id}`,routedUserId:selected.userId});")
 def subscriber(s):
