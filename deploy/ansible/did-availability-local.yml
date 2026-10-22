@@ -1,0 +1,79 @@
+- name: Deploy unified account entry points and provider DID availability shopping
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Prepare private prerequisite playbook
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        git fetch origin main </dev/null
+        release=4d797b3cc904ccffef8899ac063501d08e1de051
+        git merge-base --is-ancestor "$release" origin/main
+        bootstrap=$(mktemp /root/single-auth-prerequisite-XXXXXX.yml)
+        trap 'rm -f "$bootstrap"' EXIT
+        git show "$release:deploy/ansible/single-auth-local.yml" > "$bootstrap"
+        install -d -m 0700 /opt/olamide/reports
+        log="/opt/olamide/reports/did-shopping-auth-$(date -u +%Y%m%dT%H%M%S)-$$.log"
+        if ! ansible-playbook -i localhost, -c local "$bootstrap" > "$log" 2>&1; then
+          echo "Unified account entry/schema prerequisite failed. Inspect $log. DID search was not deployed."
+          exit 1
+        fi
+        echo "Unified sign-in and shared account database verified. Log: $log"
+      args:
+        executable: /bin/bash
+    - name: Back up, integrate, test and build provider availability search
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        release=4d797b3cc904ccffef8899ac063501d08e1de051
+        for f in services/api/smoothDid.js services/api/geoCalling.js services/api/locationPolicy.js services/api/providerManager.js; do test -f "$f" || { echo "Required geographic/provider integration missing: $f"; exit 1; }; done
+        backup="/opt/olamide/backups/did-availability-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup"
+        files=(services/api/server.js apps/web/src/main.js services/api/didAvailability.js services/api/didAvailability.test.js apps/web/src/didAvailabilityUi.js apps/web/src/didAvailabilityUi.test.js)
+        for f in "${files[@]}"; do mkdir -p "$backup/source/$(dirname "$f")"; if test -f "$f"; then cp -p "$f" "$backup/source/$f"; fi; done
+        cd deployment/docker
+        suffix=$(date +%s)-$$
+        for svc in api web; do
+          container=$(docker compose ps -q "$svc")
+          test -n "$container"
+          image=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$container")
+          docker tag "$image" "olamide-$svc:before-did-availability-$suffix"
+        done
+        printf 'services:\n  api:\n    image: olamide-api:before-did-availability-%s\n  web:\n    image: olamide-web:before-did-availability-%s\n' "$suffix" "$suffix" > "$backup/rollback.yml"
+        cd ../..
+        recover() {
+          trap - ERR
+          for f in "${files[@]}"; do if test -f "$backup/source/$f"; then cp -p "$backup/source/$f" "/opt/olamide/repo/$f"; else rm -f "/opt/olamide/repo/$f"; fi; done
+          cd /opt/olamide/repo/deployment/docker
+          docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps api web </dev/null || true
+          echo "DID availability update stopped; this stage restored prior source/images where available. Unified-auth prerequisite remains installed. Backup: $backup"
+          exit 1
+        }
+        trap recover ERR
+        for f in services/api/didAvailability.js services/api/didAvailability.test.js apps/web/src/didAvailabilityUi.js apps/web/src/didAvailabilityUi.test.js; do git show "$release:$f" > "$f"; done
+        git show "$release:tools/install-did-availability.py" > "$backup/install.py"
+        python3 "$backup/install.py"
+        cd deployment/docker
+        docker compose build api </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --test /app/didAvailability.test.js </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --check /app/server.js </dev/null
+        cd ../..
+        docker build -f deployment/docker/web.Dockerfile --target build -t olamide-did-availability-ui-check . </dev/null
+        docker run --rm --entrypoint node olamide-did-availability-ui-check --test /app/src/didAvailabilityUi.test.js /app/src/singleAuth.test.js /app/src/pageRoutes.test.js /app/src/twilioAccountAuthUi.test.js </dev/null
+        cd deployment/docker
+        docker compose build web </dev/null
+        docker compose up -d --no-deps api web </dev/null
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        trap - ERR
+        echo "Billing > Find available numbers by country and area installed. Live read-only inventory searches: enabled Flowroute, DIDWW, Twilio and eligible SmoothDID groups. Provider totals are shown only when supplied; failures are not zero stock. Existing purchase paths retained; automated Twilio purchase remains unavailable. Backup: $backup"
+      args:
+        executable: /bin/bash
+      register: did_availability
+    - name: Report account and DID search result
+      ansible.builtin.debug:
+        msg: "{{ did_availability.stdout_lines[-3:] }}"
