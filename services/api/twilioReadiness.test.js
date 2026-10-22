@@ -1,0 +1,6 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readinessRows,handleTwilioReadiness} from './twilioReadiness.js';
+test('active profile and keys cannot imply unimplemented runtime services are commissioned',()=>{const rows=readinessRows({configured:true,roles:{otp:true},callerPolicy:{enabled:true},accountPolicy:{login:true},profile:{status:'active',routing_mode:'primary',max_concurrent_calls:500}});assert.ok(rows.length>=30);for(const id of ['sip','numbers','sms','whatsapp']){const r=rows.find(x=>x.id===id);assert.equal(r.state,'implementation-required');assert.equal(r.live,false);}assert.equal(rows.find(x=>x.id==='verify').state,'configured');assert.ok(rows.every(r=>r.live===false&&r.markupPercent===30));});
+test('disabled provider OTP role cannot appear configured',()=>{const rows=readinessRows({configured:true,roles:{otp:false},callerPolicy:{enabled:true}});assert.equal(rows.find(x=>x.id==='verify').state,'setup-required');});
+test('ordinary admin is denied before reading any tenant secrets or data',async()=>{let output;await handleTwilioReadiness({req:{method:'POST'},res:{},pool:{query(){throw Error('must not read')}},user:{role:'admin'},send:(r,status,data)=>{output={status,data};}});assert.equal(output.status,403);});
