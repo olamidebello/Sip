@@ -29,7 +29,7 @@
             set -euo pipefail
             cd "{{ twilio_repo }}"
             git fetch origin main </dev/null
-            release=5ef9ef7a2fe0a2601f655279724adf898c32f061
+            release=5f27ab76b3e588130bdd8fee5498fb88f8117be4
             git merge-base --is-ancestor "$release" origin/main
             git show "$release:services/api/twilioProvision.mjs" > "{{ twilio_work.path }}/twilioProvision.mjs"
             git show "$release:tools/provision-twilio-local.mjs" > "{{ twilio_work.path }}/provision-twilio-local.mjs"
