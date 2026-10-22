@@ -1,0 +1,54 @@
+- name: Diagnose outbound SMS without changing saved credential logic
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Back up, add safe diagnostics and inspect carrier records
+    ansible.builtin.shell: "set -euo pipefail\numask 077\ncd /opt/olamide/repo\nexec\
+      \ 9>/run/olamide-update.lock\nflock -n 9 || { echo 'Another deployment is running';\
+      \ exit 1; }\nbackup_dir=\"/opt/olamide/backups/sms-diagnostics-$(date -u +%Y%m%dT%H%M%S)-$$\"\
+      \ninstall -d -m 0700 \"$backup_dir\"\ngit fetch origin main </dev/null\nrelease=2f79c115b1cfdf2910f2a84257645ce72d8b5953\n\
+      git merge-base --is-ancestor \"$release\" origin/main\nfiles=(services/api/messagingWebhooks.js)\n\
+      for file in \"${files[@]}\"; do\n mkdir -p \"$backup_dir/source/$(dirname \"\
+      $file\")\"\n if test -f \"$file\"; then cp -p \"$file\" \"$backup_dir/source/$file\"\
+      ; fi\ndone\nrecover() {\n trap - ERR\n for file in \"${files[@]}\"; do\n  if\
+      \ test -f \"$backup_dir/source/$file\"; then cp -p \"$backup_dir/source/$file\"\
+      \ \"/opt/olamide/repo/$file\"; else rm -f \"/opt/olamide/repo/$file\"; fi\n\
+      \ done\n if test -f \"$backup_dir/rollback.yml\"; then\n  cd /opt/olamide/repo/deployment/docker\n\
+      \  docker compose -f compose.yml -f \"$backup_dir/rollback.yml\" up -d --no-deps\
+      \ api </dev/null || true\n fi\n echo \"SMS diagnostics deployment stopped; prior\
+      \ source/image restored where available. Backup: $backup_dir\"\n exit 1\n}\n\
+      trap recover ERR\ngit show \"$release:tools/diagnose-sms-submission.py\" > \"\
+      $backup_dir/install.py\"\npython3 \"$backup_dir/install.py\"\ncd deployment/docker\n\
+      docker compose config --quiet </dev/null\nsuffix=$(date +%s)-$$\napi_id=$(docker\
+      \ inspect --format '{% raw %}{{.Image}}{% endraw %}' \"$(docker compose ps -q\
+      \ api)\")\ndocker tag \"$api_id\" \"olamide-api:before-sms-diagnostics-$suffix\"\
+      \nprintf 'services:\\n  api:\\n    image: olamide-api:before-sms-diagnostics-%s\\\
+      n' \"$suffix\" > \"$backup_dir/rollback.yml\"\ndocker compose build api </dev/null\n\
+      docker compose run --rm --no-deps -T --entrypoint node api --check /app/messagingWebhooks.js\
+      \ </dev/null\ndocker compose up -d --no-deps api </dev/null\ncurl -fsS --max-time\
+      \ 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health\n\
+      docker compose exec -T api node --input-type=module <<'JS'\nimport {createDatabase}\
+      \ from './db.js';\nimport {providerCredentials} from './providerCredentials.js';\n\
+      const db=createDatabase(process.env.MYSQL_URL);\ntry{\n const tenants=(await\
+      \ db.query('SELECT DISTINCT tenant_id FROM flowroute_sms_numbers WHERE enabled=TRUE')).rows;\n\
+      \ for(const t of tenants){\n  const saved=await providerCredentials(db,t.tenant_id,'flowroute');\n\
+      \  if(saved?.disabled){console.log('Saved credentials disabled; lookup skipped');continue;}\n\
+      \  const key=saved?.accessKey||process.env.FLOWROUTE_ACCESS_KEY,secret=saved?.secretKey||process.env.FLOWROUTE_SECRET_KEY;\n\
+      \  if(!key||!secret){console.log('Carrier credentials missing; lookup skipped');continue;}\n\
+      \  const url=new URL('https://api.flowroute.com/v2.2/messages');\n  url.searchParams.set('start_date',new\
+      \ Date(Date.now()-86400000).toISOString());url.searchParams.set('limit','100');\n\
+      \  const r=await fetch(url,{headers:{Authorization:'Basic '+Buffer.from(key+':'+secret).toString('base64'),Accept:'application/vnd.api+json'},signal:AbortSignal.timeout(15000)});\n\
+      \  console.log('Saved-credential message lookup HTTP:',r.status);\n  const data=await\
+      \ r.json();\n  if(Array.isArray(data.data))console.log('Carrier message metadata:',JSON.stringify(data.data.map(m=>({id:m.id,from:m.attributes?.from,to:m.attributes?.to,direction:m.attributes?.direction,status:m.attributes?.status,receipts:m.attributes?.delivery_receipts?.map(d=>({status:d.status,code:d.status_code}))}))));\n\
+      \ }\n}catch(e){console.log('Read-only lookup could not complete:',e.cause?.code||e.code||e.name);}\n\
+      finally{await db.end();}\nJS\ntrap - ERR\necho \"SMS diagnostics installed;\
+      \ credentials unchanged. Send one NEW test SMS, then inspect OLAMIDE_SMS_SUBMISSION_FAILURE\
+      \ logs. Old unknown messages were not resent. Backup: $backup_dir\"\n"
+    args:
+      executable: /bin/bash
+    register: sms_diagnostic
+    changed_when: true
+  - name: Show SMS diagnostics
+    ansible.builtin.debug:
+      msg: '{{ sms_diagnostic.stdout_lines[-18:] }}'
