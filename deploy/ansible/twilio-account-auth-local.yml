@@ -12,7 +12,7 @@
         flock -n 9 || { echo 'Another deployment is running'; exit 1; }
         test -f services/api/twilioHub.js || { echo 'Install the Twilio provider hub first'; exit 1; }
         git fetch origin main </dev/null
-        release=5ef9ef7a2fe0a2601f655279724adf898c32f061
+        release=42dd0629510489fdee14e4c71dfac0440abbfa3b
         git merge-base --is-ancestor "$release" origin/main
         backup="/opt/olamide/backups/twilio-account-auth-$(date -u +%Y%m%dT%H%M%S)-$$"
         install -d -m 0700 "$backup"
