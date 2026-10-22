@@ -16,7 +16,7 @@
             umask 077
             cd /opt/olamide/repo
             git fetch origin main </dev/null
-            release=68bde59a99263580ce74527797facde8b0b64f49
+            release=929e6d35b3a70197c002630f75d9934b09804d89
             git merge-base --is-ancestor "$release" origin/main
             git show "$release:deploy/ansible/twilio-account-auth-local.yml" > "{{ single_auth_work.path }}/account-auth.yml"
           args:
@@ -42,7 +42,7 @@
             cd /opt/olamide/repo
             exec 9>/run/olamide-update.lock
             flock -n 9 || { echo 'Another deployment is running'; exit 1; }
-            release=68bde59a99263580ce74527797facde8b0b64f49
+            release=929e6d35b3a70197c002630f75d9934b09804d89
             backup="/opt/olamide/backups/single-auth-$(date -u +%Y%m%dT%H%M%S)-$$"
             install -d -m 0700 "$backup"
             files=(apps/web/src/main.js apps/web/src/pageRoutes.js apps/web/src/twilioAccountAuthUi.js services/api/onboarding.js apps/web/src/singleAuth.js apps/web/src/singleAuth.test.js services/api/authSchema.js services/api/authSchema.test.js)
