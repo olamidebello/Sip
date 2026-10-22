@@ -1,0 +1,67 @@
+- name: Install optional mobile chat themes and public TURN relay binding
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Preserve, build, test and deploy appearance and TURN
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        git fetch origin main </dev/null
+        release=9bc7ac4a49278f5730ebc877516393369fcb0ff9
+        git merge-base --is-ancestor "$release" origin/main
+        backup="/opt/olamide/backups/mobile-style-media-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup"
+        files=(services/api/userAppearance.js services/api/userAppearance.test.js apps/web/src/userAppearanceUi.js apps/web/src/userAppearanceUi.test.js deployment/docker/turn-entrypoint.sh)
+        for f in "${files[@]}"; do test -f "$f"; mkdir -p "$backup/source/$(dirname "$f")"; cp -p "$f" "$backup/source/$f"; done
+        cd deployment/docker
+        docker compose --profile turn config --quiet
+        python3 - <<'PY'
+        import json,subprocess
+        c=json.loads(subprocess.check_output(['docker','compose','--profile','turn','config','--format','json'],text=True))
+        t=c['services'].get('turn',{});a=c['services']['api'].get('environment',{});e=t.get('environment',{})
+        assert t.get('network_mode')=='host','Existing host-network TURN service required'
+        assert e.get('TURN_PUBLIC_IP')=='154.29.77.102','Confirm TURN public IP before deployment'
+        assert len(e.get('TURN_SECRET') or '')>=32 and a.get('TURN_SECRET')==e.get('TURN_SECRET'),'TURN/API credential mismatch; no secrets printed'
+        PY
+        for svc in api web turn; do
+         id=$(docker compose --profile turn ps -q "$svc")
+         test -n "$id" || { echo "Running service required: $svc"; exit 1; }
+         image=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$id")
+         docker tag "$image" "olamide-$svc:before-mobile-$(basename "$backup")"
+        done
+        printf 'services:\n  api:\n    image: olamide-api:before-mobile-%s\n  web:\n    image: olamide-web:before-mobile-%s\n  turn:\n    image: olamide-turn:before-mobile-%s\n' "$(basename "$backup")" "$(basename "$backup")" "$(basename "$backup")" > "$backup/rollback.yml"
+        cd ../..
+        recover() {
+         trap - ERR
+         for f in "${files[@]}"; do cp -p "$backup/source/$f" "/opt/olamide/repo/$f"; done
+         cd deployment/docker
+         docker compose --profile turn -f compose.yml -f "$backup/rollback.yml" up -d --no-deps api web turn </dev/null || true
+         echo "Deployment stopped; prior source/images restored where available. Backup: $backup"
+         exit 1
+        }
+        trap recover ERR
+        for f in "${files[@]}"; do git show "$release:$f" > "$f"; done
+        sh -n deployment/docker/turn-entrypoint.sh
+        cd deployment/docker
+        docker compose build api </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --test /app/userAppearance.test.js </dev/null
+        cd ../..
+        docker build -f deployment/docker/web.Dockerfile --target build -t olamide-mobile-style-check . </dev/null
+        docker run --rm --entrypoint node olamide-mobile-style-check --test /app/src/userAppearanceUi.test.js </dev/null
+        cd deployment/docker
+        docker compose --profile turn build web turn </dev/null
+        docker compose --profile turn up -d --no-deps api web turn </dev/null
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        docker compose --profile turn exec -T turn sh -c 'grep -qx "relay-ip=154.29.77.102" /tmp/olamide-turn.conf && grep -qx "listening-ip=154.29.77.102" /tmp/olamide-turn.conf'
+        trap - ERR
+        echo "Installed. Account > Make Olamide yours > Theme > WhatsApp-inspired light/dark. TURN bound to public IP. Test a new call from Nigeria; audio is not yet verified. Backup: $backup"
+      args:
+        executable: /bin/bash
+      register: mobile_install
+    - name: Show result
+      ansible.builtin.debug:
+        msg: "{{ mobile_install.stdout_lines[-12:] }}"
