@@ -1,0 +1,77 @@
+- name: Install and attempt automatic Twilio Verify configuration
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Preserve, integrate, test and deploy Twilio hub
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        test -f services/api/callerVerification.js
+        git fetch origin main </dev/null
+        release=d4d115fe9c636ec53fbba7f7521031ee9b0406c0
+        git merge-base --is-ancestor "$release" origin/main
+        backup="/opt/olamide/backups/twilio-hub-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup"
+        files=(services/api/server.js services/api/callerVerification.js apps/web/src/main.js services/api/twilioHub.js services/api/twilioHub.test.js apps/web/src/twilioHubUi.js apps/web/src/twilioHubUi.test.js services/api/twilioAutoSetup.js services/api/twilioAutoSetup.test.js)
+        for f in "${files[@]}"; do mkdir -p "$backup/source/$(dirname "$f")"; if test -f "$f"; then cp -p "$f" "$backup/source/$f"; fi; done
+        cd deployment/docker
+        docker compose config --quiet
+        suffix=$(date +%s)-$$
+        for svc in api web; do
+         id=$(docker compose ps -q "$svc")
+         test -n "$id" || { echo "Running service required: $svc"; exit 1; }
+         image=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$id")
+         docker tag "$image" "olamide-$svc:before-twilio-$suffix"
+        done
+        printf 'services:\n  api:\n    image: olamide-api:before-twilio-%s\n  web:\n    image: olamide-web:before-twilio-%s\n' "$suffix" "$suffix" > "$backup/rollback.yml"
+        cd ../..
+        recover() {
+         trap - ERR
+         for f in "${files[@]}"; do if test -f "$backup/source/$f"; then cp -p "$backup/source/$f" "/opt/olamide/repo/$f"; else rm -f "/opt/olamide/repo/$f"; fi; done
+         cd /opt/olamide/repo/deployment/docker
+         docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps api web </dev/null || true
+         echo "Twilio deployment stopped; previous source/images restored where available. Additive tables/invoices are retained. Backup: $backup"
+         exit 1
+        }
+        trap recover ERR
+        for f in services/api/twilioHub.js services/api/twilioHub.test.js apps/web/src/twilioHubUi.js apps/web/src/twilioHubUi.test.js services/api/twilioAutoSetup.js services/api/twilioAutoSetup.test.js; do git show "$release:$f" > "$f"; done
+        git show "$release:tools/install-twilio-hub.py" > "$backup/install.py"
+        python3 "$backup/install.py"
+        cd deployment/docker
+        docker compose build api </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --test /app/twilioAutoSetup.test.js /app/twilioHub.test.js /app/callerVerification.test.js </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --check /app/server.js </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --check /app/callerVerification.js </dev/null
+        cd ../..
+        docker build -f deployment/docker/web.Dockerfile --target build -t olamide-twilio-ui-check . </dev/null
+        docker run --rm --entrypoint node olamide-twilio-ui-check --test /app/src/twilioHubUi.test.js /app/src/callerVerificationUi.test.js </dev/null
+        cd deployment/docker
+        docker compose build web </dev/null
+        docker compose up -d --no-deps api web </dev/null
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        docker compose exec -T api node --input-type=module <<'JS'
+        import {createDatabase} from './db.js';
+        import {autoSetupTwilio} from './twilioAutoSetup.js';
+        const db=createDatabase(process.env.MYSQL_URL);
+        try {
+         const candidates=(await db.query("SELECT id,tenant_id,role FROM users WHERE role='super_admin' AND status='active' ORDER BY id")).rows;
+         const tenants=new Map(candidates.map(u=>[u.tenant_id,u]));
+         const selected=process.env.TWILIO_SETUP_TENANT_ID?tenants.get(process.env.TWILIO_SETUP_TENANT_ID):tenants.size===1?[...tenants.values()][0]:null;
+         if(!selected)throw Error('Select an active tenant through the GUI, or set TWILIO_SETUP_TENANT_ID in the API environment.');
+         console.log('Twilio automatic setup:',JSON.stringify(await autoSetupTwilio(db,selected)));
+        } catch(e) {
+         console.log('Twilio automatic setup:',JSON.stringify({status:'action_required',reason:e.code?'Database/setup error '+e.code:e.message,next:'Save Twilio Account SID and Auth Token in Administrator > Providers & Routing > Twilio, then click Auto provision Verify settings.'}));
+        } finally {await db.end();}
+        JS
+        trap - ERR
+        echo "Twilio auto-setup controls installed. Administrator > Providers & Routing > Twilio. Customer Money/Billing > Twilio services marketplace. Save credentials and enable the verification Security policy. Prices cost plus 30%. Setup-required products are not live runtime adapters. No calls/messages or remote purchases were made. Backup: $backup"
+      args:
+        executable: /bin/bash
+      register: twilio_install
+    - name: Show Twilio installation result
+      ansible.builtin.debug:
+        msg: "{{ twilio_install.stdout_lines[-16:] }}"
