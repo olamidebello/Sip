@@ -1,0 +1,29 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {validateAuthPolicy,validPin,approvedCheck,verifyRequest,consumeAccountChallenge,loginAccountGate} from './twilioAccountAuth.js';
+import {seal} from './providerCredentials.js';
+import {createHash} from 'node:crypto';
+const user={id:'00000000-0000-4000-8000-000000000001',tenant_id:'00000000-0000-4000-8000-000000000000'};
+const account='AC'+'1'.repeat(32),service='VA'+'2'.repeat(32),verification='VE'+'3'.repeat(32),phone='+2348012345678',token='4'.repeat(64);
+const policy={signup:true,login:true,requirePin:true,serviceSid:service,channel:'sms',allowedPrefixes:['+234'],dailyLimit:100,version:1};
+test('enabled account policies require a service, bounded cap and explicit destinations',()=>{assert.equal(validateAuthPolicy(policy).channel,'sms');for(const b of [{serviceSid:''},{channel:'whatsapp'},{dailyLimit:1001},{allowedPrefixes:[]},{login:'true'}])assert.throws(()=>validateAuthPolicy({...policy,...b}));});
+test('PIN input rejects trivial codes and preserves leading zeros',()=>{assert.equal(validPin('025819'),true);for(const p of ['111111','123456','1234','abcdefgh',12345678])assert.equal(validPin(p),false);});
+test('approval must bind account service number and verification SID',()=>{const row={provider_sid:verification,phone,account_sid:account,service_sid:service},r={status:'approved',sid:verification,to:phone,account_sid:account,service_sid:service};assert.equal(approvedCheck(row,r),true);for(const b of [{status:'pending'},{sid:'VE'+'0'.repeat(32)},{to:'+15551234567'},{account_sid:'AC'+'0'.repeat(32)},{service_sid:'VA'+'0'.repeat(32)}])assert.equal(approvedCheck(row,{...r,...b}),false);});
+test('Verify check uses VerificationSid and fixed HTTPS endpoint without exposing codes in errors',async()=>{let sent;await verifyRequest({accountSid:account,authToken:'test'},service,'VerificationCheck',{VerificationSid:verification,Code:'428591'},async(url,o)=>{sent={url,o};return {ok:true,json:async()=>({status:'pending'})};});assert.equal(sent.url,'https://verify.twilio.com/v2/Services/'+service+'/VerificationCheck');assert.equal(new URLSearchParams(sent.o.body).get('VerificationSid'),verification);assert.equal(sent.o.redirect,'error');});
+function fixture(overrides={}){
+ process.env.PROVIDER_CREDENTIAL_KEY='5'.repeat(64);
+ const row={token_hash:createHash('sha256').update(token).digest('hex'),tenant_id:user.tenant_id,user_id:user.id,purpose:'login',phone,provider_sid:verification,service_sid:service,account_sid:account,policy_version:1,hub_version:1,status:'pending',attempts:0,expires_ms:Date.now()+60000,...overrides};
+ const updates=[];const db={release(){},query:async(sql,args)=>{
+  if(sql.includes('GET_LOCK'))return {rows:[{acquired:1}]};if(sql.includes('RELEASE_LOCK'))return {rows:[]};
+  if(sql.includes('SELECT policy,version'))return {rows:[{policy,version:1}]};
+  if(sql.includes('SELECT ciphertext'))return {rows:[{enabled:1,version:1,ciphertext:seal({accountSid:account,authToken:'test'},Buffer.from(process.env.PROVIDER_CREDENTIAL_KEY,'hex'),user.tenant_id,'twilio-hub')}]};
+  if(sql.startsWith('SELECT * FROM twilio_account_challenges'))return {rows:args[1]===user.tenant_id&&args[2]===user.id&&args[3]===row.purpose?[row]:[]};
+  if(sql.includes('SELECT phone_e164'))return {rows:[{phone_e164:phone}]};
+  if(sql.includes('UPDATE twilio_account_challenges')){updates.push({sql,args});row.status=sql.includes("status='checking'")?'checking':sql.includes("status='unknown'")?'unknown':args[0];return {rowCount:1,rows:[]};}
+  throw Error('Unexpected query '+sql);
+ }};return {pool:{connect:async()=>db,query:db.query},row,updates};
+}
+test('approved login challenge is consumed once; replay cannot call Twilio',async()=>{const f=fixture();let calls=0;const fetcher=async()=>{calls++;return {ok:true,json:async()=>({status:'approved',sid:verification,to:phone,account_sid:account,service_sid:service})};};assert.equal(await consumeAccountChallenge(f.pool,user,'login',token,'428591',fetcher),true);assert.equal(f.row.status,'consumed');await assert.rejects(consumeAccountChallenge(f.pool,user,'login',token,'428591',fetcher));assert.equal(calls,1);});
+test('expired, wrong purpose, changed policy/account and exhausted challenges never reach provider',async()=>{for(const override of [{expires_ms:0},{purpose:'signup'},{policy_version:2},{hub_version:2},{account_sid:'AC'+'0'.repeat(32)},{attempts:5},{status:'unknown'}]){const f=fixture(override);let calls=0;await assert.rejects(consumeAccountChallenge(f.pool,user,'login',token,'428591',async()=>{calls++;}));assert.equal(calls,0);}});
+test('uncertain verification check is held unknown and never retried automatically',async()=>{const f=fixture();let calls=0;const fetcher=async()=>{calls++;throw Error('network timeout');};await assert.rejects(consumeAccountChallenge(f.pool,user,'login',token,'428591',fetcher),/uncertain/);assert.equal(f.row.status,'unknown');await assert.rejects(consumeAccountChallenge(f.pool,user,'login',token,'428591',fetcher));assert.equal(calls,1);});
+test('disabled login policy with no enrolled PIN keeps existing password sign-in',async()=>{const pool={query:async sql=>sql.includes('SELECT policy')?{rows:[]}:{rows:[]}};assert.equal(await loginAccountGate(pool,user,{}),null);});

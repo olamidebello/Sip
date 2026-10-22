@@ -1,0 +1,7 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {JSDOM} from 'jsdom';
+import {setupAccountAuthUi} from './twilioAccountAuthUi.js';
+function fixture(){const dom=new JSDOM('<main><section id="account"><form id="signup"></form><form id="login"></form><p id="account-status"></p></section><section id="admin"></section></main>');const ui=setupAccountAuthUi({document:dom.window.document,get:async()=>({}),request:async()=>({}),getUserId:()=>null,isSuper:()=>false});return {dom,ui,d:dom.window.document};}
+test('OTP response adds a code step without resetting password/PIN or signing in',()=>{const {dom,ui,d}=fixture();try{const pin=d.querySelector('#login [name=pin]');pin.value='025819';ui.receiveLogin({authChallenge:'a'.repeat(64)});assert.equal(d.querySelector('#login [name=authChallenge]').value,'a'.repeat(64));assert.equal(d.querySelector('#login [name=authCode]').required,true);assert.equal(pin.value,'025819');assert.match(d.querySelector('#account-status').textContent,/phone OTP/);}finally{ui.dispose();dom.window.close();}});
+test('pending signup shows phone verification and keeps super-admin policy hidden',()=>{const {dom,ui,d}=fixture();try{ui.receiveSignup({authChallenge:'a'.repeat(64)});assert.match(d.querySelector('#account-status').textContent,/No SIP account/);assert.equal(d.querySelector('#twilio-account-auth').hidden,true);}finally{ui.dispose();dom.window.close();}});
