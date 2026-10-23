@@ -11,7 +11,7 @@
         cd /opt/olamide/repo
         exec 9>/run/olamide-update.lock
         flock -n 9 || { echo 'Another deployment is running'; exit 1; }
-        release=64094450d2a9183dc8e360984cae082747f685f4
+        release=524b09c020ac9b840cdb180f2bb60207eefe0ca0
         git fetch origin main </dev/null
         git merge-base --is-ancestor "$release" origin/main
         for f in services/api/twilioHub.js services/api/twilioRoles.js services/api/geoCalling.js services/api/providerManager.js services/api/didAvailability.js apps/web/src/didAvailabilityUi.js; do test -f "$f" || { echo "Install existing Twilio hub, geographic policies and DID availability first: $f"; exit 1; }; done
@@ -30,11 +30,12 @@
         done
         printf 'services:\n  api:\n    image: olamide-api:before-twilio-dids-%s\n  web:\n    image: olamide-web:before-twilio-dids-%s\n' "$suffix" "$suffix" > "$backup/rollback.yml"
         cd ../..
+        runtime_changed=false
         recover() {
           trap - ERR
           for f in "${files[@]}"; do if test -f "$backup/source/$f"; then cp -p "$backup/source/$f" "/opt/olamide/repo/$f"; else rm -f "/opt/olamide/repo/$f"; fi; done
           cd /opt/olamide/repo/deployment/docker
-          docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps api web </dev/null || true
+          if [[ "$runtime_changed" == true ]]; then docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps api web </dev/null || true; fi
           echo "Twilio DID update stopped. Previous source/images restored where available; additive schema and any orders remain. Backup: $backup"
           exit 1
         }
@@ -44,6 +45,8 @@
           git show "$release:$f" > "$f"
         done
         git show "$release:tools/install-twilio-dids.py" > "$backup/install.py"
+        git show "$release:tests/test_twilio_did_installer.py" > "$backup/installer.test.py"
+        TWILIO_DID_INSTALLER="$backup/install.py" python3 "$backup/installer.test.py"
         python3 "$backup/install.py"
         cd deployment/docker
         docker compose build api </dev/null
@@ -54,6 +57,7 @@
         docker run --rm --entrypoint node olamide-twilio-did-ui-check --test /app/src/twilioDidUi.test.js /app/src/didAvailabilityUi.test.js </dev/null
         cd deployment/docker
         docker compose build web </dev/null
+        runtime_changed=true
         docker compose up -d --no-deps api web </dev/null
         curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
         docker compose exec -T api node --input-type=module <<'JS'
