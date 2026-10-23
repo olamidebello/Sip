@@ -15,7 +15,7 @@ def api(s):
 def ui(s):
  if '// TWILIO_CREDENTIAL_CONTROLS_UI_V1' in s:return s
  s=once(s,'admin.append(box);billing.append(portal);','admin.append(box);billing.append(portal);const credentialControls=setupTwilioCredentialControls({host:box,document,get,request,getUserId,isSuper});')
- s=once(s,'providerRoles?.dispose();box.remove();','providerRoles?.dispose();credentialControls.dispose();box.remove();')
+ s=once(s,'providerRoles?.dispose();','providerRoles?.dispose();credentialControls.dispose();')
  return "import {setupTwilioCredentialControls} from './twilioCredentialControls.js';\n// TWILIO_CREDENTIAL_CONTROLS_UI_V1\n"+s
 changes=[]
 for file,fn in [('services/api/twilioHub.js',api),('apps/web/src/twilioHubUi.js',ui)]:
