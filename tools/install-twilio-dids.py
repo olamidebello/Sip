@@ -7,7 +7,7 @@ def once(s,a,b):
 def api(s):
  if '// TWILIO_DID_CHECKOUT_V1' in s:return s
  s="import {migrateTwilioDids,handleTwilioDids,startTwilioDidRenewals} from './twilioDids.js';\n// TWILIO_DID_CHECKOUT_V1\n"+s
- s=once(s,'      if (path === "/api/numbers" && req.method === "GET") {',"      if(path==='/api/twilio/dids'||path.startsWith('/api/twilio/dids/')||path==='/api/admin/twilio/dids'||path.startsWith('/api/admin/twilio/dids/'))return await handleTwilioDids({req,res,path,user,pool,send,readJson,sessionHash:tokenHash(currentToken(req))});\n      if (path === \"/api/numbers\" && req.method === \"GET\") {")
+ s=once(s,"      if(path==='/api/twilio'||path.startsWith('/api/twilio/')","      if(path==='/api/twilio/dids'||path.startsWith('/api/twilio/dids/')||path==='/api/admin/twilio/dids'||path.startsWith('/api/admin/twilio/dids/'))return await handleTwilioDids({req,res,path,user,pool,send,readJson,sessionHash:tokenHash(currentToken(req))});\n"+"      if(path==='/api/twilio'||path.startsWith('/api/twilio/')")
  return once(s,'await migratePstnBilling(pool);','await migratePstnBilling(pool);\nawait migrateTwilioDids(pool);\nstartTwilioDidRenewals(pool);')
 def ui(s):
  if '// TWILIO_DID_CHECKOUT_UI_V1' in s:return s
