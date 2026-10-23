@@ -1,0 +1,63 @@
+---
+- name: Install visible provider administration shortcuts
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Preserve sources and web image, test and deploy navigation
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        git fetch origin main </dev/null
+        release=f1d58954b71c49110debf2ed015fe397f6dec694
+        git merge-base --is-ancestor "$release" origin/main
+        test -f apps/web/src/adminWorkspaceUi.js
+        backup="/opt/olamide/backups/provider-navigation-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup"
+        files=(apps/web/src/adminWorkspaceUi.js apps/web/src/adminWorkspaceUi.test.js)
+        for f in "${files[@]}"; do
+          mkdir -p "$backup/source/$(dirname "$f")"
+          if test -f "$f"; then cp -p "$f" "$backup/source/$f"; fi
+        done
+        cd deployment/docker
+        cid=$(docker compose ps -q web)
+        test -n "$cid"
+        image=$(docker inspect --format '{{.Image}}' "$cid")
+        suffix=$(date +%s)-$$
+        docker tag "$image" "olamide-web:before-provider-nav-$suffix"
+        printf 'services:\n  web:\n    image: olamide-web:before-provider-nav-%s\n' "$suffix" > "$backup/rollback.yml"
+        cd ../..
+        runtime_changed=false
+        recover() {
+          trap - ERR
+          for f in "${files[@]}"; do
+            if test -f "$backup/source/$f"; then cp -p "$backup/source/$f" "/opt/olamide/repo/$f"; else rm -f "/opt/olamide/repo/$f"; fi
+          done
+          if [[ "$runtime_changed" == true ]]; then
+            cd /opt/olamide/repo/deployment/docker
+            docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps web </dev/null || true
+          fi
+          echo "Navigation update stopped; previous sources and web image restored where necessary. Backup: $backup"
+          exit 1
+        }
+        trap recover ERR
+        for f in "${files[@]}"; do git show "$release:$f" > "$f"; done
+        docker build -f deployment/docker/web.Dockerfile --target build -t olamide-provider-nav-check . </dev/null
+        docker run --rm --entrypoint node olamide-provider-nav-check --test /app/src/adminWorkspaceUi.test.js </dev/null
+        cd deployment/docker
+        docker compose build web </dev/null
+        runtime_changed=true
+        docker compose up -d --no-deps web </dev/null
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        trap - ERR
+        echo "Provider shortcuts installed at the top of Administration: Providers & Routing, Twilio API & keys, Provider management. Refresh your browser. Existing credentials and purchase policies unchanged. Backup: $backup"
+      args:
+        executable: /bin/bash
+      register: navigation
+    - name: Show navigation result
+      ansible.builtin.debug:
+        msg: "{{ navigation.stdout_lines[-8:] }}"
