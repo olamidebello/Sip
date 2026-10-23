@@ -1,3 +1,5 @@
+import {appendAdminStatus} from './adminStatusIcons.js';
+// ADMIN_STATUS_ICONS_V1
 export function setupFleetNetworkAdmin({get,request}){
   const $=id=>document.getElementById(id),status=$('fleet-device-status');
   let devices=[],access='none',nodes=[];
@@ -24,7 +26,7 @@ export function setupFleetNetworkAdmin({get,request}){
     const list=$('fleet-devices');list.replaceChildren();
     devices.forEach((d,index)=>{
       const li=item(list,`${d.name} · ${d.kind} · ${d.host}:${d.port} · ${d.site} · ${d.enabled?'enabled':'disabled'} · configuration v${d.config_version} · saved intent`);
-      li.dataset.id=d.id;li.draggable=can('manage');
+      const linked=nodes.find(n=>n.id===d.node_id);appendAdminStatus(li,linked?'health':'equipment',linked?{...linked,enabled:!!d.enabled&&!!linked.enabled}:d);li.dataset.id=d.id;li.draggable=can('manage');
       li.ondragstart=event=>{event.dataTransfer.setData('text/plain',d.id);event.dataTransfer.effectAllowed='move';};
       li.ondragover=event=>{if(can('manage'))event.preventDefault();};
       li.ondrop=async event=>{event.preventDefault();const source=event.dataTransfer.getData('text/plain');const from=devices.findIndex(x=>x.id===source);if(from<0||source===d.id)return;const [moved]=devices.splice(from,1);devices.splice(devices.findIndex(x=>x.id===d.id),0,moved);try{await persistOrder();}catch(e){status.textContent=e.message;await refresh().catch(error=>status.textContent=error.message);}};

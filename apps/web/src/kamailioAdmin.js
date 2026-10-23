@@ -1,3 +1,5 @@
+import {appendAdminStatus} from './adminStatusIcons.js';
+// ADMIN_STATUS_ICONS_V1
 export function setupKamailioAdmin(){
   const root=document.querySelector('#switch-admin'),form=root.querySelector('form'),status=root.querySelector('[role=status]'),body=root.querySelector('tbody');
   let data={catalog:{modules:[]},nodes:[],plans:[],audits:[]},canEdit=false;
@@ -16,14 +18,14 @@ export function setupKamailioAdmin(){
         const c=cell(''),input=document.createElement('input');input.type='checkbox';input.checked=choice[key];input.disabled=!canEdit;input.setAttribute('aria-label',key+' '+m.id);
         input.onchange=()=>{choice[key]=input.checked;if(key==='enable'&&input.checked)choice.install=true;if(key==='install'&&!input.checked)choice.enable=false;choices.set(m.id,choice);render();};c.append(input);
       }
-      cell(fresh?(fact?.installed?'yes':'no'):'unknown');cell(state);cell(fresh?fact?.testId||'Acceptance pending':'Fresh audit required');
+      cell(fresh?(fact?.installed?'yes':'no'):'unknown');appendAdminStatus(cell(state),'capability',{status:state});cell(fresh?fact?.testId||'Acceptance pending':'Fresh audit required');
       const link=document.createElement('a');link.href=m.documentation;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Guide';cell('').append(link);body.append(row);
     }
     const servers=root.querySelector('#service-inventory');servers.replaceChildren();
-    for(const service of data.serviceInventory?.services||[]){const li=document.createElement('li');li.textContent=service.name+' · '+(service.active?'process running':'process pending')+' · '+(service.transportConnected?'transport connected':'transport pending')+' · '+Object.entries(service.capabilities).map(([k,v])=>k+': '+v).join(' · ');servers.append(li);}
+    for(const service of data.serviceInventory?.services||[]){const li=document.createElement('li');li.textContent=service.name+' · '+(service.active?'process running':'process pending')+' · '+(service.transportConnected?'transport connected':'transport pending')+' · '+Object.entries(service.capabilities).map(([k,v])=>k+': '+v).join(' · ');appendAdminStatus(li,'service',service);servers.append(li);}
     if(!servers.children.length){const li=document.createElement('li');li.textContent=data.serviceInventory?.reason||'Super administrator service inventory unavailable';servers.append(li);}
     const readiness=root.querySelector('#carrier-readiness');readiness.replaceChildren();
-    for(const f of data.carrierCapabilities?.features||[]){const li=document.createElement('li');li.textContent=f.name+' · '+f.status+' · '+(f.applicationIntegration?'Application integration exists; ':'')+f.reason;readiness.append(li);}
+    for(const f of data.carrierCapabilities?.features||[]){const li=document.createElement('li');li.textContent=f.name+' · '+f.status+' · '+(f.applicationIntegration?'Application integration exists; ':'')+f.reason;appendAdminStatus(li,'capability',f);readiness.append(li);}
     const history=root.querySelector('#kamailio-history');history.replaceChildren();
     for(const p of data.plans.filter(p=>p.node_id===form.elements.node.value)){const li=document.createElement('li');li.textContent=p.created_at+' · '+p.profile+' · '+p.status+' · '+p.summary;history.append(li);}
     status.textContent=data.catalog.modules.length+' capabilities tracked. '+(fresh?'Fresh audit: '+audit.checkedAt:'Server evidence pending or expired.');
@@ -35,7 +37,7 @@ export function setupKamailioAdmin(){
       if(!response.ok)throw new Error(result.error);
       status.textContent=result.configured?'Automatic provisioning configured ('+result.mode+'). Verified and active accounts sync automatically.':'Pending configuration: commission the local Kamailio authentication backend or configure the HTTPS adapter, plus the credential encryption key.';
       list.replaceChildren();
-      for(const a of result.accounts){const li=document.createElement('li');li.textContent=a.email+' · '+a.username+'@'+a.domain+' · '+a.status+' · '+(a.last_result||'queued')+' · attempts '+(a.attempts||0);list.append(li);}
+      for(const a of result.accounts){const li=document.createElement('li');li.textContent=a.email+' · '+a.username+'@'+a.domain+' · '+a.status+' · '+(a.last_result||'queued')+' · attempts '+(a.attempts||0);appendAdminStatus(li,'user',a);list.append(li);}
     }catch(error){status.textContent=error.message;}
   }
   root.querySelector('#sip-provisioning-retry').onclick=async()=>{

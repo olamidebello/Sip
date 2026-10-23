@@ -1,3 +1,5 @@
+import {appendAdminStatus} from './adminStatusIcons.js';
+// ADMIN_STATUS_ICONS_V1
 export function setupAdapterAdmin({get,request}){
   const root=document.querySelector('#carrier-adapter-admin');
   const description=root.querySelector(':scope > p');if(description)description.textContent='Add private HTTPS adapter targets below, then check node health and enable them. Tokens are encrypted and hidden after saving.';
@@ -47,7 +49,7 @@ export function setupAdapterAdmin({get,request}){
         const title=document.createElement('h4');title.textContent=`${node.name} · ${node.provider} · ${node.region}`;
         const detail=document.createElement('p');
         detail.textContent=`Target ${node.target_key} · ${node.health} · ${node.enabled?'enabled':'disabled'} · ${node.max_concurrent_calls} calls · priority ${node.priority}${assigned?' · assigned':''}`;
-        const controls=document.createElement('div');
+        appendAdminStatus(detail,'health',node);const controls=document.createElement('div');
         const check=document.createElement('button');check.type='button';check.textContent='Check health';
         check.onclick=async()=>{check.disabled=true;try{
           await request(`/api/admin/carrier-adapters/${node.id}/check`,{});

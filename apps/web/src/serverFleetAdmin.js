@@ -1,3 +1,5 @@
+import {appendAdminStatus} from './adminStatusIcons.js';
+// ADMIN_STATUS_ICONS_V1
 export function setupServerFleetAdmin({get,request}){
   const $=id=>document.getElementById(id);
   const status=$('fleet-status');
@@ -20,7 +22,7 @@ export function setupServerFleetAdmin({get,request}){
       li.ondrop=async e=>{e.preventDefault();const from=e.dataTransfer.getData('text/plain'),ids=data.nodes.map(node=>node.id);
         if(!ids.includes(from)||from===n.id)return;ids.splice(ids.indexOf(from),1);ids.splice(ids.indexOf(n.id),0,from);
         try{await request('/api/admin/servers/order',{ids},'PUT');await refresh();}catch(error){status.textContent=error.message;}};
-      const p=document.createElement('p');p.textContent=`${n.name} · ${n.role} · ${n.host}:${n.ssh_port} · ${n.region} · ${n.status} · version ${n.version||'unknown'} · capacity ${n.capacity} · last check ${n.last_seen_at||'never'}${n.last_error?' · '+n.last_error:''}`;li.append(p);
+      const p=document.createElement('p');p.textContent=`${n.name} · ${n.role} · ${n.host}:${n.ssh_port} · ${n.region} · ${n.status} · version ${n.version||'unknown'} · capacity ${n.capacity} · last check ${n.last_seen_at||'never'}${n.last_error?' · '+n.last_error:''}`;li.append(p);appendAdminStatus(li,'health',{...n,staleSeconds:data.settings?.stale_seconds||300});
       const controls=document.createElement('div');controls.className='form-row';li.append(controls);
       if(!can('manage'))controls.hidden=true;
       const host=document.createElement('input');host.value=n.host;host.setAttribute('aria-label',`${n.name} IPv4 address`);controls.append(host);

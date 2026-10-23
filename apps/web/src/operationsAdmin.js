@@ -1,3 +1,5 @@
+import {appendAdminStatus} from './adminStatusIcons.js';
+// ADMIN_STATUS_ICONS_V1
 export function setupOperationsAdmin({get,request}){
   const $=id=>document.getElementById(id),status=$('operations-status');
   let nodes=[];
@@ -13,7 +15,7 @@ export function setupOperationsAdmin({get,request}){
     $('redirector-scope').textContent=data.scope;
     const list=$('redirector-targets');list.replaceChildren();
     for(const t of data.targets){const li=document.createElement('li');li.textContent=`${t.name} · ${t.region} · ${t.wss_url} · weight ${t.weight} · ${t.enabled?'enabled':'disabled'} · switch ${t.node_status} `;
-      const edit=document.createElement('button');edit.type='button';edit.textContent='Edit';edit.onclick=()=>{for(const [field,key] of [['name','name'],['region','region'],['nodeId','node_id'],['wssUrl','wss_url'],['weight','weight']])form.elements[field].value=t[key];form.elements.enabled.checked=!!t.enabled;form.elements.targetId.value=t.id;form.scrollIntoView({block:'center'});};li.append(edit);
+      appendAdminStatus(li,'health',{...nodes.find(n=>n.id===t.node_id),enabled:!!t.enabled,status:t.node_status});const edit=document.createElement('button');edit.type='button';edit.textContent='Edit';edit.onclick=()=>{for(const [field,key] of [['name','name'],['region','region'],['nodeId','node_id'],['wssUrl','wss_url'],['weight','weight']])form.elements[field].value=t[key];form.elements.enabled.checked=!!t.enabled;form.elements.targetId.value=t.id;form.scrollIntoView({block:'center'});};li.append(edit);
       const remove=document.createElement('button');remove.type='button';remove.textContent='Delete';remove.onclick=async()=>{try{await request(`/api/admin/operations/redirector/${t.id}`,{},'DELETE');await refresh();status.textContent='Target deleted.';}catch(e){status.textContent=e.message;}};li.append(remove);list.append(li);
     }
     const audit=$('operations-events');audit.replaceChildren();for(const e of data.audit){const li=document.createElement('li');li.textContent=`${e.created_at} · ${e.action} · ${e.detail}`;audit.append(li);}

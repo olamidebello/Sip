@@ -1,3 +1,5 @@
+import {appendAdminStatus,adminStatus} from './adminStatusIcons.js';
+// ADMIN_STATUS_ICONS_V1
 const featureLabels = {
   meetings: "Meetings",
   screen_share: "Screen sharing",
@@ -45,6 +47,7 @@ export function setupGroupAdmin() {
   function fillUser() {
     const user = users.find((item) => item.id === $("#group-user").value);
     $("#group-user-details").textContent=user ? `${user.name} — ${user.role}, ${user.status}, ${user.auth_source||"local"} authentication` : "Select a user";
+    if(user)appendAdminStatus($("#group-user-details"),'user',user);
     $("#group-assign").disabled=user?.auth_source==="ldap";
     const container = $("#group-memberships");
     container.replaceChildren();
@@ -79,7 +82,7 @@ export function setupGroupAdmin() {
     $("#group-user").replaceChildren(...users.map((user) => {
       const option = document.createElement("option");
       option.value = user.id;
-      option.textContent = `${user.name} <${user.email}>`;
+      const status=adminStatus('user',user);option.textContent = ({green:'🟢',yellow:'🟡',red:'🔴'})[status.color]+` ${user.name} <${user.email}> · ${user.status}`;
       return option;
     }));
     if (groups.some((group) => group.id === chosenGroup)) $("#group-list").value = chosenGroup;
