@@ -23,6 +23,14 @@ jobs:
       - name: Generate existing Android app
         working-directory: apps/mobile
         run: npm install --no-audit --no-fund && npx cap add android && npx cap sync android && bash install-carrier-native.sh && python3 install-vpn-native.py
+      - name: Configure current Play SDK and unique version
+        env:
+          OLAMIDE_ANDROID_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          python3 tests/test_play_release.py
+          export OLAMIDE_ANDROID_VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT))
+          python3 apps/mobile/prepare-play-release.py
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - name: Apply original Olamide logo to Android and Play artwork
         run: python3 -m pip install Pillow==11.3.0 && python3 apps/mobile/generate-brand-artwork.py
       - uses: actions/upload-artifact@v4
@@ -31,7 +39,7 @@ jobs:
           path: apps/mobile/play-artwork/
       - name: Build APK and release bundle
         working-directory: apps/mobile/android
-        run: ./gradlew assembleDebug bundleRelease
+        run: ./gradlew assembleDebug assembleRelease bundleRelease
       - name: Sign bundle only with configured release key
         id: signing
         working-directory: apps/mobile/android
@@ -50,11 +58,18 @@ jobs:
             printf '%s' "$CARRIER_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/play-upload.jks"
             jarsigner -keystore "$RUNNER_TEMP/play-upload.jks" -storepass:env CARRIER_KEYSTORE_PASSWORD -keypass:env CARRIER_KEY_PASSWORD -signedjar play-output/Olamide-release.aab app/build/outputs/bundle/release/app-release.aab "$CARRIER_KEY_ALIAS"
             jarsigner -verify play-output/Olamide-release.aab
+            tools="$ANDROID_HOME/build-tools/36.0.0"
+            "$tools/zipalign" -f -p 4 app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/aligned-release.apk"
+            "$tools/apksigner" sign --ks "$RUNNER_TEMP/play-upload.jks" --ks-key-alias "$CARRIER_KEY_ALIAS" --ks-pass env:CARRIER_KEYSTORE_PASSWORD --key-pass env:CARRIER_KEY_PASSWORD --out play-output/Olamide-release.apk "$RUNNER_TEMP/aligned-release.apk"
+            "$tools/apksigner" verify --verbose play-output/Olamide-release.apk
+            rm -f "$RUNNER_TEMP/aligned-release.apk"
             echo 'Release bundle signed with configured carrier key. Verify this key matches the Play upload certificate before submitting.' > play-output/STATUS.txt
           else
             cp app/build/outputs/bundle/release/app-release.aab play-output/Olamide-UNSIGNED.aab
             echo 'Signing key not configured. Debug APK is for testing only. UNSIGNED bundle cannot be submitted to Google Play.' > play-output/STATUS.txt
           fi
+          printf '%s\n' "$GITHUB_SHA" > play-output/SOURCE_COMMIT.txt
+          printf '%s\n' 'Package: com.dobhrap.olamide. Target API: 36. Hosted-web preview; physical-device and policy acceptance required. No Play submission performed.' >> play-output/STATUS.txt
           cat play-output/STATUS.txt >> "$GITHUB_STEP_SUMMARY"
           cd play-output && sha256sum *.apk *.aab > SHA256SUMS
       - uses: actions/upload-artifact@v4
