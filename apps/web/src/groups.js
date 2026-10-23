@@ -1,3 +1,4 @@
+// ADMIN_MONITORING_DASHBOARD_V1
 import {appendAdminStatus,adminStatus} from './adminStatusIcons.js';
 // ADMIN_STATUS_ICONS_V1
 const featureLabels = {
@@ -141,5 +142,6 @@ export function setupGroupAdmin() {
       await refresh();status(`User action completed: ${action}`);
     } catch(error) {status(error.message);}
   };
+  document.addEventListener('admin-monitor-select',async event=>{if(event.detail?.kind!=='users')return;try{await refresh();const id=event.detail.id;if(users.some(u=>u.id===id)){root.querySelector('#group-user').value=id;fillUser();root.querySelector('#group-user').focus();}}catch(error){status(error.message);}});
   return { refresh };
 }

@@ -1,3 +1,4 @@
+// ADMIN_MONITORING_DASHBOARD_V1
 import {appendAdminStatus} from './adminStatusIcons.js';
 // ADMIN_STATUS_ICONS_V1
 export function setupServerFleetAdmin({get,request}){
@@ -58,5 +59,6 @@ export function setupServerFleetAdmin({get,request}){
   $('fleet-report-settings').onsubmit=async e=>{e.preventDefault();try{const b=Object.fromEntries(new FormData(e.currentTarget));await request('/api/admin/servers/report-settings',{staleSeconds:Number(b.staleSeconds),warningLatencyMs:Number(b.warningLatencyMs),retentionDays:Number(b.retentionDays)},'PUT');await report();status.textContent='Report thresholds saved.';}catch(error){status.textContent=error.message;}};
   $('fleet-refresh').onclick=()=>refresh().catch(e=>status.textContent=e.message);
   $('fleet-report-run').onclick=()=>report().catch(e=>status.textContent=e.message);
+  document.addEventListener('admin-monitor-select',async event=>{if(event.detail?.kind!=='servers')return;try{await refresh();const row=[...$('fleet-nodes').children].find(li=>li.dataset.id===event.detail.id);row?.scrollIntoView?.({block:'center'});row?.querySelector('input,button')?.focus();}catch(error){status.textContent=error.message;}});
   return {refresh:()=>Promise.all([refresh(),report()]).catch(e=>status.textContent=e.message)};
 }

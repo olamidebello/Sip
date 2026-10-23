@@ -1,3 +1,4 @@
+// ADMIN_MONITORING_DASHBOARD_V1
 import {appendAdminStatus} from './adminStatusIcons.js';
 // ADMIN_STATUS_ICONS_V1
 export function setupFleetNetworkAdmin({get,request}){
@@ -63,5 +64,6 @@ export function setupFleetNetworkAdmin({get,request}){
   input.ondrop=async e=>{e.preventDefault();const file=e.dataTransfer.files[0];if(!file||file.size>12000){status.textContent='Drop a JSON configuration file under 12 KB.';return;}
     try{input.value=JSON.stringify(JSON.parse(await file.text()),null,2);status.textContent='Configuration loaded for review. Save to create a version.';}catch{status.textContent='Invalid JSON configuration.';}};
   $('fleet-device-refresh').onclick=()=>refresh().catch(e=>status.textContent=e.message);
+  document.addEventListener('admin-monitor-select',async event=>{if(event.detail?.kind!=='equipment')return;try{await refresh();const device=devices.find(d=>d.id===event.detail.id);if(device){setForm(device);form.scrollIntoView?.({block:'center'});form.elements.name.focus();}}catch(error){status.textContent=error.message;}});
   return {refresh:()=>refresh().catch(e=>status.textContent=e.message)};
 }

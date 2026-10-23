@@ -1,3 +1,4 @@
+// ADMIN_MONITORING_DASHBOARD_V1
 import {appendAdminStatus} from './adminStatusIcons.js';
 // ADMIN_STATUS_ICONS_V1
 export function setupOperationsAdmin({get,request}){
@@ -28,5 +29,6 @@ export function setupOperationsAdmin({get,request}){
     await request(id?`/api/admin/operations/redirector/${id}`:'/api/admin/operations/redirector',data,id?'PUT':'POST');f.reset();f.elements.targetId.value='';await refresh();status.textContent='WSS discovery target saved.';
   }catch(error){status.textContent=error.message;}};
   $('redirector-new').onclick=()=>{$('redirector-form').reset();$('redirector-form').elements.targetId.value='';};
+  document.addEventListener('admin-monitor-select',event=>{if(event.detail?.kind!=='discovery')return;const t=event.detail.record,form=$('redirector-form');if(!t||!form)return;for(const [field,key] of [['name','name'],['region','region'],['nodeId','node_id'],['wssUrl','wss_url'],['weight','weight']])form.elements[field].value=t[key]??'';form.elements.enabled.checked=!!t.enabled;form.elements.targetId.value=t.id;form.elements.name.focus();});
   return {refresh:()=>refresh().catch(e=>status.textContent=e.message)};
 }
