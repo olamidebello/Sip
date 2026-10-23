@@ -37,7 +37,7 @@ export async function testOneCredential(c,target,request=twilioRequest,fetcher=f
 export async function handleTwilioCredentials({req,res,path,user,pool,send,readJson}){
  if(user?.role!=='super_admin')return send(res,403,{error:'Super administrator required'});
  res.setHeader('Cache-Control','no-store');
- if(path===root&&req.method==='GET'){const hub=await hubSettings(pool,user.tenant_id);const rows=(await pool.query('SELECT id,actor_id,hub_version,report,created_at FROM twilio_credential_tests WHERE tenant_id=$1 ORDER BY created_at DESC,id DESC LIMIT 5',[user.tenant_id])).rows;return send(res,200,{...credentialStatus(hub),history:rows.map(r=>({...r,report:typeof r.report==='string'?JSON.parse(r.report):r.report}))});}
+ if(path===root&&req.method==='GET'){const hub=await hubSettings(pool,user.tenant_id);const rows=(await pool.query('SELECT id,actor_id,hub_version,report,created_at FROM twilio_credential_tests WHERE tenant_id=$1 ORDER BY created_at DESC,id DESC LIMIT 50',[user.tenant_id])).rows;return send(res,200,{...credentialStatus(hub),history:rows.map(r=>({...r,report:typeof r.report==='string'?JSON.parse(r.report):r.report}))});}
  if(path===root+'/test'&&req.method==='POST'){
   const b=await readJson(req);if(!Number.isInteger(b.version))return send(res,400,{error:'Current settings version required'});
   const hub=await hubSettings(pool,user.tenant_id);if(!hub?.credentials||hub.version!==b.version)return send(res,409,{error:'Credentials unavailable or changed; refresh first'});
