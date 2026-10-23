@@ -26,7 +26,7 @@
         cd deployment/docker
         cid=$(docker compose ps -q web)
         test -n "$cid"
-        image=$(docker inspect --format '{{.Image}}' "$cid")
+        image=$(docker inspect "$cid" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["Image"])')
         suffix=$(date +%s)-$$
         docker tag "$image" "olamide-web:before-provider-nav-$suffix"
         printf 'services:\n  web:\n    image: olamide-web:before-provider-nav-%s\n' "$suffix" > "$backup/rollback.yml"
