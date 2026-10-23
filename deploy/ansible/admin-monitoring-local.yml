@@ -1,0 +1,65 @@
+---
+- name: Install super-admin monitoring dashboard
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Back up, integrate, test and deploy monitoring GUI
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        git fetch origin main </dev/null
+        release=36757cf266713f033d08288c58bb23b0141319aa
+        git merge-base --is-ancestor "$release" origin/main
+        for f in adminWorkspaceUi.js groups.js serverFleetAdmin.js fleetNetworkAdmin.js operationsAdmin.js; do test -f "apps/web/src/$f" || { echo "Existing administration module required: $f"; exit 1; }; done
+        backup="/opt/olamide/backups/admin-monitoring-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup"
+        files=(adminStatusIcons.js adminMonitoringUi.js adminMonitoringUi.test.js adminWorkspaceUi.js adminWorkspaceUi.test.js groups.js serverFleetAdmin.js fleetNetworkAdmin.js operationsAdmin.js)
+        for f in "${files[@]}"; do if test -f "apps/web/src/$f"; then cp -p "apps/web/src/$f" "$backup/$f"; fi; done
+        cd deployment/docker
+        docker compose config --quiet
+        cid=$(docker compose ps -q web)
+        test -n "$cid"
+        image=$(docker inspect "$cid" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["Image"])')
+        suffix=$(date +%s)-$$
+        docker tag "$image" "olamide-web:before-monitoring-$suffix"
+        printf 'services:\n  web:\n    image: olamide-web:before-monitoring-%s\n' "$suffix" > "$backup/rollback.yml"
+        cd ../..
+        runtime_changed=false
+        recover() {
+          trap - ERR
+          for f in "${files[@]}"; do
+            if test -f "$backup/$f"; then cp -p "$backup/$f" "/opt/olamide/repo/apps/web/src/$f"; else rm -f "/opt/olamide/repo/apps/web/src/$f"; fi
+          done
+          if [[ "$runtime_changed" == true ]]; then
+            cd /opt/olamide/repo/deployment/docker
+            docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps web </dev/null || true
+          fi
+          echo "Monitoring update stopped; prior sources and runtime restored where necessary. Backup: $backup"
+          exit 1
+        }
+        trap recover ERR
+        for f in adminStatusIcons.js adminMonitoringUi.js adminMonitoringUi.test.js adminWorkspaceUi.js adminWorkspaceUi.test.js; do git show "$release:apps/web/src/$f" > "apps/web/src/$f"; done
+        git show "$release:tools/install-admin-monitoring.py" > "$backup/install.py"
+        git show "$release:tests/test_admin_monitoring_installer.py" > "$backup/install.test.py"
+        ADMIN_MONITORING_INSTALLER="$backup/install.py" python3 "$backup/install.test.py"
+        python3 "$backup/install.py"
+        docker build -f deployment/docker/web.Dockerfile --target build -t olamide-monitoring-ui-check . </dev/null
+        docker run --rm --entrypoint node olamide-monitoring-ui-check --test /app/src/adminMonitoringUi.test.js /app/src/adminWorkspaceUi.test.js </dev/null
+        cd deployment/docker
+        docker compose build web </dev/null
+        runtime_changed=true
+        docker compose up -d --no-deps web </dev/null
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        trap - ERR
+        echo "Administration > Monitoring dashboard installed: users, servers/switches, trunks, gateways, adapters, equipment, inbound routes, discovery and switch services. Status filters, search and record settings links included. Refresh browser. No credentials or device configuration changed. Backup: $backup"
+      args:
+        executable: /bin/bash
+      register: monitoring_install
+    - name: Show monitoring result
+      ansible.builtin.debug:
+        msg: "{{ monitoring_install.stdout_lines[-6:] }}"
