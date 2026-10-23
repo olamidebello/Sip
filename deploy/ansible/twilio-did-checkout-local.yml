@@ -1,0 +1,75 @@
+- name: Install customer Twilio DID checkout and provider badges
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Back up, integrate and test Twilio customer number purchasing
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        release=64094450d2a9183dc8e360984cae082747f685f4
+        git fetch origin main </dev/null
+        git merge-base --is-ancestor "$release" origin/main
+        for f in services/api/twilioHub.js services/api/twilioRoles.js services/api/geoCalling.js services/api/providerManager.js services/api/didAvailability.js apps/web/src/didAvailabilityUi.js; do test -f "$f" || { echo "Install existing Twilio hub, geographic policies and DID availability first: $f"; exit 1; }; done
+        backup="/opt/olamide/backups/twilio-did-checkout-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup"
+        files=(services/api/server.js apps/web/src/main.js services/api/twilioDidCore.js services/api/twilioDidCore.test.js services/api/twilioDids.js services/api/twilioDids.test.js services/api/twilioReadiness.js apps/web/src/twilioDidUi.js apps/web/src/twilioDidUi.test.js apps/web/src/providerLabels.js apps/web/src/didAvailabilityUi.js apps/web/src/didAvailabilityUi.test.js)
+        for f in "${files[@]}"; do mkdir -p "$backup/source/$(dirname "$f")"; if test -f "$f"; then cp -p "$f" "$backup/source/$f"; fi; done
+        cd deployment/docker
+        docker compose config --quiet
+        suffix=$(date +%s)-$$
+        for svc in api web; do
+          container=$(docker compose ps -q "$svc")
+          test -n "$container"
+          image=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$container")
+          docker tag "$image" "olamide-$svc:before-twilio-dids-$suffix"
+        done
+        printf 'services:\n  api:\n    image: olamide-api:before-twilio-dids-%s\n  web:\n    image: olamide-web:before-twilio-dids-%s\n' "$suffix" "$suffix" > "$backup/rollback.yml"
+        cd ../..
+        recover() {
+          trap - ERR
+          for f in "${files[@]}"; do if test -f "$backup/source/$f"; then cp -p "$backup/source/$f" "/opt/olamide/repo/$f"; else rm -f "/opt/olamide/repo/$f"; fi; done
+          cd /opt/olamide/repo/deployment/docker
+          docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps api web </dev/null || true
+          echo "Twilio DID update stopped. Previous source/images restored where available; additive schema and any orders remain. Backup: $backup"
+          exit 1
+        }
+        trap recover ERR
+        for f in "${files[@]}"; do
+          case "$f" in services/api/server.js|apps/web/src/main.js) continue;; esac
+          git show "$release:$f" > "$f"
+        done
+        git show "$release:tools/install-twilio-dids.py" > "$backup/install.py"
+        python3 "$backup/install.py"
+        cd deployment/docker
+        docker compose build api </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --test /app/twilioDidCore.test.js /app/twilioDids.test.js /app/twilioReadiness.test.js </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --check /app/server.js </dev/null
+        cd ../..
+        docker build -f deployment/docker/web.Dockerfile --target build -t olamide-twilio-did-ui-check . </dev/null
+        docker run --rm --entrypoint node olamide-twilio-did-ui-check --test /app/src/twilioDidUi.test.js /app/src/didAvailabilityUi.test.js </dev/null
+        cd deployment/docker
+        docker compose build web </dev/null
+        docker compose up -d --no-deps api web </dev/null
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        docker compose exec -T api node --input-type=module <<'JS'
+        import {createDatabase} from './db.js';
+        const db=createDatabase(process.env.MYSQL_URL);
+        try {
+          const tables=new Set((await db.query('SHOW TABLES')).rows.flatMap(Object.values));
+          for(const name of ['twilio_did_settings','twilio_did_orders','twilio_did_number_locks','twilio_did_periods'])if(!tables.has(name))throw Error('Required Twilio DID table missing: '+name);
+          console.log('Four Twilio DID tables verified. New checkout policies remain off until configured by super admin.');
+        }finally{await db.end();}
+        JS
+        trap - ERR
+        echo "TWI/FLO/DID/SMO badges and customer Twilio checkout installed. Super admin > TWI Customer DID purchases. Current scope: US/CA local numbers with no address requirement, +30% rental, wallet holds, allocation, monthly renewal, release and reconciliation. No remote number was purchased by deployment. Existing policies are retained. Backup: $backup"
+      args:
+        executable: /bin/bash
+      register: twilio_did_install
+    - name: Show Twilio DID deployment result
+      ansible.builtin.debug:
+        msg: '{{ twilio_did_install.stdout_lines[-4:] }}'
