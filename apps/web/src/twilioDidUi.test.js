@@ -4,6 +4,7 @@ import {JSDOM} from 'jsdom';
 import {setupTwilioDidUi} from './twilioDidUi.js';
 import {setupDidAvailabilityUi} from './didAvailabilityUi.js';
 const flush=()=>new Promise(r=>setTimeout(r,0));
+test('standalone search button opens Twilio inventory without a legacy provider selector',()=>{const dom=new JSDOM('<section id="billing"><details id="did-country-inventory"><select name="provider"><option value="all">All</option><option value="twilio">Twilio</option></select></details></section><section id="admin"></section>');const ui=setupTwilioDidUi({document:dom.window.document,get:async()=>({orders:[],policy:{enabled:false}}),request:async()=>{},getUserId:()=>'buyer',isSuper:()=>false});try{const d=dom.window.document;d.querySelector('[data-find-twilio]').click();assert.equal(d.querySelector('#did-country-inventory').open,true);assert.equal(d.querySelector('[name=provider]').value,'twilio');}finally{ui.dispose();dom.window.close();}});
 test('Twilio selection quotes exact country/number and requires recurring-payment consent',async()=>{
  const dom=new JSDOM('<section id="billing"></section><section id="admin"></section>'),d=dom.window.document,calls=[];
  const get=async path=>path.startsWith('/api/numbers/availability')?{loaded:1,checkedAt:new Date().toISOString(),providers:[{provider:'twilio',displayName:'Twilio',status:'ok',numbers:[{number:'+12125551234'}],loaded:1,total:null,hasMore:false}]}:{orders:[],policy:{enabled:true}};
@@ -13,3 +14,4 @@ test('Twilio selection quotes exact country/number and requires recurring-paymen
  }finally{ui.dispose();inventory.dispose();dom.window.close();}
 });
 test('ordinary users cannot submit the hidden admin settings form',async()=>{const dom=new JSDOM('<section id="billing"></section><section id="admin"></section>');let calls=0;const ui=setupTwilioDidUi({document:dom.window.document,get:async()=>({orders:[],policy:{enabled:false}}),request:async()=>{calls++;},getUserId:()=>'buyer',isSuper:()=>false});try{dom.window.document.querySelector('#twilio-did-admin form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));await flush();assert.equal(calls,0);}finally{ui.dispose();dom.window.close();}});
+
