@@ -1,0 +1,15 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {JSDOM} from 'jsdom';
+import {setupTwilioDidUi} from './twilioDidUi.js';
+import {setupDidAvailabilityUi} from './didAvailabilityUi.js';
+const flush=()=>new Promise(r=>setTimeout(r,0));
+test('Twilio selection quotes exact country/number and requires recurring-payment consent',async()=>{
+ const dom=new JSDOM('<section id="billing"></section><section id="admin"></section>'),d=dom.window.document,calls=[];
+ const get=async path=>path.startsWith('/api/numbers/availability')?{loaded:1,checkedAt:new Date().toISOString(),providers:[{provider:'twilio',displayName:'Twilio',status:'ok',numbers:[{number:'+12125551234'}],loaded:1,total:null,hasMore:false}]}:{orders:[],policy:{enabled:true}};
+ const request=async(path,b)=>{calls.push({path,b});if(path.endsWith('/quote'))return {id:'order',number_e164:b.number,status:'quoted',monthly_cents:150,quote_expires_ms:Date.now()+300000};return {status:'allocated'};};
+ const ui=setupTwilioDidUi({document:d,get,request,getUserId:()=>'buyer',isSuper:()=>false}),inventory=setupDidAvailabilityUi({document:d,get,getUserId:()=>'buyer'});
+ try{const f=d.querySelector('#did-country-inventory form');f.elements.country.value='US';f.dispatchEvent(new dom.window.Event('submit',{bubbles:true,cancelable:true}));await flush();assert.match(d.querySelector('[data-results]').textContent,/\[TWI\]/);d.querySelector('[data-results] button').click();await flush();assert.equal(calls[0].b.country,'US');assert.equal(calls[0].b.number,'+12125551234');const checkout=d.querySelector('#twilio-did-checkout [data-quote] form');checkout.dispatchEvent(new dom.window.Event('submit',{cancelable:true}));await flush();assert.equal(calls.length,1);checkout.elements.consent.checked=true;checkout.dispatchEvent(new dom.window.Event('submit',{cancelable:true}));await flush();assert.equal(calls[1].path,'/api/twilio/dids/purchase');assert.equal(calls[1].b.monthlyCents,150);assert.equal(calls[1].b.acceptTerms,true);assert.equal(d.querySelector('#twilio-did-admin').hidden,true);
+ }finally{ui.dispose();inventory.dispose();dom.window.close();}
+});
+test('ordinary users cannot submit the hidden admin settings form',async()=>{const dom=new JSDOM('<section id="billing"></section><section id="admin"></section>');let calls=0;const ui=setupTwilioDidUi({document:dom.window.document,get:async()=>({orders:[],policy:{enabled:false}}),request:async()=>{calls++;},getUserId:()=>'buyer',isSuper:()=>false});try{dom.window.document.querySelector('#twilio-did-admin form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));await flush();assert.equal(calls,0);}finally{ui.dispose();dom.window.close();}});

@@ -1,8 +1,9 @@
+import fs from 'node:fs';
 import {products,hubSettings,twilioRequest} from './twilioHub.js';
 import {roleSettings} from './twilioRoles.js';
 import {accountAuthPolicy} from './twilioAccountAuth.js';
 
-export function readinessRows({configured,roles,callerPolicy,accountPolicy,profile}){
+export function readinessRows({configured,roles,callerPolicy,accountPolicy,profile,didAdapter=false}){
  return products.map(p=>{
   let state='implementation-required',requirements=p.requirements,controls='catalog';
   if(p.id==='verify'){
@@ -14,7 +15,8 @@ export function readinessRows({configured,roles,callerPolicy,accountPolicy,profi
    // Existing Flowroute commissioning cannot be inherited by a new provider.
    state='implementation-required';
   }
-  if(p.id==='numbers'||p.id==='tollfree'){controls='did';requirements+='; transactional customer purchase, wallet hold, unique allocation, regulatory validation, inbound routes and rental reconciliation are not implemented';}
+  if(p.id==='numbers'&&didAdapter){state='setup-required';controls='did';requirements='US/CA local-number checkout, wallet holds, unique customer allocation, calendar-month renewals and release/reconciliation are installed. Enable the customer DID policy, approve the TK trunk and test provider acceptance. Other countries/types and regulated numbers require manual setup.';}
+  if((p.id==='numbers'&&!didAdapter)||p.id==='tollfree'){controls='did';requirements+='; transactional customer purchase, wallet hold, unique allocation, regulatory validation, inbound routes and rental reconciliation are not implemented';}
   if(p.id==='sms'){controls='sms';requirements+='; customer send, segment/carrier-fee billing, verified callbacks and uncertain-submission reconciliation are not implemented';}
   if(p.id==='whatsapp'){controls='whatsapp';requirements+='; WhatsApp runtime adapter, customer consent/session/template validation and billing are not implemented';}
   return {id:p.id,name:p.name,category:p.category,state,controls,requirements,live:false,markupPercent:30};
@@ -30,12 +32,13 @@ export async function readTwilioReadiness(pool,user,{remote=false}={}){
  const configured=!!hub?.enabled&&!!hub.credentials;
  let account={checked:false,status:'unchecked'};
  if(remote){if(!configured)account={checked:false,status:'credentials-required'};else try{const result=await twilioRequest(hub.credentials,'account');account={checked:true,status:result.status,matching:result.sid===hub.credentials.accountSid};}catch{account={checked:true,status:'unavailable'};}}
- const rows=readinessRows({configured,roles,callerPolicy,accountPolicy,profile:profile.rows[0]});
+ const didAdapter=fs.existsSync(new URL('./twilioDids.js',import.meta.url));
+ const rows=readinessRows({configured,roles,callerPolicy,accountPolicy,profile:profile.rows[0],didAdapter});
  return {provider:'twilio',generatedAt:new Date().toISOString(),configured,roles,account,
   accountAuthentication:{signup:accountPolicy.signup,login:accountPolicy.login,requirePin:accountPolicy.requirePin,serviceConfigured:!!accountPolicy.serviceSid,liveDeliveryVerified:false},
   products:rows,live:false,
   summary:{catalog:rows.length,configured:rows.filter(x=>x.state==='configured').length,implementationRequired:rows.filter(x=>x.state==='implementation-required').length,commissioned:0},
-  blockers:['Twilio SIP termination is blocked by the existing Flowroute-only billing/switch adapter','Automated customer DID purchase and unique allocation adapter is missing','Customer SMS and WhatsApp submission/billing adapters are missing','Least-cost routing is not wired into submissions','Live delivery and two-way media acceptance have not been recorded'],
+  blockers:['Twilio SIP termination is blocked by the existing Flowroute-only billing/switch adapter',didAdapter?'US/CA local DID checkout requires operator configuration and live acceptance; other countries/types remain manual':'Automated customer DID purchase and unique allocation adapter is missing','Customer SMS and WhatsApp submission/billing adapters are missing','Least-cost routing is not wired into submissions','Live delivery and two-way media acceptance have not been recorded'],
   note:'This report does not activate routes, send messages, purchase numbers, infer acceptance from configuration, or bypass geofences, caller identity or wallet checks.'};
 }
 export async function handleTwilioReadiness({req,res,pool,user,send}){
@@ -43,3 +46,4 @@ export async function handleTwilioReadiness({req,res,pool,user,send}){
  if(!['GET','POST'].includes(req.method))return send(res,405,{error:'Unsupported readiness action'});
  res.setHeader('Cache-Control','no-store');return send(res,200,await readTwilioReadiness(pool,user,{remote:req.method==='POST'}));
 }
+
