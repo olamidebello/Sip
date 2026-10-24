@@ -20,13 +20,26 @@
         owner: root
         group: root
         mode: '0700'
-    - name: Pull source, back up database, rebuild and verify SIP
-      ansible.builtin.script: ../../deployment/pull-and-deploy.sh
-      args:
-        executable: /bin/bash
-      register: sip_deploy
-      changed_when: "'SIP_DEPLOYED' in sip_deploy.stdout"
-      no_log: true
+    - name: Deploy with private diagnostics
+      block:
+        - name: Pull source, back up database, rebuild and verify SIP
+          ansible.builtin.script: ../../deployment/pull-and-deploy.sh
+          args:
+            executable: /bin/bash
+          register: sip_deploy
+          changed_when: "'SIP_DEPLOYED' in sip_deploy.stdout"
+          no_log: true
+      rescue:
+        - name: Show safe failure phase and private log location
+          ansible.builtin.debug:
+            msg: "{{ sip_deploy.stdout_lines | default([]) | select('match', '^SIP_DEPLOY_ERROR phase=[a-z_]+ log=/opt/olamide/backups/deploy-log-[A-Za-z0-9]+$') | list }}"
+        - name: Report stopped deployment
+          ansible.builtin.fail:
+            msg: >-
+              Deployment stopped. The safe phase above identifies the failed check;
+              detailed output remains in the root-only log on the server.
+              local_changes or diverged_history requires reconciling the server
+              integrations before deployment. Do not reset or clean the live checkout.
     - name: Show deployment outcome
       ansible.builtin.debug:
         msg: "{{ sip_deploy.stdout_lines | select('match', '^SIP_DEPLOYED ') | list }}"

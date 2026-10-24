@@ -30,9 +30,12 @@ migrations are not automatically reversed. Backups remain under
 using a release requiring a database restore. A running app and a working MySQL
 dump are required before deployment. Running again rebuilds and checks the release.
 
-The deployment task hides command output because Docker/backup failures can contain
-private configuration. If Ansible reports failure, inspect the server's checkout,
-Compose status, and private backup directory locally. For interactive diagnostics:
+Detailed command output is saved to a root-only `/opt/olamide/backups/deploy-log-*`
+file. Ansible displays a safe `SIP_DEPLOY_ERROR` phase and that log path on failure.
+For example, `local_changes` means server edits need reconciliation; `git_fetch`
+means the Git fetch failed; `container_build` means the image build failed.
+Do not share private logs without reviewing them for credentials.
+For an interactive run with the same private logging:
 
 ```sh
 bash /opt/olamide-deploy-controller/deployment/pull-and-deploy.sh
