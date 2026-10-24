@@ -9,6 +9,7 @@ export function signupInput(input){
  }catch(e){throw Object.assign(Error(e.message),{registrationValidation:true});}
 }
 export function registrationFailure(error,log=console.error){
+ if(error.signupLimited)return {status:429,body:{error:error.message,retryAfter:600,captchaConsumed:false}};
  if(error.registrationValidation)return {status:400,body:{error:error.message,captchaConsumed:false}};
  if(error instanceof SyntaxError||['Invalid JSON object','Request too large'].includes(error.message))return {status:400,body:{error:'Invalid registration request',captchaConsumed:false}};
  const reference=randomUUID(),code=/^[A-Z][A-Z0-9_]{1,60}$/.test(error.code||'')?error.code:error.name==='TypeError'?'TYPE_ERROR':'REGISTRATION_ERROR';
