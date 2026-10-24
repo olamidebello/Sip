@@ -1,0 +1,38 @@
+---
+- name: Diagnose inbound DID owner and switch ingress without changing routing
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read DID assignments and SIP provisioning state privately
+      ansible.builtin.command:
+        argv: [docker, compose, exec, '-T', api, node, '--input-type=module']
+        chdir: /opt/olamide/repo/deployment/docker
+        stdin: "{{ lookup('ansible.builtin.file', playbook_dir + '/../../tools/diagnose-flowroute-inbound.mjs') }}"
+      register: inbound_summary
+      changed_when: false
+      failed_when: false
+      no_log: true
+    - name: Show safe DID delivery checks
+      ansible.builtin.debug:
+        msg: "{{ inbound_summary.stdout_lines | default([]) | select('match', '^SIP_INBOUND_CHECK [a-z_]+=[A-Za-z0-9_]+$') | list }}"
+    - name: Inspect inbound switch route structure
+      ansible.builtin.command:
+        argv:
+          - python3
+          - '-c'
+          - |
+            import pathlib,re
+            s=pathlib.Path('/etc/kamailio/kamailio.cfg').read_text()
+            match=re.search(r'route\s*\[OLAMIDE_FLOWROUTE_INBOUND\]',s)
+            print('SIP_INBOUND_CHECK ingress_present='+str(bool(match)).lower())
+            if match:
+              route=s[match.start():];end=re.search(r'\n(?:route|failure_route|event_route)\s*\[',route[1:])
+              if end:route=route[:end.start()+1]
+              print('SIP_INBOUND_CHECK reads_to_header='+str(any(v in route for v in ['$tU','$tu','$hdr(To)'])).lower())
+              print('SIP_INBOUND_CHECK reads_request_user='+str('$rU' in route).lower())
+      register: ingress_structure
+      changed_when: false
+    - name: Show ingress checks
+      ansible.builtin.debug:
+        msg: '{{ ingress_structure.stdout_lines }}'
