@@ -1,0 +1,43 @@
+---
+- name: Preserve local SIP integrations and install signup, Admin and trunk controls
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Install staging prerequisites
+      ansible.builtin.apt:
+        name: [python3, git, tar, gzip, curl, util-linux, coreutils, ca-certificates]
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+    - name: Stage and verify feature integration with private logs
+      block:
+        - name: Back up, stage, test and deploy the requested features
+          ansible.builtin.script: '../../deployment/deploy-local-features.sh {{ (playbook_dir ~ "/../..") | quote }}'
+          args:
+            executable: /bin/bash
+          register: feature_deploy
+          no_log: true
+          changed_when: "'SIP_FEATURE_DEPLOYED' in feature_deploy.stdout"
+      rescue:
+        - name: Show safe failure stage and backup directory
+          ansible.builtin.debug:
+            msg: "{{ feature_deploy.stdout_lines | default([]) | select('match', '^SIP_FEATURE_(ERROR|DETAIL) ') | list }}"
+        - name: Stop after failed feature acceptance
+          ansible.builtin.fail:
+            msg: >-
+              Feature update stopped. Existing local source/configuration was retained
+              or restoration attempted if promotion had begun. Inspect the root-only
+              deploy.log inside the reported backup. Additive schema changes remain.
+    - name: Show accepted deployment result
+      ansible.builtin.debug:
+        msg: "{{ feature_deploy.stdout_lines | select('match', '^SIP_FEATURE_DEPLOYED ') | list }}"
+    - name: Demote requested account to Admin and revoke its sessions
+      ansible.builtin.command:
+        argv: [docker, compose, exec, -T, api, node, manage-admin-group.js, dg857641@gmail.com, admin]
+        chdir: /opt/olamide/repo/deployment/docker
+      register: requested_demotion
+      changed_when: true
+    - name: Show requested account role result
+      ansible.builtin.debug:
+        msg: '{{ requested_demotion.stdout }}'

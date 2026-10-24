@@ -304,10 +304,10 @@ async function handler(req, res) {
         path.startsWith("/api/vpn") || path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") || path.startsWith("/api/native-push/") ||
         path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path==="/api/admin/google-contacts" || path.startsWith("/api/dashboard") || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
         path === "/api/admin/cdr" || path.startsWith('/api/marketplace/') || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
-      let user = await currentUser(req);
+      const user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
       if(path==='/api/account/admin-access'&&req.method==='GET')return send(res,200,{role:user.role,policy:user.role==='admin'?await adminGroupPolicy(pool,user.tenant_id):null});
-      user=await scopedAdminUser(pool,user,path);
+      Object.assign(user,await scopedAdminUser(pool,user,path));
       if(path.startsWith('/api/admin/system-admin-group'))return await handleAdminGroup({req,res,path,user,pool,send,readJson,meetingSignaling});
       if(path.startsWith('/api/softphone/scheduled'))return await handleScheduledCalls({req,res,path,user,pool,send,readJson});
       if(path==='/api/navigation'||path.startsWith('/api/admin/navigation'))return await handleNavigationPolicy({req,res,path,user,pool,send,readJson});

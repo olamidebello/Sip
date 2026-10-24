@@ -1,3 +1,4 @@
+import {setupTrunkAdmin} from './trunkAdmin.js';
 import {setupSystemAdminGroup} from './adminGroup.js';
 import {setupQuickSignup} from './quickSignup.js';
 import {accountJson,signupFailureNotice} from './registrationFeedback.js';
@@ -1254,6 +1255,7 @@ const callGui=setupCallGui({document,openAudio:()=>callsScreen.open('settings'),
 }});
 setupDownloads();
 setupCarrierControl();
+const trunkSuperAdmin=setupTrunkAdmin({document,get:apiGet,request:accountRequest,getRole:()=>activeRole,getUserId:()=>softphoneUserId,show:showWorkspace});
 const systemAdminGroup=setupSystemAdminGroup({document,get:apiGet,request:accountRequest,getRole:()=>activeRole,getUserId:()=>softphoneUserId,show:showWorkspace});
 const navigationGroups=[
   ...userNavigationGroups,
@@ -1543,6 +1545,7 @@ async function refreshSoftphoneState(user) {
   softphoneUserId=user.id;
   void quickSignup.refreshProfile();
   void systemAdminGroup.refresh();
+  void trunkSuperAdmin.refresh().catch(()=>{});
   const [settings,history]=await Promise.all([
     softphoneRequest("/api/softphone/preferences"),softphoneRequest("/api/softphone/calls")]);
   if (generation!==softphoneLoad || softphoneUserId!==user.id) return;
@@ -2575,7 +2578,7 @@ $("#logout").onclick = async () => {
     advancedCalling.reset();
     lastDialedTarget='';
     await accountRequest("/api/logout", {});
-    softphoneLoad++;softphoneUserId=null;void quickSignup.refreshProfile();void systemAdminGroup.refresh();favorites.clear();recentCalls=[];$("#dnd").checked=false;renderSoftphoneLists();
+    softphoneLoad++;softphoneUserId=null;void quickSignup.refreshProfile();void systemAdminGroup.refresh();void trunkSuperAdmin.refresh();favorites.clear();recentCalls=[];$("#dnd").checked=false;renderSoftphoneLists();
     geofenceGeneration++;geoPolicyLoaded=false;geoPolicy={enabled:true,maxAccuracyMeters:0,zones:[]};$("#geo-policy").textContent="Sign in to load calling area policy.";
     $("#signup").hidden = false;
     $("#login").hidden = false;
