@@ -1,0 +1,54 @@
+---
+- name: Permit Flowroute carrier signaling through the existing host firewall
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Preserve private firewall snapshot for reference
+      ansible.builtin.shell: |
+        set -eu
+        umask 077
+        install -d -m 0700 /opt/olamide/backups
+        backup=$(mktemp /opt/olamide/backups/firewall-before-flowroute-XXXXXXXX.json)
+        nft -j list ruleset > "$backup"
+      args:
+        executable: /bin/bash
+      changed_when: true
+      no_log: true
+    - name: Install scoped Flowroute signaling rule manager
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../tools/allow_flowroute_sip.py'
+        dest: /usr/local/sbin/olamide-flowroute-sip-firewall
+        owner: root
+        group: root
+        mode: '0700'
+    - name: Install persistent scoped firewall service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/olamide-flowroute-sip-firewall.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Permit Flowroute signaling through existing nftables input chains
+          After=nftables.service
+          Before=kamailio.service
+          PartOf=nftables.service
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/bin/python3 /usr/local/sbin/olamide-flowroute-sip-firewall
+          RemainAfterExit=yes
+          [Install]
+          WantedBy=multi-user.target
+    - name: Validate and atomically apply Flowroute exceptions
+      ansible.builtin.command:
+        argv: [python3, /usr/local/sbin/olamide-flowroute-sip-firewall]
+      register: scoped_firewall
+      changed_when: "'rules_added=0' not in scoped_firewall.stdout"
+    - name: Enable persistence without restarting the existing firewall
+      ansible.builtin.systemd:
+        name: olamide-flowroute-sip-firewall
+        enabled: true
+        state: started
+        daemon_reload: true
+    - name: Report narrow firewall changes
+      ansible.builtin.debug:
+        msg: '{{ scoped_firewall.stdout }}. Flowroute IPv4 signaling networks are permitted on UDP/TCP 5060 in existing input chains. Existing rules and default-drop policy remain. No Kamailio restart is required. Test the incoming DID now; media connectivity still requires a completed call test.'
