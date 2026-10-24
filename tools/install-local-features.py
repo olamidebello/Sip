@@ -17,6 +17,7 @@ NEW_FILES = [
  'apps/web/src/adminGroup.js','apps/web/src/adminGroup.test.js',
  'apps/web/src/trunkAdmin.js','apps/web/src/trunkAdmin.test.js',
 ]
+KNOWN_FEATURE_UPGRADES = {'services/api/quickSignup.js': ['e01b1b906915c64605f617fe92d77dce7f1cac4fa8220647510ab030606d83ba'], 'services/api/quickSignup.test.js': ['925f06eeaf7763252826bba24270394c22d03f954b97d2e3ffa0572542a71357'], 'apps/web/src/quickSignup.js': ['9cab4c4b51d9463a4c072f0750392a4813247c8a2ee9a72f376735e00bfc2497'], 'apps/web/src/quickSignup.test.js': ['fd29b099a510d91a5d2d6fea35f3a2c32314e6f13a4b7aff6c37574291255ce4']}
 SHARED = ['services/api/onboarding.js','services/api/messagingWebhooks.js','services/api/server.js',
  'services/api/migrate.js','services/api/trunkManagement.js','services/api/trunkManagement.test.js',
  'apps/web/src/main.js','apps/web/src/adminNavigation.js',
@@ -119,7 +120,7 @@ const navigationGroups=[""")
    errors.append('Feature source missing: '+name)
    continue
   existing=target/name
-  if existing.exists() and (existing.is_symlink() or existing.read_bytes()!=p.read_bytes()):
+  if existing.exists() and (existing.is_symlink() or (existing.read_bytes()!=p.read_bytes() and hashlib.sha256(existing.read_bytes()).hexdigest() not in KNOWN_FEATURE_UPGRADES.get(name,[]))):
    errors.append('Existing feature module differs: '+name+'; no files changed')
    continue
   changes[name]=p.read_text()

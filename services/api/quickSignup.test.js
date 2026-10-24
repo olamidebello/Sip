@@ -99,3 +99,14 @@ test('authenticated webhook retry still activates after event ledger insertion w
  assert.equal(response.status,200);assert.equal(response.body.duplicate,true);assert.equal(f.users,1);
  }finally{if(old===undefined)delete process.env.FLOWROUTE_WEBHOOK_TOKEN;else process.env.FLOWROUTE_WEBHOOK_TOKEN=old;}
 });
+test('pending status reports a conflict only from a matching authenticated carrier event',async()=>{
+ const old=process.env.FLOWROUTE_WEBHOOK_TOKEN;process.env.FLOWROUTE_WEBHOOK_TOKEN='z'.repeat(64);
+ try{for(const conflict of [false,true]){
+  const calls=[];let response;
+  await handleQuickSignup({req:{method:'POST'},res:{setHeader(){}},path:'/api/register/quick/status',readJson:async()=>({token:'a'.repeat(64)}),send:(_r,status,body)=>{response={status,body};},pool:{query:async(sql,args)=>{calls.push([sql,args]);return {rows:sql.includes('FROM quick_signups q')?[{state:'pending',code_hash:'private-hash',created_at:'start',expires_at:'end'}]:conflict?[{found:1}]:[]};}}});
+  assert.equal(response.body.state,conflict?'unavailable':'pending');
+  if(conflict)assert.match(response.body.error,/Sign in or use password recovery/);
+  const query=calls[1];assert.match(query[0],/e.tenant_id=\$1/);assert.match(query[0],/SHA2/);assert.match(query[0],/e.received_at>= \$4/);
+  assert.equal(JSON.stringify(response).includes('private-hash'),false);
+ }}finally{if(old===undefined)delete process.env.FLOWROUTE_WEBHOOK_TOKEN;else process.env.FLOWROUTE_WEBHOOK_TOKEN=old;}
+});

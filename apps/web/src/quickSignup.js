@@ -30,7 +30,7 @@ export function setupQuickSignup({document,get,request,getUserId}){
    if(r.state==='verified'){
     document.getElementById('login').elements.email.value=pending.email;clear();instructions.hidden=true;
     notice.textContent='Phone verified. Your account is created. Sign in with your email and password, then complete your profile. SIP connection status is shown after sign-in.';
-   }else if(r.state==='unavailable'){clear();form.hidden=false;instructions.hidden=true;notice.textContent='Signup could not be completed. Use sign-in or account recovery if you already have an account.';void captcha();}
+   }else if(r.state==='unavailable'){clear();form.hidden=false;instructions.hidden=true;notice.textContent=r.error||'Signup could not be completed. The phone number or login may already belong to an account, or registration policy does not permit this signup. Sign in or use password recovery.';void captcha();}
    else notice.textContent='Waiting for your text. Verification completes when the carrier delivers it.';
   }catch(e){notice.textContent=e.message;}finally{checking=false;}
  }

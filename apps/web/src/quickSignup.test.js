@@ -31,3 +31,13 @@ test('profile prompt rejects stale account refresh and sends only profile fields
  const f=profile.querySelector('form');for(const [k,v]of Object.entries({name:'New Person',address1:'1 Main St',address2:'',city:'Dallas',region:'TX',postalCode:'75001',country:'US'}))f.elements[k].value=v;
  await f.onsubmit({preventDefault(){},currentTarget:f});assert.equal(requests[0][0],'/api/account/quick-profile');assert.equal(requests[0][2],'PUT');assert.equal(requests[0][1].phone,undefined);assert.equal(profile.hidden,true);dom.window.close();
 });
+test('waiting screen displays signup conflict and stops polling',async()=>{
+ const dom=page(),document=dom.window.document;
+ setupQuickSignup({document,get:async()=>({}),getUserId:()=>null,request:async path=>path.endsWith('/start')?{token:'a'.repeat(64),number:'+12109050290',message:'OLAMIDE ABCDEF0123456789',expiresInSeconds:600}:{state:'unavailable',error:'This phone or login may already have an account. Use password recovery.'}});
+ const box=document.querySelector('details'),f=box.querySelector('form');
+ f.elements.email.value='new@example.com';f.elements.password.value=f.elements.confirmPassword.value='long-password-123';
+ await f.onsubmit({preventDefault(){}});await box.querySelector('[data-check]').onclick();
+ assert.match(box.querySelector('[role=status]').textContent,/Use password recovery/);
+ assert.equal(box.querySelector('[data-instructions]').hidden,true);
+ assert.equal(dom.window.sessionStorage.getItem('olamide-quick-signup'),null);dom.window.close();
+});

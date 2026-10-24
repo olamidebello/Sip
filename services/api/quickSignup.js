@@ -61,10 +61,23 @@ async function publicHandler({req,res,path,pool,send,readJson}){
  }
  if(path==='/api/register/quick/status'){
   if(!/^[a-f0-9]{64}$/.test(b.token||''))return send(res,400,{error:'Valid signup token required'});
-  const row=(await pool.query(`SELECT q.state,q.user_id,a.status AS sip_status FROM quick_signups q
+  const row=(await pool.query(`SELECT q.state,q.user_id,q.code_hash,q.created_at,q.expires_at,a.status AS sip_status FROM quick_signups q
    LEFT JOIN sip_accounts a ON a.user_id=q.user_id WHERE q.token_hash=$1 AND q.expires_at>UTC_TIMESTAMP(3)`,[digest(b.token)])).rows[0];
   if(!row)return send(res,410,{error:'Signup expired. Start again.'});
-  return send(res,200,{state:row.state,sipStatus:row.sip_status||null,profileRequired:row.state==='verified'});
+  // Only persisted, authenticated carrier events can establish a phone conflict.
+  // This also handles messages whose earlier webhook attempt stopped before activation.
+  if(row.state==='pending'){
+   const conflict=(await pool.query(`SELECT 1 FROM flowroute_message_events e
+    JOIN user_profiles p ON p.phone_e164=CONCAT('+',TRIM(LEADING '+' FROM e.sender))
+    WHERE e.tenant_id=$1 AND e.kind='sms'
+    AND CONCAT('+',TRIM(LEADING '+' FROM e.recipient))=$2
+    AND UPPER(TRIM(e.body)) REGEXP '^OLAMIDE [A-F0-9]{16}$'
+    AND SHA2(SUBSTRING(UPPER(TRIM(e.body)),9),256)=$3
+    AND e.received_at>= $4 AND e.received_at< $5 LIMIT 1`,
+    [defaultTenantId,quickSignupDid,row.code_hash,row.created_at,row.expires_at])).rows[0];
+   if(conflict)return send(res,200,{state:'unavailable',error:'Signup could not be completed. The phone number or login may already belong to an account. Sign in or use password recovery.',sipStatus:null,profileRequired:false});
+  }
+  return send(res,200,{state:row.state,error:row.state==='unavailable'?'Signup could not be completed. The phone number or login may already belong to an account, or registration policy does not permit this signup. Sign in or use password recovery.':undefined,sipStatus:row.sip_status||null,profileRequired:row.state==='verified'});
  }
  return send(res,404,{error:'Quick signup route unavailable'});
 }
