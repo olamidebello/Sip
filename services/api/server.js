@@ -1,4 +1,5 @@
 import {migrateHostedApps,handleHostedApps,hostedApp} from './hostedApps.js';
+import {migrateJustisolveBridge,handleJustisolveBridge,redeemJustisolveTicket,startJustisolveLeaseSweep} from './justisolveBridge.js';
 import {handleVpn} from './vpn.js';
 import {handleLiveCalls} from './liveCalls.js';
 import {handleVoicemail} from './voicemail.js';
@@ -155,7 +156,7 @@ async function currentUser(req) {
   const token = currentToken(req);
   if (!token) return null;
   const result = await pool.query(
-    "SELECT u.id,u.display_name,u.email,u.role,u.auth_source,u.must_change_password,s.auth_method, CASE WHEN u.role='super_admin' AND selected.id IS NOT NULL THEN selected.id ELSE u.tenant_id END AS tenant_id FROM sessions s JOIN users u ON u.id=s.user_id AND u.status='active' JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenant_ldap_settings ldap ON ldap.tenant_id=u.tenant_id LEFT JOIN tenant_auth_policy auth ON auth.tenant_id=u.tenant_id LEFT JOIN tenants selected ON selected.id=s.selected_tenant_id AND selected.status='active' WHERE s.token_hash=$1 AND s.expires_at>now() AND ((u.auth_source='local' AND (auth.local_enabled IS NULL OR auth.local_enabled=TRUE OR u.role='super_admin')) OR (u.auth_source='ldap' AND ldap.enabled=TRUE))",
+    "SELECT u.id,u.display_name,u.email,u.role,u.auth_source,u.must_change_password,s.auth_method, CASE WHEN u.role='super_admin' AND selected.id IS NOT NULL THEN selected.id ELSE u.tenant_id END AS tenant_id FROM sessions s JOIN users u ON u.id=s.user_id AND u.status='active' JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenant_ldap_settings ldap ON ldap.tenant_id=u.tenant_id LEFT JOIN tenant_auth_policy auth ON auth.tenant_id=u.tenant_id LEFT JOIN tenants selected ON selected.id=s.selected_tenant_id AND selected.status='active' WHERE s.token_hash=$1 AND s.expires_at>now() AND NOT EXISTS(SELECT 1 FROM justisolve_identities j WHERE j.user_id=u.id AND (j.enabled=false OR j.lease_expires IS NULL OR j.lease_expires<=now())) AND ((u.auth_source='local' AND (auth.local_enabled IS NULL OR auth.local_enabled=TRUE OR u.role='super_admin')) OR (u.auth_source='ldap' AND ldap.enabled=TRUE))",
     [tokenHash(token)]
   );
   const user = result.rows[0];
@@ -175,6 +176,7 @@ async function featuresFor(user) {
 async function handler(req, res) {
   const path = new URL(req.url, origin).pathname;
   const hostedIntegration=path==='/api/integrations/hosted-apps/provision'&&!!hostedApp(req);
+  const justisolveRunner=path.startsWith('/api/integrations/justisolve/');
   const nativePushHook=path==='/api/native-push/wake'&&pushHookAuthorized(req);
   if (req.method === "GET" && path === "/api/health")
     return send(res, 200, { status: "ok", ...(process.env.APP_RELEASE ? {release:process.env.APP_RELEASE} : {}) });
@@ -186,11 +188,11 @@ async function handler(req, res) {
   const switchXml = path === "/api/switch/xml";
   const deployRunner = path.startsWith('/api/integrations/deployment/');
   const kamailioRunner=path.startsWith('/api/integrations/kamailio/');
-  if (req.method !== "GET" && !hostedIntegration && !nativePushHook && !deployRunner && !kamailioRunner && !switchXml && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
+  if (req.method !== "GET" && !hostedIntegration && !justisolveRunner && !nativePushHook && !deployRunner && !kamailioRunner && !switchXml && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
     return send(res, 403, { error: "Invalid origin" });
   try {
     if(req.method!=='GET'||path==='/api/register/captcha'){
-      const external=!!(hostedIntegration||nativePushHook||deployRunner||kamailioRunner||switchXml||cdrIngest||flowrouteWebhook||stripeWebhook||providerWebhook||didwwWebhook);
+      const external=!!(hostedIntegration||justisolveRunner||nativePushHook||deployRunner||kamailioRunner||switchXml||cdrIngest||flowrouteWebhook||stripeWebhook||providerWebhook||didwwWebhook);
       const client=await proxyClient(req);
       const edge=requestLimiter.check('edge:'+client,600);
       if(!edge.allowed)return send(res,429,{error:'Too many requests',retryAfter:edge.retryAfter},{'Retry-After':String(edge.retryAfter)});
@@ -200,6 +202,8 @@ async function handler(req, res) {
       if(!limited.allowed)return send(res,429,{error:'Too many requests',retryAfter:limited.retryAfter},{'Retry-After':String(limited.retryAfter)});
     }
     if(path==='/api/integrations/hosted-apps/provision')return await handleHostedApps({req,res,pool,send,readJson});
+    if(path==='/api/justisolve/redeem')return await redeemJustisolveTicket({req,res,pool,readJson,send,origin,sessionCookie});
+    if(justisolveRunner)return await handleJustisolveBridge({req,res,path,pool,send,readJson});
     if(path==='/api/native-push/wake')return await handleNativePush({req,res,path,pool,send,readJson});
     if (switchXml) return send(res,410,{error:'Legacy XML integration retired'});
     if(kamailioRunner) return await handleKamailioRunner({req,res,path,pool,send,readJson});
@@ -222,7 +226,7 @@ async function handler(req, res) {
           email.length > 254 || password.length > 1024)
         return send(res, 400, { error: "Invalid credentials" });
       const result = await pool.query(
-        "SELECT u.id, u.display_name, u.email, u.role, u.tenant_id,u.must_change_password, u.password_salt, u.password_hash FROM users u JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenant_auth_policy auth ON auth.tenant_id=u.tenant_id WHERE (u.email=$1 OR u.username=$1) AND u.status='active' AND u.auth_source='local' AND (auth.local_enabled IS NULL OR auth.local_enabled=TRUE OR u.role='super_admin')",
+        "SELECT u.id, u.display_name, u.email, u.role, u.tenant_id,u.must_change_password, u.password_salt, u.password_hash FROM users u JOIN tenants t ON t.id=u.tenant_id AND t.status='active' LEFT JOIN tenant_auth_policy auth ON auth.tenant_id=u.tenant_id WHERE (u.email=$1 OR u.username=$1) AND u.status='active' AND NOT EXISTS(SELECT 1 FROM justisolve_identities j WHERE j.user_id=u.id AND (j.enabled=false OR j.lease_expires IS NULL OR j.lease_expires<=now())) AND u.auth_source='local' AND (auth.local_enabled IS NULL OR auth.local_enabled=TRUE OR u.role='super_admin')",
         [email.trim().toLowerCase()]
       );
       const user = result.rows[0];
@@ -854,10 +858,12 @@ async function handler(req, res) {
 await migrate(pool);
 await migrateHostedApps(pool);
 await migratePstnBilling(pool);
+await migrateJustisolveBridge(pool);
 const kamailioHttpBridge=startKamailioHttpBridge(pool);
 const stopTelecomReports=startTelecomReports(pool);
 const stopCdrArchives=startCdrArchives(pool);
 const stopPaymentReconciliation=startPaymentReconciliation(pool);
+const stopJustisolveLeases=startJustisolveLeaseSweep(pool);
 const stopSipProvisioning=startSipProvisioning(pool,origin);
 const stopMessageExpiry=startMessageExpiry(pool);
 const stopSubscriberEmail=startSubscriberEmail(pool);
@@ -873,6 +879,7 @@ server.on("close",stopTelecomReports);
 server.on("close",stopCdrArchives);
 server.on("close",stopPaymentReconciliation);
 server.on("close",stopSipProvisioning);
+server.on("close",stopJustisolveLeases);
 server.on("close",()=>kamailioHttpBridge?.close());
 server.on("close",stopNativePush);
 server.on("close",stopSubscriberDelivery);

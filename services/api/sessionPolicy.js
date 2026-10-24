@@ -23,7 +23,7 @@ async function trim(db,userId,limit,newHash=null){
 }
 // Serialize all logins and limit changes per user, including across API replicas.
 export async function createLimitedSession(pool,{userId,token,seconds=604800,authMethod='password'}){
-  if(![3600,604800].includes(seconds)||!['password','passkey'].includes(authMethod))throw new Error('Invalid session configuration');
+  if(![3600,604800].includes(seconds)||!['password','passkey','justisolve'].includes(authMethod))throw new Error('Invalid session configuration');
   const db=await pool.connect();
   try{
     await db.query('BEGIN');
