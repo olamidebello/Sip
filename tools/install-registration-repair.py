@@ -23,8 +23,13 @@ def patch_account_json(source):
   "const data = await response.json(); if (!response.ok) throw new Error(data.error || \"Account request failed\"); return data;",
   "const data = await response.json(); if (!response.ok) {const error=new Error(data.error || \"Account request failed\");error.status=response.status;throw error;} return data;",
   "const data = await response.json(); if (!response.ok) { throw new Error(data.error || \"Account request failed\"); } return data;"]
+ customer_variant='''const data = await response.json(); if (!response.ok) {const error=new Error(["admin","super_admin"].includes(activeRole)?data.error||"Account request failed":customerText(data.error||"Account request failed"));error.status=response.status;error.code=data.code;const retry=Number(response.headers.get('Retry-After')||data.retryAfter);if(Number.isFinite(retry)&&retry>0)error.retryAfter=retry;throw error;} return data;'''
+ variants.append(customer_variant)
  if normalize(tail) not in [normalize(v) for v in variants]:raise SystemExit('Unknown accountRequest response handling; no files changed')
- updated=function[:parsed.start()]+'  return accountJson(response);\n'+function[close:]
+ replacement='  return accountJson(response);\n'
+ if normalize(tail)==normalize(customer_variant):
+  replacement='  try { return await accountJson(response); } catch(error) { if(!["admin","super_admin"].includes(activeRole))error.message=customerText(error.message); throw error; }\n'
+ updated=function[:parsed.start()]+replacement+function[close:]
  return source[:start.start()]+updated+source[boundary:]
 changes=[]
 for name,replacements in patches.items():

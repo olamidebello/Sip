@@ -38,6 +38,18 @@ class InstallerTests(unittest.TestCase):
     changed=p.read_text();self.assertIn('return accountJson(response);',changed)
     self.assertIn('const response=await fetch(path);',changed)
     self.assertIn('async function unrelated() { const data=await response.json(); return data; }',changed)
+ def test_installed_customer_parser(self):
+  variant='''const data = await response.json();
+  if (!response.ok) {const error=new Error(["admin","super_admin"].includes(activeRole)?data.error||"Account request failed":customerText(data.error||"Account request failed"));error.status=response.status;error.code=data.code;const retry=Number(response.headers.get('Retry-After')||data.retryAfter);if(Number.isFinite(retry)&&retry>0)error.retryAfter=retry;throw error;}
+  return data;'''
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t);self.fixture(root);p=root/'apps/web/src/main.js'
+   p.write_text(p.read_text().replace(patches['apps/web/src/main.js'][0][0],variant))
+   subprocess.run([sys.executable,str(installer),str(root)],check=True,capture_output=True)
+   changed=p.read_text();self.assertIn('return await accountJson(response)',changed)
+   self.assertIn('error.message=customerText(error.message)',changed)
+   subprocess.run([sys.executable,str(installer),str(root)],check=True,capture_output=True)
+   self.assertEqual(changed,p.read_text())
  def test_unknown_frontend_does_not_write_backend_changes(self):
   with tempfile.TemporaryDirectory() as t:
    root=Path(t);self.fixture(root);p=root/'apps/web/src/main.js';p.write_text(p.read_text().replace(patches['apps/web/src/main.js'][0][0],'customParser();'))

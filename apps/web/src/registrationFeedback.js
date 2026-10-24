@@ -7,6 +7,6 @@ export function signupFailureNotice(error){
 }
 export async function accountJson(response){
  let data;try{data=await response.json();}catch{const e=Error('Account service returned an unreadable response. The previous request may have completed; check sign-in or verification before retrying.');e.status=response.status||502;throw e;}
- if(!response.ok){const e=Error(typeof data?.error==='string'?data.error:'Account request failed');e.status=response.status;e.reference=typeof data?.reference==='string'?data.reference:undefined;e.captchaConsumed=typeof data?.captchaConsumed==='boolean'?data.captchaConsumed:undefined;const retry=Number(response.headers.get('Retry-After')||data?.retryAfter);if(Number.isFinite(retry)&&retry>0)e.retryAfter=retry;throw e;}
+ if(!response.ok){const e=Error(typeof data?.error==='string'?data.error:'Account request failed');e.status=response.status;e.code=data?.code;e.reference=typeof data?.reference==='string'?data.reference:undefined;e.captchaConsumed=typeof data?.captchaConsumed==='boolean'?data.captchaConsumed:undefined;const retry=Number(response.headers.get('Retry-After')||data?.retryAfter);if(Number.isFinite(retry)&&retry>0)e.retryAfter=retry;throw e;}
  return data;
 }
