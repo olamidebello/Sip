@@ -16,11 +16,13 @@ function fixture({duplicate=false,claim=false,fail=false,closed=false,policy=nul
   else if(sql.includes('SELECT user_id FROM quick_verified_phones'))rows=claim?[{user_id:'existing'}]:[];
   else if(sql.startsWith('INSERT INTO users')){if(existingEmail)throw Object.assign(Error('duplicate'),{code:'ER_DUP_ENTRY'});users++;}
   else if(sql.includes('SELECT tenant_id FROM users'))rows=[{tenant_id:defaultTenantId}];
+  // Managed starter-plan enrollment reads an existing tenant setting.
+  else if(sql.includes('SELECT allowance_seconds FROM calling_plan_settings'))rows=[{allowance_seconds:600}];
   else if(sql.startsWith('INSERT INTO sip_accounts')&&fail)throw Error('switch record failed');
   else if(sql.startsWith('UPDATE quick_signups'))pending=false;
   else if(sql==='COMMIT')committed++;
   else if(sql==='ROLLBACK'){pending=true;users=0;}
-  return {rows,rowCount:rows.length||1};
+  return {rows,rowCount:/^\s*SELECT\b/i.test(sql)?rows.length:1};
  }};
  return {pool:{connect:async()=>db},calls,get users(){return users;},get committed(){return committed;}};
 }

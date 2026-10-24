@@ -51,3 +51,15 @@ a real carrier/SMS test and production MySQL deployment remain required.
 For live acceptance, start signup yourself, text the displayed code from your own
 phone, check account creation, sign in, save the profile, and verify switch status.
 Do not send someone else's code or use the provider DID as a sender for this test.
+
+## Managed calling-plan test compatibility
+
+The deployment tests model the existing `calling_plan_settings` row read by managed
+starter-plan enrollment. The earlier fixture omitted that row, causing the signup,
+rollback and webhook-retry tests to fail before SIP insertion on that helper version.
+The corrected fixture returns consistent SELECT row counts and preserves every
+creation, transaction-rollback and single-use assertion. Production enrollment,
+configured allowance values and existing subscriptions are unchanged.
+
+A recorded-contract regression runs the same signup tests against the matched SIP
+helper and the two-minute, ten-minute and managed-plan enrollment implementations.
