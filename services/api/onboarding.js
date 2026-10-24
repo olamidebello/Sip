@@ -1,7 +1,10 @@
+import {signupInput,safeRegistration} from './registrationSafety.js';
+// REGISTRATION_REPAIR_V1
+const validateRegistration=signupInput;
 import {ensureDefaultPresence} from './defaultPresence.js';
 import {issueCaptcha,consumeCaptcha} from './signupCaptcha.js';
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
-import { validateRegistration, hashPassword } from './security.js';
+import { hashPassword } from './security.js';
 import { randomUUID } from 'node:crypto';
 import { defaultTenantId } from './tenancy.js';
 import { createSipAccount } from './sipMarketplace.js';
@@ -59,7 +62,7 @@ async function sendCode(email, code, origin) {
   if (!response.ok) throw new Error('Email delivery failed');
 }
 
-export async function handleOnboarding({req,res,path,pool,send,readJson,origin}) {
+async function registrationHandler({req,res,path,pool,send,readJson,origin}) {
   if(path==='/api/register/captcha'&&req.method==='GET')return send(res,200,await issueCaptcha(pool));
   if (path === '/api/register' && req.method === 'POST') {
     const input=await readJson(req);
@@ -131,3 +134,5 @@ export async function handleOnboarding({req,res,path,pool,send,readJson,origin})
   }
   return send(res,404,{error:'Registration route unavailable'});
 }
+
+export async function handleOnboarding(context){return safeRegistration(registrationHandler,context);}

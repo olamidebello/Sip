@@ -1,3 +1,5 @@
+import {registrationFailure} from './registrationSafety.js';
+// REGISTRATION_REPAIR_V1
 import {randomBytes,createHash} from 'node:crypto';
 import {hashPassword,verifyPassword} from './security.js';
 import {hubSettings} from './twilioHub.js';
@@ -55,7 +57,8 @@ export async function consumeAccountChallenge(pool,user,purpose,token,code,fetch
  if(!/^[a-f0-9]{64}$/.test(token||'')||!/^\d{4,10}$/.test(code||''))throw Error('Verification challenge and code required');
  const {policy,hub}=await authContext(db,user),row=(await db.query('SELECT * FROM twilio_account_challenges WHERE token_hash=$1 AND tenant_id=$2 AND user_id=$3 AND purpose=$4',[digest(token),user.tenant_id,user.id,purpose])).rows[0];
  const phone=(await db.query('SELECT phone_e164 FROM user_profiles WHERE user_id=$1',[user.id])).rows[0]?.phone_e164;
- if(!policy[purpose]||!row||row.status!=='pending'||row.attempts>=5||Number(row.expires_ms)<=Date.now()||row.phone!==phone||row.policy_version!==policy.version||row.hub_version!==hub.version||row.service_sid!==policy.serviceSid||row.account_sid!==hub.credentials.accountSid)throw Error('Invalid or expired verification');
+ if(!policy[purpose]||!row||(!['pending',...(purpose==='signup'?['consumed']:[])].includes(row.status))||(row.status!=='consumed'&&row.attempts>=5)||Number(row.expires_ms)<=Date.now()||row.phone!==phone||row.policy_version!==policy.version||row.hub_version!==hub.version||row.service_sid!==policy.serviceSid||row.account_sid!==hub.credentials.accountSid)throw Error('Invalid or expired verification');
+ if(purpose==='signup'&&row.status==='consumed')return true;
  await db.query("UPDATE twilio_account_challenges SET status='checking',attempts=attempts+1 WHERE token_hash=$1",[digest(token)]);
  let r;try{r=await verifyRequest(hub.credentials,row.service_sid,'VerificationCheck',{VerificationSid:row.provider_sid,Code:code},fetcher);}catch{await db.query("UPDATE twilio_account_challenges SET status='unknown' WHERE token_hash=$1",[digest(token)]);throw Error('Verification check uncertain. Request a new code after the cooldown');}
  const approved=approvedCheck(row,r);await db.query('UPDATE twilio_account_challenges SET status=$1 WHERE token_hash=$2',[approved?'consumed':'pending',digest(token)]);if(!approved)throw Error('Invalid verification code');return true;
@@ -98,10 +101,10 @@ export async function handleAccountAuth({req,res,path,pool,user,send,readJson,or
   }
   if(path==='/api/account-auth/signup/check'&&req.method==='POST'){
    const b=await readJson(req);if(!/^[a-f0-9]{64}$/.test(b.authChallenge||''))throw Error('Invalid challenge');
-   const u=(await pool.query("SELECT u.id,u.tenant_id FROM twilio_account_challenges c JOIN users u ON u.id=c.user_id AND u.tenant_id=c.tenant_id JOIN tenants t ON t.id=u.tenant_id AND t.status='active' WHERE c.token_hash=$1 AND c.purpose='signup' AND u.status='pending_email'",[digest(b.authChallenge)])).rows[0];
-   if(!u)throw Error('Invalid verification');await consumeAccountChallenge(pool,u,'signup',b.authChallenge,b.authCode);
+   const u=(await pool.query("SELECT u.id,u.tenant_id,u.status,c.status AS challenge_status,c.expires_ms FROM twilio_account_challenges c JOIN users u ON u.id=c.user_id AND u.tenant_id=c.tenant_id JOIN tenants t ON t.id=u.tenant_id AND t.status='active' WHERE c.token_hash=$1 AND c.purpose='signup' AND u.status IN ('pending_email','active')",[digest(b.authChallenge)])).rows[0];
+   if(!u)throw Error('Invalid verification');if(u.status==='active'){if(u.challenge_status==='consumed'&&Number(u.expires_ms)>Date.now())return send(res,200,{status:'verified'});throw Error('Invalid verification');}await consumeAccountChallenge(pool,u,'signup',b.authChallenge,b.authCode);
    const {createSipAccount}=await import('./sipMarketplace.js');const db=await pool.connect();try{await db.query('START TRANSACTION');const changed=await db.query("UPDATE users SET status='active' WHERE id=$1 AND tenant_id=$2 AND status='pending_email'",[u.id,u.tenant_id]);if(!changed.rowCount)throw Error('Account activation changed');await createSipAccount(db,u.id,new URL(origin).hostname);await db.query('COMMIT');}catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}return send(res,200,{status:'verified'});
   }
   return send(res,404,{error:'Authentication route unavailable'});
- }catch(e){return send(res,409,{error:e.message});}
+ }catch(e){if(e.code||e instanceof TypeError){const result=registrationFailure(e);return send(res,result.status,result.body);}return send(res,409,{error:e.message});}
 }

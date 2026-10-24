@@ -1,3 +1,5 @@
+import {accountJson,signupFailureNotice} from './registrationFeedback.js';
+// REGISTRATION_REPAIR_V1
 import {setupVpnUi} from './vpnUi.js';
 import {softphoneMediaOptions} from './softphoneMedia.js';
 import {setupLiveCallsUi} from './liveCallsUi.js';
@@ -1690,9 +1692,7 @@ async function accountRequest(path, body, method="POST") {
     credentials: "same-origin",
     body: JSON.stringify(body)
   });
-  const data = await response.json();
-  if (!response.ok) {const error=new Error(data.error || "Account request failed");error.status=response.status;const retry=Number(response.headers.get('Retry-After')||data.retryAfter);if(Number.isFinite(retry)&&retry>0)error.retryAfter=retry;throw error;}
-  return data;
+  return accountJson(response);
 }
 async function apiGet(path) {
   const response = await fetch(path, { credentials: "same-origin" });
@@ -2331,10 +2331,10 @@ $("#signup").addEventListener("submit", async event=>{
  event.preventDefault();const form=event.currentTarget,button=form.querySelector('button:last-child');
  if(!signupCaptcha.ready()){await refreshSignupCaptcha();$('#account-status').textContent=signupCaptcha.ready()?'CAPTCHA refreshed. Enter the new six digits, then submit again.':'CAPTCHA unavailable. Tap New CAPTCHA to retry.';return;}
  if(form.elements.password.value!==form.elements.confirmPassword.value){$('#account-status').textContent='Passwords must match';return;}
- button.disabled=true;let created=false,failureMessage;
+ button.disabled=true;let created=false,failureMessage,failureError;
  try{const data=Object.fromEntries(new FormData(form));await accountRequest('/api/register',data);created=true;form.reset();$('#login').elements.email.value=data.email;$('#account-status').textContent='Account created. Sign in to continue.';pageRoutes.go('login');}
- catch(error){failureMessage=error.message;}
- finally{button.disabled=false;if(!created){await refreshSignupCaptcha();$('#account-status').textContent=failureMessage+' '+(signupCaptcha.ready()?'Enter the new CAPTCHA and try again.':'CAPTCHA unavailable. Tap New CAPTCHA to retry.');}}
+ catch(error){failureMessage=error.message;failureError=error;}
+ finally{button.disabled=false;if(!created){const notice=signupFailureNotice(failureError);if(notice.refreshCaptcha)await refreshSignupCaptcha();$('#account-status').textContent=notice.text;}}
 });
 $("#signup-verify").addEventListener('submit',async event=>{
   event.preventDefault();
@@ -2937,6 +2937,3 @@ $('#routing-refresh').onclick=()=>refreshSubscriberRouting().catch(e=>{$('#routi
 $('#subscriber-routing').onsubmit=async event=>{event.preventDefault();try{const body={};for(const key of routingFlags)body[key]=event.currentTarget.elements[key].checked;await accountRequest('/api/account/subscriber-routing',body,'PUT');await refreshSubscriberRouting();}catch(e){$('#routing-status').textContent=e.message;}};
 $('#routing-email-code').onclick=async()=>{try{await accountRequest('/api/account/subscriber-routing/email-code',{});$('#routing-status').textContent='Verification code sent to your profile email.';}catch(e){$('#routing-status').textContent=e.message;}};
 $('#routing-verify').onsubmit=async event=>{event.preventDefault();try{await accountRequest('/api/account/subscriber-routing/verify-email',{code:event.currentTarget.elements.code.value});event.currentTarget.reset();await refreshSubscriberRouting();}catch(e){$('#routing-status').textContent=e.message;}};
-
-
-
