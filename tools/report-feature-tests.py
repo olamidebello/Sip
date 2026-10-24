@@ -1,6 +1,7 @@
 """Report only public test identifiers and fixed error codes from private test logs."""
 import argparse
 import ast
+import hashlib
 from pathlib import Path
 import re
 
@@ -32,7 +33,25 @@ def summarize(text,source):
  for match in re.finditer(r"Cannot find module ['\"]([^'\"]+)['\"]",text):
   name=Path(match[1]).name
   if name in known:output.add('SIP_FEATURE_TEST file='+name+' check=module_not_found')
+ for match in re.finditer(r'(?:file://)?/app/([A-Za-z0-9_.-]+\.(?:js|mjs)):(\d+):(\d+)',text):
+  if match[1] in known:output.add('SIP_FEATURE_TEST file='+match[1]+' check=stack line='+match[2]+' column='+match[3])
+ members=set()
+ for p in (source/'services/api').glob('*.js'):
+  members.update(re.findall(r'\.([A-Za-z_$][A-Za-z0-9_$]*)',p.read_text()))
+ for match in re.finditer(r"Cannot read properties of (?:undefined|null) \(reading ['\"]([A-Za-z_$][A-Za-z0-9_$]*)['\"]\)",text):
+  if match[1] in members:output.add('SIP_FEATURE_TEST check=undefined_property property='+match[1])
+ for match in re.finditer(r'\b[A-Za-z_$][A-Za-z0-9_$]*\.([A-Za-z_$][A-Za-z0-9_$]*) is not a function',text):
+  if match[1] in members:output.add('SIP_FEATURE_TEST check=missing_method member='+match[1])
  return sorted(output) or ['SIP_FEATURE_TEST check=unclassified_failure']
+
+def fingerprints(directory):
+ output=[]
+ for name in ['sipMarketplace.js','defaultPresence.js','messagingWebhooks.js','subscriberRouting.js','twilioAccountAuth.js']:
+  p=directory/'stage/services/api'/name
+  if p.is_file():
+   data=p.read_bytes();blob=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+   output.append('SIP_FEATURE_TEST file='+name+' check=source_blob value='+blob)
+ return output
 
 def main():
  parser=argparse.ArgumentParser();parser.add_argument('log',nargs='?',type=Path);parser.add_argument('--source',type=Path,default=Path(__file__).resolve().parents[1]);parser.add_argument('--latest',action='store_true');args=parser.parse_args()
@@ -47,5 +66,7 @@ def main():
  else:
   if not log or not log.is_file():raise SystemExit('Feature test log not found')
   text=log.read_text(errors='replace')
- print('\n'.join(summarize(text,args.source.resolve())))
+ output=summarize(text,args.source.resolve())
+ if args.latest:output.extend(fingerprints(directory))
+ print('\n'.join(output))
 if __name__=='__main__':main()

@@ -70,3 +70,9 @@ restart services, change database records, alter user roles or print SQL/error
 payloads. Unknown test titles and private file paths are omitted. Future failed
 rollouts emit these same summaries automatically and retain complete TAP logs in
 the private backup directory.
+
+For helper-version mismatches, diagnostics also include public source file/line
+locations, recognized property/method identifiers and Git-compatible blob hashes of
+five known helper files from the failed staging snapshot. These hashes identify the
+tested implementation without printing its contents. Credentials, SQL parameters,
+unknown identifiers and private filenames remain excluded.
