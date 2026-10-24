@@ -3,6 +3,9 @@ from pathlib import Path
 import argparse
 import json
 import hashlib
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from feature_patch_worker import PatchWorker
 
 NEW_FILES = [
  'services/api/featureModuleGraph.mjs',
@@ -23,18 +26,31 @@ def once(text, old, new, name):
  if text.count(old)!=1: raise ValueError('Unknown integration anchor in '+name+'; no files changed')
  return text.replace(old,new,1)
 
-def plan_changes(source, target):
+def plan_changes(source, target, worker=None):
  changes={}
+ errors=[]
  for name in SHARED:
   p=target/name
-  if not p.is_file() or p.is_symlink(): raise ValueError('Missing or symlinked integration file: '+name)
+  if not p.is_file() or p.is_symlink():
+   errors.append('Missing or symlinked integration file: '+name)
+   continue
   changes[name]=p.read_text()
- def patch(name,old,new): changes[name]=once(changes[name],old,new,name)
+ def patch(name,old,new):
+  if name not in changes:return
+  try:changes[name]=once(changes[name],old,new,name)
+  except ValueError:
+   if worker:
+    try:changes[name]=worker.call('once',text=changes[name],old=old,new=new)
+    except ValueError as error:errors.append('SIP_FEATURE_DETAIL file='+name+' check='+str(error))
+   else:errors.append('Unknown integration anchor in '+name+'; no files changed')
  def imp(name,line):
+  if name not in changes:return
   text=changes[name]
   if line in text:return
   module=line.split(' from ')[-1]
-  if module in text:raise ValueError('Unfamiliar existing import in '+name)
+  if module in text:
+   errors.append('Unfamiliar existing import in '+name)
+   return
   changes[name]=line+'\n'+text
  imp('services/api/onboarding.js',"import {migrateQuickSignup} from './quickSignup.js';")
  patch('services/api/onboarding.js','export async function migrateOnboarding(pool) {','export async function migrateOnboarding(pool) {\n  await migrateQuickSignup(pool);')
@@ -43,37 +59,20 @@ def plan_changes(source, target):
  # Quick signup is independent of whether the DID has an inbox/routing recipient.
  # Integrate after event persistence, before delivery receipts and subscriber copies.
  hook="    if(match[2]==='sms') await acceptQuickSignup(pool,event,{tenantId:tenant(),origin});"
- webhook=changes['services/api/messagingWebhooks.js']
+ webhook=changes.get('services/api/messagingWebhooks.js','')
  if 'await acceptQuickSignup(pool,event,' in webhook:
-  if webhook.count(hook)!=1:raise ValueError('Unfamiliar existing import in services/api/messagingWebhooks.js')
+  if webhook.count(hook)!=1:errors.append('Unfamiliar existing import in services/api/messagingWebhooks.js')
  else:
   anchor="    if (match[2].endsWith('-dlr') && result.rowCount)"
   patch('services/api/messagingWebhooks.js',anchor,hook+'\n'+anchor)
  imp('services/api/migrate.js',"import {migrateAdminGroup} from './adminGroup.js';")
  patch('services/api/migrate.js',"['access', () => migrateAccess(pool)],","['access', () => migrateAccess(pool)],\n      ['system_admin_group', () => migrateAdminGroup(pool)],")
- # Normalize the prior managed Admin integration without changing its semantics.
- old="      let user = await currentUser(req);"
- if old in changes['services/api/server.js'] and '      user=await scopedAdminUser(pool,user,path);' in changes['services/api/server.js']:
-  changes['services/api/server.js']=changes['services/api/server.js'].replace(old,'      const user = await currentUser(req);',1).replace('      user=await scopedAdminUser(pool,user,path);','      Object.assign(user,await scopedAdminUser(pool,user,path));',1)
- imp('services/api/server.js',"import {handleQuickSignup,handleQuickProfile} from './quickSignup.js';")
- imp('services/api/server.js',"import {adminRouteAllowed,scopedAdminUser,handleAdminGroup,adminGroupPolicy} from './adminGroup.js';")
- patch('services/api/server.js','handleFlowrouteWebhook({req,res,path,pool,send})','handleFlowrouteWebhook({req,res,path,pool,send,origin})')
- anchor="    if(keyedBridge||path.startsWith('/api/admin/api-bridge/'))"
- patch('services/api/server.js',anchor,"""    if(path.startsWith('/api/admin/')){
-      const viewer=await currentUser(req);
-      if(!viewer)return send(res,401,{error:'Sign in required'});
-      if(!await adminRouteAllowed(pool,viewer,path,req.method))return send(res,403,{error:'This action requires Super Admin or an assigned Admin group permission'});
-    }
-"""+anchor)
- anchor="    if (path.startsWith('/api/register'))"
- patch('services/api/server.js',anchor,"""    if (path.startsWith('/api/register/quick/')) return await handleQuickSignup({req,res,path,pool,send,readJson,origin});
-    if (path==='/api/account/quick-profile') return await handleQuickProfile({req,res,pool,user:await currentUser(req),send,readJson});
-"""+anchor)
- patch('services/api/server.js','      const user = await currentUser(req);\n      if (!user) return send(res, 401, { error: "Sign in required" });', '''      const user = await currentUser(req);
-      if (!user) return send(res, 401, { error: "Sign in required" });
-      if(path==='/api/account/admin-access'&&req.method==='GET')return send(res,200,{role:user.role,policy:user.role==='admin'?await adminGroupPolicy(pool,user.tenant_id):null});
-      Object.assign(user,await scopedAdminUser(pool,user,path));
-      if(path.startsWith('/api/admin/system-admin-group'))return await handleAdminGroup({req,res,path,user,pool,send,readJson,meetingSignaling});''')
+ # Parse the installed router rather than requiring a particular API bridge,
+ # quote style, whitespace layout or adjacency of its existing authentication checks.
+ try:
+  if not worker:raise ValueError('parser_runtime')
+  if 'services/api/server.js' in changes:changes['services/api/server.js']=worker.call('server',text=changes['services/api/server.js'])
+ except ValueError as error:errors.append('SIP_FEATURE_DETAIL file=services/api/server.js check='+str(error))
  name='services/api/trunkManagement.js'
  anchor='export async function handleTrunks({req,res,path,user,pool,send,readJson}){'
  patch(name,anchor,anchor+"\n  if(user?.role!=='super_admin')return send(res,403,{error:'Super administrator required for trunk management'});")
@@ -95,16 +94,26 @@ const navigationGroups=[""")
  # Refuse to silently replace a locally edited new module on repeated deployments.
  for name in NEW_FILES:
   p=source/name
-  if not p.is_file():raise ValueError('Feature source missing: '+name)
+  if not p.is_file():
+   errors.append('Feature source missing: '+name)
+   continue
   existing=target/name
-  if existing.exists() and (existing.is_symlink() or existing.read_bytes()!=p.read_bytes()):raise ValueError('Existing feature module differs: '+name+'; no files changed')
+  if existing.exists() and (existing.is_symlink() or existing.read_bytes()!=p.read_bytes()):
+   errors.append('Existing feature module differs: '+name+'; no files changed')
+   continue
   changes[name]=p.read_text()
+ if errors:raise ValueError('\n'.join(dict.fromkeys(errors))+'\nIntegration preflight failed; no files changed')
  return {name:text for name,text in changes.items() if not (target/name).exists() or (target/name).read_text()!=text}
 
 def main():
- parser=argparse.ArgumentParser();parser.add_argument('source',type=Path);parser.add_argument('target',type=Path);parser.add_argument('manifest',type=Path);args=parser.parse_args()
- try:changes=plan_changes(args.source.resolve(),args.target.resolve())
- except ValueError as e:raise SystemExit(str(e))
+ parser=argparse.ArgumentParser();parser.add_argument('source',type=Path);parser.add_argument('target',type=Path);parser.add_argument('manifest',type=Path);parser.add_argument('--node-image');args=parser.parse_args()
+ worker=None
+ try:
+  worker=PatchWorker(args.source,args.node_image)
+  changes=plan_changes(args.source.resolve(),args.target.resolve(),worker)
+ except (ValueError,BrokenPipeError) as e:raise SystemExit(str(e))
+ finally:
+  if worker:worker.close()
  manifest={'files':[{'path':name,'existed':(args.target/name).exists(),'before_sha256':hashlib.sha256((args.target/name).read_bytes()).hexdigest() if (args.target/name).exists() else None} for name in changes]}
  # Planning succeeds for every integration before any destination is written.
  for name,text in changes.items():

@@ -50,7 +50,7 @@ Open `http://127.0.0.1:5173`. Vite forwards `/api` HTTP and WebSocket traffic to
 
 ## Locally modified server rollout
 
-For a server with existing local integrations, use the [guarded feature rollout](docs/local-features-preserve.md) to preserve them while adding signup, Admin access controls and a visible Super Admin SIP trunks panel.
+For a server with existing local integrations or router compatibility failures, use the [automatic repair playbook](docs/auto-repair-all.md) to preserve them while adding signup, Admin access controls and a visible Super Admin SIP trunks panel.
 
 ## Admin system group
 

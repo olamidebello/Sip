@@ -21,6 +21,8 @@ for line in open(sys.argv[1]):
  line=line.strip()
  if re.fullmatch(r'(?:Unknown integration anchor in |Duplicate integration in |Missing or symlinked integration file: |Unfamiliar existing import in |Existing feature module differs: |Feature source missing: )[A-Za-z0-9_./-]+(?:; no files changed)?',line):
   print('SIP_FEATURE_DETAIL '+line)
+ elif re.fullmatch(r'SIP_FEATURE_DETAIL file=[A-Za-z0-9_./-]+ check=[a-z_]+',line):
+  print(line)
 PYSAFE
  fi
  exit 1
@@ -41,8 +43,12 @@ tar -czf "$backup/source.tgz" -C "$live" --exclude=.git --exclude=node_modules -
 tar -xzf "$backup/source.tgz" -C "$stage"
 git -C "$live" status --short > "$backup/git-status-before.txt"
 git -C "$source_dir" rev-parse HEAD > "$backup/feature-release.txt"
+phase=parser_runtime
+mapfile -t parser_containers < <(docker compose ps -q api)
+[[ ${#parser_containers[@]} -gt 0 ]]
+parser_image=$(docker inspect --format '{{.Image}}' "${parser_containers[0]}")
 phase=guarded_integration
-python3 "$source_dir/tools/install-local-features.py" "$source_dir" "$stage" "$backup/manifest.json" > "$backup/integration.txt" 2>&1
+python3 "$source_dir/tools/install-local-features.py" "$source_dir" "$stage" "$backup/manifest.json" --node-image "$parser_image" > "$backup/integration.txt" 2>&1
 phase=staged_configuration
 release_tool=$source_dir/tools/local-feature-release.py
 python3 "$release_tool" prepare "$live" "$stage" "$backup"

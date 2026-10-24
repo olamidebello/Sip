@@ -43,8 +43,10 @@ The rollout:
 The stage may contain ignored private configuration, including old `.env` backups.
 It is root-only and must not be committed, uploaded or shared as a debugging bundle.
 
-The guarded installer supports the known registration/API bridge and navigation
-integration shapes. It does not guess how to merge an unfamiliar implementation.
+The guarded installer parses the installed server router and supports known
+registration, API bridge and navigation layouts, including token-equivalent quote
+and whitespace variants. See [automatic repair](auto-repair-all.md). It reports
+unfamiliar semantic layouts for reconciliation.
 On failure, share only the `SIP_FEATURE_ERROR` and `SIP_FEATURE_DETAIL` lines. They
 identify the stage and, for anchor failures, the source filename without exposing
 SQL, passwords, environment values or full diffs.

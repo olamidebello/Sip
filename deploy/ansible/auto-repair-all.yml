@@ -1,0 +1,4 @@
+---
+# Full requested feature rollout with parser-aware preflight, staged validation,
+# preservation/rollback, health checks and the explicitly requested demotion.
+- import_playbook: local-features-preserve.yml

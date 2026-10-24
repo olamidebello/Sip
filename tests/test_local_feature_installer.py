@@ -41,6 +41,40 @@ class FeatureInstaller(unittest.TestCase):
    self.assertLess(patched.index('await acceptQuickSignup(pool,event,'),patched.index("if(match[2]==='sms'&&selected?.userId)"))
    self.assertNotIn("if(match[2]==='sms'&&selected?.userId) await acceptQuickSignup",patched)
    again=self.run_installer(path);self.assertEqual(again.returncode,0,again.stderr)
+ def test_server_without_api_bridge_and_with_formatted_authentication_is_integrated(self):
+  with tempfile.TemporaryDirectory() as t:
+   path=Path(t)/'stage';self.fixture(path)
+   p=path/'services/api/server.js';text=p.read_text()
+   text='\n'.join(line for line in text.splitlines() if "if(keyedBridge||path.startsWith('/api/admin/api-bridge/'))" not in line)
+   text=text.replace('const user = await currentUser(req);','let user=await currentUser( req );')
+   text=text.replace('if (!user) return send(res, 401, { error: "Sign in required" });',"// retain local authentication validation\n      if (!user) return send(res,401,{error:'Sign in required'});")
+   text+='\n// parser must not execute this code\nprocess.exit(99);\n'
+   p.write_text(text)
+   r=self.run_installer(path);self.assertEqual(r.returncode,0,r.stderr)
+   patched=p.read_text();self.assertIn('// SIP_FEATURE_ROUTER_V2',patched)
+   self.assertIn('process.exit(99)',patched);self.assertIn('retain local authentication validation',patched)
+   self.assertIn('currentUser(req).then(featureUser=>',patched)
+   self.assertLess(patched.index('const limited=requestLimiter.check'),patched.index('// SIP_FEATURE_ROUTER_V2'))
+   self.assertIn('principal.must_change_password||principal.passkeyGate',patched)
+   again=self.run_installer(path);self.assertEqual(again.returncode,0,again.stderr)
+ def test_whitespace_and_quote_variants_in_client_are_matched_by_tokens(self):
+  with tempfile.TemporaryDirectory() as t:
+   path=Path(t)/'stage';self.fixture(path)
+   p=path/'apps/web/src/main.js';text=p.read_text().replace('const navigationGroups=[','const navigationGroups = [').replace('  softphoneUserId=user.id;','  softphoneUserId = user.id;')
+   text=text.replace('if(target==="top")target=userHome();',"if (target === 'top') target = userHome();")
+   p.write_text(text)
+   r=self.run_installer(path);self.assertEqual(r.returncode,0,r.stderr)
+   self.assertIn('setupTrunkAdmin',p.read_text())
+ def test_reports_multiple_unknown_files_without_writing_any_source(self):
+  with tempfile.TemporaryDirectory() as t:
+   path=Path(t)/'stage';self.fixture(path)
+   p=path/'services/api/server.js';p.write_text(p.read_text().replace('async function handler(req, res)', 'async function unfamiliarHandler(req, res)'))
+   p=path/'apps/web/src/main.js';p.write_text(p.read_text().replace('function navigationAllowed(target){','function unfamiliarNav(target){'))
+   before={p:p.read_bytes() for p in path.rglob('*') if p.is_file()}
+   r=self.run_installer(path);self.assertNotEqual(r.returncode,0)
+   self.assertIn('file=services/api/server.js check=server_handler',r.stderr)
+   self.assertIn('file=apps/web/src/main.js check=unknown_pattern',r.stderr)
+   self.assertEqual(before,{p:p.read_bytes() for p in path.rglob('*') if p.is_file()})
  def test_unknown_integration_leaves_every_file_unchanged(self):
   with tempfile.TemporaryDirectory() as t:
    path=Path(t)/'stage';self.fixture(path)
