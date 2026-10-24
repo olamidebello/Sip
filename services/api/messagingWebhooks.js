@@ -1,3 +1,4 @@
+import {acceptQuickSignup} from './quickSignup.js';
 import {queueSubscriberSms} from './subscriberRouting.js';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { isAdmin, defaultTenantId } from './tenancy.js';
@@ -71,7 +72,7 @@ export function normalizeFlowroute(kind, payload) {
   return {id:data.id,sender,recipient,body,level,status,statusCode,media,timestamp};
 }
 
-export async function handleFlowrouteWebhook({req,res,path,pool,send}) {
+export async function handleFlowrouteWebhook({req,res,path,pool,send,origin=process.env.PUBLIC_ORIGIN}) {
   const match = /^\/api\/webhooks\/flowroute\/([^/]+)\/(sms|mms|sms-dlr|mms-dlr)$/.exec(path);
   if (!match) return send(res,404,{error:'Webhook unavailable'});
   if (req.method !== 'POST') return send(res,405,{error:'POST required'});
@@ -100,6 +101,7 @@ export async function handleFlowrouteWebhook({req,res,path,pool,send}) {
     if (match[2].endsWith('-dlr') && result.rowCount)
       await pool.query("UPDATE flowroute_sms_outbound SET status=$1 WHERE tenant_id=$2 AND provider_event_id=$3",
         [event.status || 'receipt',tenant(),event.id]);
+    if(match[2]==='sms') await acceptQuickSignup(pool,event,{tenantId:tenant(),origin});
     if(match[2]==='sms') await queueSubscriberSms(pool,{tenantId:tenant(),number:'+'+event.recipient.replace(/^\+/,''),senderNumber:'+'+event.sender.replace(/^\+/,''),body:event.body,eventKey:`flowroute/${event.id}`});
     return send(res,200,{received:true,duplicate:result.rowCount === 0});
   } catch (error) {

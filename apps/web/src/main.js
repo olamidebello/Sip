@@ -1,3 +1,4 @@
+import {setupQuickSignup} from './quickSignup.js';
 import {accountJson,signupFailureNotice} from './registrationFeedback.js';
 // REGISTRATION_REPAIR_V1
 import {setupVpnUi} from './vpnUi.js';
@@ -1537,6 +1538,7 @@ async function softphoneRequest(path,method="GET",body) {
 async function refreshSoftphoneState(user) {
   const generation=++softphoneLoad;
   softphoneUserId=user.id;
+  void quickSignup.refreshProfile();
   const [settings,history]=await Promise.all([
     softphoneRequest("/api/softphone/preferences"),softphoneRequest("/api/softphone/calls")]);
   if (generation!==softphoneLoad || softphoneUserId!==user.id) return;
@@ -2324,6 +2326,7 @@ $("#server-config").addEventListener("submit", async (event) => {
 apiGet("/api/config").then(({ sipWssUrl }) => {
   if (sipWssUrl) $("#connect [name=server]").value = sipWssUrl;
 }).catch(() => {});
+const quickSignup=setupQuickSignup({document,get:apiGet,request:accountRequest,getUserId:()=>softphoneUserId});
 const signupCaptcha=setupSignupCaptcha({document,get:apiGet});
 const refreshSignupCaptcha=signupCaptcha.refresh;
 if(pageId(location.pathname)==='signup')refreshSignupCaptcha();
@@ -2568,7 +2571,7 @@ $("#logout").onclick = async () => {
     advancedCalling.reset();
     lastDialedTarget='';
     await accountRequest("/api/logout", {});
-    softphoneLoad++;softphoneUserId=null;favorites.clear();recentCalls=[];$("#dnd").checked=false;renderSoftphoneLists();
+    softphoneLoad++;softphoneUserId=null;void quickSignup.refreshProfile();favorites.clear();recentCalls=[];$("#dnd").checked=false;renderSoftphoneLists();
     geofenceGeneration++;geoPolicyLoaded=false;geoPolicy={enabled:true,maxAccuracyMeters:0,zones:[]};$("#geo-policy").textContent="Sign in to load calling area policy.";
     $("#signup").hidden = false;
     $("#login").hidden = false;

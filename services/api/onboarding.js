@@ -1,3 +1,4 @@
+import {migrateQuickSignup} from './quickSignup.js';
 import {signupInput,safeRegistration} from './registrationSafety.js';
 // REGISTRATION_REPAIR_V1
 const validateRegistration=signupInput;
@@ -15,6 +16,7 @@ const emailAddress = value => typeof value === 'string' && value.length <= 254 ?
 const configured = () => !!(process.env.RESEND_API_KEY && process.env.RESEND_FROM && process.env.OTP_HMAC_SECRET?.length >= 32);
 
 export async function migrateOnboarding(pool) {
+  await migrateQuickSignup(pool);
   await pool.query(`CREATE TABLE IF NOT EXISTS signup_captchas (
     id CHAR(36) PRIMARY KEY,answer_hash CHAR(64) NOT NULL,expires_at DATETIME(3) NOT NULL,
     INDEX signup_captcha_expiry(expires_at)) ENGINE=InnoDB`);

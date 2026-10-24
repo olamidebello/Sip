@@ -1,3 +1,4 @@
+import {handleQuickSignup,handleQuickProfile} from './quickSignup.js';
 import {migrateApiBridge,handleApiBridge} from './apiBridge.js';
 // API_BRIDGE_KEYS_V1
 import {handleHostedAccounts} from './hostedAccounts.js';
@@ -215,7 +216,7 @@ async function handler(req, res) {
     if (switchXml) return send(res,410,{error:'Legacy XML integration retired'});
     if(kamailioRunner) return await handleKamailioRunner({req,res,path,pool,send,readJson});
     if (deployRunner) return await handleServerFleetRunner({req,res,path,pool,send,readJson});
-    if (flowrouteWebhook) return await handleFlowrouteWebhook({req,res,path,pool,send});
+    if (flowrouteWebhook) return await handleFlowrouteWebhook({req,res,path,pool,send,origin});
     if (stripeWebhook) return await handleStripeWebhook({req,res,path,pool,send});
     if (providerWebhook) return await handleProviderWebhook({req,res,path,pool,send});
     if (didwwWebhook) return await handleDidwwCallback({req,res,path,pool,send,origin});
@@ -225,6 +226,8 @@ async function handler(req, res) {
       if(sessionAccount?.must_change_password) return send(res,403,{error:'Change your temporary password before continuing'});
       if(sessionAccount?.passkeyGate && !((sessionAccount.passkeyGate==='enroll') && (path==='/api/passkeys'||path.startsWith('/api/passkeys/register/')))) return send(res,403,{error:sessionAccount.passkeyGate==='enroll'?'Register a passkey, then sign in with it':'Passkey sign-in required'});
     }
+    if (path.startsWith('/api/register/quick/')) return await handleQuickSignup({req,res,path,pool,send,readJson,origin});
+    if (path==='/api/account/quick-profile') return await handleQuickProfile({req,res,pool,user:await currentUser(req),send,readJson});
     if (path.startsWith('/api/register')) return await handleOnboarding({req,res,path,pool,send,readJson,origin});
     if (path.startsWith('/api/passkeys')) return await handlePasskeys({req,res,path,pool,send,readJson,origin,currentUser,featuresFor,sessionCookie,closeSessions:hashes=>meetingSignaling?.closeSessions(hashes)});
     if (req.method === "POST" && path === "/api/login") {
