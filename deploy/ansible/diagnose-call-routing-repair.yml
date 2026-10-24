@@ -1,0 +1,14 @@
+---
+- name: Read safe summaries from the latest private call routing repair log
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Extract fixed failure codes and public test names
+      ansible.builtin.command:
+        argv: [python3, '{{ playbook_dir }}/../../tools/report-call-routing.py']
+      register: routing_summary
+      changed_when: false
+    - name: Show safe failure summary
+      ansible.builtin.debug:
+        msg: '{{ routing_summary.stdout_lines }}'

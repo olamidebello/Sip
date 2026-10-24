@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 
 def summarize(text,source):
- suites=['flowrouteSetup.test.js','trunkAdmin.test.js','quickSignup.test.js','adminGroup.test.js','trunkManagement.test.js','locationReportAddress.test.js','locationReports.test.js']
+ suites=['pstnDigest.test.js','flowrouteSetup.test.js','trunkAdmin.test.js','quickSignup.test.js','adminGroup.test.js','trunkManagement.test.js','locationReportAddress.test.js','locationReports.test.js']
  titles={}
  for area in ['services/api','apps/web/src']:
   for name in suites:
