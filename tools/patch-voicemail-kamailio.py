@@ -95,14 +95,15 @@ route[OLAMIDE_VOICEMAIL] {
         "$var(vm_req)","Authorization: Bearer __TOKEN__\r\nContent-Type: application/json","$var(vm_body)");
     if ($var(vm_http) != 200 || !jansson_get("mailbox","$var(vm_body)","$var(vm_box)") ||
         !($var(vm_box) =~ "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$")) return;
+    # OLAMIDE_VOICEMAIL_FORWARD_V2
+    clear_branches();
     $avp(vm_done)=1;
     if ($avp(vm_access) == 1) $ru="sip:check-" + $var(vm_box) + "@127.0.0.1:5062";
     else $ru="sip:" + $var(vm_box) + "@127.0.0.1:5062";
     $du="sip:127.0.0.1:5062;transport=udp";
-    clear_branches();
     if ($avp(vm_rr) != 1) { record_route(); $avp(vm_rr)=1; }
     # No credentials or forwarding headers are passed to the private recorder.
-    consume_credentials();
+    remove_hf("Authorization"); remove_hf("Proxy-Authorization");
     remove_hf("Route"); remove_hf("Diversion"); remove_hf("History-Info");
     if (has_body("application/sdp") && !rtpengine_offer("replace-origin replace-session-connection RTP/AVP ICE=remove DTLS=off SDES=off rtcp-mux-demux")) {
         sl_send_reply("488","Voicemail media unavailable"); exit;
