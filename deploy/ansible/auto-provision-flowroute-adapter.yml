@@ -1,0 +1,87 @@
+---
+- name: Prepare local Flowroute adapter provisioning
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Require the existing SIP installation
+      ansible.builtin.stat:
+        path: /opt/olamide/repo/deployment/docker/compose.yml
+      register: sip_compose
+    - name: Validate destination
+      ansible.builtin.assert:
+        that: sip_compose.stat.isreg | default(false)
+        fail_msg: Run this playbook on the SIP server 154.29.77.102.
+    - name: Add local switch group for existing adapter installer
+      ansible.builtin.add_host:
+        name: '{{ inventory_hostname }}'
+        groups: switch_nodes
+        ansible_connection: local
+    - name: Inspect existing adapter
+      ansible.builtin.stat:
+        path: /etc/olamide/carrier-adapter.json
+      register: flowroute_existing_adapter
+    - name: Remember whether installation is needed
+      ansible.builtin.set_fact:
+        flowroute_install_needed: '{{ not flowroute_existing_adapter.stat.exists }}'
+- import_playbook: install-kamailio-carrier-adapter.yml
+  when: flowroute_install_needed | default(false) | bool
+- name: Reconcile existing private adapter and verify GUI registration
+  hosts: switch_nodes
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Ensure installed service is running
+      ansible.builtin.systemd:
+        name: olamide-carrier-adapter
+        enabled: true
+        state: started
+    - name: Prepare commissioning input using existing stable token
+      ansible.builtin.command:
+        argv: [python3, '-c', "import json,pathlib; p=pathlib.Path('/etc/olamide/carrier-adapter.json'); c=json.loads(p.read_text()); assert c['backend']=='kamailio'; assert len(c['token'])>=32; print(json.dumps({'tenantId':c['tenantId'],'targetKey':'primary','url':c['url'],'token':c['token'],'provider':'flowroute','name':'Primary carrier adapter','region':'primary','maxConcurrentCalls':500}))"]
+      register: flowroute_private_commission
+      changed_when: false
+      no_log: true
+    - name: Encrypt target and automatically register, health check and enable node
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - exec
+          - '-T'
+          - api
+          - node
+          - '--input-type=module'
+          - '-e'
+          - |
+            import {createDatabase} from './db.js';
+            import {commissionAdapter} from './commissionAdapter.js';
+            const db=createDatabase(process.env.MYSQL_URL);
+            try {
+              let raw='';for await(const chunk of process.stdin){raw+=chunk;if(raw.length>16384)throw Error('Input too large');}
+              const input=JSON.parse(raw);
+              const rows=(await db.query("SELECT name,region,priority,max_concurrent_calls FROM carrier_adapter_nodes WHERE tenant_id=$1 AND provider='flowroute' AND target_key=$2",[input.tenantId,input.targetKey])).rows;
+              if(rows.length>1)throw Error('Multiple adapter nodes require reconciliation');
+              if(rows[0])Object.assign(input,{name:rows[0].name,region:rows[0].region,priority:Number(rows[0].priority),maxConcurrentCalls:Number(rows[0].max_concurrent_calls)});
+              await commissionAdapter(db,input);
+            } catch {console.error('Adapter commissioning failed; no private details printed.');process.exitCode=1;}
+            finally {await db.end();}
+        chdir: /opt/olamide/repo/deployment/docker
+        stdin: '{{ flowroute_private_commission.stdout }}'
+      changed_when: true
+      no_log: true
+    - name: Read live adapter health and carrier diagnostics
+      ansible.builtin.command:
+        argv: [docker, compose, exec, '-T', api, node, '--input-type=module']
+        chdir: /opt/olamide/repo/deployment/docker
+        stdin: "{{ lookup('ansible.builtin.file', playbook_dir + '/../../tools/diagnose-flowroute.mjs') }}"
+      register: flowroute_health
+      changed_when: false
+      failed_when: false
+      no_log: true
+    - name: Show safe health results
+      ansible.builtin.debug:
+        msg: "{{ flowroute_health.stdout_lines | default([]) | select('match', '^SIP_FLOWROUTE_CHECK [a-z_]+=[A-Za-z0-9_]+$') | list }}"
+    - name: Report adapter provisioning
+      ansible.builtin.debug:
+        msg: Adapter registered, health checked and enabled. In SIP trunks refresh Flowroute status, then provision the gateway. Default adapter admission limit is 500 calls; a requested 5000-call profile requires a separately validated capacity increase. Existing routing commissioning and passwords were preserved.

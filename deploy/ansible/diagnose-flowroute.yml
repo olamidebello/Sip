@@ -1,0 +1,22 @@
+---
+- name: Diagnose Flowroute carrier and switch health without activating calls
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read carrier state and check adapter health only
+      ansible.builtin.command:
+        argv: [docker, compose, exec, -T, api, node, --input-type=module]
+        chdir: /opt/olamide/repo/deployment/docker
+        stdin: "{{ lookup('ansible.builtin.file', playbook_dir + '/../../tools/diagnose-flowroute.mjs') }}"
+      register: flowroute_diagnostic
+      changed_when: false
+      failed_when: false
+      no_log: true
+    - name: Show aggregate diagnostic results only
+      ansible.builtin.debug:
+        msg: "{{ flowroute_diagnostic.stdout_lines | default([]) | select('match', '^SIP_FLOWROUTE_CHECK [a-z_]+=[A-Za-z0-9_]+$') | list }}"
+    - name: Report whether diagnostics executed
+      ansible.builtin.assert:
+        that: flowroute_diagnostic.rc == 0
+        fail_msg: Read-only diagnostics could not finish. No accounts or configuration were changed.
