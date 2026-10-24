@@ -1,0 +1,32 @@
+---
+- name: Pull and deploy the existing SIP installation
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Install deployment prerequisites
+      ansible.builtin.apt:
+        name: [git, curl, ca-certificates, python3, util-linux, gzip, tar]
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+    - name: Check Docker Compose
+      ansible.builtin.command: docker compose version
+      changed_when: false
+    - name: Ensure private backup directory exists
+      ansible.builtin.file:
+        path: /opt/olamide/backups
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+    - name: Pull source, back up database, rebuild and verify SIP
+      ansible.builtin.script: ../../deployment/pull-and-deploy.sh
+      args:
+        executable: /bin/bash
+      register: sip_deploy
+      changed_when: "'SIP_DEPLOYED' in sip_deploy.stdout"
+      no_log: true
+    - name: Show deployment outcome
+      ansible.builtin.debug:
+        msg: "{{ sip_deploy.stdout_lines | select('match', '^SIP_DEPLOYED ') | list }}"
