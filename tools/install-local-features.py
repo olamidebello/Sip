@@ -40,7 +40,15 @@ def plan_changes(source, target):
  patch('services/api/onboarding.js','export async function migrateOnboarding(pool) {','export async function migrateOnboarding(pool) {\n  await migrateQuickSignup(pool);')
  imp('services/api/messagingWebhooks.js',"import {acceptQuickSignup} from './quickSignup.js';")
  patch('services/api/messagingWebhooks.js','handleFlowrouteWebhook({req,res,path,pool,send})','handleFlowrouteWebhook({req,res,path,pool,send,origin=process.env.PUBLIC_ORIGIN})')
- patch('services/api/messagingWebhooks.js',"    if(match[2]==='sms') await queueSubscriberSms", "    if(match[2]==='sms') await acceptQuickSignup(pool,event,{tenantId:tenant(),origin});\n    if(match[2]==='sms') await queueSubscriberSms")
+ # Quick signup is independent of whether the DID has an inbox/routing recipient.
+ # Integrate after event persistence, before delivery receipts and subscriber copies.
+ hook="    if(match[2]==='sms') await acceptQuickSignup(pool,event,{tenantId:tenant(),origin});"
+ webhook=changes['services/api/messagingWebhooks.js']
+ if 'await acceptQuickSignup(pool,event,' in webhook:
+  if webhook.count(hook)!=1:raise ValueError('Unfamiliar existing import in services/api/messagingWebhooks.js')
+ else:
+  anchor="    if (match[2].endsWith('-dlr') && result.rowCount)"
+  patch('services/api/messagingWebhooks.js',anchor,hook+'\n'+anchor)
  imp('services/api/migrate.js',"import {migrateAdminGroup} from './adminGroup.js';")
  patch('services/api/migrate.js',"['access', () => migrateAccess(pool)],","['access', () => migrateAccess(pool)],\n      ['system_admin_group', () => migrateAdminGroup(pool)],")
  # Normalize the prior managed Admin integration without changing its semantics.

@@ -26,6 +26,21 @@ class FeatureInstaller(unittest.TestCase):
    contents={p:p.read_bytes() for p in path.rglob('*') if p.is_file()}
    r=self.run_installer(path);self.assertEqual(r.returncode,0,r.stderr)
    self.assertEqual(contents,{p:p.read_bytes() for p in path.rglob('*') if p.is_file()})
+ def test_routed_inbound_sms_guard_is_retained_and_verification_is_not_nested(self):
+  with tempfile.TemporaryDirectory() as t:
+   path=Path(t)/'stage';self.fixture(path)
+   p=path/'services/api/messagingWebhooks.js'
+   text=p.read_text().replace("if(match[2]==='sms') await queueSubscriberSms", "if(match[2]==='sms'&&selected?.userId) await queueSubscriberSms")
+   text=text.replace("eventKey:`flowroute/${event.id}`});", "eventKey:`flowroute/${event.id}`,routedUserId:selected.userId});")
+   p.write_text(text)
+   r=self.run_installer(path);self.assertEqual(r.returncode,0,r.stderr)
+   patched=p.read_text()
+   self.assertIn("if(match[2]==='sms'&&selected?.userId) await queueSubscriberSms",patched)
+   self.assertIn('routedUserId:selected.userId',patched)
+   self.assertEqual(patched.count('await acceptQuickSignup(pool,event,'),1)
+   self.assertLess(patched.index('await acceptQuickSignup(pool,event,'),patched.index("if(match[2]==='sms'&&selected?.userId)"))
+   self.assertNotIn("if(match[2]==='sms'&&selected?.userId) await acceptQuickSignup",patched)
+   again=self.run_installer(path);self.assertEqual(again.returncode,0,again.stderr)
  def test_unknown_integration_leaves_every_file_unchanged(self):
   with tempfile.TemporaryDirectory() as t:
    path=Path(t)/'stage';self.fixture(path)
