@@ -10,6 +10,9 @@ test('digest trunks reserve credit while subscription and wallet checks stay enf
   const writes=[];const ciphertext=seal({authenticationMode:'digest',pop:'US-East-VA',sipUsername:'12345678',sipPassword:'test-secret',techPrefix:'12345678',publicIp:'154.29.77.102',callerId:'+15551234567',maxConcurrentCalls:500},Buffer.from(process.env.PROVIDER_CREDENTIAL_KEY,'hex'),tenant,'flowroute_sip');
   const db={release(){},async query(sql,args=[]){let rows=[];
    if(sql.startsWith('SELECT tenant_id,user_id'))rows=[{tenant_id:tenant,user_id:'user',external_calls:subscribed?1:0}];
+   else if(sql.includes('FROM managed_outbound_identities'))rows=[{number_e164:'+15551234567',authorized:1,provider:'flowroute'}];
+   else if(sql.includes('FROM user_profiles p'))rows=[{phone_e164:'+15551234567',country:'US'}];
+   else if(sql.includes('SELECT require_assigned_did'))rows=[{require_assigned_did:0}];
    else if(sql.includes('GET_LOCK'))rows=[{acquired:1}];
    else if(sql.startsWith('SELECT balance_cents,currency'))rows=[{balance_cents:balance,currency:'USD'}];
    else if(sql.startsWith('SELECT max_concurrent_calls'))rows=[{max_concurrent_calls:500}];

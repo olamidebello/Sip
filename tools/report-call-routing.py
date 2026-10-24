@@ -8,6 +8,8 @@ logs=list(Path('/opt/olamide/backups').glob('call-routing-*/deploy.log'))
 if not logs:raise SystemExit('SIP_CALL_ROUTE_CHECK log=missing')
 log=max(logs,key=lambda p:p.stat().st_mtime);text=log.read_text(errors='replace')
 for fixed,label in {
+ 'Profile phone number requires caller-ID authorization by super administrator':'caller_id_authorization_required',
+ 'No authorized outbound DID assigned to this user':'assigned_did_required',
  'Unknown authentication gate':'authentication_gate_layout',
  'failed to solve':'image_build_failed',
  'Set your profile country':'profile_country_required',
