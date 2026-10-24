@@ -1,3 +1,4 @@
+import {adminRouteAllowed,scopedAdminUser,handleAdminGroup,adminGroupPolicy} from './adminGroup.js';
 import {handleQuickSignup,handleQuickProfile} from './quickSignup.js';
 import {migrateApiBridge,handleApiBridge} from './apiBridge.js';
 // API_BRIDGE_KEYS_V1
@@ -207,6 +208,11 @@ async function handler(req, res) {
       const limited=requestLimiter.check(rule.key,rule.maximum);
       if(!limited.allowed)return send(res,429,{error:'Too many requests',retryAfter:limited.retryAfter},{'Retry-After':String(limited.retryAfter)});
     }
+    if(path.startsWith('/api/admin/')){
+      const viewer=await currentUser(req);
+      if(!viewer)return send(res,401,{error:'Sign in required'});
+      if(!await adminRouteAllowed(pool,viewer,path,req.method))return send(res,403,{error:'This action requires Super Admin or an assigned Admin group permission'});
+    }
     if(keyedBridge||path.startsWith('/api/admin/api-bridge/'))return await handleApiBridge({req,res,path,pool,send,readJson,user:keyedBridge?null:await currentUser(req)});
     if(hostedBridge)return await handleHostedAccounts({req,res,pool,send,readJson});
     if(path==='/api/integrations/hosted-apps/provision')return await handleHostedApps({req,res,pool,send,readJson});
@@ -298,8 +304,11 @@ async function handler(req, res) {
         path.startsWith("/api/vpn") || path.startsWith("/api/meetings") || path.startsWith("/api/pbx/") || path.startsWith("/api/softphone/") || path.startsWith("/api/native-push/") ||
         path==="/api/geofence" || path==="/api/search" || path.startsWith("/api/support/") || path==="/api/locales" || path==="/api/locales/catalog" || path==="/api/admin/locales" || path==="/api/admin/google-contacts" || path.startsWith("/api/dashboard") || path==="/api/admin/dashboard" || path==="/api/wallet" || path.startsWith("/api/wallet/") ||
         path === "/api/admin/cdr" || path.startsWith('/api/marketplace/') || path.startsWith('/api/payments/') || path.startsWith('/api/sip-profiles') || path.startsWith('/api/sip-account') || path.startsWith('/api/dialplan/') || path.startsWith('/api/admin/dialplan/')) {
-      const user = await currentUser(req);
+      let user = await currentUser(req);
       if (!user) return send(res, 401, { error: "Sign in required" });
+      if(path==='/api/account/admin-access'&&req.method==='GET')return send(res,200,{role:user.role,policy:user.role==='admin'?await adminGroupPolicy(pool,user.tenant_id):null});
+      user=await scopedAdminUser(pool,user,path);
+      if(path.startsWith('/api/admin/system-admin-group'))return await handleAdminGroup({req,res,path,user,pool,send,readJson,meetingSignaling});
       if(path.startsWith('/api/softphone/scheduled'))return await handleScheduledCalls({req,res,path,user,pool,send,readJson});
       if(path==='/api/navigation'||path.startsWith('/api/admin/navigation'))return await handleNavigationPolicy({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/contacts/registration-alerts'))return await handleContactDiscovery({req,res,path,user,pool,send,readJson});

@@ -1,3 +1,4 @@
+import {setupSystemAdminGroup} from './adminGroup.js';
 import {setupQuickSignup} from './quickSignup.js';
 import {accountJson,signupFailureNotice} from './registrationFeedback.js';
 // REGISTRATION_REPAIR_V1
@@ -1253,6 +1254,7 @@ const callGui=setupCallGui({document,openAudio:()=>callsScreen.open('settings'),
 }});
 setupDownloads();
 setupCarrierControl();
+const systemAdminGroup=setupSystemAdminGroup({document,get:apiGet,request:accountRequest,getRole:()=>activeRole,getUserId:()=>softphoneUserId,show:showWorkspace});
 const navigationGroups=[
   ...userNavigationGroups,
   ...adminNavigationGroups
@@ -1273,17 +1275,18 @@ const adminTargets=new Set(navigationGroups.filter(group=>group.roles||group.lab
 adminTargets.add('help-admin');
 for(const id of adminTargets)document.getElementById(id)?.setAttribute('data-admin-panel','true');
 function adminTarget(target){return !!document.getElementById(target)?.closest('[data-admin-panel]');}
-function navigationAllowed(target){let node=document.getElementById(target);while(node&&node!==root){if(node.id&&!navigationPolicy?.allowed(node.id)&&!(node.id==='meetings'&&(videoWorkflow||meetings.invitationId())))return false;node=node.parentElement;}return true;}
+function navigationAllowed(target){if(activeRole==='admin'&&adminTarget(target)&&target!=='delegated-admin-panel')return false;let node=document.getElementById(target);while(node&&node!==root){if(node.id&&!navigationPolicy?.allowed(node.id)&&!(node.id==='meetings'&&(videoWorkflow||meetings.invitationId())))return false;node=node.parentElement;}return true;}
 function userHome(){if(meetings.invitationId()&&navigationAllowed('meetings')&&!$('#meetings').hidden)return 'meetings';return !$('#chat').hidden?'chat':'calling-workspace';}
 let activeView="dashboard";
 function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   if(target==="top")target=userHome();
+  if(activeRole==='admin'&&target==='admin')target='delegated-admin-panel';
   if(!document.getElementById(target)?.closest("#meetings"))videoWorkflow=false;
   if(!activeRole) return false;
   if(advancedTelecomIds.has(target)&&activeRole!=='super_admin')return false;
   if(activeRole.startsWith("pending_")&&target!=="account")return false;
   if(adminTarget(target)&&!['admin','super_admin'].includes(activeRole))return false;
-  if(!adminTarget(target)&&navigationPolicy&&!navigationAllowed(target))return false;
+  if(navigationPolicy&&!navigationAllowed(target))return false;
   const adminMode=adminTarget(target);
   const modeChanged=document.body.classList.contains('admin-mode')!==adminMode;
   document.body.classList.toggle('admin-mode',adminMode);
@@ -1539,6 +1542,7 @@ async function refreshSoftphoneState(user) {
   const generation=++softphoneLoad;
   softphoneUserId=user.id;
   void quickSignup.refreshProfile();
+  void systemAdminGroup.refresh();
   const [settings,history]=await Promise.all([
     softphoneRequest("/api/softphone/preferences"),softphoneRequest("/api/softphone/calls")]);
   if (generation!==softphoneLoad || softphoneUserId!==user.id) return;
@@ -2571,7 +2575,7 @@ $("#logout").onclick = async () => {
     advancedCalling.reset();
     lastDialedTarget='';
     await accountRequest("/api/logout", {});
-    softphoneLoad++;softphoneUserId=null;void quickSignup.refreshProfile();favorites.clear();recentCalls=[];$("#dnd").checked=false;renderSoftphoneLists();
+    softphoneLoad++;softphoneUserId=null;void quickSignup.refreshProfile();void systemAdminGroup.refresh();favorites.clear();recentCalls=[];$("#dnd").checked=false;renderSoftphoneLists();
     geofenceGeneration++;geoPolicyLoaded=false;geoPolicy={enabled:true,maxAccuracyMeters:0,zones:[]};$("#geo-policy").textContent="Sign in to load calling area policy.";
     $("#signup").hidden = false;
     $("#login").hidden = false;

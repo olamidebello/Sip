@@ -1,0 +1,26 @@
+---
+- import_playbook: pull-and-deploy.yml
+
+- name: Demote requested account to the limited Admin system group
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Change dg857641 account role and revoke its application sessions
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - exec
+          - -T
+          - api
+          - node
+          - manage-admin-group.js
+          - dg857641@gmail.com
+          - admin
+        chdir: /opt/olamide/repo/deployment/docker
+      register: admin_demotion
+      changed_when: true
+    - name: Show role change result
+      ansible.builtin.debug:
+        msg: '{{ admin_demotion.stdout }}'

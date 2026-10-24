@@ -48,6 +48,10 @@ npm run dev -- --host 127.0.0.1
 
 Open `http://127.0.0.1:5173`. Vite forwards `/api` HTTP and WebSocket traffic to the API on port 8080. The MySQL integration check runs in GitHub Actions against MySQL 8.4. Locally, set `TEST_MYSQL_URL` to a disposable database before running `npm test` in `services/api`; `npm test` in `apps/web` runs its client tests.
 
+## Admin system group
+
+Super Admin can control a limited Admin group, its tenant access grants and membership. See [Admin access and the requested account demotion](docs/admin-system-group.md).
+
 ## SMS quick signup
 
 Users can text a one-time signup command from their own phone to +12109050290, then sign in and complete their profile. Requires the authenticated Flowroute inbound SMS webhook and a configured SIP provisioning worker. See [SMS quick signup](docs/quick-signup.md) and [pull and deploy](docs/pull-and-deploy.md).

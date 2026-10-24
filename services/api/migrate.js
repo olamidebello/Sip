@@ -1,3 +1,4 @@
+import {migrateAdminGroup} from './adminGroup.js';
 import {migrateHostedAccounts} from './hostedAccounts.js';
 import {migrateLocationHistory} from './locationHistory.js';
 import {migrateCdrArchives} from './cdrArchive.js';
@@ -87,6 +88,7 @@ export async function migrate(pool) {
       ['core', () => pool.initialize(awaitSql.core)],
       ['tenancy', () => migrateTenancy(pool)],
       ['access', () => migrateAccess(pool)],
+      ['system_admin_group', () => migrateAdminGroup(pool)],
       ['telecom_refills', () => migrateTelecomRefills(pool)],
       ['telecom_reports', () => migrateTelecomReports(pool)],
       ['telecom_policies', () => migrateTelecomPolicies(pool)],
