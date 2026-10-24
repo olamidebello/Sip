@@ -187,3 +187,5 @@
     - name: Report activated outbound gateway
       ansible.builtin.debug:
         msg: 'Flowroute outbound gateway acknowledged activation. Username/password challenges are now supported alongside IP authentication. Existing wallet, rates, tenant policy, caller ID, time limits and settlement remain required. No billable test call was placed. Backup: {{ outbound_backup.path }}'
+
+- import_playbook: repair-flowroute-call-routing.yml

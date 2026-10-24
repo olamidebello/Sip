@@ -1,0 +1,68 @@
+---
+- name: Repair API authorization for commissioned Flowroute digest outbound calls
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Require validated outbound digest installation
+      ansible.builtin.command:
+        argv: [python3, '-c', "import json,pathlib; c=json.loads(pathlib.Path('/etc/olamide/carrier-adapter.json').read_text()); assert c.get('digestCommissioned') is True and c.get('routingCommissioned') is True"]
+      changed_when: false
+      no_log: true
+    - name: Create private call routing rollback directory
+      ansible.builtin.tempfile:
+        state: directory
+        path: /opt/olamide/backups
+        prefix: call-routing-
+      register: call_route_backup
+    - name: Patch the authentication gate, test and deploy API with rollback
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || exit 1
+        backup='{{ call_route_backup.path }}'
+        exec > "$backup/deploy.log" 2>&1
+        cp -p services/api/pstnBilling.js "$backup/pstnBilling.js"
+        if test -f services/api/pstnDigest.test.js; then cp -p services/api/pstnDigest.test.js "$backup/test.previous"; fi
+        cd deployment/docker
+        current=$(docker compose ps -q api)
+        test -n "$current"
+        image=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$current")
+        tag="olamide-api:before-call-routing-$(date +%s)-$$"
+        docker tag "$image" "$tag"
+        printf 'services:\n  api:\n    image: %s\n' "$tag" > "$backup/rollback.yml"
+        promoted=0
+        restore() {
+          trap - ERR
+          cp -p "$backup/pstnBilling.js" /opt/olamide/repo/services/api/pstnBilling.js
+          if test -f "$backup/test.previous"; then cp -p "$backup/test.previous" /opt/olamide/repo/services/api/pstnDigest.test.js; else rm -f /opt/olamide/repo/services/api/pstnDigest.test.js; fi
+          if test "$promoted" = 1; then docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps api || true; fi
+          exit 1
+        }
+        trap restore ERR
+        python3 - <<'PY'
+        from pathlib import Path
+        p=Path('/opt/olamide/repo/services/api/pstnBilling.js');s=p.read_text()
+        old="if(config.authenticationMode!=='ip')throw Error('Kamailio paid route requires IP authentication');"
+        new="if(!['ip','digest'].includes(config.authenticationMode))throw Error('Unsupported carrier authentication mode');"
+        if new not in s:
+            if s.count(old)!=1:raise SystemExit('Unknown authentication gate; refusing source changes')
+            p.write_text(s.replace(old,new,1))
+        PY
+        install -m 0644 '{{ playbook_dir }}/../../services/api/pstnDigest.test.js' /opt/olamide/repo/services/api/pstnDigest.test.js
+        docker compose build api
+        docker compose run --rm --no-deps -T --entrypoint node api --test /app/pstnDigest.test.js
+        docker compose run --rm --no-deps -T --entrypoint node api --check /app/pstnBilling.js
+        promoted=1
+        docker compose up -d --no-deps api
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 2 https://sip.dobhrap.com/api/health
+        trap - ERR
+      args:
+        executable: /bin/bash
+      no_log: true
+      changed_when: true
+    - name: Report repaired call authorization
+      ansible.builtin.debug:
+        msg: 'API now permits commissioned Flowroute digest authentication. Subscription, wallet, active rate deck, caller identity, country and fraud policy still apply. Backup/private log: {{ call_route_backup.path }}. Test a full international number such as +12149918553; local ten-digit dialing requires the user profile country.'

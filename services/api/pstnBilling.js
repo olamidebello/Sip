@@ -85,7 +85,7 @@ export async function reservePstn(pool,data){
   while(maxSeconds>=60&&callCharge(rate.price_usd_per_minute,maxSeconds,rate.first_interval,rate.sub_interval)>budget)maxSeconds-=60;
   if(maxSeconds<60)throw Error('Insufficient credit for one minute');
   const reserved=callCharge(rate.price_usd_per_minute,maxSeconds,rate.first_interval,rate.sub_interval);
-  if(config.authenticationMode!=='ip')throw Error('Kamailio paid route requires IP authentication');
+  if(!['ip','digest'].includes(config.authenticationMode))throw Error('Unsupported carrier authentication mode');
   await db.query('INSERT INTO pstn_calls(call_key,tenant_id,user_id,destination,rate,first_interval,sub_interval,reserved_cents,max_seconds,caller_id,provider,carrier_host) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',[data.callKey,actor.tenant_id,actor.user_id,destination,rate.price_usd_per_minute,rate.first_interval,rate.sub_interval,reserved,maxSeconds,callerId,provider,identity?.carrierHost||null]);
   const callType=selectCallType(policies,destination);
   if(callType)await db.query('UPDATE pstn_calls SET call_type_id=$1 WHERE call_key=$2',[callType,data.callKey]);

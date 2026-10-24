@@ -5,6 +5,8 @@ import {flowrouteTrunk} from '/app/flowrouteTrunk.js';
 const db=createDatabase(process.env.MYSQL_URL);
 const emit=(key,value)=>console.log('SIP_FLOWROUTE_CHECK '+key+'='+value);
 try{
+ emit('pstn_enabled',process.env.KAMAILIO_PSTN_ENABLED==='true');
+ emit('bridge_enabled',process.env.KAMAILIO_HTTP_BRIDGE_ENABLED==='true');
  const profiles=(await db.query("SELECT tenant_id,status,max_concurrent_calls FROM carrier_provider_profiles WHERE provider='flowroute'")).rows;
  emit('profiles',profiles.length);
  for(const p of profiles){
