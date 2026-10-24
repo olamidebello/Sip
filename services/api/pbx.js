@@ -22,6 +22,10 @@ export function evaluateOutboundPolicy(number, policies) {
 }
 export async function handlePbx({req,res,path,user,pool,send,readJson}) {
   const admin = isAdmin(user), tenant = user.tenant_id;
+  if (path === "/api/pbx/branding" && req.method === "GET") {
+    const result=await pool.query("SELECT name FROM tenants WHERE id=$1",[tenant]);
+    return send(res,200,{name:result.rows[0]?.name || ''});
+  }
   if (path === "/api/pbx/my-extension" && req.method === "GET") {
     const result = await pool.query("SELECT d.id,d.number,d.name,e.voicemail_enabled,e.forward_to FROM pbx_extensions e JOIN pbx_destinations d ON d.id=e.destination_id WHERE e.user_id=$1 AND e.tenant_id=$2",[user.id,tenant]);
     return send(res,200,{extension:result.rows[0] || null});

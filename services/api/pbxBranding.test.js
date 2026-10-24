@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {handlePbx} from './pbx.js';
+test('branding uses authenticated tenant instead of caller-controlled identity',async()=>{let call,result;await handlePbx({req:{method:'GET',url:'/api/pbx/branding?tenant=foreign'},res:{},path:'/api/pbx/branding',user:{id:'owner',tenant_id:'own-tenant',role:'user'},pool:{query:async(sql,args)=>(call={sql,args},{rows:[{name:'Bello Legal Services'}]})},send:(r,status,data)=>(result={status,data})});assert.deepEqual(call.args,['own-tenant']);assert.equal(result.data.name,'Bello Legal Services');});

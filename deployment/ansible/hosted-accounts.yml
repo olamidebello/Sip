@@ -1,0 +1,22 @@
+---
+- name: Install scoped DOBHRAP signup bridge on the existing SIP host
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Require existing SIP deployment
+      ansible.builtin.stat:
+        path: /opt/olamide/repo/deployment/docker/.env
+      register: existing_sip
+    - name: Reject execution on a different server
+      ansible.builtin.assert:
+        that: existing_sip.stat.exists
+        fail_msg: Run on the SIP host with its existing /opt/olamide/repo checkout and protected Compose environment
+    - name: Back up database, validate candidate, migrate and install API bridge
+      ansible.builtin.command:
+        argv: [bash, /opt/olamide/repo/deployment/ansible/install-hosted-accounts.sh]
+      register: hosted_install
+    - name: Report bridge installation without credentials
+      ansible.builtin.debug:
+        msg: '{{ hosted_install.stdout_lines }}'

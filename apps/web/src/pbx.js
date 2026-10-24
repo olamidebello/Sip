@@ -1,3 +1,4 @@
+import {applyPbxBranding} from './pbxBranding.js';
 const $ = (selector) => document.querySelector(selector);
 async function api(path,method="GET",body) {
   const response = await fetch(path,{method,credentials:"same-origin",
@@ -31,9 +32,10 @@ export function setupPbx() {
   let queues = [], agents = [], trunks = [], destinations = [];
   const report = (error) => { status.textContent = error.message; };
   async function refreshSelf(user) {
-    const [extension,presence] = await Promise.all([
-      api("/api/pbx/my-extension"),api("/api/pbx/agent-status")
+    const [extension,presence,branding] = await Promise.all([
+      api("/api/pbx/my-extension"),api("/api/pbx/agent-status"),api("/api/pbx/branding")
     ]);
+    applyPbxBranding(branding.name);
     $("#my-extension").textContent = extension.extension
       ? `Assigned extension ${extension.extension.number} (${extension.extension.name})` : "No extension assigned";
     const own = presence.agents?.find((agent) => agent.id === user.id);

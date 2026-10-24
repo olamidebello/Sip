@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {applyPbxBranding} from './pbxBranding.js';
+test('business headings render names as literal text and choose only preset colors',()=>{const elements=[];const doc={querySelector(selector){const section={style:{},setAttribute(k,v){this[k]=v}},h={textContent:'',closest:()=>section};elements.push({selector,section,h});return h;}};applyPbxBranding('<img src=x onerror=bad()>',doc);for(const {section,h} of elements){assert(h.textContent.startsWith('<img src=x onerror=bad()> · '));assert.match(section.style.borderInlineStart,/^5px solid #[a-f0-9]{6}$/);assert(!section.style.borderInlineStart.includes('img'));}});

@@ -1,3 +1,4 @@
+import {migrateHostedAccounts} from './hostedAccounts.js';
 import {migrateLocationHistory} from './locationHistory.js';
 import {migrateCdrArchives} from './cdrArchive.js';
 import {migratePaymentReconciliation} from './paymentReconciliation.js';
@@ -94,6 +95,7 @@ export async function migrate(pool) {
       ['onboarding', () => migrateOnboarding(pool)],
       ['sip_marketplace', () => migrateSipMarketplace(pool)],
       ['sip_provisioning', () => migrateSipProvisioning(pool)],
+      ['hosted_accounts', () => migrateHostedAccounts(pool)],
       ['kamailio_accounts', () => migrateKamailioAccounts(pool)],
       ['sip_call_access', () => migrateCallAccessView(pool)],
       ['sip_profiles', () => migrateSipProfiles(pool)],
