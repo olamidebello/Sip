@@ -1,0 +1,94 @@
+- name: Automatically repair known registration issues and report remaining blockers
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Install registration repair command prerequisites
+    ansible.builtin.apt:
+      name:
+      - python3
+      - git
+      - curl
+      - ca-certificates
+      - util-linux
+      state: present
+      update_cache: true
+      cache_valid_time: 3600
+  - name: Check existing Docker Compose installation
+    ansible.builtin.command:
+      argv:
+      - docker
+      - compose
+      - version
+    changed_when: false
+  - block:
+    - name: Preserve integrations, repair registration, check schema and deploy
+      ansible.builtin.shell: "set -euo pipefail\numask 077\ncd /opt/olamide/repo\nexec 9>/run/olamide-update.lock\nflock -n\
+        \ 9 || { echo 'Another deployment is running'; exit 1; }\ngit fetch origin main </dev/null\nrelease=ce6d5f60eb3f142d3ed291af1f1d672b0819f7f0\n\
+        git merge-base --is-ancestor \"$release\" origin/main\nfor f in services/api/onboarding.js services/api/twilioAccountAuth.js\
+        \ apps/web/src/main.js; do test -f \"$f\" || { echo \"Installed account verification integration required: $f\"; exit\
+        \ 1; }; done\nbackup=\"/opt/olamide/backups/registration-repair-$(date -u +%Y%m%dT%H%M%S)-$$\"\ninstall -d -m 0700\
+        \ \"$backup\"\nexec > >(tee \"$backup/repair.log\") 2>&1\nprintf 'Private repair log: %s/repair.log\\n' \"$backup\"\
+        \nfiles=(services/api/onboarding.js services/api/twilioAccountAuth.js apps/web/src/main.js services/api/registrationSafety.js\
+        \ services/api/registrationSafety.test.js services/api/twilioAccountAuth.test.js apps/web/src/registrationFeedback.js\
+        \ apps/web/src/registrationFeedback.test.js)\nfor f in \"${files[@]}\"; do mkdir -p \"$backup/source/$(dirname \"\
+        $f\")\"; if test -f \"$f\"; then cp -p \"$f\" \"$backup/source/$f\"; fi; done\ncd deployment/docker\ndocker compose\
+        \ config --quiet\nsuffix=$(date +%s)-$$\nfor svc in api web; do\n  cid=$(docker compose ps -q \"$svc\")\n  test -n\
+        \ \"$cid\"\n  image=$(docker inspect \"$cid\" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0][\"Image\"\
+        ])')\n  docker tag \"$image\" \"olamide-$svc:before-registration-$suffix\"\ndone\nprintf 'services:\\n  api:\\n  \
+        \  image: olamide-api:before-registration-%s\\n  web:\\n    image: olamide-web:before-registration-%s\\n' \"$suffix\"\
+        \ \"$suffix\" > \"$backup/rollback.yml\"\ndocker compose -f compose.yml -f \"$backup/rollback.yml\" config --quiet\n\
+        cd ../..\nruntime_changed=false\nrecover() {\n  trap - ERR\n  for f in \"${files[@]}\"; do if test -f \"$backup/source/$f\"\
+        ; then cp -p \"$backup/source/$f\" \"/opt/olamide/repo/$f\"; else rm -f \"/opt/olamide/repo/$f\"; fi; done\n  if [[\
+        \ \"$runtime_changed\" == true ]]; then\n    cd /opt/olamide/repo/deployment/docker\n    docker compose -f compose.yml\
+        \ -f \"$backup/rollback.yml\" up -d --no-deps api web </dev/null || true\n  fi\n  echo \"Registration update stopped;\
+        \ prior source/images restored where necessary. Additive tables retained. Backup: $backup\"\n  exit 1\n}\ntrap recover\
+        \ ERR\nfor f in services/api/registrationSafety.js services/api/registrationSafety.test.js services/api/twilioAccountAuth.test.js\
+        \ apps/web/src/registrationFeedback.js apps/web/src/registrationFeedback.test.js; do git show \"$release:$f\" > \"\
+        $f\"; done\ngit show \"$release:tools/install-registration-repair.py\" > \"$backup/install.py\"\ngit show \"$release:tests/test_registration_repair_installer.py\"\
+        \ > \"$backup/install.test.py\"\nREGISTRATION_REPAIR_INSTALLER=\"$backup/install.py\" python3 \"$backup/install.test.py\"\
+        \npython3 \"$backup/install.py\"\ncd deployment/docker\ndocker compose build api </dev/null\ndocker compose run --rm\
+        \ --no-deps -T --entrypoint node api --test /app/registrationSafety.test.js /app/twilioAccountAuth.test.js </dev/null\n\
+        docker compose run --rm --no-deps -T --entrypoint node api --check /app/onboarding.js </dev/null\ndocker compose run\
+        \ --rm --no-deps -T --entrypoint node api --input-type=module <<'JS'\nimport {createDatabase} from './db.js';\nimport\
+        \ {migrateOnboarding} from './onboarding.js';\nimport {migrateTwilioAccountAuth} from './twilioAccountAuth.js';\n\
+        import {migrateSipMarketplace} from './sipMarketplace.js';\nconst db=createDatabase(process.env.MYSQL_URL);\ntry{\n\
+        \  await migrateOnboarding(db);\n  await migrateTwilioAccountAuth(db);\n  await migrateSipMarketplace(db);\n  const\
+        \ expected={users:['id','tenant_id','status','password_salt','password_hash'],user_profiles:['user_id','phone_e164','address_line1','country'],user_presence:['user_id','searchable','presence','share_presence'],sip_accounts:['user_id','tenant_id','secret_cipher','status'],twilio_account_pins:['user_id','pin_hash','salt'],twilio_account_challenges:['token_hash','policy_version','hub_version','status','expires_ms']};\n\
+        \  for(const [table,columns]of Object.entries(expected)){\n    const rows=(await db.query('SELECT COLUMN_NAME AS name\
+        \ FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=$1',[table])).rows;\n    const found=new\
+        \ Set(rows.map(r=>r.name));\n    for(const column of columns)if(!found.has(column))throw Error('Registration schema\
+        \ prerequisite missing: '+table+'.'+column);\n  }\n  const owner=(await db.query(\"SELECT id FROM tenants WHERE id='00000000-0000-4000-8000-000000000000'\
+        \ AND status='active'\")).rows;\n  if(!owner.length)throw Error('Default registration tenant is missing or inactive;\
+        \ administrator review required');\n  const group=(await db.query(\"SELECT id FROM user_groups WHERE id='00000000-0000-4000-8000-000000000001'\
+        \ AND tenant_id='00000000-0000-4000-8000-000000000000'\")).rows;\n  if(!group.length)throw Error('Default signup group\
+        \ is missing or belongs to another tenant; administrator review required');\n  console.log('Registration tables and\
+        \ default tenant/group prerequisites verified. Existing keys and policies retained.');\n}finally{await db.end();}\n\
+        JS\ncd ../..\ndocker build -f deployment/docker/web.Dockerfile --target build -t olamide-registration-ui-check . </dev/null\n\
+        docker run --rm --entrypoint node olamide-registration-ui-check --test /app/src/registrationFeedback.test.js </dev/null\n\
+        cd deployment/docker\ndocker compose build web </dev/null\nruntime_changed=true\ndocker compose up -d --no-deps api\
+        \ web </dev/null\ncurl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health\n\
+        curl -fsS --max-time 10 https://sip.dobhrap.com/api/register/captcha | python3 -c 'import json,sys; r=json.load(sys.stdin);\
+        \ assert r.get(\"captchaId\") and r.get(\"image\",\"\").startswith(\"data:image/png;base64,\"); print(\"Live registration\
+        \ CAPTCHA endpoint verified\")'\ntrap - ERR\necho \"Registration repair installed: optional PIN validation, safe errors\
+        \ with reference IDs, verification activation retry and honest retry feedback. No OTP, account or carrier purchase\
+        \ was created by deployment. Backup: $backup\"\n"
+      args:
+        executable: /bin/bash
+      register: registration_repair
+      no_log: true
+    rescue:
+    - name: Show safe registration failure summary
+      ansible.builtin.debug:
+        msg: '{{ registration_repair.stdout_lines | default([]) | select(''search'', ''not ok|Signup did not reach the injected
+          database failure|Registration schema prerequisite missing|Default registration tenant|Default signup group|Unknown
+          .*no files changed|Private repair log:|Registration update stopped'') | list }}'
+    - name: Keep failed repair blocked
+      ansible.builtin.fail:
+        msg: Repair stopped before acceptance. See the private repair.log in the reported backup directory. Existing validation,
+          CAPTCHA and verification policies were preserved; do not bypass failed tests.
+  - name: Show registration repair result
+    ansible.builtin.debug:
+      msg: '{{ registration_repair.stdout_lines | select(''search'', ''verified|Verification|Registration repair installed|Private
+        repair log:'') | list }}'
