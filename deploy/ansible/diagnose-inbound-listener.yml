@@ -1,0 +1,14 @@
+---
+- name: Diagnose inbound SIP listener and firewall without changing server settings
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Inspect service listener and firewall summaries
+      ansible.builtin.command:
+        argv: [python3, '{{ playbook_dir }}/../../tools/diagnose_inbound_listener.py']
+      register: listener_checks
+      changed_when: false
+    - name: Show fixed listener checks
+      ansible.builtin.debug:
+        msg: '{{ listener_checks.stdout_lines }}'
