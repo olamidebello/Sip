@@ -1,0 +1,14 @@
+---
+- name: Identify private outbound route layout using safe structural checks
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Inspect recognized paid and carrier routes without changing them
+      ansible.builtin.command:
+        argv: [python3, '{{ playbook_dir }}/../../tools/diagnose_flowroute_outbound.py', /etc/kamailio/kamailio.cfg]
+      register: outbound_layout
+      changed_when: false
+    - name: Show fixed structural results only
+      ansible.builtin.debug:
+        msg: '{{ outbound_layout.stdout_lines }}'

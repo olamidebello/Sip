@@ -89,4 +89,7 @@ failure_route[OLAMIDE_FLOWROUTE_AUTH] {
 if __name__=='__main__':
  try:
   src=pathlib.Path(sys.argv[1]);out=pathlib.Path(sys.argv[2]);result=patch(src.read_text());out.write_text(result);out.chmod(0o640)
- except Exception:raise SystemExit('Outbound staging refused: unrecognized route or authentication settings. Live configuration unchanged.')
+ except ValueError as error:
+  from diagnose_flowroute_outbound import CHECKS
+  raise SystemExit('SIP_OUTBOUND_CHECK blocker='+CHECKS.get(str(error),'unknown_layout')+'; live configuration unchanged')
+ except Exception:raise SystemExit('Outbound staging refused: configuration could not be read or staged. Live configuration unchanged.')
