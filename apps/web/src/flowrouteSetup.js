@@ -11,7 +11,7 @@ export function setupFlowrouteSetup({document,parent,get,request,getRole,getUser
  <label>Concurrent call limit<input name="maxConcurrentCalls" type="number" min="1" max="100000" value="1" required></label>
  <label><input name="allowedIpConfirmed" type="checkbox">Public IP is allowed in Flowroute Manage (required for IP authentication)</label>
  <button type="submit">Save encrypted settings</button><button type="button" data-provision>Save &amp; provision Flowroute</button></form>
- <a href="#carrier-adapter-admin" data-manage-adapter class="button-link">Manage adapter</a> <button type="button" data-refresh>Refresh Flowroute status</button><button type="button" data-deactivate>Deactivate Flowroute</button><button type="button" data-remove>Remove saved SIP credentials</button><p role="status" aria-live="polite"></p>`;
+ <button type="button" data-manage-adapter aria-controls="carrier-adapter-admin">Manage adapter</button> <button type="button" data-refresh>Refresh Flowroute status</button><button type="button" data-deactivate>Deactivate Flowroute</button><button type="button" data-remove>Remove saved SIP credentials</button><p role="status" aria-live="polite"></p>`;
  const shortcut=document.createElement('button');shortcut.type='button';shortcut.textContent='Flowroute password & setup';shortcut.dataset.flowrouteSetup='';shortcut.hidden=true;
  const heading=parent.querySelector('h2');if(heading)heading.after(shortcut,box);else parent.prepend(shortcut,box);
  shortcut.onclick=()=>{if(!authorized())return;box.hidden=false;box.scrollIntoView?.({behavior:'smooth',block:'start'});form.elements.sipPassword.focus();};
@@ -34,6 +34,6 @@ export function setupFlowrouteSetup({document,parent,get,request,getRole,getUser
  box.querySelector('[data-refresh]').onclick=()=>act(async current=>{const r=await get('/api/admin/carriers/flowroute/trunk/status');if(current())status.textContent=`Flowroute: ${r.profile?.status||'not provisioned'} · adapter ${r.adapterConfigured?'configured':'missing'}.`;});
  box.querySelector('[data-deactivate]').onclick=()=>act(async current=>{await request('/api/admin/carriers/flowroute/deactivate',{},'POST');if(current())status.textContent='Flowroute deactivated.';});
  box.querySelector('[data-remove]').onclick=()=>{if(!authorized()||!document.defaultView.confirm('Remove saved Flowroute SIP credentials? Deactivate the carrier first.'))return;return act(async current=>{await request('/api/admin/carriers/flowroute/trunk',{expectedRevision:revision},'DELETE');if(current()){revision=0;form.reset();status.textContent='Saved SIP credentials removed.';}});};
- box.querySelector('[data-manage-adapter]').onclick=e=>{e.preventDefault();if(authorized())show?.('carrier-adapter-admin');};
+ box.querySelector('[data-manage-adapter]').onclick=e=>{e.preventDefault();if(!authorized())return;show?.('carrier-adapter-admin');const setup=document.getElementById('adapter-configure');setup?.click();setup?.focus();document.getElementById('carrier-adapter-admin')?.scrollIntoView?.({behavior:'smooth',block:'start'});};
  return {refresh};
 }

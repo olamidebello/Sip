@@ -26,9 +26,9 @@ test('password shortcut appears above trunk list and focuses password field',asy
  const section=f.document.getElementById('flowroute-setup');assert.equal(section.previousElementSibling,shortcut);
  f.logout();await f.ui.refresh();assert.equal(shortcut.hidden,true);f.dom.window.close();
 });
-test('manage adapter link opens the registered Super Admin adapter workspace',async()=>{
- const dom=new JSDOM('<main></main>'),document=dom.window.document,targets=[];let role='super_admin';
+test('manage adapter button opens adapter setup and configuration',async()=>{
+ const dom=new JSDOM('<main></main><section id="carrier-adapter-admin"><button id="adapter-configure">Configure</button></section>'),document=dom.window.document,targets=[];let role='super_admin',opened=0;document.getElementById('adapter-configure').onclick=()=>opened++;
  const ui=setupFlowrouteSetup({document,parent:document.querySelector('main'),get:async()=>({configured:false}),request:async()=>({}),getRole:()=>role,getUserId:()=> 'owner',show:id=>targets.push(id)});
- await ui.refresh();const link=document.querySelector('[data-manage-adapter]');assert.equal(link.getAttribute('href'),'#carrier-adapter-admin');link.click();assert.deepEqual(targets,['carrier-adapter-admin']);
+ await ui.refresh();const link=document.querySelector('[data-manage-adapter]');assert.equal(link.tagName,'BUTTON');assert.equal(link.type,'button');assert.equal(link.getAttribute('aria-controls'),'carrier-adapter-admin');link.click();assert.deepEqual(targets,['carrier-adapter-admin']);assert.equal(opened,1);assert.equal(document.activeElement.id,'adapter-configure');
  role='admin';link.click();assert.equal(targets.length,1);dom.window.close();
 });
