@@ -3,6 +3,27 @@ const input={name:'Test User',email:'user@example.com',password:'correct long pa
 test('invalid optional PIN and incomplete fields become field errors before side effects',()=>{for(const override of [{pin:'123456'},{pin:'111111'},{pin:123456},{city:''},{phone:'08012345678'}])assert.throws(()=>signupInput({...input,...override}),e=>e.registrationValidation===true);assert.equal(signupInput({...input,pin:''}).email,'user@example.com');assert.equal(signupInput({...input,pin:'025819'}).phone,input.phone);});
 test('infrastructure failures have reference IDs and never return or log SQL or secrets',()=>{const logged=[];const e=Object.assign(Error('password=private INSERT INTO users'),{code:'ER_NO_SUCH_TABLE',sql:'private'});const r=registrationFailure(e,(...args)=>logged.push(args));assert.equal(r.status,503);assert.match(r.body.reference,/^[a-f0-9-]{36}$/);assert(!JSON.stringify([r,logged]).includes('private'));assert.equal(logged[0][0],'Registration failure');});
 test('safe registration catches invalid body and sanitizes unhandled exceptions',async()=>{let response;const ctx={res:{},send:(_r,status,body)=>response={status,body},readJson:async()=>null};await safeRegistration(async c=>{await c.readJson();throw Error('should not reach');},ctx);assert.equal(response.status,400);assert.equal(response.body.captchaConsumed,false);});
-async function handler(deps){const text=await readFile(new URL('./onboarding.js',import.meta.url),'utf8');const names=['signupInput','safeRegistration','ensureDefaultPresence','issueCaptcha','consumeCaptcha','createHash','randomInt','timingSafeEqual','hashPassword','randomUUID','defaultTenantId','createSipAccount','registrationAllowed','accountAuthPolicy','signupPin','startAccountChallenge','validPin'];globalThis.registrationFixture={signupInput,safeRegistration,accountAuthPolicy:async()=>({signup:false,login:false,requirePin:false}),signupPin:async()=>{},validPin:()=>true,...deps};const source='const {'+names.join(',')+'}=globalThis.registrationFixture;\n'+text.replace(/^import .*;\n/gm,'');const mod=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64')+'#'+Math.random());delete globalThis.registrationFixture;return mod.handleOnboarding;}
+async function handler(deps, installedSource){
+ const moduleUrl=new URL('./onboarding.js',import.meta.url);
+ const text=installedSource??await readFile(moduleUrl,'utf8');
+ const names=['signupInput','safeRegistration','ensureDefaultPresence','issueCaptcha','consumeCaptcha','createHash','randomInt','timingSafeEqual','hashPassword','randomUUID','defaultTenantId','createSipAccount','registrationAllowed','accountAuthPolicy','signupPin','startAccountChallenge','validPin'];
+ globalThis.registrationFixture={signupInput,safeRegistration,accountAuthPolicy:async()=>({signup:false,login:false,requirePin:false}),signupPin:async()=>{},validPin:()=>true,...deps};
+ // Stub only explicit transaction/delivery dependencies. Keep additional installed validators real.
+ const preserved=text.replace(/^import\s+\{([^}]+)\}\s+from\s+(['"])([^'"\n]+)\2;?\s*$/gm,(_all,bindings,_quote,specifier)=>{
+  const keep=bindings.split(',').map(s=>s.trim()).filter(s=>!names.includes(s.split(/\s+as\s+/).at(-1)));
+  if(!keep.length)return '';
+  return 'import {'+keep.join(',')+'} from '+JSON.stringify(new URL(specifier,moduleUrl).href)+';';
+ });
+ const source='const {'+names.join(',')+'}=globalThis.registrationFixture;\n'+preserved;
+ try{const mod=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64')+'#'+Math.random());return mod.handleOnboarding;}
+ finally{delete globalThis.registrationFixture;}
+}
+test('handler fixture retains additional installed validators instead of dropping their imports',async()=>{
+ const validator='data:text/javascript,'+encodeURIComponent('export function validateCountries(value){if(value!=="NG")throw Error("invalid country");return "validated";}');
+ const source='import {validateCountries} from '+JSON.stringify(validator)+';\nexport async function handleOnboarding(ctx){return validateCountries(ctx.country);}';
+ const run=await handler({},source);
+ assert.equal(await run({country:'NG'}),'validated');
+ await assert.rejects(()=>run({country:'bad'}),/invalid country/);
+});
 test('real signup handler rejects a weak optional PIN without consuming CAPTCHA or starting a transaction',async()=>{let consumed=0,response;const run=await handler({consumeCaptcha:async()=>{consumed++;return true;}});await run({req:{method:'POST'},res:{},path:'/api/register',readJson:async()=>({...input,pin:'123456'}),pool:{connect(){throw Error('must not connect');}},send:(_r,status,body)=>response={status,body}});assert.equal(response.status,400);assert.equal(consumed,0);});
 test('real signup handler rolls back every partial write on SIP record failure',async()=>{const queries=[];let response;const db={release(){queries.push('release');},query:async q=>{queries.push(q);return {rows:[],rowCount:1};}};const run=await handler({consumeCaptcha:async()=>true,registrationAllowed:async()=>true,hashPassword:async()=>({salt:'salt',hash:'hash'}),randomUUID:()=> 'new-user',defaultTenantId:'tenant',ensureDefaultPresence:async()=>{},createSipAccount:async()=>{throw Object.assign(Error('private failure'),{code:'ER_NO_SUCH_TABLE'});}});await run({req:{method:'POST'},res:{},path:'/api/register',origin:'https://sip.example.com',readJson:async()=>input,pool:{connect:async()=>db},send:(_r,status,body)=>response={status,body}});assert.equal(response.status,503,'Signup did not reach the injected database failure: '+JSON.stringify(response));assert(queries.includes('ROLLBACK'));assert(!queries.includes('COMMIT'));assert.equal(queries.at(-1),'release');});
