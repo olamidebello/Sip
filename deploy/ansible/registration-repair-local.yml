@@ -1,0 +1,94 @@
+---
+- name: Repair registration and verification safely
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Preserve integrations, repair registration, check schema and deploy
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        git fetch origin main </dev/null
+        release=9a72bdea387fe16b3cad39e2c78949fa7af1b3cd
+        git merge-base --is-ancestor "$release" origin/main
+        for f in services/api/onboarding.js services/api/twilioAccountAuth.js apps/web/src/main.js; do test -f "$f" || { echo "Installed account verification integration required: $f"; exit 1; }; done
+        backup="/opt/olamide/backups/registration-repair-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup"
+        files=(services/api/onboarding.js services/api/twilioAccountAuth.js apps/web/src/main.js services/api/registrationSafety.js services/api/registrationSafety.test.js services/api/twilioAccountAuth.test.js apps/web/src/registrationFeedback.js apps/web/src/registrationFeedback.test.js)
+        for f in "${files[@]}"; do mkdir -p "$backup/source/$(dirname "$f")"; if test -f "$f"; then cp -p "$f" "$backup/source/$f"; fi; done
+        cd deployment/docker
+        docker compose config --quiet
+        suffix=$(date +%s)-$$
+        for svc in api web; do
+          cid=$(docker compose ps -q "$svc")
+          test -n "$cid"
+          image=$(docker inspect "$cid" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["Image"])')
+          docker tag "$image" "olamide-$svc:before-registration-$suffix"
+        done
+        printf 'services:\n  api:\n    image: olamide-api:before-registration-%s\n  web:\n    image: olamide-web:before-registration-%s\n' "$suffix" "$suffix" > "$backup/rollback.yml"
+        cd ../..
+        runtime_changed=false
+        recover() {
+          trap - ERR
+          for f in "${files[@]}"; do if test -f "$backup/source/$f"; then cp -p "$backup/source/$f" "/opt/olamide/repo/$f"; else rm -f "/opt/olamide/repo/$f"; fi; done
+          if [[ "$runtime_changed" == true ]]; then
+            cd /opt/olamide/repo/deployment/docker
+            docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps api web </dev/null || true
+          fi
+          echo "Registration update stopped; prior source/images restored where necessary. Additive tables retained. Backup: $backup"
+          exit 1
+        }
+        trap recover ERR
+        for f in services/api/registrationSafety.js services/api/registrationSafety.test.js services/api/twilioAccountAuth.test.js apps/web/src/registrationFeedback.js apps/web/src/registrationFeedback.test.js; do git show "$release:$f" > "$f"; done
+        git show "$release:tools/install-registration-repair.py" > "$backup/install.py"
+        git show "$release:tests/test_registration_repair_installer.py" > "$backup/install.test.py"
+        REGISTRATION_REPAIR_INSTALLER="$backup/install.py" python3 "$backup/install.test.py"
+        python3 "$backup/install.py"
+        cd deployment/docker
+        docker compose build api </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --test /app/registrationSafety.test.js /app/twilioAccountAuth.test.js </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --check /app/onboarding.js </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --input-type=module <<'JS'
+        import {createDatabase} from './db.js';
+        import {migrateOnboarding} from './onboarding.js';
+        import {migrateTwilioAccountAuth} from './twilioAccountAuth.js';
+        import {migrateSipMarketplace} from './sipMarketplace.js';
+        const db=createDatabase(process.env.MYSQL_URL);
+        try{
+          await migrateOnboarding(db);
+          await migrateTwilioAccountAuth(db);
+          await migrateSipMarketplace(db);
+          const expected={users:['id','tenant_id','status','password_salt','password_hash'],user_profiles:['user_id','phone_e164','address_line1','country'],user_presence:['user_id','searchable','presence','share_presence'],sip_accounts:['user_id','tenant_id','secret_cipher','status'],twilio_account_pins:['user_id','pin_hash','salt'],twilio_account_challenges:['token_hash','policy_version','hub_version','status','expires_ms']};
+          for(const [table,columns]of Object.entries(expected)){
+            const rows=(await db.query('SELECT COLUMN_NAME AS name FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=$1',[table])).rows;
+            const found=new Set(rows.map(r=>r.name));
+            for(const column of columns)if(!found.has(column))throw Error('Registration schema prerequisite missing: '+table+'.'+column);
+          }
+          const owner=(await db.query("SELECT id FROM tenants WHERE id='00000000-0000-4000-8000-000000000000' AND status='active'")).rows;
+          if(!owner.length)throw Error('Default registration tenant is missing or inactive; administrator review required');
+          const group=(await db.query("SELECT id FROM user_groups WHERE id='00000000-0000-4000-8000-000000000001' AND tenant_id='00000000-0000-4000-8000-000000000000'")).rows;
+          if(!group.length)throw Error('Default signup group is missing or belongs to another tenant; administrator review required');
+          console.log('Registration tables and default tenant/group prerequisites verified. Existing keys and policies retained.');
+        }finally{await db.end();}
+        JS
+        cd ../..
+        docker build -f deployment/docker/web.Dockerfile --target build -t olamide-registration-ui-check . </dev/null
+        docker run --rm --entrypoint node olamide-registration-ui-check --test /app/src/registrationFeedback.test.js </dev/null
+        cd deployment/docker
+        docker compose build web </dev/null
+        runtime_changed=true
+        docker compose up -d --no-deps api web </dev/null
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        curl -fsS --max-time 10 https://sip.dobhrap.com/api/register/captcha | python3 -c 'import json,sys; r=json.load(sys.stdin); assert r.get("captchaId") and r.get("image","").startswith("data:image/png;base64,"); print("Live registration CAPTCHA endpoint verified")'
+        trap - ERR
+        echo "Registration repair installed: optional PIN validation, safe errors with reference IDs, verification activation retry and honest retry feedback. No OTP, account or carrier purchase was created by deployment. Backup: $backup"
+      args:
+        executable: /bin/bash
+      register: registration_repair
+    - name: Show registration repair result
+      ansible.builtin.debug:
+        msg: "{{ registration_repair.stdout_lines[-8:] }}"
