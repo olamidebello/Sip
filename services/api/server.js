@@ -1,3 +1,4 @@
+import {migrateHostedApps,handleHostedApps,hostedApp} from './hostedApps.js';
 import {handleVpn} from './vpn.js';
 import {handleLiveCalls} from './liveCalls.js';
 import {handleVoicemail} from './voicemail.js';
@@ -173,6 +174,7 @@ async function featuresFor(user) {
 }
 async function handler(req, res) {
   const path = new URL(req.url, origin).pathname;
+  const hostedIntegration=path==='/api/integrations/hosted-apps/provision'&&!!hostedApp(req);
   const nativePushHook=path==='/api/native-push/wake'&&pushHookAuthorized(req);
   if (req.method === "GET" && path === "/api/health")
     return send(res, 200, { status: "ok", ...(process.env.APP_RELEASE ? {release:process.env.APP_RELEASE} : {}) });
@@ -184,11 +186,11 @@ async function handler(req, res) {
   const switchXml = path === "/api/switch/xml";
   const deployRunner = path.startsWith('/api/integrations/deployment/');
   const kamailioRunner=path.startsWith('/api/integrations/kamailio/');
-  if (req.method !== "GET" && !nativePushHook && !deployRunner && !kamailioRunner && !switchXml && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
+  if (req.method !== "GET" && !hostedIntegration && !nativePushHook && !deployRunner && !kamailioRunner && !switchXml && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
     return send(res, 403, { error: "Invalid origin" });
   try {
     if(req.method!=='GET'||path==='/api/register/captcha'){
-      const external=!!(nativePushHook||deployRunner||kamailioRunner||switchXml||cdrIngest||flowrouteWebhook||stripeWebhook||providerWebhook||didwwWebhook);
+      const external=!!(hostedIntegration||nativePushHook||deployRunner||kamailioRunner||switchXml||cdrIngest||flowrouteWebhook||stripeWebhook||providerWebhook||didwwWebhook);
       const client=await proxyClient(req);
       const edge=requestLimiter.check('edge:'+client,600);
       if(!edge.allowed)return send(res,429,{error:'Too many requests',retryAfter:edge.retryAfter},{'Retry-After':String(edge.retryAfter)});
@@ -197,6 +199,7 @@ async function handler(req, res) {
       const limited=requestLimiter.check(rule.key,rule.maximum);
       if(!limited.allowed)return send(res,429,{error:'Too many requests',retryAfter:limited.retryAfter},{'Retry-After':String(limited.retryAfter)});
     }
+    if(path==='/api/integrations/hosted-apps/provision')return await handleHostedApps({req,res,pool,send,readJson});
     if(path==='/api/native-push/wake')return await handleNativePush({req,res,path,pool,send,readJson});
     if (switchXml) return send(res,410,{error:'Legacy XML integration retired'});
     if(kamailioRunner) return await handleKamailioRunner({req,res,path,pool,send,readJson});
@@ -849,6 +852,7 @@ async function handler(req, res) {
 }
 
 await migrate(pool);
+await migrateHostedApps(pool);
 await migratePstnBilling(pool);
 const kamailioHttpBridge=startKamailioHttpBridge(pool);
 const stopTelecomReports=startTelecomReports(pool);

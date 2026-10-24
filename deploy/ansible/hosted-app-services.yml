@@ -1,0 +1,63 @@
+---
+- name: Enable trusted hosted application SIP and PBX provisioning
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  vars:
+    sip_repo: /opt/olamide/repo
+    sip_secrets: /etc/olamide/secrets.env
+    hosted_app_ids: [olamidepanel, justisolve, dobhrap, digimarketing, nekkeddating, africanbrowser, africanappsstore, africandroid, africancreativity, olamidemedical, africajobs]
+  tasks:
+    - name: Install provisioning prerequisites
+      ansible.builtin.apt:
+        name: [python3, nodejs, git, ca-certificates]
+        state: present
+        update_cache: true
+    - name: Require existing SIP service configuration
+      ansible.builtin.stat:
+        path: '{{ sip_secrets }}'
+      register: sip_environment
+    - name: Require installed SIP server
+      ansible.builtin.assert:
+        that: sip_environment.stat.isreg | default(false)
+    - name: Pull source preserving tracked local changes
+      ansible.builtin.git:
+        repo: https://github.com/olamidebello/Sip.git
+        dest: '{{ sip_repo }}'
+        version: main
+        force: false
+    - name: Validate provisioning code and security tests
+      ansible.builtin.command:
+        argv: [node, --test, services/api/hostedApps.test.js]
+        chdir: '{{ sip_repo }}'
+      changed_when: false
+    - name: Generate per-application credentials without displaying them
+      ansible.builtin.command:
+        argv: '{{ ["python3", sip_repo + "/tools/configure-hosted-apps.py", "--env", sip_secrets, "--apps"] + hosted_app_ids }}'
+      no_log: true
+    - name: Validate Compose configuration without showing credentials
+      ansible.builtin.command:
+        argv: [docker, compose, --env-file, '{{ sip_secrets }}', config, --quiet]
+        chdir: '{{ sip_repo }}/deployment/docker'
+      changed_when: false
+      no_log: true
+    - name: Build API only
+      ansible.builtin.command:
+        argv: [docker, compose, --env-file, '{{ sip_secrets }}', build, api]
+        chdir: '{{ sip_repo }}/deployment/docker'
+    - name: Recreate API preserving database and other services
+      ansible.builtin.command:
+        argv: [docker, compose, --env-file, '{{ sip_secrets }}', up, -d, --no-deps, api]
+        chdir: '{{ sip_repo }}/deployment/docker'
+    - name: Verify API health
+      ansible.builtin.uri:
+        url: https://sip.dobhrap.com/api/health
+        status_code: 200
+      register: ready
+      until: ready.status | default(0) == 200
+      retries: 15
+      delay: 3
+    - name: Report private handoff
+      ansible.builtin.debug:
+        msg: Per-app configuration is in /etc/olamide/hosted-apps (root only). Transfer only each application's own JSON to its hosting server/service account. Registration adapters and SMTP must be configured separately; no passwords, paid calls or SSO sessions were granted.

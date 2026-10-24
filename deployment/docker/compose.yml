@@ -43,6 +43,7 @@ services:
       dockerfile: deployment/docker/api.Dockerfile
     restart: unless-stopped
     environment:
+      HOSTED_APP_TOKENS_JSON: "${HOSTED_APP_TOKENS_JSON:-}"
       MYSQL_URL: ${MYSQL_URL:?set in secrets.env}
       PUBLIC_ORIGIN: https://${DOMAIN:?set domain}
       LISTEN_ADDR: 0.0.0.0
