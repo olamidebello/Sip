@@ -9,7 +9,7 @@ class InstallerTests(unittest.TestCase):
  def fixture(self,root):
   base=root/'apps/web/src';base.mkdir(parents=True)
   for name,changes in patches.items():
-   p=root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text('\n'.join(a for a,b in changes))
+   p=root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(('async function accountRequest(path,body,method=\"POST\") {\n const response=await fetch(path);\n'+changes[0][0]+'\n}\nasync function apiGet(path) {}\n'+'\n'.join(a for a,b in changes[1:])) if name=='apps/web/src/main.js' else '\n'.join(a for a,b in changes))
  def test_all_anchors_and_repeat(self):
   with tempfile.TemporaryDirectory() as t:
    root=Path(t);self.fixture(root)
@@ -24,4 +24,30 @@ class InstallerTests(unittest.TestCase):
    before={p:p.read_text() for p in (p for p in root.rglob('*') if p.is_file())}
    result=subprocess.run([sys.executable,str(installer),str(root)],capture_output=True)
    self.assertNotEqual(result.returncode,0);self.assertEqual(before,{p:p.read_text() for p in before})
+ def test_legacy_response_parsers_and_unrelated_code_survive(self):
+  variants=["const data=await response.json(); if(!response.ok)throw new Error(data.error || 'Account request failed'); return data;",
+   "const data=await response.json(); if(!response.ok){throw new Error(data.error || 'Account request failed');} return data;",
+   "const data=await response.json(); if(!response.ok){const error=new Error(data.error || 'Account request failed');error.status=response.status;throw error;} return data;"]
+  for variant in variants:
+   with self.subTest(variant=variant),tempfile.TemporaryDirectory() as t:
+    root=Path(t);self.fixture(root);p=root/'apps/web/src/main.js'
+    original=p.read_text().replace(patches['apps/web/src/main.js'][0][0],variant)
+    original+='\nasync function unrelated() { const data=await response.json(); return data; }\n'
+    p.write_text(original)
+    subprocess.run([sys.executable,str(installer),str(root)],check=True,capture_output=True)
+    changed=p.read_text();self.assertIn('return accountJson(response);',changed)
+    self.assertIn('const response=await fetch(path);',changed)
+    self.assertIn('async function unrelated() { const data=await response.json(); return data; }',changed)
+ def test_unknown_frontend_does_not_write_backend_changes(self):
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t);self.fixture(root);p=root/'apps/web/src/main.js';p.write_text(p.read_text().replace(patches['apps/web/src/main.js'][0][0],'customParser();'))
+   before={p:p.read_text() for p in root.rglob('*') if p.is_file()}
+   result=subprocess.run([sys.executable,str(installer),str(root)],capture_output=True)
+   self.assertNotEqual(result.returncode,0);self.assertEqual(before,{p:p.read_text() for p in before})
+ def test_duplicate_response_block_in_another_function_is_not_replaced(self):
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t);self.fixture(root);p=root/'apps/web/src/main.js';tail=patches['apps/web/src/main.js'][0][0]
+   other='\nasync function otherRequest() {\n'+tail+'\n}\n';p.write_text(p.read_text()+other)
+   subprocess.run([sys.executable,str(installer),str(root)],check=True,capture_output=True)
+   changed=p.read_text();self.assertEqual(changed.count('return accountJson(response);'),1);self.assertIn(other,changed)
 if __name__=='__main__':unittest.main()
