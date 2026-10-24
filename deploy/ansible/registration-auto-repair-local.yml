@@ -25,7 +25,7 @@
   - block:
     - name: Preserve integrations, repair registration, check schema and deploy
       ansible.builtin.shell: "set -euo pipefail\numask 077\ncd /opt/olamide/repo\nexec 9>/run/olamide-update.lock\nflock -n\
-        \ 9 || { echo 'Another deployment is running'; exit 1; }\ngit fetch origin main </dev/null\nrelease=ce6d5f60eb3f142d3ed291af1f1d672b0819f7f0\n\
+        \ 9 || { echo 'Another deployment is running'; exit 1; }\ngit fetch origin main </dev/null\nrelease=5c2d6290acb7ad054ace25b20a6184a9619a0ce2\n\
         git merge-base --is-ancestor \"$release\" origin/main\nfor f in services/api/onboarding.js services/api/twilioAccountAuth.js\
         \ apps/web/src/main.js; do test -f \"$f\" || { echo \"Installed account verification integration required: $f\"; exit\
         \ 1; }; done\nbackup=\"/opt/olamide/backups/registration-repair-$(date -u +%Y%m%dT%H%M%S)-$$\"\ninstall -d -m 0700\
