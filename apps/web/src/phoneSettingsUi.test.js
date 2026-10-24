@@ -1,0 +1,8 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {JSDOM} from 'jsdom';import {setupPhoneSettingsUi} from './phoneSettingsUi.js';
+test('settings load, save optimistic revision and open existing voicemail controls',async()=>{
+ const dom=new JSDOM('<body><section id="account"></section><details id="voicemail-settings"></details></body>');let payload,workspace;const document=dom.window.document;
+ const ui=setupPhoneSettingsUi({document,isSignedIn:()=>true,show:w=>workspace=w,get:async()=>({dnd:false,callWaiting:true,forwardMode:'off',forwardUser:null,ringSeconds:30,revision:4,contacts:[]}),request:async(path,b,method)=>{assert.equal(path,'/api/account/phone-settings');assert.equal(method,'PUT');payload=b;}});
+ await document.querySelector('[data-refresh]').onclick();document.querySelector('[data-dnd]').checked=true;await document.querySelector('[data-save]').onclick();assert.equal(payload.revision,4);assert.equal(payload.dnd,true);
+ document.querySelector('[data-voicemail]').click();assert.equal(workspace,'account');assert.equal(document.getElementById('voicemail-settings').open,true);ui.dispose();dom.window.close();
+});
+test('signed out users cannot load or save settings',async()=>{const dom=new JSDOM('<body><section id="account"></section></body>');let calls=0;const ui=setupPhoneSettingsUi({document:dom.window.document,isSignedIn:()=>false,get:async()=>calls++,request:async()=>calls++,show(){}});await dom.window.document.querySelector('[data-refresh]').onclick();await dom.window.document.querySelector('[data-save]').onclick();assert.equal(calls,0);ui.dispose();dom.window.close();});
