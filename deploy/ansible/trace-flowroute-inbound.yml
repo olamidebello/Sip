@@ -1,0 +1,17 @@
+---
+- name: Observe inbound SIP response codes for a 45-second test call
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Explain test window
+      ansible.builtin.debug:
+        msg: Place one incoming call to the affected DID from another phone while the next task runs for 45 seconds. Only transaction counts and response codes are reported; no packets are saved. This observes UDP SIP port 5060 only.
+    - name: Observe incoming call signaling without saving packet contents
+      ansible.builtin.command:
+        argv: [python3, '{{ playbook_dir }}/../../tools/trace_flowroute_inbound.py']
+      register: inbound_trace
+      changed_when: false
+    - name: Show response code summary
+      ansible.builtin.debug:
+        msg: '{{ inbound_trace.stdout_lines }}'
