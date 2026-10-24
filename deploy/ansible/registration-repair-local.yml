@@ -13,7 +13,7 @@
         exec 9>/run/olamide-update.lock
         flock -n 9 || { echo 'Another deployment is running'; exit 1; }
         git fetch origin main </dev/null
-        release=4f89554f9e2721e40ed4bb29f56fd28002354bd3
+        release=9d96ddef7613266bcb646c46211b2ae49068a43b
         git merge-base --is-ancestor "$release" origin/main
         for f in services/api/onboarding.js services/api/twilioAccountAuth.js apps/web/src/main.js; do test -f "$f" || { echo "Installed account verification integration required: $f"; exit 1; }; done
         backup="/opt/olamide/backups/registration-repair-$(date -u +%Y%m%dT%H%M%S)-$$"
