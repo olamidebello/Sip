@@ -1,0 +1,76 @@
+---
+- name: Install Super Admin user caller ID controls
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Create private caller ID rollback directory
+      ansible.builtin.tempfile:
+        state: directory
+        path: /opt/olamide/backups
+        prefix: user-caller-id-
+      register: phone_backup
+    - name: Back up, stage, validate and deploy caller ID controls
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        exec 9>/run/olamide-update.lock
+        flock -n 9
+        backup='{{ phone_backup.path }}'
+        controller='{{ playbook_dir }}/../..'
+        exec > "$backup/deploy.log" 2>&1
+        cd /opt/olamide/repo
+        python3 - "$backup" <<'PY'
+        from pathlib import Path
+        import sys,json,shutil
+        root=Path('/opt/olamide/repo');b=Path(sys.argv[1]);names=['services/api/'+n for n in ['server.js','callerIdentityPolicy.js','userCallerId.js','userCallerId.test.js']]+['apps/web/src/'+n for n in ['main.js','userCallerIdAdmin.js','userCallerIdAdmin.test.js']]
+        manifest={}
+        for name in names:
+            p=root/name
+            if p.is_symlink():raise SystemExit('Symlinked integration file refused')
+            manifest[name]=p.exists()
+            if p.exists():
+                target=b/'source'/name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,target)
+        (b/'manifest.json').write_text(json.dumps(manifest))
+        PY
+        cd deployment/docker
+        for svc in api web; do
+          container=$(docker compose ps -q "$svc")
+          test -n "$container"
+          image=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$container")
+          docker tag "$image" "olamide-$svc:phone-rollback-$(basename "$backup")"
+        done
+        printf 'services:\n  api:\n    image: olamide-api:phone-rollback-%s\n  web:\n    image: olamide-web:phone-rollback-%s\n' "$(basename "$backup")" "$(basename "$backup")" > "$backup/rollback.yml"
+        promoted=0
+        restore() {
+          trap - ERR
+          python3 - "$backup" <<'PY'
+        import json,pathlib,shutil,sys
+        b=pathlib.Path(sys.argv[1]);root=pathlib.Path('/opt/olamide/repo')
+        for name,exists in json.loads((b/'manifest.json').read_text()).items():
+            if exists:shutil.copy2(b/'source'/name,root/name)
+            else:(root/name).unlink(missing_ok=True)
+        PY
+          if test "$promoted" = 1; then
+            docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps api web || true
+          fi
+          exit 1
+        }
+        trap restore ERR
+        python3 "$controller/tools/install_user_caller_id.py" /opt/olamide/repo
+        for name in userCallerId.js userCallerId.test.js; do install -m 0644 "$controller/services/api/$name" "/opt/olamide/repo/services/api/$name"; done
+        for name in userCallerIdAdmin.js userCallerIdAdmin.test.js; do install -m 0644 "$controller/apps/web/src/$name" "/opt/olamide/repo/apps/web/src/$name"; done
+        docker compose build api web
+        docker compose run --rm --no-deps -T --entrypoint node api --test /app/userCallerId.test.js
+        for name in server.js callerIdentityPolicy.js; do docker compose run --rm --no-deps -T --entrypoint node api --check "/app/$name"; done
+        promoted=1
+        docker compose up -d --no-deps api web
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 2 https://sip.dobhrap.com/api/health
+        trap - ERR
+      args:
+        executable: /bin/bash
+      no_log: true
+      changed_when: true
+    - name: Report user caller ID controls installation
+      ansible.builtin.debug:
+        msg: 'Super Admin user caller ID controls installed. Open Admin > Manage user caller ID. Profile numbers and DID ownership are unchanged. Tenant policy, existing caller-ID blocks and carrier authorization remain enforced. Backup/private log: {{ phone_backup.path }}'
