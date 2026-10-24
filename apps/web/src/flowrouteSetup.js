@@ -12,9 +12,12 @@ export function setupFlowrouteSetup({document,parent,get,request,getRole,getUser
  <label><input name="allowedIpConfirmed" type="checkbox">Public IP is allowed in Flowroute Manage (required for IP authentication)</label>
  <button type="submit">Save encrypted settings</button><button type="button" data-provision>Save &amp; provision Flowroute</button></form>
  <button type="button" data-refresh>Refresh Flowroute status</button><button type="button" data-deactivate>Deactivate Flowroute</button><button type="button" data-remove>Remove saved SIP credentials</button><p role="status" aria-live="polite"></p>`;
- parent.append(box);const form=box.querySelector('form'),status=box.querySelector('[role=status]');let revision=0,generation=0;
+ const shortcut=document.createElement('button');shortcut.type='button';shortcut.textContent='Flowroute password & setup';shortcut.dataset.flowrouteSetup='';shortcut.hidden=true;
+ const heading=parent.querySelector('h2');if(heading)heading.after(shortcut,box);else parent.prepend(shortcut,box);
+ shortcut.onclick=()=>{if(!authorized())return;box.hidden=false;box.scrollIntoView?.({behavior:'smooth',block:'start'});form.elements.sipPassword.focus();};
+ const form=box.querySelector('form'),status=box.querySelector('[role=status]');let revision=0,generation=0;
  const authorized=()=>getRole()==='super_admin'&&!!getUserId();
- async function refresh(){const token=++generation,owner=getUserId();box.hidden=!authorized();form.elements.sipPassword.value='';if(!authorized()){revision=0;form.reset();form.elements.sipPassword.value='';status.textContent='';return;}
+ async function refresh(){const token=++generation,owner=getUserId();box.hidden=!authorized();shortcut.hidden=!authorized();form.elements.sipPassword.value='';if(!authorized()){revision=0;form.reset();form.elements.sipPassword.value='';status.textContent='';return;}
   try{const c=await get('/api/admin/carriers/flowroute/trunk');if(token!==generation||owner!==getUserId()||!authorized())return;revision=c.revision||0;
    if(c.configured)for(const key of ['pop','authenticationMode','sipUsername','techPrefix','publicIp','callerId','maxConcurrentCalls'])form.elements[key].value=c[key]??'';
    form.elements.allowedIpConfirmed.checked=!!c.allowedIpConfirmed;

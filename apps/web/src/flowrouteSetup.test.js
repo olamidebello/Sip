@@ -20,3 +20,9 @@ test('ordinary Admin cannot save credentials; signout clears password',async()=>
  await f.document.querySelector('form').onsubmit({preventDefault(){}});assert.equal(f.calls.length,0);
  f.logout();await f.ui.refresh();assert.equal(f.document.querySelector('[name=sipPassword]').value,'');assert.equal(f.document.querySelector('section').hidden,true);f.dom.window.close();
 });
+test('password shortcut appears above trunk list and focuses password field',async()=>{
+ const f=fixture();await f.ui.refresh();const shortcut=f.document.querySelector('[data-flowroute-setup]');
+ assert.equal(shortcut.hidden,false);shortcut.click();assert.equal(f.document.activeElement,f.document.querySelector('[name=sipPassword]'));
+ const section=f.document.getElementById('flowroute-setup');assert.equal(section.previousElementSibling,shortcut);
+ f.logout();await f.ui.refresh();assert.equal(shortcut.hidden,true);f.dom.window.close();
+});
