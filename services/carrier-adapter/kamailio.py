@@ -19,7 +19,7 @@ class KamailioAdapter(Adapter):
         state=pathlib.Path(self.config['stateFile']);old=state.read_bytes() if state.exists() else b''
         if action=='activate':
             c=validate(b.get('flowrouteTrunk'))
-            if c['authenticationMode']!='ip':raise ValueError('This Kamailio backend requires Flowroute IP authentication')
+            if c['authenticationMode']=='digest' and not self.config.get('digestCommissioned'):raise ValueError('Commission Flowroute digest outbound routing first')
             import ipaddress
             ipaddress.ip_address(c['publicIp'])
             value=json.dumps(c,separators=(',',':'))
@@ -32,4 +32,4 @@ class KamailioAdapter(Adapter):
         except Exception:
             self.rpc('htable.sets','olamide_carrier',tenant,old.decode());raise
         if action=='deactivate':return {'status':'inactive'}
-        return {'status':'active','configurationRevision':c['configurationRevision'],'authenticationMode':'ip','defaultOutbound':'flowroute'}
+        return {'status':'active','configurationRevision':c['configurationRevision'],'authenticationMode':c['authenticationMode'],'defaultOutbound':'flowroute'}

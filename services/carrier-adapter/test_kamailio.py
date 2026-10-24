@@ -16,6 +16,15 @@ class Tests(unittest.TestCase):
             self.assertEqual(result['configurationRevision'],1);self.assertIn(c['host'],p.read_text())
             self.assertEqual(a.handle(dict(tenantId=TENANT,provider='flowroute',action='deactivate')),{'status':'inactive'})
             self.assertEqual(p.read_bytes(),b'')
+    def test_digest_activation_requires_validated_route_and_returns_matching_mode(self):
+        with tempfile.TemporaryDirectory() as d:
+            a=self.make(pathlib.Path(d)/'state');c=trunk();c.update(authenticationMode='digest',sipPassword='test-secret',publicIp='154.29.77.102',destinationFormat='E164')
+            body=dict(tenantId=TENANT,provider='flowroute',action='activate',flowrouteTrunk=c)
+            self.assertRaises(ValueError,a.handle,body)
+            a.config['digestCommissioned']=True
+            result=a.handle(body)
+            self.assertEqual(result['authenticationMode'],'digest')
+            self.assertNotIn('sipPassword',result)
     def test_uncommissioned_route_refused(self):
         a=self.make('/unused',False)
         self.assertEqual(a.handle(dict(tenantId=TENANT,provider='flowroute',action='health')),{'status':'healthy','backend':'kamailio','routingCommissioned':False})

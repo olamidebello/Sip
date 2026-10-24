@@ -1,0 +1,71 @@
+---
+- name: Enable inbound DID delivery to the assigned user while preserving local integrations
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Create private inbound rollback directory
+      ansible.builtin.tempfile:
+        state: directory
+        path: /opt/olamide/backups
+        prefix: inbound-owner-
+      register: inbound_backup
+    - name: Back up, integrate, test and deploy owner-based inbound routing
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        test -f services/api/flowrouteDidRouting.js
+        test -f services/api/didIngress.js
+        # Use the existing authenticated carrier ingress; do not create an open relay.
+        python3 - <<'PY'
+        from pathlib import Path
+        s=Path('/etc/kamailio/kamailio.cfg').read_text()
+        if 'route[OLAMIDE_FLOWROUTE_INBOUND]' not in s:raise SystemExit('Existing Flowroute carrier ingress is required; no files changed')
+        PY
+        backup='{{ inbound_backup.path }}'
+        exec > "$backup/deploy.log" 2>&1
+        files=(services/api/flowrouteDidRouting.js services/api/inboundDidOwner.js services/api/inboundDidOwner.test.js)
+        for file in "${files[@]}"; do
+          mkdir -p "$backup/source/$(dirname "$file")"
+          if test -f "$file"; then cp -p "$file" "$backup/source/$file"; fi
+        done
+        cd deployment/docker
+        current=$(docker compose ps -q api)
+        test -n "$current"
+        image=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$current")
+        tag="olamide-api:before-owner-$(date +%s)-$$"
+        docker tag "$image" "$tag"
+        printf 'services:\n  api:\n    image: %s\n' "$tag" > "$backup/rollback.yml"
+        promoted=0
+        restore() {
+          trap - ERR
+          for file in "${files[@]}"; do
+            if test -f "$backup/source/$file"; then cp -p "$backup/source/$file" "/opt/olamide/repo/$file"; else rm -f "/opt/olamide/repo/$file"; fi
+          done
+          if test "$promoted" = 1; then docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps api || true; fi
+          echo 'Inbound routing deployment failed; previous source restored.'
+          exit 1
+        }
+        trap restore ERR
+        python3 '{{ playbook_dir }}/../../tools/install-inbound-did-owner.py'
+        for name in inboundDidOwner.js inboundDidOwner.test.js; do
+          install -m 0644 '{{ playbook_dir }}/../../services/api/'"$name" "/opt/olamide/repo/services/api/$name"
+        done
+        docker compose build api
+        docker compose run --rm --no-deps -T --entrypoint node api --test /app/inboundDidOwner.test.js
+        docker compose run --rm --no-deps -T --entrypoint node api --check /app/flowrouteDidRouting.js
+        promoted=1
+        docker compose up -d --no-deps api
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 2 https://sip.dobhrap.com/api/health
+        trap - ERR
+      args:
+        executable: /bin/bash
+      no_log: true
+      changed_when: true
+    - name: Report inbound DID delivery
+      ansible.builtin.debug:
+        msg: >-
+          Inbound owner lookup installed and API health verified. Calls use each DID's current active assignment and that user's unique SIP account. Ambiguous, suspended, expired or unassigned numbers are rejected. Existing explicit inbound routing rules are preserved. Carrier DID routing must deliver the dialed DID to the SIP server; SIP registration alone does not confirm DID delivery or a completed call. Backup and private deployment log: {{ inbound_backup.path }}

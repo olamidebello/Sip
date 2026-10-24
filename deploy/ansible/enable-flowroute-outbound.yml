@@ -1,0 +1,189 @@
+---
+- name: Enable Flowroute outbound digest calling on the existing commissioned SIP server
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Verify existing paid-call commissioning
+      ansible.builtin.command:
+        argv: [python3, '-c', "import json,pathlib; c=json.loads(pathlib.Path('/etc/olamide/carrier-adapter.json').read_text()); assert c.get('backend')=='kamailio' and c.get('routingCommissioned') is True; assert pathlib.Path('/etc/kamailio/kamailio.cfg').is_file()"]
+      changed_when: false
+      no_log: true
+    - name: Require existing switch and settlement queue services
+      ansible.builtin.command:
+        argv: [systemctl, is-active, '{{ item }}']
+      loop: [kamailio, olamide-billing-queue, olamide-carrier-adapter]
+      changed_when: false
+    - name: Create private rollback directory
+      ansible.builtin.tempfile:
+        state: directory
+        path: /opt/olamide/backups
+        prefix: flowroute-outbound-
+      register: outbound_backup
+    - name: Preserve existing switch and private adapter configuration
+      ansible.builtin.copy:
+        src: '{{ item.src }}'
+        dest: '{{ outbound_backup.path }}/{{ item.name }}'
+        remote_src: true
+        mode: '0600'
+      loop:
+        - {src: /etc/kamailio/kamailio.cfg, name: kamailio.cfg}
+        - {src: /etc/olamide/carrier-adapter.json, name: adapter.json}
+      no_log: true
+    - name: Preserve current carrier runtime state
+      ansible.builtin.command:
+        argv: [python3, '-c', "import json,pathlib,sys; c=json.loads(pathlib.Path('/etc/olamide/carrier-adapter.json').read_text()); p=pathlib.Path(c['stateFile']); out=pathlib.Path(sys.argv[1]); out.write_bytes(p.read_bytes() if p.exists() else b''); out.chmod(0o600)", '{{ outbound_backup.path }}/runtime.json']
+      changed_when: true
+      no_log: true
+    - name: Inspect previous adapter service override
+      ansible.builtin.stat:
+        path: /etc/systemd/system/olamide-carrier-adapter.service.d/90-flowroute-outbound.conf
+      register: previous_outbound_override
+    - name: Preserve previous service override
+      ansible.builtin.copy:
+        src: /etc/systemd/system/olamide-carrier-adapter.service.d/90-flowroute-outbound.conf
+        dest: '{{ outbound_backup.path }}/override.conf'
+        remote_src: true
+        mode: '0600'
+      when: previous_outbound_override.stat.exists
+    - name: Stage digest routing without changing the live switch
+      ansible.builtin.command:
+        argv: [python3, '{{ playbook_dir }}/../../tools/prepare_flowroute_outbound.py', /etc/kamailio/kamailio.cfg, '{{ outbound_backup.path }}/staged.cfg']
+      changed_when: true
+    - name: Require switch configuration acceptance
+      ansible.builtin.command:
+        argv: [kamailio, '-c', '-f', '{{ outbound_backup.path }}/staged.cfg']
+      changed_when: false
+      no_log: true
+    - name: Create isolated adapter release and override directories
+      ansible.builtin.file:
+        path: '{{ item }}'
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+      loop:
+        - '{{ outbound_backup.path }}/adapter'
+        - /etc/systemd/system/olamide-carrier-adapter.service.d
+    - name: Install dedicated adapter implementation
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../services/carrier-adapter/{{ item }}'
+        dest: '{{ outbound_backup.path }}/adapter/{{ item }}'
+        owner: root
+        group: root
+        mode: '0600'
+      loop: [adapter.py, kamailio.py]
+    - name: Refuse concurrent switch changes
+      ansible.builtin.command:
+        argv: [cmp, /etc/kamailio/kamailio.cfg, '{{ outbound_backup.path }}/kamailio.cfg']
+      changed_when: false
+      no_log: true
+    - name: Promote, verify and activate with rollback
+      block:
+        - name: Install validated outbound route
+          ansible.builtin.copy:
+            src: '{{ outbound_backup.path }}/staged.cfg'
+            dest: /etc/kamailio/kamailio.cfg
+            remote_src: true
+            owner: root
+            group: kamailio
+            mode: '0640'
+        - name: Mark validated digest route capability
+          ansible.builtin.command:
+            argv: [python3, '-c', "import json,pathlib; p=pathlib.Path('/etc/olamide/carrier-adapter.json'); c=json.loads(p.read_text()); c['digestCommissioned']=True; t=p.with_suffix('.outbound.tmp'); t.write_text(json.dumps(c)); t.chmod(0o600); t.replace(p)"]
+          no_log: true
+          changed_when: true
+        - name: Select dedicated digest-capable adapter
+          ansible.builtin.copy:
+            dest: /etc/systemd/system/olamide-carrier-adapter.service.d/90-flowroute-outbound.conf
+            mode: '0600'
+            content: |
+              [Service]
+              ExecStart=
+              ExecStart=/usr/bin/python3 {{ outbound_backup.path }}/adapter/adapter.py --config /etc/olamide/carrier-adapter.json
+        - name: Restart validated switch and adapter
+          ansible.builtin.systemd:
+            name: '{{ item }}'
+            state: restarted
+            daemon_reload: true
+          loop: [kamailio, olamide-carrier-adapter]
+        - name: Restore carrier runtime after switch restart
+          ansible.builtin.command:
+            argv: [python3, '-c', "import json,pathlib,subprocess; c=json.loads(pathlib.Path('/etc/olamide/carrier-adapter.json').read_text()); p=pathlib.Path(c['stateFile']); value=p.read_text() if p.exists() else ''; subprocess.run([c.get('kamcmd','/usr/sbin/kamcmd'),'-s',c['rpcSocket'],'htable.sets','olamide_carrier',c['tenantId'],value],check=True,capture_output=True)"]
+          no_log: true
+          changed_when: true
+        - name: Provision saved Flowroute outbound credentials and require adapter acknowledgement
+          ansible.builtin.command:
+            argv:
+              - docker
+              - compose
+              - exec
+              - '-T'
+              - api
+              - node
+              - '--input-type=module'
+              - '-e'
+              - |
+                import {createDatabase} from './db.js';
+                import {handleCarrierProviders} from './carrierProviders.js';
+                const db=createDatabase(process.env.MYSQL_URL);
+                try {
+                  const rows=(await db.query("SELECT tenant_id FROM provider_api_credentials WHERE provider='flowroute_sip' AND enabled=TRUE")).rows;
+                  if(rows.length!==1)throw Error('One saved Flowroute tenant required');
+                  const user=(await db.query("SELECT id,tenant_id,role FROM users WHERE tenant_id=$1 AND role='super_admin' AND status='active' ORDER BY id LIMIT 1",[rows[0].tenant_id])).rows[0];
+                  if(!user)throw Error('Super Admin unavailable');
+                  let result=await handleCarrierProviders({req:{method:'POST'},res:{},path:'/api/admin/carriers/flowroute/trunk/provision',user,pool:db,readJson:async()=>({}),send:(_r,code,body)=>({code,body})});
+                  if(result.code!==200||result.body.status!=='active')throw Error('Activation not acknowledged');
+                  result=await handleCarrierProviders({req:{method:'POST'},res:{},path:'/api/admin/carriers/flowroute/activate',user,pool:db,readJson:async()=>({}),send:(_r,code,body)=>({code,body})});
+                  if(result.code!==200||result.body.status!=='active')throw Error('Activation not acknowledged');
+                  console.log('FLOWROUTE_OUTBOUND active');
+                }catch{console.error('FLOWROUTE_OUTBOUND activation_failed');process.exitCode=1;}
+                finally{await db.end();}
+            chdir: /opt/olamide/repo/deployment/docker
+          no_log: true
+          changed_when: true
+      rescue:
+        - name: Restore previous switch configuration
+          ansible.builtin.copy:
+            src: '{{ outbound_backup.path }}/kamailio.cfg'
+            dest: /etc/kamailio/kamailio.cfg
+            remote_src: true
+            owner: root
+            group: kamailio
+            mode: '0640'
+        - name: Restore private adapter configuration
+          ansible.builtin.copy:
+            src: '{{ outbound_backup.path }}/adapter.json'
+            dest: /etc/olamide/carrier-adapter.json
+            remote_src: true
+            mode: '0600'
+          no_log: true
+        - name: Restore previous override
+          ansible.builtin.copy:
+            src: '{{ outbound_backup.path }}/override.conf'
+            dest: /etc/systemd/system/olamide-carrier-adapter.service.d/90-flowroute-outbound.conf
+            remote_src: true
+            mode: '0600'
+          when: previous_outbound_override.stat.exists
+        - name: Remove newly installed override
+          ansible.builtin.file:
+            path: /etc/systemd/system/olamide-carrier-adapter.service.d/90-flowroute-outbound.conf
+            state: absent
+          when: not previous_outbound_override.stat.exists
+        - name: Restart restored switch and adapter
+          ansible.builtin.systemd:
+            name: '{{ item }}'
+            state: restarted
+            daemon_reload: true
+          loop: [kamailio, olamide-carrier-adapter]
+        - name: Restore previous carrier runtime
+          ansible.builtin.command:
+            argv: [python3, '-c', "import json,pathlib,subprocess,sys; c=json.loads(pathlib.Path('/etc/olamide/carrier-adapter.json').read_text()); value=pathlib.Path(sys.argv[1]).read_text(); subprocess.run([c.get('kamcmd','/usr/sbin/kamcmd'),'-s',c['rpcSocket'],'htable.sets','olamide_carrier',c['tenantId'],value],check=True,capture_output=True); p=pathlib.Path(c['stateFile']); p.write_text(value); p.chmod(0o600)", '{{ outbound_backup.path }}/runtime.json']
+          no_log: true
+          changed_when: true
+        - name: Report unsuccessful activation
+          ansible.builtin.fail:
+            msg: 'Outbound activation failed; previous switch and adapter configuration restored. Private backup: {{ outbound_backup.path }}. Run diagnose-flowroute.yml for safe health results.'
+    - name: Report activated outbound gateway
+      ansible.builtin.debug:
+        msg: 'Flowroute outbound gateway acknowledged activation. Username/password challenges are now supported alongside IP authentication. Existing wallet, rates, tenant policy, caller ID, time limits and settlement remain required. No billable test call was placed. Backup: {{ outbound_backup.path }}'
