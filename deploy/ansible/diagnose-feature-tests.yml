@@ -1,0 +1,19 @@
+---
+- name: Read safe failure summaries from the latest SIP feature test log
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Extract public test names and fixed error codes only
+      ansible.builtin.command:
+        argv:
+          - python3
+          - '{{ playbook_dir }}/../../tools/report-feature-tests.py'
+          - --latest
+          - --source
+          - '{{ playbook_dir }}/../..'
+      register: feature_test_summary
+      changed_when: false
+    - name: Show safe test failure summaries
+      ansible.builtin.debug:
+        msg: '{{ feature_test_summary.stdout_lines }}'

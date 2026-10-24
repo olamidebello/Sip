@@ -22,7 +22,7 @@
       rescue:
         - name: Show safe failure stage and backup directory
           ansible.builtin.debug:
-            msg: "{{ feature_deploy.stdout_lines | default([]) | select('match', '^SIP_FEATURE_(ERROR|DETAIL) ') | list }}"
+            msg: "{{ feature_deploy.stdout_lines | default([]) | select('match', '^SIP_FEATURE_(ERROR|DETAIL|TEST) ') | list }}"
         - name: Stop after failed feature acceptance
           ansible.builtin.fail:
             msg: >-

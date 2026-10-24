@@ -84,12 +84,18 @@ PYGRAPH
  false
 fi
 phase=backend_tests
-docker compose -f "$backup/stage-compose.json" run --rm --no-deps -T --entrypoint node api --test /app/quickSignup.test.js /app/adminGroup.test.js /app/trunkManagement.test.js
+if ! docker compose -f "$backup/stage-compose.json" run --rm --no-deps -T --entrypoint node api --test --test-reporter=tap /app/quickSignup.test.js /app/adminGroup.test.js /app/trunkManagement.test.js /app/locationReportAddress.test.js > "$backup/backend-tests.tap" 2>&1; then
+ python3 "$source_dir/tools/report-feature-tests.py" "$backup/backend-tests.tap" --source "$source_dir" >&3
+ false
+fi
 phase=staged_web_build
 check_image=olamide-feature-web-check:${backup##*/}
 docker build --target build -f "$stage/deployment/docker/web.Dockerfile" -t "$check_image" "$stage"
 phase=browser_tests
-docker run --rm --entrypoint node "$check_image" --test /app/src/quickSignup.test.js /app/src/adminGroup.test.js /app/src/trunkAdmin.test.js
+if ! docker run --rm --entrypoint node "$check_image" --test --test-reporter=tap /app/src/quickSignup.test.js /app/src/adminGroup.test.js /app/src/trunkAdmin.test.js /app/src/locationReports.test.js > "$backup/browser-tests.tap" 2>&1; then
+ python3 "$source_dir/tools/report-feature-tests.py" "$backup/browser-tests.tap" --source "$source_dir" >&3
+ false
+fi
 phase=final_web_build
 docker compose -f "$backup/stage-compose.json" build web
 phase=additive_schema

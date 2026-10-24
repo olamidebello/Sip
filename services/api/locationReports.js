@@ -1,3 +1,4 @@
+import {profileAddress} from './locationReportAddress.js';
 import {randomUUID} from 'node:crypto';
 const defaults={enabled:true,retentionDays:30};
 export async function migrateLocationReports(pool){
@@ -28,7 +29,7 @@ export async function handleLocationReports({req,res,user,pool,send,readJson}){
  if(req.method!=='GET')return send(res,405,{error:'GET or DELETE required'});
  const policy=await locationReportPolicy(pool,user.tenant_id);
  await pool.query('DELETE FROM user_location_history WHERE tenant_id=$1 AND recorded_at<DATE_SUB(UTC_TIMESTAMP(),INTERVAL $2 DAY)',[user.tenant_id,policy.retentionDays]);
- const rows=await pool.query('SELECT h.user_id AS userId,u.display_name AS name,h.latitude,h.longitude,h.accuracy_meters AS accuracyMeters,h.recorded_at AS recordedAt FROM user_location_history h JOIN users u ON u.id=h.user_id AND u.tenant_id=h.tenant_id WHERE h.tenant_id=$1 ORDER BY h.recorded_at DESC,h.id DESC LIMIT 500',[user.tenant_id]);
- await audit(pool,user,'location_report_viewed');return send(res,200,{policy,entries:rows.rows,limit:500});
+ const rows=await pool.query('SELECT h.user_id AS userId,u.display_name AS name,h.latitude,h.longitude,h.accuracy_meters AS accuracyMeters,h.recorded_at AS recordedAt,p.address_line1 AS address1,p.address_line2 AS address2,p.city,p.region,p.postal_code AS postalCode,p.country FROM user_location_history h JOIN users u ON u.id=h.user_id AND u.tenant_id=h.tenant_id LEFT JOIN user_profiles p ON p.user_id=u.id WHERE h.tenant_id=$1 ORDER BY h.recorded_at DESC,h.id DESC LIMIT 500',[user.tenant_id]);
+ await audit(pool,user,'location_report_viewed');return send(res,200,{policy,entries:rows.rows.map(row=>({...row,profileAddress:profileAddress(row)})),limit:500});
 }
 async function audit(pool,user,action,target=null){await pool.query('INSERT INTO security_events(id,tenant_id,actor_id,target_id,action) VALUES($1,$2,$3,$4,$5)',[randomUUID(),user.tenant_id,user.id,target,action]);}

@@ -53,3 +53,20 @@ that needs review without printing the installed source or credentials.
 
 Live SMS delivery and SIP carrier commissioning still require their own acceptance
 tests after deployment; an HTTP health result alone does not verify those services.
+
+## Diagnose a failed test run without rebuilding
+
+If deployment stops at `backend_tests` or `browser_tests`, run:
+
+```sh
+ansible-pull -U https://github.com/olamidebello/Sip.git -C main \
+  -d /opt/olamide-deploy-controller -i localhost, -c local \
+  deploy/ansible/diagnose-feature-tests.yml
+```
+
+This reads the latest feature-deployment logs and emits `SIP_FEATURE_TEST` records
+containing public test identifiers and fixed error codes. It does not rebuild,
+restart services, change database records, alter user roles or print SQL/error
+payloads. Unknown test titles and private file paths are omitted. Future failed
+rollouts emit these same summaries automatically and retain complete TAP logs in
+the private backup directory.

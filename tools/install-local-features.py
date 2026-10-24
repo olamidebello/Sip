@@ -8,6 +8,8 @@ sys.path.insert(0,str(Path(__file__).resolve().parent))
 from feature_patch_worker import PatchWorker
 
 NEW_FILES = [
+ 'services/api/locationReportAddress.js','services/api/locationReportAddress.test.js',
+ 'apps/web/src/locationReportCsv.js','apps/web/src/locationReports.test.js',
  'services/api/featureModuleGraph.mjs',
  'services/api/quickSignup.js','services/api/quickSignup.test.js',
  'services/api/adminGroup.js','services/api/adminGroup.test.js','services/api/manage-admin-group.js',
@@ -17,7 +19,8 @@ NEW_FILES = [
 ]
 SHARED = ['services/api/onboarding.js','services/api/messagingWebhooks.js','services/api/server.js',
  'services/api/migrate.js','services/api/trunkManagement.js','services/api/trunkManagement.test.js',
- 'apps/web/src/main.js','apps/web/src/adminNavigation.js']
+ 'apps/web/src/main.js','apps/web/src/adminNavigation.js',
+ 'services/api/locationReports.js','apps/web/src/locationReports.js']
 
 def once(text, old, new, name):
  if new in text:
@@ -91,6 +94,14 @@ const navigationGroups=[""")
  name='apps/web/src/adminNavigation.js'
  patch(name,"['group-admin','Users & groups'],","['system-admin-group','Admin group access',superOnly],['delegated-admin-panel','Admin workspace',['admin']],['group-admin','Users & groups'],")
  patch(name,"['carrier-console','Carriers & termination'],","['trunk-super-admin','SIP trunks',superOnly],['carrier-console','Carriers & termination'],")
+ imp('services/api/locationReports.js',"import {profileAddress} from './locationReportAddress.js';")
+ imp('apps/web/src/locationReports.js',"import {locationReportCsv} from './locationReportCsv.js';")
+ patch('services/api/locationReports.js','SELECT h.user_id AS userId,u.display_name AS name,h.latitude,h.longitude,h.accuracy_meters AS accuracyMeters,h.recorded_at AS recordedAt FROM user_location_history h JOIN users u ON u.id=h.user_id AND u.tenant_id=h.tenant_id WHERE h.tenant_id=$1 ORDER BY h.recorded_at DESC,h.id DESC LIMIT 500','SELECT h.user_id AS userId,u.display_name AS name,h.latitude,h.longitude,h.accuracy_meters AS accuracyMeters,h.recorded_at AS recordedAt,p.address_line1 AS address1,p.address_line2 AS address2,p.city,p.region,p.postal_code AS postalCode,p.country FROM user_location_history h JOIN users u ON u.id=h.user_id AND u.tenant_id=h.tenant_id LEFT JOIN user_profiles p ON p.user_id=u.id WHERE h.tenant_id=$1 ORDER BY h.recorded_at DESC,h.id DESC LIMIT 500')
+ patch('services/api/locationReports.js','entries:rows.rows,limit:500','entries:rows.rows.map(row=>({...row,profileAddress:profileAddress(row)})),limit:500')
+ patch('apps/web/src/locationReports.js','Up to 500 newest entries are shown.','Up to 500 newest entries are shown. Address is the current user profile address and may differ from the saved GPS location.')
+ patch('apps/web/src/locationReports.js','<th>Accuracy (m)</th>','<th>Accuracy (m)</th><th>Current profile address</th>')
+ patch('apps/web/src/locationReports.js','for(const value of [e.name||e.userId,new Date(e.recordedAt).toLocaleString(),e.latitude,e.longitude,e.accuracyMeters])',"for(const value of [e.name||e.userId,new Date(e.recordedAt).toLocaleString(),e.latitude,e.longitude,e.accuracyMeters,e.profileAddress||'Not provided'])")
+ patch('apps/web/src/locationReports.js','const values=[[\'User ID\',\'Saved at\',\'Latitude\',\'Longitude\',\'Accuracy meters\'],...entries.map(e=>[e.userId,e.recordedAt,e.latitude,e.longitude,e.accuracyMeters])];const csv=values.map(row=>row.map(v=>\'"\'+String(v??\'\').replace(/^[=+@-]/,"\'$&").replaceAll(\'"\',\'""\')+\'"\').join(\',\')).join(\'\\r\\n\')','const csv=locationReportCsv(entries)')
  # Refuse to silently replace a locally edited new module on repeated deployments.
  for name in NEW_FILES:
   p=source/name
