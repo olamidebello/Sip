@@ -8,6 +8,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parent))
 from feature_patch_worker import PatchWorker
 
 NEW_FILES = [
+ 'apps/web/src/flowrouteSetup.js','apps/web/src/flowrouteSetup.test.js',
  'services/api/locationReportAddress.js','services/api/locationReportAddress.test.js',
  'apps/web/src/locationReportCsv.js','apps/web/src/locationReports.test.js',
  'services/api/featureModuleGraph.mjs',
@@ -17,7 +18,7 @@ NEW_FILES = [
  'apps/web/src/adminGroup.js','apps/web/src/adminGroup.test.js',
  'apps/web/src/trunkAdmin.js','apps/web/src/trunkAdmin.test.js',
 ]
-KNOWN_FEATURE_UPGRADES = {'services/api/quickSignup.js': ['e01b1b906915c64605f617fe92d77dce7f1cac4fa8220647510ab030606d83ba'], 'services/api/quickSignup.test.js': ['925f06eeaf7763252826bba24270394c22d03f954b97d2e3ffa0572542a71357'], 'apps/web/src/quickSignup.js': ['9cab4c4b51d9463a4c072f0750392a4813247c8a2ee9a72f376735e00bfc2497', 'd288165eb8177d295c9ab572852155b44a9204c95b7ed1930b4d24ee44452746'], 'apps/web/src/quickSignup.test.js': ['fd29b099a510d91a5d2d6fea35f3a2c32314e6f13a4b7aff6c37574291255ce4', '675631076d41f16c4c2a591695eaefe7c14e6a3386480e70ed33a176c90be24b']}
+KNOWN_FEATURE_UPGRADES = {'services/api/quickSignup.js': ['e01b1b906915c64605f617fe92d77dce7f1cac4fa8220647510ab030606d83ba'], 'services/api/quickSignup.test.js': ['925f06eeaf7763252826bba24270394c22d03f954b97d2e3ffa0572542a71357'], 'apps/web/src/quickSignup.js': ['9cab4c4b51d9463a4c072f0750392a4813247c8a2ee9a72f376735e00bfc2497', 'd288165eb8177d295c9ab572852155b44a9204c95b7ed1930b4d24ee44452746'], 'apps/web/src/quickSignup.test.js': ['fd29b099a510d91a5d2d6fea35f3a2c32314e6f13a4b7aff6c37574291255ce4', '675631076d41f16c4c2a591695eaefe7c14e6a3386480e70ed33a176c90be24b'], 'apps/web/src/trunkAdmin.js': ['4fedd4233404531b753b855882e3ebbf41ec65ed37e54be9a4c5933b39a8d784']}
 SHARED = ['services/api/onboarding.js','services/api/messagingWebhooks.js','services/api/server.js',
  'services/api/migrate.js','services/api/trunkManagement.js','services/api/trunkManagement.test.js',
  'apps/web/src/main.js','apps/web/src/adminNavigation.js',

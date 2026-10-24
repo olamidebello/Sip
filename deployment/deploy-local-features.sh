@@ -92,7 +92,7 @@ phase=staged_web_build
 check_image=olamide-feature-web-check:${backup##*/}
 docker build --target build -f "$stage/deployment/docker/web.Dockerfile" -t "$check_image" "$stage"
 phase=browser_tests
-if ! docker run --rm --entrypoint node "$check_image" --test --test-reporter=tap /app/src/quickSignup.test.js /app/src/adminGroup.test.js /app/src/trunkAdmin.test.js /app/src/locationReports.test.js > "$backup/browser-tests.tap" 2>&1; then
+if ! docker run --rm --entrypoint node "$check_image" --test --test-reporter=tap /app/src/quickSignup.test.js /app/src/adminGroup.test.js /app/src/trunkAdmin.test.js /app/src/flowrouteSetup.test.js /app/src/locationReports.test.js > "$backup/browser-tests.tap" 2>&1; then
  python3 "$source_dir/tools/report-feature-tests.py" "$backup/browser-tests.tap" --source "$source_dir" >&3
  false
 fi
