@@ -53,21 +53,23 @@ def patch(text):
     }'''
  carrier=carrier.replace(old,new);text=text[:a]+carrier+text[b:]
  a,b=bounds(text,'OLAMIDE_PAID_CALL');paid=text[a:b]
- if 't_on_failure(' in paid:raise ValueError('Existing paid failure handling requires reconciliation')
- anchor='    t_on_reply("MEDIA_REPLY");'
- if paid.count(anchor)!=1:raise ValueError('Unrecognized paid relay')
+ if re.search(r'\bt_on_failure\s*\(',paid):raise ValueError('Existing paid failure handling requires reconciliation')
+ relays=list(re.finditer(r'(?m)^[ \t]*(?:if\s*\(\s*!\s*)?t_relay\s*\(\s*\)',paid))
+ if len(relays)!=1:raise ValueError('Unrecognized paid relay')
  identity='''    remove_hf("P-Asserted-Identity");
     remove_hf("P-Preferred-Identity");
     remove_hf("Remote-Party-ID");
     append_hf("P-Asserted-Identity: <$var(paid_from)>\\r\\n");
 '''
  if 'P-Asserted-Identity' not in paid:
-  timeout='    $avp(olamide_timeout) = $var(paid_seconds);'
-  if paid.count(timeout)!=1:raise ValueError('Unknown caller identity placement')
-  paid=paid.replace(timeout,identity+timeout)
+  timeouts=list(re.finditer(r'(?m)^[ \t]*\$avp\(olamide_timeout\)\s*=\s*\$var\(paid_seconds\)\s*;',paid))
+  if len(timeouts)!=1:raise ValueError('Unknown caller identity placement')
+  offset=timeouts[0].start();paid=paid[:offset]+identity+paid[offset:]
  elif not all(v in paid for v in ['remove_hf("P-Asserted-Identity")','remove_hf("P-Preferred-Identity")','remove_hf("Remote-Party-ID")','P-Asserted-Identity: <$var(paid_from)>']):raise ValueError('Unknown existing caller identity handling')
- paid=paid.replace('route[OLAMIDE_PAID_CALL] {','route[OLAMIDE_PAID_CALL] {\n    $avp(fr_auth_user) = $null;\n    $avp(fr_auth_pass) = $null;')
- paid=paid.replace(anchor,'    t_on_failure("OLAMIDE_FLOWROUTE_AUTH");\n'+anchor);text=text[:a]+paid+text[b:]
+ paid=re.sub(r'(route\s*\[\s*OLAMIDE_PAID_CALL\s*\]\s*\{)',lambda m:m[0]+'\n    $avp(fr_auth_user) = $null;\n    $avp(fr_auth_pass) = $null;',paid,count=1)
+ relay=list(re.finditer(r'(?m)^[ \t]*(?:if\s*\(\s*!\s*)?t_relay\s*\(\s*\)',paid))[0]
+ paid=paid[:relay.start()]+'    t_on_failure("OLAMIDE_FLOWROUTE_AUTH");\n'+paid[relay.start():]
+ text=text[:a]+paid+text[b:]
  pos=text.index('request_route')
  params=MARKER+'\nmodparam("uac","auth_username_avp","$avp(fr_auth_user)")\nmodparam("uac","auth_password_avp","$avp(fr_auth_pass)")\nmodparam("uac","auth_realm_avp","$avp(fr_auth_realm)")\n'
  text=text[:pos]+params+text[pos:]

@@ -20,3 +20,20 @@ class Tests(unittest.TestCase):
  def test_uncommissioned_config_rejected(self):
   with self.assertRaises(ValueError):patch('request_route {}')
 if __name__=='__main__':unittest.main()
+
+class RelayVariants(unittest.TestCase):
+ def test_existing_reply_handler_is_preserved(self):
+  source=paid(SOURCE,'ab'*32)+ROUTE
+  source=source.replace('t_on_reply("MEDIA_REPLY");','t_on_reply ( "LOCAL_MEDIA" );').replace('if (!t_relay()) {','if ( ! t_relay ( ) ) {')
+  result=patch(source)
+  self.assertIn('t_on_reply ( "LOCAL_MEDIA" );',result)
+  self.assertLess(result.index('t_on_failure("OLAMIDE_FLOWROUTE_AUTH");'),result.index('if ( ! t_relay ( ) )'))
+ def test_no_reply_handler_is_required(self):
+  source=(paid(SOURCE,'ab'*32)+ROUTE).replace('    t_on_reply("MEDIA_REPLY");\n','')
+  self.assertIn('t_on_failure("OLAMIDE_FLOWROUTE_AUTH");',patch(source))
+ def test_spaced_existing_failure_handler_is_rejected(self):
+  source=(paid(SOURCE,'ab'*32)+ROUTE).replace('t_on_reply("MEDIA_REPLY");','t_on_failure ("CUSTOM");')
+  with self.assertRaises(ValueError):patch(source)
+ def test_multiple_relays_are_rejected(self):
+  source=(paid(SOURCE,'ab'*32)+ROUTE).replace('    t_on_reply("MEDIA_REPLY");','    t_relay();')
+  with self.assertRaises(ValueError):patch(source)
