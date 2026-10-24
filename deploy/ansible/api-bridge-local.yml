@@ -1,0 +1,77 @@
+---
+- name: Install scoped application API bridge and super-admin key controls
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Preserve sources and images, integrate, test and deploy
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd /opt/olamide/repo
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        git fetch origin main </dev/null
+        release=52797948e97ab0de536b2da856c2e32b547fb13c
+        git merge-base --is-ancestor "$release" origin/main
+        for f in services/api/server.js services/api/hostedAccounts.js apps/web/src/adminWorkspaceUi.js; do test -f "$f" || { echo "Existing platform integration required: $f"; exit 1; }; done
+        backup="/opt/olamide/backups/api-bridge-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup"
+        files=(services/api/server.js services/api/hostedAccounts.js services/api/apiBridge.js services/api/apiBridge.test.js apps/web/src/adminWorkspaceUi.js apps/web/src/apiBridgeUi.js apps/web/src/apiBridgeUi.test.js)
+        for f in "${files[@]}"; do mkdir -p "$backup/source/$(dirname "$f")"; if test -f "$f"; then cp -p "$f" "$backup/source/$f"; fi; done
+        cd deployment/docker
+        docker compose config --quiet
+        suffix=$(date +%s)-$$
+        for svc in api web; do
+          cid=$(docker compose ps -q "$svc")
+          test -n "$cid"
+          image=$(docker inspect "$cid" | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["Image"])')
+          docker tag "$image" "olamide-$svc:before-api-bridge-$suffix"
+        done
+        printf 'services:\n  api:\n    image: olamide-api:before-api-bridge-%s\n  web:\n    image: olamide-web:before-api-bridge-%s\n' "$suffix" "$suffix" > "$backup/rollback.yml"
+        docker compose -f compose.yml -f "$backup/rollback.yml" config --quiet
+        cd ../..
+        runtime_changed=false
+        recover() {
+          trap - ERR
+          for f in "${files[@]}"; do if test -f "$backup/source/$f"; then cp -p "$backup/source/$f" "/opt/olamide/repo/$f"; else rm -f "/opt/olamide/repo/$f"; fi; done
+          if [[ "$runtime_changed" == true ]]; then
+            cd /opt/olamide/repo/deployment/docker
+            docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps api web </dev/null || true
+          fi
+          echo "API bridge deployment stopped. Previous sources/images restored where necessary; additive schema retained. Backup: $backup"
+          exit 1
+        }
+        trap recover ERR
+        for f in services/api/apiBridge.js services/api/apiBridge.test.js apps/web/src/apiBridgeUi.js apps/web/src/apiBridgeUi.test.js; do git show "$release:$f" > "$f"; done
+        git show "$release:tools/install-api-bridge.py" > "$backup/install.py"
+        python3 "$backup/install.py"
+        cd deployment/docker
+        docker compose build api </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --test /app/apiBridge.test.js </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --check /app/server.js </dev/null
+        docker compose run --rm --no-deps -T --entrypoint node api --input-type=module <<'JS'
+        import {createDatabase} from './db.js';
+        import {migrateApiBridge} from './apiBridge.js';
+        const db=createDatabase(process.env.MYSQL_URL);
+        try {await migrateApiBridge(db);await db.query('SELECT id,token_hash,instance_id,expires_ms FROM api_bridge_keys LIMIT 0');console.log('API bridge schema verified. No key was created.');}finally{await db.end();}
+        JS
+        cd ../..
+        docker build -f deployment/docker/web.Dockerfile --target build -t olamide-api-bridge-ui-check . </dev/null
+        docker run --rm --entrypoint node olamide-api-bridge-ui-check --test /app/src/apiBridgeUi.test.js </dev/null
+        cd deployment/docker
+        docker compose build web </dev/null
+        runtime_changed=true
+        docker compose up -d --no-deps api web </dev/null
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        code=$(curl -sS --max-time 10 -o "$backup/unauthorized.json" -w '%{http_code}' https://sip.dobhrap.com/api/bridge/v1/status)
+        test "$code" = 401
+        trap - ERR
+        echo "API bridge installed: Administration > System Settings > API bridge & application keys. Create a scoped key and use Test connection. Status and instance-bound internal account provisioning supported; no paid service activated. Backup: $backup"
+      args:
+        executable: /bin/bash
+      register: bridge_result
+    - name: Show installation result
+      ansible.builtin.debug:
+        msg: "{{ bridge_result.stdout_lines[-5:] }}"
