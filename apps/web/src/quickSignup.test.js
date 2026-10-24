@@ -41,3 +41,12 @@ test('waiting screen displays signup conflict and stops polling',async()=>{
  assert.equal(box.querySelector('[data-instructions]').hidden,true);
  assert.equal(dom.window.sessionStorage.getItem('olamide-quick-signup'),null);dom.window.close();
 });
+test('separate signup buttons switch forms without submitting or clearing an SMS challenge',async()=>{
+ const dom=page(),document=dom.window.document;
+ setupQuickSignup({document,get:async()=>({captchaId:'id',image:'data:image/png;base64,a'}),request:async()=>{throw Error('No submission expected');},getUserId:()=>null});
+ const nav=document.querySelector('nav[aria-label="Signup method"]'),box=document.getElementById('quick-signup-panel'),standard=document.getElementById('signup');
+ assert.equal(box.hidden,true);assert.equal(standard.hidden,false);
+ nav.querySelector('[data-quick]').click();assert.equal(box.hidden,false);assert.equal(standard.hidden,true);assert.equal(nav.querySelector('[data-quick]').getAttribute('aria-pressed'),'true');
+ nav.querySelector('[data-standard]').click();assert.equal(box.hidden,true);assert.equal(standard.hidden,false);
+ assert.equal(nav.querySelector('[data-standard]').getAttribute('aria-pressed'),'true');dom.window.close();
+});

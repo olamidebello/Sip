@@ -12,7 +12,13 @@ export function setupQuickSignup({document,get,request,getUserId}){
  <button type="button" data-captcha>New CAPTCHA</button><label>CAPTCHA digits<input name="captchaAnswer" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required></label>
  <button type="submit">Get my SMS signup code</button></form>
  <section hidden data-instructions><p>Text this exact message to <strong data-number></strong> within ten minutes:</p><p><strong data-message></strong></p><a data-sms>Open SMS app</a><p>Keep this page open. Your carrier may charge for the text. No outbound verification SMS is needed.</p><button type="button" data-check>Check verification</button></section><p role="status" aria-live="polite"></p>`;
- signup.before(box);
+ box.id='quick-signup-panel';box.hidden=true;
+ const choices=document.createElement('nav');choices.setAttribute('aria-label','Signup method');
+ choices.innerHTML='<button type="button" data-standard aria-controls="signup" aria-pressed="true">Sign up</button> <button type="button" data-quick aria-controls="quick-signup-panel" aria-pressed="false">Quick signup by SMS</button>';
+ signup.before(choices,box);
+ function choose(quick){signup.hidden=quick;box.hidden=!quick;box.open=quick;choices.querySelector('[data-standard]').setAttribute('aria-pressed',String(!quick));choices.querySelector('[data-quick]').setAttribute('aria-pressed',String(quick));if(quick&&!pending&&!form.elements.captchaId.value)void captcha();}
+ choices.querySelector('[data-standard]').onclick=()=>choose(false);
+ choices.querySelector('[data-quick]').onclick=()=>choose(true);
  const form=box.querySelector('form'),notice=box.querySelector('[role=status]'),instructions=box.querySelector('[data-instructions]');
  let pending=null,poll=null,checking=false,generation=0;
  function clear(){pending=null;clearInterval(poll);poll=null;try{document.defaultView.sessionStorage.removeItem('olamide-quick-signup');}catch{}}
@@ -20,7 +26,7 @@ export function setupQuickSignup({document,get,request,getUserId}){
  async function captcha(){const n=++generation,b=box.querySelector('[data-captcha]');b.disabled=true;form.elements.captchaId.value='';form.elements.captchaAnswer.value='';try{const c=await get('/api/register/captcha');if(n!==generation)return;form.elements.captchaId.value=c.captchaId;box.querySelector('img').src=c.image;}catch(e){notice.textContent=e.message;}finally{if(n===generation)b.disabled=false;}}
  box.querySelector('[data-captcha]').onclick=captcha;
  box.addEventListener('toggle',()=>{if(box.open&&!pending&&!form.elements.captchaId.value)void captcha();});
- function display(){instructions.hidden=false;form.hidden=true;box.open=true;box.querySelector('[data-number]').textContent=pending.number;box.querySelector('[data-message]').textContent=pending.message;box.querySelector('[data-sms]').href=`sms:${pending.number}?body=${encodeURIComponent(pending.message)}`;clearInterval(poll);poll=setInterval(()=>void check(),8000);}
+ function display(){choose(true);instructions.hidden=false;form.hidden=true;box.open=true;box.querySelector('[data-number]').textContent=pending.number;box.querySelector('[data-message]').textContent=pending.message;box.querySelector('[data-sms]').href=`sms:${pending.number}?body=${encodeURIComponent(pending.message)}`;clearInterval(poll);poll=setInterval(()=>void check(),8000);}
  async function check(){
   if(!pending||checking)return;
   if(Date.now()>=pending.expires){clear();form.hidden=false;instructions.hidden=true;notice.textContent='Code expired. Start again.';void captcha();return;}
