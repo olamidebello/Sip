@@ -1,0 +1,98 @@
+---
+- name: Provision automatic Flowroute SIP registration using saved GUI credentials
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read saved Flowroute SIP credentials privately
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - exec
+          - '-T'
+          - api
+          - node
+          - '--input-type=module'
+          - '-e'
+          - |
+            import {createDatabase} from './db.js';
+            import {flowrouteTrunk,flowrouteHosts} from './flowrouteTrunk.js';
+            const db=createDatabase(process.env.MYSQL_URL);
+            try {
+              const rows=(await db.query("SELECT tenant_id FROM provider_api_credentials WHERE provider='flowroute_sip' AND enabled=TRUE")).rows;
+              if(rows.length!==1)throw Error('Exactly one saved tenant configuration required');
+              const c=await flowrouteTrunk(db,rows[0].tenant_id);
+              if(!c?.sipPassword||!c.sipUsername)throw Error('Save SIP username and password in the Super Admin GUI first');
+              console.log(JSON.stringify({host:flowrouteHosts[c.pop],username:c.sipUsername,password:c.sipPassword,publicIp:c.publicIp}));
+            } catch {console.error('Saved SIP credentials unavailable or tenant ambiguous.');process.exitCode=1;}
+            finally {await db.end();}
+        chdir: /opt/olamide/repo/deployment/docker
+      register: private_sip_registration
+      changed_when: false
+      no_log: true
+    - name: Create protected registration directory
+      ansible.builtin.file:
+        path: /etc/olamide
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+    - name: Store registration credentials privately
+      ansible.builtin.copy:
+        dest: /etc/olamide/flowroute-registration.json
+        content: '{{ private_sip_registration.stdout }}'
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+    - name: Install registration worker
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../../services/flowroute-registration/register.py'
+        dest: /usr/local/sbin/olamide-flowroute-register
+        owner: root
+        group: root
+        mode: '0700'
+    - name: Install registration service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/olamide-flowroute-registration.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Renew Flowroute SIP registration
+          After=network-online.target
+          Wants=network-online.target
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/bin/python3 /usr/local/sbin/olamide-flowroute-register /etc/olamide/flowroute-registration.json
+          UMask=0077
+          NoNewPrivileges=true
+          PrivateTmp=true
+          ProtectSystem=strict
+          ProtectHome=true
+    - name: Install registration renewal timer
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/olamide-flowroute-registration.timer
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Renew Flowroute registration every two minutes
+          [Timer]
+          OnBootSec=30s
+          OnUnitActiveSec=120s
+          Unit=olamide-flowroute-registration.service
+          [Install]
+          WantedBy=timers.target
+    - name: Start periodic registration renewal
+      ansible.builtin.systemd:
+        name: olamide-flowroute-registration.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+    - name: Register with the carrier and require acknowledgement
+      ansible.builtin.command:
+        argv: [systemctl, start, olamide-flowroute-registration.service]
+      changed_when: true
+    - name: Report registration result
+      ansible.builtin.debug:
+        msg: Flowroute acknowledged SIP registration. Renewal runs every two minutes. This registers the saved username and password with a Contact at the configured public IP port 5060; it does not enable password-authenticated outbound Kamailio routing. After changing credentials in the GUI rerun this playbook to synchronize the registration service.
