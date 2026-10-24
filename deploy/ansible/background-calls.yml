@@ -1,0 +1,82 @@
+---
+- name: Install background-call lifecycle and user readiness controls
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Create private background call rollback directory
+      ansible.builtin.tempfile:
+        state: directory
+        path: /opt/olamide/backups
+        prefix: background-calls-
+      register: phone_backup
+    - name: Back up, stage, validate and deploy background-call controls
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        exec 9>/run/olamide-update.lock
+        flock -n 9
+        backup='{{ phone_backup.path }}'
+        controller='{{ playbook_dir }}/../..'
+        exec > "$backup/deploy.log" 2>&1
+        cd /opt/olamide/repo
+        python3 - "$backup" <<'PY'
+        from pathlib import Path
+        import sys,json,shutil
+        root=Path('/opt/olamide/repo');b=Path(sys.argv[1]);names=['apps/web/src/'+n for n in ['main.js','nativePushClient.js','nativePushClient.test.js','backgroundCalls.js','backgroundCalls.test.js']]
+        manifest={}
+        for name in names:
+            p=root/name
+            if p.is_symlink():raise SystemExit('Symlinked integration file refused')
+            manifest[name]=p.exists()
+            if p.exists():
+                target=b/'source'/name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,target)
+        (b/'manifest.json').write_text(json.dumps(manifest))
+        PY
+        cd deployment/docker
+        for svc in web; do
+          container=$(docker compose ps -q "$svc")
+          test -n "$container"
+          image=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$container")
+          docker tag "$image" "olamide-$svc:phone-rollback-$(basename "$backup")"
+        done
+        printf 'services:\n  web:\n    image: olamide-web:phone-rollback-%s\n' "$(basename "$backup")" > "$backup/rollback.yml"
+        promoted=0
+        restore() {
+          trap - ERR
+          python3 - "$backup" <<'PY'
+        import json,pathlib,shutil,sys
+        b=pathlib.Path(sys.argv[1]);root=pathlib.Path('/opt/olamide/repo')
+        for name,exists in json.loads((b/'manifest.json').read_text()).items():
+            if exists:shutil.copy2(b/'source'/name,root/name)
+            else:(root/name).unlink(missing_ok=True)
+        PY
+          if test "$promoted" = 1; then
+            docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps web || true
+          fi
+          exit 1
+        }
+        trap restore ERR
+        python3 "$controller/tools/install_background_calls.py" /opt/olamide/repo
+        for name in backgroundCalls.js backgroundCalls.test.js nativePushClient.js nativePushClient.test.js; do install -m 0644 "$controller/apps/web/src/$name" "/opt/olamide/repo/apps/web/src/$name"; done
+        docker compose build web
+        promoted=1
+        docker compose up -d --no-deps web
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 2 https://sip.dobhrap.com/api/health
+        trap - ERR
+      args:
+        executable: /bin/bash
+      no_log: true
+      changed_when: true
+    - name: Read server push readiness without exposing credentials
+      ansible.builtin.command:
+        argv: [docker, compose, exec, '-T', api, node, '-e', "const fs=require('fs'); const p=process.env.NATIVE_PUSH_SERVICE_ACCOUNT_FILE; console.log('BACKGROUND_CALLS firebase_file_configured='+Boolean(p&&fs.existsSync(p))); console.log('BACKGROUND_CALLS push_hook_token_configured='+Boolean(process.env.NATIVE_PUSH_HOOK_TOKEN));"]
+        chdir: /opt/olamide/repo/deployment/docker
+      register: push_readiness
+      changed_when: false
+    - name: Show server push prerequisites
+      ansible.builtin.debug:
+        var: push_readiness.stdout_lines
+    - name: Report background calling requirements
+      ansible.builtin.debug:
+        msg: 'Account > Background incoming calls installed. Native changes require a rebuilt APK with OLAMIDE_FIREBASE_ANDROID_JSON configured in GitHub and matching server Firebase credentials. Android permissions and a real background call test are still required. Backup/private log: {{ phone_backup.path }}'

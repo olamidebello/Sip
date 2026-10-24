@@ -23,6 +23,19 @@ jobs:
       - name: Generate existing Android app
         working-directory: apps/mobile
         run: npm install --no-audit --no-fund && npx cap add android && npx cap sync android && bash install-carrier-native.sh && python3 install-vpn-native.py
+      - name: Install native background-call notifications when Firebase is configured
+        env:
+          FIREBASE_ANDROID_CONFIG: ${{ secrets.OLAMIDE_FIREBASE_ANDROID_JSON }}
+        run: |
+          if [ -n "$FIREBASE_ANDROID_CONFIG" ]; then
+            umask 077
+            config="$RUNNER_TEMP/olamide-firebase-android.json"
+            printf '%s' "$FIREBASE_ANDROID_CONFIG" > "$config"
+            python3 apps/mobile/install-native-push.py --google-services "$config"
+            rm -f "$config"
+          else
+            echo '::warning::Background incoming-call notifications are unavailable: configure OLAMIDE_FIREBASE_ANDROID_JSON and server Firebase credentials.'
+          fi
       - name: Configure current Play SDK and unique version
         env:
           OLAMIDE_ANDROID_VERSION_CODE: ${{ github.run_number }}
