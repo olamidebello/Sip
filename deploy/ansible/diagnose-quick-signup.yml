@@ -1,0 +1,22 @@
+---
+- name: Diagnose SMS signup without changing accounts or messages
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read private signup and authenticated carrier event summaries
+      ansible.builtin.command:
+        argv: [docker, compose, exec, -T, api, node, --input-type=module]
+        chdir: /opt/olamide/repo/deployment/docker
+        stdin: "{{ lookup('ansible.builtin.file', playbook_dir + '/../../tools/diagnose-quick-signup.mjs') }}"
+      register: signup_diagnostic
+      changed_when: false
+      failed_when: false
+      no_log: true
+    - name: Show aggregate diagnostic results only
+      ansible.builtin.debug:
+        msg: "{{ signup_diagnostic.stdout_lines | default([]) | select('match', '^SIP_SIGNUP_CHECK [a-z_]+=(true|false|[0-9]+|ER_NO_SUCH_TABLE|ER_BAD_FIELD_ERROR|ER_ACCESS_DENIED_ERROR|ECONNREFUSED|UNCLASSIFIED)$') | list }}"
+    - name: Report whether diagnostics executed
+      ansible.builtin.assert:
+        that: signup_diagnostic.rc == 0
+        fail_msg: Read-only diagnostics could not finish. No accounts or configuration were changed.
