@@ -1,3 +1,4 @@
+// API_BRIDGE_KEYS_V1
 // Narrow service bridge: deterministic external identities, never email-based account takeover.
 import {randomUUID,randomBytes,createHash,timingSafeEqual} from 'node:crypto';
 import {hashPassword} from './security.js';
@@ -14,10 +15,11 @@ export function validateHostedAccount(b){
  if(b.kind==='personal'&&b.role!=='user')throw Error('Personal accounts cannot administer a PBX');
  return {...b,owner:String(b.owner),tenant:String(b.tenant),email:b.email.toLowerCase()};
 }
-export async function handleHostedAccounts({req,res,pool,send,readJson}){
- if(!bridgeAuthorized(req))return send(res,401,{error:'Service bridge authorization required'});
+export async function handleHostedAccounts({req,res,pool,send,readJson,bridgePrincipal}){
+ if(!bridgePrincipal&&!bridgeAuthorized(req))return send(res,401,{error:'Service bridge authorization required'});
  if(req.method!=='POST')return send(res,405,{error:'POST required'});
  let b;try{b=validateHostedAccount(await readJson(req,8192));}catch{return send(res,400,{error:'Invalid hosted account request'});}
+ if(bridgePrincipal&&b.instance!==bridgePrincipal.instance)return send(res,403,{error:'API key instance does not match the request'});
  const db=await pool.connect();let lock=false,userId,tenantId;
  const lockName='ha:'+createHash('sha256').update(b.instance).digest('hex').slice(0,40);
  try{
@@ -60,3 +62,4 @@ export async function handleHostedAccounts({req,res,pool,send,readJson}){
  const account=(await pool.query("SELECT u.status AS user_status,a.username,a.domain,a.status,d.number AS extension FROM users u JOIN sip_accounts a ON a.user_id=u.id LEFT JOIN pbx_extensions e ON e.user_id=u.id AND e.tenant_id=u.tenant_id LEFT JOIN pbx_destinations d ON d.id=e.destination_id WHERE u.id=$1 AND u.tenant_id=$2",[userId,tenantId])).rows[0];
  return send(res,200,{accountId:userId,tenantId,kind:b.kind,login:b.email,portal:'https://sip.dobhrap.com/',state:account?.user_status==='active'?account.status:'suspended',sipUri:account?'sip:'+account.username+'@'+account.domain:null,extension:account?.extension||null,externalCallsEnabled:false,note:'Internal SIP account; PSTN, DIDs, paid plans and PBX routing require separate activation.'});
 }
+

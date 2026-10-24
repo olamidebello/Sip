@@ -1,3 +1,5 @@
+import {migrateApiBridge,handleApiBridge} from './apiBridge.js';
+// API_BRIDGE_KEYS_V1
 import {handleHostedAccounts} from './hostedAccounts.js';
 import {migrateHostedApps,handleHostedApps,hostedApp} from './hostedApps.js';
 import {migrateJustisolveBridge,handleJustisolveBridge,redeemJustisolveTicket,startJustisolveLeaseSweep} from './justisolveBridge.js';
@@ -176,6 +178,7 @@ async function featuresFor(user) {
 }
 async function handler(req, res) {
   const path = new URL(req.url, origin).pathname;
+  const keyedBridge=path==='/api/bridge/v1/status'||path==='/api/bridge/v1/accounts';
   const hostedBridge=path==='/api/integrations/hosted-account';
   const hostedIntegration=path==='/api/integrations/hosted-apps/provision'&&!!hostedApp(req);
   const justisolveRunner=path.startsWith('/api/integrations/justisolve/');
@@ -190,11 +193,11 @@ async function handler(req, res) {
   const switchXml = path === "/api/switch/xml";
   const deployRunner = path.startsWith('/api/integrations/deployment/');
   const kamailioRunner=path.startsWith('/api/integrations/kamailio/');
-  if (req.method !== "GET" && !hostedBridge && !hostedIntegration && !justisolveRunner && !nativePushHook && !deployRunner && !kamailioRunner && !switchXml && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
+  if (req.method !== "GET" && !keyedBridge && !hostedBridge && !hostedIntegration && !justisolveRunner && !nativePushHook && !deployRunner && !kamailioRunner && !switchXml && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
     return send(res, 403, { error: "Invalid origin" });
   try {
     if(req.method!=='GET'||path==='/api/register/captcha'){
-      const external=!!(hostedBridge||hostedIntegration||justisolveRunner||nativePushHook||deployRunner||kamailioRunner||switchXml||cdrIngest||flowrouteWebhook||stripeWebhook||providerWebhook||didwwWebhook);
+      const external=!!(keyedBridge||hostedBridge||hostedIntegration||justisolveRunner||nativePushHook||deployRunner||kamailioRunner||switchXml||cdrIngest||flowrouteWebhook||stripeWebhook||providerWebhook||didwwWebhook);
       const client=await proxyClient(req);
       const edge=requestLimiter.check('edge:'+client,600);
       if(!edge.allowed)return send(res,429,{error:'Too many requests',retryAfter:edge.retryAfter},{'Retry-After':String(edge.retryAfter)});
@@ -203,6 +206,7 @@ async function handler(req, res) {
       const limited=requestLimiter.check(rule.key,rule.maximum);
       if(!limited.allowed)return send(res,429,{error:'Too many requests',retryAfter:limited.retryAfter},{'Retry-After':String(limited.retryAfter)});
     }
+    if(keyedBridge||path.startsWith('/api/admin/api-bridge/'))return await handleApiBridge({req,res,path,pool,send,readJson,user:keyedBridge?null:await currentUser(req)});
     if(hostedBridge)return await handleHostedAccounts({req,res,pool,send,readJson});
     if(path==='/api/integrations/hosted-apps/provision')return await handleHostedApps({req,res,pool,send,readJson});
     if(path==='/api/justisolve/redeem')return await redeemJustisolveTicket({req,res,pool,readJson,send,origin,sessionCookie});
@@ -860,6 +864,7 @@ async function handler(req, res) {
 
 await migrate(pool);
 await migrateHostedApps(pool);
+await migrateApiBridge(pool);
 await migratePstnBilling(pool);
 await migrateJustisolveBridge(pool);
 const kamailioHttpBridge=startKamailioHttpBridge(pool);
@@ -891,5 +896,6 @@ server.on("close",stopStoreRenewals);
 meetingSignaling = attachMeetingSignaling(server, { pool, origin, currentUser });
 server.listen(port, address, () =>
   console.log(`Account API listening on ${address}:${port}`));
+
 
 
