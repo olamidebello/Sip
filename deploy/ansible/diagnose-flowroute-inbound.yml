@@ -4,18 +4,6 @@
   become: true
   gather_facts: false
   tasks:
-    - name: Read DID assignments and SIP provisioning state privately
-      ansible.builtin.command:
-        argv: [docker, compose, exec, '-T', api, node, '--input-type=module']
-        chdir: /opt/olamide/repo/deployment/docker
-        stdin: "{{ lookup('ansible.builtin.file', playbook_dir + '/../../tools/diagnose-flowroute-inbound.mjs') }}"
-      register: inbound_summary
-      changed_when: false
-      failed_when: false
-      no_log: true
-    - name: Show safe DID delivery checks
-      ansible.builtin.debug:
-        msg: "{{ inbound_summary.stdout_lines | default([]) | select('match', '^SIP_INBOUND_CHECK [a-z_]+=[A-Za-z0-9_]+$') | list }}"
     - name: Inspect inbound switch route structure
       ansible.builtin.command:
         argv:
@@ -36,3 +24,15 @@
     - name: Show ingress checks
       ansible.builtin.debug:
         msg: '{{ ingress_structure.stdout_lines }}'
+    - name: Read DID assignments and SIP provisioning state privately
+      ansible.builtin.command:
+        argv: [docker, compose, exec, '-T', api, node, '--input-type=module']
+        chdir: /opt/olamide/repo/deployment/docker
+        stdin: "{{ lookup('ansible.builtin.file', playbook_dir + '/../../tools/diagnose-flowroute-inbound.mjs') }}"
+      register: inbound_summary
+      changed_when: false
+      failed_when: false
+      no_log: true
+    - name: Show safe DID delivery checks
+      ansible.builtin.debug:
+        msg: "{{ inbound_summary.stdout_lines | default([]) | select('match', '^SIP_INBOUND_CHECK [a-z_]+=[A-Za-z0-9_]+$') | list }}"

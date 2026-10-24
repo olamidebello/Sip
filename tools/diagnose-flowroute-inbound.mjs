@@ -9,11 +9,15 @@ try{
  UNION SELECT number_e164 FROM did_shop_orders WHERE tenant_id=$1
  UNION SELECT q.number_e164 FROM did_quotes q JOIN users u ON u.id=q.user_id WHERE u.tenant_id=$1 AND q.provider='flowroute' AND q.status='fulfilled' LIMIT 200`,[tenant])).rows;
  const numbers=[...new Set(rows.map(r=>'+'+String(r.number_e164).replace(/^\+/,'')))];emit('known_numbers',numbers.length);
+ let unassigned=0,assigned=0;
  for(const number of numbers){
-  emit('did_suffix',number.slice(-4));const owner=await lookupInboundDidOwner(db,tenant,number);
-  emit('unique_active_owner',!!owner);if(!owner)continue;
+  const owner=await lookupInboundDidOwner(db,tenant,number);
+  if(!owner){unassigned++;continue;}
+  assigned++;if(assigned>10)continue;
+  emit('did_suffix',number.slice(-4));emit('unique_active_owner',true);
   const sip=(await db.query('SELECT status FROM sip_accounts WHERE user_id=$1',[owner.user_id])).rows;
   emit('sip_accounts',sip.length);
   if(sip.length===1)emit('sip_state',['active','pending','error','disabled','provisioned'].includes(sip[0].status)?sip[0].status:'unknown');
  }
+ emit('assigned_numbers',assigned);emit('unassigned_or_unavailable',unassigned);emit('inventory_limit_reached',rows.length===200);
 }catch(e){emit('diagnostic',['ER_NO_SUCH_TABLE','ER_BAD_FIELD_ERROR'].includes(e.code)?e.code:'failed');process.exitCode=1;}finally{await db.end();}
