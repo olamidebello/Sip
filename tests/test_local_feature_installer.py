@@ -26,6 +26,29 @@ class FeatureInstaller(unittest.TestCase):
    contents={p:p.read_bytes() for p in path.rglob('*') if p.is_file()}
    r=self.run_installer(path);self.assertEqual(r.returncode,0,r.stderr)
    self.assertEqual(contents,{p:p.read_bytes() for p in path.rglob('*') if p.is_file()})
+ def test_absent_report_modules_are_added_and_repeatable(self):
+  with tempfile.TemporaryDirectory() as t:
+   path=Path(t)/'stage';self.fixture(path)
+   for name in MODULE.OPTIONAL_REPORTS:(path/name).unlink()
+   r=self.run_installer(path);self.assertEqual(r.returncode,0,r.stderr)
+   manifest=json.loads((path.parent/'manifest.json').read_text())
+   for name in MODULE.OPTIONAL_REPORTS:
+    self.assertEqual((path/name).read_text(),(ROOT/name).read_text())
+    entry=next(e for e in manifest['files'] if e['path']==name)
+    self.assertFalse(entry['existed']);self.assertIsNone(entry['before_sha256'])
+   r=self.run_installer(path);self.assertEqual(r.returncode,0,r.stderr)
+ def test_report_symlink_is_rejected_without_writes(self):
+  for dangling in (False,True):
+   with tempfile.TemporaryDirectory() as t:
+    path=Path(t)/'stage';self.fixture(path)
+    p=path/'services/api/locationReports.js';p.unlink()
+    outside=Path(t)/'outside.js'
+    if not dangling:outside.write_text('private integration')
+    p.symlink_to(outside)
+    before={p:p.read_bytes() for p in path.rglob('*') if p.is_file()}
+    r=self.run_installer(path);self.assertNotEqual(r.returncode,0)
+    self.assertIn('Missing or symlinked integration file',r.stderr)
+    self.assertEqual(before,{p:p.read_bytes() for p in path.rglob('*') if p.is_file()})
  def test_routed_inbound_sms_guard_is_retained_and_verification_is_not_nested(self):
   with tempfile.TemporaryDirectory() as t:
    path=Path(t)/'stage';self.fixture(path)

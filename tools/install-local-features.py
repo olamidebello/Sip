@@ -22,6 +22,10 @@ SHARED = ['services/api/onboarding.js','services/api/messagingWebhooks.js','serv
  'apps/web/src/main.js','apps/web/src/adminNavigation.js',
  'services/api/locationReports.js','apps/web/src/locationReports.js']
 
+# Older installations can lack the report modules entirely. Existing modules
+# still use guarded patches; only genuinely absent regular paths are seeded.
+OPTIONAL_REPORTS = {'services/api/locationReports.js','apps/web/src/locationReports.js'}
+
 def once(text, old, new, name):
  if new in text:
   if text.count(new)!=1: raise ValueError('Duplicate integration in '+name)
@@ -34,6 +38,12 @@ def plan_changes(source, target, worker=None):
  errors=[]
  for name in SHARED:
   p=target/name
+  if name in OPTIONAL_REPORTS and not p.exists() and not p.is_symlink():
+   feature=source/name
+   if not feature.is_file() or feature.is_symlink():
+    errors.append('Feature source missing: '+name)
+   else:changes[name]=feature.read_text()
+   continue
   if not p.is_file() or p.is_symlink():
    errors.append('Missing or symlinked integration file: '+name)
    continue
