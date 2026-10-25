@@ -46,7 +46,7 @@ jobs:
           node-version: '22'
       - run: npm install --no-audit --no-fund
         working-directory: apps/desktop
-      - run: npm run dist -- --${{ matrix.platform }}
+      - run: npm run dist -- --${{ matrix.platform }} --x64 --arm64
         working-directory: apps/desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
@@ -69,6 +69,22 @@ jobs:
       - uses: android-actions/setup-android@v4
       - run: npm install --no-audit --no-fund && npx cap add android && npx cap sync android && bash install-carrier-native.sh
         working-directory: apps/mobile
+      - name: Configure Android update version and optional Firebase notifications
+        env:
+          FIREBASE_ANDROID_CONFIG: ${{ secrets.OLAMIDE_FIREBASE_ANDROID_JSON }}
+        run: |
+          export OLAMIDE_ANDROID_VERSION_CODE=$((200000 + GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT))
+          python3 apps/mobile/prepare-play-release.py
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+          if [ -n "$FIREBASE_ANDROID_CONFIG" ]; then
+            umask 077
+            config="$RUNNER_TEMP/olamide-firebase-android.json"
+            printf '%s' "$FIREBASE_ANDROID_CONFIG" > "$config"
+            python3 apps/mobile/install-native-push.py --google-services "$config"
+            rm -f "$config"
+          else
+            echo '::warning::Firebase is not configured; background incoming-call notifications are unavailable.'
+          fi
       - name: Apply original Olamide logo artwork
         run: python3 -m pip install Pillow==11.3.0 && python3 apps/mobile/generate-brand-artwork.py
       - run: ./gradlew assembleDebug
