@@ -33,6 +33,28 @@ def compile_config(rows,pins):
     for context,boxes in sorted(contexts.items()):vm+=['',f'[{context}]',*sorted(boxes)]
     return '\n'.join(vm)+'\n','\n'.join(extensions)+'\n'
 
+def ensure_default_greetings(rows,sound,spool,uid,gid):
+    if not sound.is_file():raise RuntimeError('Default unavailable greeting is missing')
+    audio=sound.read_bytes()
+    if not audio.startswith(b'RIFF') or audio[8:12]!=b'WAVE':raise ValueError('Invalid default greeting audio')
+    for row in rows:
+        if not row['enabled']:continue
+        box=row['mailbox_id'];tenant=row['tenant_id']
+        if not UUID.fullmatch(box) or not UUID.fullmatch(tenant):raise ValueError('Invalid greeting identity')
+        tenant_folder=spool/('tenant-'+tenant)
+        tenant_folder.mkdir(parents=True,exist_ok=True,mode=0o770)
+        if tenant_folder.resolve()!=tenant_folder.absolute():raise ValueError('Symlinked tenant mailbox path refused')
+        tenant_folder.chmod(0o770);os.chown(tenant_folder,uid,gid)
+        folder=tenant_folder/box
+        folder.mkdir(exist_ok=True,mode=0o770)
+        if folder.resolve()!=folder.absolute():raise ValueError('Symlinked mailbox path refused')
+        folder.chmod(0o770);os.chown(folder,uid,gid)
+        # Exclusive creation preserves personal recordings and existing message files.
+        try:
+            with (folder/'unavail.wav').open('xb') as out:out.write(audio)
+        except FileExistsError:continue
+        (folder/'unavail.wav').chmod(0o640);os.chown(folder/'unavail.wav',uid,gid)
+
 def atomic(path,content,mode=0o640,gid=None):
     p=path.with_name(path.name+'.new');p.write_text(content);p.chmod(mode)
     if gid is not None:os.chown(p,0,gid)
@@ -45,6 +67,9 @@ def main():
         rows=json.loads(run(COMPOSE))
         pinfile=STATE/'pins.json';pins=json.loads(pinfile.read_text()) if pinfile.exists() else {}
         vm,ext=compile_config(rows,pins);gid=grp.getgrnam('olamidevm').gr_gid
+        import pwd
+        sound=Path('/opt/olamide/asterisk-22.11.0/var/lib/asterisk/sounds/en/olamide-user-unavailable.wav')
+        if sound.is_file():ensure_default_greetings(rows,sound,STATE/'spool/voicemail',pwd.getpwnam('olamidevm').pw_uid,gid)
         atomic(pinfile,json.dumps(pins),0o600)
         digest=hashlib.sha256((vm+ext).encode()).hexdigest();stamp=STATE/'applied.sha256'
         changed=not stamp.exists() or stamp.read_text()!=digest or not (CONFIG/'voicemail.conf').exists() or not (CONFIG/'extensions.conf').exists()

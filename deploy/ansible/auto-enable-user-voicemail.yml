@@ -1,0 +1,120 @@
+---
+- name: Provision voicemail for active users and enable offline unavailable greetings
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Require the existing private voicemail recorder
+      ansible.builtin.stat:
+        path: /etc/olamide/voicemail/asterisk.conf
+      register: recorder
+    - name: Require voicemail installation before enabling mailboxes
+      ansible.builtin.assert:
+        that: recorder.stat.exists
+        fail_msg: Existing voicemail recorder is required. This play does not replace the SIP installation.
+    - name: Install local greeting generation prerequisites
+      ansible.builtin.apt:
+        name: [espeak-ng, sox]
+        state: present
+    - name: Create private voicemail enablement backup
+      ansible.builtin.tempfile:
+        state: directory
+        path: /opt/olamide/backups
+        prefix: auto-voicemail-
+      register: vm_backup
+    - name: Back up, provision and verify automatic offline voicemail
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        exec 9>/run/olamide-update.lock
+        flock -n 9
+        backup='{{ vm_backup.path }}'
+        controller='{{ playbook_dir }}/../..'
+        exec > "$backup/deploy.log" 2>&1
+        cd /opt/olamide/repo/deployment/docker
+        binary=/opt/olamide/asterisk-22.11.0/sbin/asterisk
+        config=/etc/olamide/voicemail/asterisk.conf
+        worker=/usr/local/lib/olamide-voicemail/sync.py
+        test -f "$worker"
+        test -x "$binary"
+        systemctl is-active --quiet olamide-voicemail
+        cp -p "$worker" "$backup/sync.py"
+        cp -p /etc/kamailio/kamailio.cfg "$backup/kamailio.cfg"
+        cp -p /etc/olamide/voicemail/extensions.conf "$backup/extensions.conf"
+        cp -p /etc/olamide/voicemail/voicemail.conf "$backup/voicemail.conf"
+        timer_before=$(systemctl is-active olamide-voicemail-sync.timer || true)
+        trap 'if test "$timer_before" = active; then systemctl start olamide-voicemail-sync.timer || true; fi; exit 1' ERR
+        systemctl stop olamide-voicemail-sync.timer
+        systemctl stop olamide-voicemail-sync.service
+        python3 - "$controller/services/api/voicemailExport.mjs" "$backup/provision.mjs" <<'PY'
+        from pathlib import Path
+        import sys
+        s=Path(sys.argv[1]).read_text().replace("from './db.js'","from '/app/db.js'").replace("from './voicemail.js'","from '/app/voicemail.js'")
+        Path(sys.argv[2]).write_text(s)
+        PY
+        docker compose cp "$backup/provision.mjs" api:/tmp/olamide-auto-voicemail.mjs
+        docker compose exec -T api node /tmp/olamide-auto-voicemail.mjs > "$backup/mailboxes-before.json"
+        changed=0
+        restore() {
+          trap - ERR
+          cp -p "$backup/sync.py" "$worker"
+          if test "$changed" = 1; then
+            docker compose exec -T api node /tmp/olamide-auto-voicemail.mjs --restore-enabled < "$backup/mailboxes-before.json" || true
+          fi
+          cp -p "$backup/extensions.conf" /etc/olamide/voicemail/extensions.conf
+          cp -p "$backup/voicemail.conf" /etc/olamide/voicemail/voicemail.conf
+          "$binary" -C "$config" -rx 'dialplan reload' || true
+          "$binary" -C "$config" -rx 'voicemail reload' || true
+          cp -p "$backup/kamailio.cfg" /etc/kamailio/kamailio.cfg
+          if test "${switch_promoted:-0}" = 1; then systemctl restart kamailio || true; restore_carrier || true; fi
+          if test "$timer_before" = active; then systemctl start olamide-voicemail-sync.timer || true; fi
+          exit 1
+        }
+        restore_carrier() {
+          python3 - <<'PY'
+        import json,pathlib,subprocess
+        c=json.loads(pathlib.Path('/etc/olamide/carrier-adapter.json').read_text());p=pathlib.Path(c['stateFile']);assert p.exists()
+        subprocess.run([c.get('kamcmd','/usr/sbin/kamcmd'),'-s',c['rpcSocket'],'htable.sets','olamide_carrier',c['tenantId'],p.read_text()],check=True,capture_output=True)
+        PY
+        }
+        trap restore ERR
+        python3 "$controller/tools/prepare_voicemail_forwarding.py" /etc/kamailio/kamailio.cfg "$backup/staged.cfg"
+        python3 - "$backup/staged.cfg" <<'PY'
+        import sys,re
+        from pathlib import Path
+        s=Path(sys.argv[1]).read_text()
+        for route in ['OLAMIDE_FLOWROUTE_INBOUND','OLAMIDE_DID_INBOUND','OLAMIDE_PUSH_RESUME']:
+            if not re.search(r'route\['+route+r'\]',s):raise SystemExit('Expected offline route missing')
+        if s.count('route(OLAMIDE_VOICEMAIL)')<3:raise SystemExit('Offline voicemail integration requires review')
+        PY
+        kamailio -c -f "$backup/staged.cfg"
+        espeak-ng -v en-us -s 145 -w "$backup/unavailable-source.wav" 'The user is not available. Please leave a message after the tone.'
+        sox "$backup/unavailable-source.wav" -r 8000 -c 1 -b 16 "$backup/olamide-user-unavailable.wav"
+        sounds=/opt/olamide/asterisk-22.11.0/var/lib/asterisk/sounds/en
+        install -d -m 0755 "$sounds"
+        install -m 0644 "$backup/olamide-user-unavailable.wav" "$sounds/olamide-user-unavailable.wav"
+        install -m 0755 "$controller/tools/voicemail-sync.py" "$worker"
+        changed=1
+        docker compose exec -T api node /tmp/olamide-auto-voicemail.mjs --enable-all
+        systemctl start olamide-voicemail-sync.service
+        systemctl enable --now olamide-voicemail-sync.timer
+        "$binary" -C "$config" -rx 'dialplan show olamide-voicemail' > "$backup/dialplan-check.txt"
+        grep -q 'VoiceMail(' "$backup/dialplan-check.txt"
+        cmp /etc/kamailio/kamailio.cfg "$backup/kamailio.cfg"
+        switch_promoted=0
+        if ! cmp -s "$backup/staged.cfg" /etc/kamailio/kamailio.cfg; then
+          install -o root -g kamailio -m 0640 "$backup/staged.cfg" /etc/kamailio/kamailio.cfg
+          switch_promoted=1
+          systemctl restart kamailio
+          restore_carrier
+        fi
+        systemctl is-active --quiet olamide-voicemail
+        systemctl is-active --quiet olamide-voicemail-sync.timer
+        trap - ERR
+      args:
+        executable: /bin/bash
+      changed_when: true
+      no_log: true
+    - name: Report automatic mailbox provisioning
+      ansible.builtin.debug:
+        msg: 'Voicemail enabled for existing active users. New active users are provisioned within about 30 seconds. Offline calls use the existing guarded voicemail fallback. Default greeting: The user is not available. Please leave a message after the tone. Personal greetings and saved messages retained. Dial *98 to manage a mailbox. Backup/private log: {{ vm_backup.path }}. Verify with an offline incoming call.'
