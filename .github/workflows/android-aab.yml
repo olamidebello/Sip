@@ -46,6 +46,26 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Set unique Play Store version code
+        working-directory: apps/mobile/android
+        env:
+          PLAY_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, re
+          p = Path("app/build.gradle")
+          if not p.exists():
+              p = Path("app/build.gradle.kts")
+          content = p.read_text()
+          version_code = 10000 + int(os.environ["PLAY_VERSION_CODE"])
+          updated, count = re.subn(r"\\bversionCode\\s*(?:=\\s*)?\\d+", f"versionCode {version_code}" if p.suffix != ".kts" else f"versionCode = {version_code}", content, count=1)
+          if count != 1:
+              raise SystemExit("Cannot find Android versionCode; refusing to produce a potentially non-upgradeable bundle")
+          p.write_text(updated)
+          print(f"Set versionCode to {version_code}")
+          PY
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
