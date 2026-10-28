@@ -4,23 +4,14 @@
   become: true
   gather_facts: false
   tasks:
-    - name: Require exclusive DNS routing to the existing SIP server
+    - name: Require two public DNS resolvers to agree on the SIP server
       ansible.builtin.command:
-        argv:
-          - python3
-          - '-c'
-          - |
-            import socket,sys
-            expected={'154.29.77.102'}
-            for name in ['olamideconnect.com','www.olamideconnect.com']:
-                try:addresses={r[4][0] for r in socket.getaddrinfo(name,None,socket.AF_INET)}
-                except socket.gaierror:sys.exit('DNS missing for '+name+'; set its A record to 154.29.77.102')
-                if addresses!=expected:sys.exit('DNS must point only to 154.29.77.102 for '+name+'; remove parking and extra A records')
-                try:ipv6={r[4][0] for r in socket.getaddrinfo(name,None,socket.AF_INET6)}
-                except socket.gaierror:ipv6=set()
-                if ipv6:sys.exit('Review/remove AAAA records for '+name+' before enabling this IPv4 alias')
-            print('Both alias names point exclusively to the SIP IPv4 server')
+        argv: [python3, '{{ playbook_dir }}/../../tools/check_connect_dns.py']
+      register: connect_dns
       changed_when: false
+    - name: Show public DNS and local cache comparison
+      ansible.builtin.debug:
+        var: connect_dns.stdout_lines
     - name: Create private domain rollback directory
       ansible.builtin.tempfile:
         state: directory
@@ -79,7 +70,7 @@
             curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
             phase=alias_https
             for host in olamideconnect.com www.olamideconnect.com; do
-              curl --fail --silent --show-error --head --max-time 15 --retry 12 --retry-all-errors --retry-delay 3 "https://$host/" > "$backup/$host.headers"
+              curl --fail --silent --show-error --head --max-time 15 --retry 12 --retry-all-errors --retry-delay 3 --resolve "$host:443:154.29.77.102" "https://$host/" > "$backup/$host.headers"
               grep -Eiq '^location: https://sip[.]dobhrap[.]com/' "$backup/$host.headers"
             done
             trap - ERR
