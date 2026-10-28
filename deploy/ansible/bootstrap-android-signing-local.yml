@@ -72,17 +72,17 @@
       register: signing
       no_log: true
     - name: Verify signing secret names (never display values)
-      ansible.builtin.command: gh secret list --repo {{ repo }} --json name --jq '.[].name'
+      ansible.builtin.command: gh secret list --repo {{ repo }}
       register: names
       changed_when: false
       no_log: true
     - name: Confirm all four signing secrets exist
       ansible.builtin.assert:
         that:
-          - "'ANDROID_KEYSTORE_BASE64' in names.stdout_lines"
-          - "'ANDROID_KEYSTORE_PASSWORD' in names.stdout_lines"
-          - "'ANDROID_KEY_ALIAS' in names.stdout_lines"
-          - "'ANDROID_KEY_PASSWORD' in names.stdout_lines"
+          - "names.stdout is search('(?m)^ANDROID_KEYSTORE_BASE64\\s')"
+          - "names.stdout is search('(?m)^ANDROID_KEYSTORE_PASSWORD\\s')"
+          - "names.stdout is search('(?m)^ANDROID_KEY_ALIAS\\s')"
+          - "names.stdout is search('(?m)^ANDROID_KEY_PASSWORD\\s')"
     - name: Report completion without revealing credentials
       ansible.builtin.debug:
         msg: >-
