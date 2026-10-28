@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.",
   "summary": {
-    "clientSourceModules": 177,
+    "clientSourceModules": 179,
     "apiSourceModules": 168,
     "applicationFeatures": 86,
     "featureStates": {
@@ -71,6 +71,16 @@
     },
     {
       "source": "apps/web/public/terms/index.html",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/public/welcome/home.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/public/welcome/index.html",
       "family": "web",
       "liveAcceptance": "unverified"
     },

@@ -193,6 +193,8 @@ API source modules: 168. Application feature entries: 86. Kamailio entries: 266.
 | apps/web/public/social-oauth-callback.js | web | unverified |
 | apps/web/public/sw.js | web | unverified |
 | apps/web/public/terms/index.html | web | unverified |
+| apps/web/public/welcome/home.js | web | unverified |
+| apps/web/public/welcome/index.html | web | unverified |
 | apps/web/src/accountRanges.js | web | unverified |
 | apps/web/src/adapterAdmin.js | web | unverified |
 | apps/web/src/addressBookImport.js | web | unverified |
