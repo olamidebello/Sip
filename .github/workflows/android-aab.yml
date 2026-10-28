@@ -127,7 +127,7 @@ jobs:
           p.write_text(s)
           PY
             export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/upload-keystore.jks"
-            ./gradlew bundleRelease
+            ./gradlew bundleRelease assembleRelease
           else
             echo "::error::Missing ANDROID_KEYSTORE_BASE64. Configure a persistent upload key before building a Play Store release."
             exit 1
@@ -139,5 +139,14 @@ jobs:
         with:
           name: olamide-sip-vpn-aab
           path: apps/mobile/android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload installable signed APK artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: olamide-sip-vpn-apk
+          path: apps/mobile/android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 14
