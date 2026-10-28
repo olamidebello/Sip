@@ -2,7 +2,7 @@
 
 Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.
 
-API source modules: 124. Application feature entries: 86. Kamailio entries: 266.
+API source modules: 167. Application feature entries: 86. Kamailio entries: 266.
 
 ## API sources
 
@@ -12,13 +12,18 @@ API source modules: 124. Application feature entries: 86. Kamailio entries: 266.
 | accountRanges | True | True | accountRanges.integration.test.js, accountRanges.test.js | handleAccountRanges |
 | adapterRegistry | True | True | adapterRegistry.test.js, adapterTargets.test.js | handleAdapterRegistry |
 | adapterTargets | True | False | adapterTargets.test.js | library / CLI / no direct reference |
+| adminGroup | True | True | adminGroup.test.js | handleAdminGroup |
+| apiBridge | True | False | apiBridge.test.js | handleApiBridge |
 | apnsPush | True | False | apnsPush.test.js | library / CLI / no direct reference |
 | authProviders | True | True | authProviders.test.js | handleAuthProviders |
+| authSchema | False | False | authSchema.test.js | library / CLI / no direct reference |
 | background | True | True | background.test.js | handleBackground |
 | billing | True | False | billing.test.js | library / CLI / no direct reference |
 | bootstrap-production-admin | False | False | bootstrap-production-admin.test.js | library / CLI / no direct reference |
 | bootstrap-super-admin | False | False | none identified | library / CLI / no direct reference |
-| callAccess | True | False | callAccess.test.js | handleCallAccess |
+| callAccess | True | False | callAccess.test.js, callAccessDialing.test.js | handleCallAccess |
+| callerIdentityPolicy | False | False | callerIdentityPolicy.test.js | library / CLI / no direct reference |
+| callerVerification | False | False | callerVerification.test.js | library / CLI / no direct reference |
 | campaigns | True | True | none identified | handleCampaigns |
 | carrierProviders | True | True | carrierProviders.test.js | handleCarrierProviders |
 | catalogControl | True | True | catalogControl.test.js | handleCatalogControl |
@@ -36,30 +41,48 @@ API source modules: 124. Application feature entries: 86. Kamailio entries: 266.
 | dashboard | True | True | dashboard.test.js | handleDashboard |
 | db | True | True | accountRanges.integration.test.js, integration.test.js, moduleRollout.integration.test.js, storeGateways.integration.test.js, tariffCatalog.integration.test.js, telecomModules.integration.test.js | library / CLI / no direct reference |
 | defaultPresence | True | True | defaultPresence.test.js | library / CLI / no direct reference |
+| dialingPolicy | True | False | dialingPolicy.test.js | handleDialingPolicy |
+| didAvailability | False | False | didAvailability.test.js | library / CLI / no direct reference |
 | dids | True | False | dids.test.js | handleInhouseDids |
 | didwwIntegration | True | True | didwwIntegration.test.js | handleDidwwCallback, handleDidwwAdmin |
 | didwwProvisionWorker | False | False | none identified | library / CLI / no direct reference |
 | didwwProvisioning | True | False | didwwProvisioning.test.js | library / CLI / no direct reference |
 | fleetFirewall | True | True | fleetNetwork.test.js | library / CLI / no direct reference |
 | fleetNetwork | True | True | fleetNetwork.test.js | library / CLI / no direct reference |
+| flowrouteCustomerRate | True | False | flowrouteCustomerRate.test.js | library / CLI / no direct reference |
 | flowrouteRateSync | True | False | flowrouteRateSync.test.js | startFlowrouteRateSync |
 | flowrouteRates | True | True | flowrouteRates.test.js | handleFlowrouteRates |
 | flowrouteTrunk | True | False | flowrouteTrunk.test.js | library / CLI / no direct reference |
+| geoCalling | False | False | geoCalling.test.js | library / CLI / no direct reference |
+| geofenceAddress | True | False | geofenceAddress.test.js | handleGeofenceAddress |
 | geofencePolicy | True | True | geofencePolicy.test.js | handleGeofencePolicy |
 | googleContactsConfig | True | False | googleContactsConfig.test.js | handleGoogleContactsAdmin |
 | helpAgent | True | False | helpAgent.test.js | handleHelpAgent |
+| hostedAccounts | True | True | apiBridge.test.js, hostedAccounts.test.js | handleHostedAccounts |
+| hostedApps | True | False | hostedApps.test.js | handleHostedApps |
+| hpInterconnect | False | False | hpInterconnect.test.js | library / CLI / no direct reference |
+| icnInterconnect | False | False | icnInterconnect.test.js | library / CLI / no direct reference |
 | importFlowrouteTrunk | False | False | none identified | library / CLI / no direct reference |
+| inboundDidOwner | False | False | inboundDidOwner.test.js | library / CLI / no direct reference |
+| inboundRouting | False | False | inboundRouting.test.js | library / CLI / no direct reference |
+| justisolveBridge | True | False | justisolveBridge.test.js | handleJustisolveBridge, startJustisolveLeaseSweep |
 | kamailio | True | True | kamailio.test.js | handleKamailioAdmin, handleKamailioRunner |
 | kamailioAccounts | True | True | kamailioAccounts.test.js | library / CLI / no direct reference |
 | kamailioHttpBridge | True | False | kamailioHttpBridge.test.js | startKamailioHttpBridge |
 | languageTools | True | False | languageTools.test.js | handleLanguageTools |
 | ldap | True | True | ldap.test.js | handleLdapAdmin |
+| liveCalls | True | False | liveCalls.test.js | handleLiveCalls |
+| localDialing | True | False | dialingPolicy.test.js, localDialing.test.js | library / CLI / no direct reference |
 | locales | True | True | locales.test.js | handleLocales |
+| locationHistory | True | True | locationHistory.test.js | handleLocationHistory |
+| locationReportAddress | True | False | locationReportAddress.test.js | library / CLI / no direct reference |
+| locationReports | True | False | locationReportAddress.test.js, locationReports.test.js | handleLocationReports |
+| manage-admin-group | False | False | none identified | library / CLI / no direct reference |
 | marketplaceControl | True | True | marketplaceControl.test.js, moduleRollout.integration.test.js, storeGateways.integration.test.js | handleMarketplaceControl |
 | marketplaceReadiness | False | False | none identified | library / CLI / no direct reference |
 | meetings | True | False | none identified | library / CLI / no direct reference |
 | messagePrivacy | True | True | messagePrivacy.test.js | handleViewOnce, startMessageExpiry |
-| messagingWebhooks | True | True | messagingWebhooks.test.js | handleFlowrouteWebhook, handleMessagingWebhookAdmin, handleExternalSms, handleSmsNumberAdmin |
+| messagingWebhooks | True | True | messagingWebhooks.test.js, quickSignup.test.js | handleFlowrouteWebhook, handleMessagingWebhookAdmin, handleExternalSms, handleSmsNumberAdmin |
 | messengerFeatures | True | True | messengerFeatures.test.js | handleMessengerFeatures |
 | messengerPreferences | True | True | messengerPreferences.test.js, profilePhoto.test.js | handleMessengerPreferences, handleProfilePhoto |
 | migrate | True | False | moduleRollout.integration.test.js, storeGateways.integration.test.js, tariffCatalog.integration.test.js, telecomModules.integration.test.js | library / CLI / no direct reference |
@@ -70,7 +93,7 @@ API source modules: 124. Application feature entries: 86. Kamailio entries: 266.
 | nativePush | True | True | nativePush.test.js | handleNativePush, startNativePush |
 | navigationPolicy | True | True | navigationPolicy.test.js | handleNavigationPolicy |
 | nigeria | True | False | nigeria.test.js | handleNigeria |
-| onboarding | True | True | onboarding.test.js | handleOnboarding |
+| onboarding | True | True | onboarding.test.js, registrationSafety.test.js | handleOnboarding |
 | operationsPolicy | True | True | fleetNetwork.test.js | handleOperationsPolicy |
 | operatorControl | True | True | operatorControl.test.js | handleOperatorControl |
 | outboundDids | True | False | outboundDids.test.js | library / CLI / no direct reference |
@@ -78,35 +101,42 @@ API source modules: 124. Application feature entries: 86. Kamailio entries: 266.
 | passkeys | True | False | none identified | handlePasskeys |
 | paymentReconciliation | True | True | paymentReconciliation.test.js | handlePaymentReconciliation, startPaymentReconciliation |
 | payments | True | True | payments.test.js | handlePaymentAdmin, handlePaymentCheckout, handleStripeWebhook |
-| pbx | True | False | pbx.test.js | handlePbx |
+| pbx | True | False | pbx.test.js, pbxBranding.test.js | handlePbx |
 | permissions | True | False | permissions.test.js | library / CLI / no direct reference |
+| phoneSettings | False | False | phoneSettings.test.js | library / CLI / no direct reference |
 | pricing | True | True | pricing.test.js | handlePricing |
 | productPublish | False | False | integration.test.js, productPublish.test.js | library / CLI / no direct reference |
 | productStore | True | True | integration.test.js, marketplaceControl.test.js, moduleRollout.integration.test.js, productStore.test.js | handleProductStore, startStoreRenewals |
 | promote-super-admin | False | False | none identified | library / CLI / no direct reference |
-| providerCredentials | True | True | didwwProvisioning.test.js, providerCredentials.test.js, storeGateways.test.js, walletProviders.test.js | handleProviderCredentials |
+| providerCredentials | True | True | callerVerification.test.js, didwwProvisioning.test.js, providerCredentials.test.js, pstnDigest.test.js, storeGateways.test.js, twilioAccountAuth.test.js, twilioAutoSetup.test.js, twilioCredentials.test.js, twilioHub.test.js, twilioRoles.test.js, walletProviders.test.js | handleProviderCredentials |
+| providerManager | False | False | providerManager.test.js | library / CLI / no direct reference |
 | providerWebhooks | True | True | providerWebhooks.test.js | handleProviderWebhook, handleProviderWebhookAdmin |
 | providers | True | False | flowrouteInventoryEndpoint.test.js, inventoryFailure.test.js, providers.test.js | library / CLI / no direct reference |
-| pstnBilling | True | False | outboundDids.test.js, pstnBilling.test.js, telecomModules.integration.test.js | library / CLI / no direct reference |
+| pstnBilling | True | False | flowrouteSettlement.test.js, outboundDids.test.js, pstnBilling.test.js, pstnDigest.test.js, telecomModules.integration.test.js | library / CLI / no direct reference |
+| quickSignup | True | False | quickSignup.test.js | handleQuickSignup, handleQuickProfile |
 | refreshSipAuth | False | False | refreshSipAuth.test.js | library / CLI / no direct reference |
+| registrationSafety | True | False | registrationSafety.test.js | library / CLI / no direct reference |
 | repairFlowrouteProfile | False | False | none identified | library / CLI / no direct reference |
 | repairSipDomain | False | False | repairSipDomain.test.js | library / CLI / no direct reference |
 | reports | True | False | reports.test.js | handleReports |
 | requestLimits | True | False | requestLimits.test.js | library / CLI / no direct reference |
 | scheduledCalls | True | True | scheduledCalls.test.js | handleScheduledCalls |
 | search | True | False | support.test.js | handleSearch |
-| security | True | False | security.test.js, sessionPolicy.test.js | library / CLI / no direct reference |
+| security | True | False | apiBridge.test.js, security.test.js, sessionPolicy.test.js | library / CLI / no direct reference |
 | server | False | False | routeContracts.test.js | library / CLI / no direct reference |
 | serverFleet | True | True | serverFleet.test.js | handleServerFleetAdmin, handleServerFleetRunner |
 | serviceInventory | True | False | serviceInventory.test.js | library / CLI / no direct reference |
 | sessionPolicy | True | True | sessionPolicy.test.js | handleSessionPolicy |
-| signupCaptcha | True | False | integration.test.js, onboarding.test.js, signupCaptcha.test.js | library / CLI / no direct reference |
+| signupCaptcha | True | False | captchaRegistration.test.js, integration.test.js, onboarding.test.js, quickSignup.test.js, signupCaptcha.test.js | library / CLI / no direct reference |
 | sipLiveCheck | False | False | none identified | library / CLI / no direct reference |
-| sipMarketplace | True | True | automaticSipSession.test.js, refreshSipAuth.test.js, repairSipDomain.test.js, sipProvisioning.test.js | handleSipMarketplace |
+| sipMarketplace | True | True | apiBridge.test.js, automaticSipSession.test.js, refreshSipAuth.test.js, repairSipDomain.test.js, sipProvisioning.test.js | handleSipMarketplace |
 | sipProbeAccount | False | False | sipProbeAccount.test.js | library / CLI / no direct reference |
 | sipProfiles | True | True | sipProfiles.test.js | handleSipProfiles |
 | sipProvisioning | True | True | sipProvisioning.test.js | handleSipProvisioning, startSipProvisioning |
 | sipRegisterDigest | False | False | sipRegisterDigest.test.js | library / CLI / no direct reference |
+| smoothDid | False | False | smoothDid.test.js | library / CLI / no direct reference |
+| smsCredentials | False | False | smsCredentials.test.js | library / CLI / no direct reference |
+| smsRouteControl | False | False | smsRouteControl.test.js | library / CLI / no direct reference |
 | social | True | True | social.test.js | handleSocial |
 | socialLinks | True | False | socialLinks.test.js | library / CLI / no direct reference |
 | socialOAuth | True | False | socialOAuth.test.js | library / CLI / no direct reference |
@@ -114,7 +144,7 @@ API source modules: 124. Application feature entries: 86. Kamailio entries: 266.
 | softphoneState | True | True | softphoneState.test.js | handleSoftphoneState |
 | storeGateways | True | True | storeGateways.integration.test.js, storeGateways.test.js | handleStoreGateways |
 | subscriberDelivery | True | True | subscriberDelivery.test.js | handleSubscriberSettings, startSubscriberEmail |
-| subscriberRouting | True | True | subscriberRouting.test.js | handleSubscriberRouting, startSubscriberDelivery |
+| subscriberRouting | True | True | smsRouteControl.test.js, subscriberRouting.test.js | handleSubscriberRouting, startSubscriberDelivery |
 | support | True | True | support.test.js | handleSupport |
 | switch | True | True | switch.test.js | library / CLI / no direct reference |
 | tariffCatalog | True | True | tariffCatalog.integration.test.js, tariffCatalog.test.js | handleTariffCatalog |
@@ -124,12 +154,25 @@ API source modules: 124. Application feature entries: 86. Kamailio entries: 266.
 | telecomRefills | True | True | telecomModules.integration.test.js, telecomRefills.test.js | handleTelecomRefills |
 | telecomReports | True | True | telecomModules.integration.test.js, telecomReports.test.js | handleTelecomReports, startTelecomReports |
 | telecomResources | True | False | telecomResources.test.js | handleTelecomResources |
-| tenancy | True | True | authProviders.test.js, tenancy.test.js | handleTenants |
+| tenancy | True | True | authProviders.test.js, quickSignup.test.js, tenancy.test.js | handleTenants |
 | trunkManagement | True | True | trunkManagement.test.js | library / CLI / no direct reference |
 | turn | True | False | turn.test.js | library / CLI / no direct reference |
+| twilioAccountAuth | True | False | twilioAccountAuth.test.js | library / CLI / no direct reference |
+| twilioAutoSetup | False | False | twilioAutoSetup.test.js | library / CLI / no direct reference |
+| twilioCredentials | False | False | twilioCredentials.test.js | library / CLI / no direct reference |
+| twilioDidCore | False | False | twilioDidCore.test.js | library / CLI / no direct reference |
+| twilioDids | False | False | none identified | library / CLI / no direct reference |
+| twilioHub | True | False | twilioCredentials.test.js, twilioHub.test.js, twilioRoles.test.js | library / CLI / no direct reference |
+| twilioReadiness | False | False | twilioReadiness.test.js | library / CLI / no direct reference |
+| twilioRoles | False | False | twilioRoles.test.js | library / CLI / no direct reference |
 | userActivity | True | True | userActivity.test.js | handleUserActivity |
+| userAppearance | False | False | userAppearance.test.js | library / CLI / no direct reference |
+| userCallerId | False | False | userCallerId.test.js | library / CLI / no direct reference |
+| voicemail | True | False | voicemail.test.js | handleVoicemail |
+| vpn | True | False | vpn.test.js | handleVpn |
 | wallet | True | True | moneyRequests.test.js, wallet.test.js | handleWallet |
 | walletProviders | True | False | walletProviders.test.js | handleWalletProviderAdmin |
+| walletPurchases | True | False | walletPurchases.test.js | library / CLI / no direct reference |
 | workPlanner | True | True | featureWorkflows.test.js | handleWorkPlanner |
 | workspaceShortcuts | True | True | workspaceShortcuts.test.js | handleWorkspaceShortcuts |
 
@@ -139,6 +182,10 @@ API source modules: 124. Application feature entries: 86. Kamailio entries: 266.
 | --- | --- | --- |
 | apps/web/index.html | web | unverified |
 | apps/web/navigationTestSupport.js | web | unverified |
+| apps/web/public/install/device-install.js | web | unverified |
+| apps/web/public/install/index.html | web | unverified |
+| apps/web/public/justisolve-connect.html | web | unverified |
+| apps/web/public/justisolve-connect.js | web | unverified |
 | apps/web/public/offline.html | web | unverified |
 | apps/web/public/privacy/index.html | web | unverified |
 | apps/web/public/social-oauth-callback.html | web | unverified |
@@ -148,14 +195,23 @@ API source modules: 124. Application feature entries: 86. Kamailio entries: 266.
 | apps/web/src/accountRanges.js | web | unverified |
 | apps/web/src/adapterAdmin.js | web | unverified |
 | apps/web/src/addressBookImport.js | web | unverified |
+| apps/web/src/adminGroup.js | web | unverified |
+| apps/web/src/adminMonitoringUi.js | web | unverified |
 | apps/web/src/adminNavigation.js | web | unverified |
+| apps/web/src/adminStatusIcons.js | web | unverified |
+| apps/web/src/adminWorkspaceUi.js | web | unverified |
 | apps/web/src/advancedCalling.js | web | unverified |
 | apps/web/src/advancedTelecomNavigation.js | web | unverified |
+| apps/web/src/apiBridgeUi.js | web | unverified |
+| apps/web/src/appearanceDefaults.js | web | unverified |
 | apps/web/src/authProviders.js | web | unverified |
 | apps/web/src/autoSipRegistration.js | web | unverified |
 | apps/web/src/background.js | web | unverified |
+| apps/web/src/backgroundCalls.js | web | unverified |
 | apps/web/src/callGui.js | web | unverified |
 | apps/web/src/callIdentity.js | web | unverified |
+| apps/web/src/callerIdentityAdmin.js | web | unverified |
+| apps/web/src/callerVerificationUi.js | web | unverified |
 | apps/web/src/callsScreen.js | web | unverified |
 | apps/web/src/campaigns.js | web | unverified |
 | apps/web/src/carrierConsole.js | web | unverified |
@@ -177,23 +233,35 @@ API source modules: 124. Application feature entries: 86. Kamailio entries: 266.
 | apps/web/src/dashboard.js | web | unverified |
 | apps/web/src/dialIdentityInput.js | web | unverified |
 | apps/web/src/dialerContacts.js | web | unverified |
+| apps/web/src/dialingAdmin.js | web | unverified |
 | apps/web/src/dialpad.js | web | unverified |
+| apps/web/src/didAvailabilityUi.js | web | unverified |
 | apps/web/src/didwwAdmin.js | web | unverified |
 | apps/web/src/didwwProvisionAdmin.js | web | unverified |
 | apps/web/src/downloads.js | web | unverified |
 | apps/web/src/fleetAccessAdmin.js | web | unverified |
 | apps/web/src/fleetFirewallAdmin.js | web | unverified |
 | apps/web/src/fleetNetworkAdmin.js | web | unverified |
+| apps/web/src/flowrouteSetup.js | web | unverified |
 | apps/web/src/flowrouteTrunkAdmin.js | web | unverified |
 | apps/web/src/formGroups.js | web | unverified |
+| apps/web/src/geoCallingUi.js | web | unverified |
 | apps/web/src/geofence.js | web | unverified |
+| apps/web/src/geofenceLocation.js | web | unverified |
 | apps/web/src/googleContacts.js | web | unverified |
 | apps/web/src/groups.js | web | unverified |
+| apps/web/src/hpInterconnectUi.js | web | unverified |
+| apps/web/src/icnUi.js | web | unverified |
+| apps/web/src/inboundRoutingUi.js | web | unverified |
 | apps/web/src/install.js | web | unverified |
 | apps/web/src/kamailioAdmin.js | web | unverified |
 | apps/web/src/languageTools.js | web | unverified |
 | apps/web/src/ldapAdmin.js | web | unverified |
+| apps/web/src/liveCallsUi.js | web | unverified |
 | apps/web/src/localeSettings.js | web | unverified |
+| apps/web/src/locationHistory.js | web | unverified |
+| apps/web/src/locationReportCsv.js | web | unverified |
+| apps/web/src/locationReports.js | web | unverified |
 | apps/web/src/main.js | web | unverified |
 | apps/web/src/marketplaceControl.js | web | unverified |
 | apps/web/src/meetingInvite.js | web | unverified |
@@ -209,6 +277,7 @@ API source modules: 124. Application feature entries: 86. Kamailio entries: 266.
 | apps/web/src/moduleReadiness.js | web | unverified |
 | apps/web/src/moneyWorkspace.js | web | unverified |
 | apps/web/src/nativeCallClient.js | web | unverified |
+| apps/web/src/nativeEmergency.js | web | unverified |
 | apps/web/src/nativePushClient.js | web | unverified |
 | apps/web/src/navigationPolicy.js | web | unverified |
 | apps/web/src/operationsAdmin.js | web | unverified |
@@ -216,23 +285,33 @@ API source modules: 124. Application feature entries: 86. Kamailio entries: 266.
 | apps/web/src/pageRoutes.js | web | unverified |
 | apps/web/src/passkeyPolicy.js | web | unverified |
 | apps/web/src/pbx.js | web | unverified |
+| apps/web/src/pbxBranding.js | web | unverified |
 | apps/web/src/phoneContacts.js | web | unverified |
+| apps/web/src/phoneSettingsUi.js | web | unverified |
 | apps/web/src/pricing.js | web | unverified |
 | apps/web/src/productImport.js | web | unverified |
 | apps/web/src/productStore.js | web | unverified |
 | apps/web/src/profilePhoto.js | web | unverified |
 | apps/web/src/providerCredentialsAdmin.js | web | unverified |
+| apps/web/src/providerLabels.js | web | unverified |
+| apps/web/src/providerManagerUi.js | web | unverified |
 | apps/web/src/providerWebhookAdmin.js | web | unverified |
+| apps/web/src/quickSignup.js | web | unverified |
+| apps/web/src/registrationFeedback.js | web | unverified |
 | apps/web/src/reports.js | web | unverified |
 | apps/web/src/serverFleetAdmin.js | web | unverified |
 | apps/web/src/sessionAdmin.js | web | unverified |
 | apps/web/src/sessionWatch.js | web | unverified |
 | apps/web/src/signupCaptcha.js | web | unverified |
+| apps/web/src/singleAuth.js | web | unverified |
 | apps/web/src/sipProfiles.js | web | unverified |
 | apps/web/src/sipRegistration.js | web | unverified |
+| apps/web/src/smoothDidUi.js | web | unverified |
+| apps/web/src/smsRouteControlUi.js | web | unverified |
 | apps/web/src/socialLinks.js | web | unverified |
 | apps/web/src/socialPublishing.js | web | unverified |
 | apps/web/src/socialWorkspace.js | web | unverified |
+| apps/web/src/softphoneMedia.js | web | unverified |
 | apps/web/src/subscriberDelivery.js | web | unverified |
 | apps/web/src/support.js | web | unverified |
 | apps/web/src/tariffCatalog.js | web | unverified |
@@ -241,8 +320,21 @@ API source modules: 124. Application feature entries: 86. Kamailio entries: 266.
 | apps/web/src/telecomRefills.js | web | unverified |
 | apps/web/src/telecomReports.js | web | unverified |
 | apps/web/src/tenants.js | web | unverified |
+| apps/web/src/trunkAdmin.js | web | unverified |
+| apps/web/src/twilioAccountAuthUi.js | web | unverified |
+| apps/web/src/twilioCredentialControls.js | web | unverified |
+| apps/web/src/twilioDidUi.js | web | unverified |
+| apps/web/src/twilioHubUi.js | web | unverified |
+| apps/web/src/twilioReadinessUi.js | web | unverified |
+| apps/web/src/twilioRolesUi.js | web | unverified |
 | apps/web/src/userActivity.js | web | unverified |
+| apps/web/src/userAppearanceUi.js | web | unverified |
+| apps/web/src/userCallerIdAdmin.js | web | unverified |
 | apps/web/src/userNavigation.js | web | unverified |
+| apps/web/src/userProvisionControls.js | web | unverified |
+| apps/web/src/voicemailUi.js | web | unverified |
+| apps/web/src/vpnNativeClient.js | web | unverified |
+| apps/web/src/vpnUi.js | web | unverified |
 | apps/web/src/walletProvidersAdmin.js | web | unverified |
 | apps/web/src/workPlanner.js | web | unverified |
 | apps/web/src/workspaceNavigation.js | web | unverified |
@@ -251,13 +343,18 @@ API source modules: 124. Application feature entries: 86. Kamailio entries: 266.
 | apps/mobile/callkit-native/OlamideCallKit.swift | mobile | unverified |
 | apps/mobile/carrier-native/CarrierBrandPlugin.java | mobile | unverified |
 | apps/mobile/carrier-native/MainActivity.java | mobile | unverified |
+| apps/mobile/configure-call-permissions.py | mobile | unverified |
 | apps/mobile/configure-contacts.py | mobile | unverified |
+| apps/mobile/generate-brand-artwork.py | mobile | unverified |
 | apps/mobile/install-callkit.rb | mobile | unverified |
 | apps/mobile/install-carrier-native.sh | mobile | unverified |
 | apps/mobile/install-native-push.py | mobile | unverified |
+| apps/mobile/install-vpn-native.py | mobile | unverified |
+| apps/mobile/prepare-play-release.py | mobile | unverified |
 | apps/mobile/push-native/NativePushPlugin.java | mobile | unverified |
 | apps/mobile/push-native/OlamideCallService.java | mobile | unverified |
 | apps/mobile/push-native/OlamideMessagingService.java | mobile | unverified |
+| apps/mobile/vpn-native/OlamideVpnPlugin.java | mobile | unverified |
 | apps/mobile/www/index.html | mobile | unverified |
 | apps/desktop/main.cjs | desktop | unverified |
 

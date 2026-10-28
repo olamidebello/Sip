@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "scope": "Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.",
   "summary": {
-    "clientSourceModules": 123,
-    "apiSourceModules": 124,
+    "clientSourceModules": 177,
+    "apiSourceModules": 167,
     "applicationFeatures": 86,
     "featureStates": {
       "implemented": 13,
@@ -21,6 +21,26 @@
     },
     {
       "source": "apps/web/navigationTestSupport.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/public/install/device-install.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/public/install/index.html",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/public/justisolve-connect.html",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/public/justisolve-connect.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -70,7 +90,27 @@
       "liveAcceptance": "unverified"
     },
     {
+      "source": "apps/web/src/adminGroup.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/adminMonitoringUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
       "source": "apps/web/src/adminNavigation.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/adminStatusIcons.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/adminWorkspaceUi.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -81,6 +121,16 @@
     },
     {
       "source": "apps/web/src/advancedTelecomNavigation.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/apiBridgeUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/appearanceDefaults.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -100,12 +150,27 @@
       "liveAcceptance": "unverified"
     },
     {
+      "source": "apps/web/src/backgroundCalls.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
       "source": "apps/web/src/callGui.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
     {
       "source": "apps/web/src/callIdentity.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/callerIdentityAdmin.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/callerVerificationUi.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -215,7 +280,17 @@
       "liveAcceptance": "unverified"
     },
     {
+      "source": "apps/web/src/dialingAdmin.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
       "source": "apps/web/src/dialpad.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/didAvailabilityUi.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -250,6 +325,11 @@
       "liveAcceptance": "unverified"
     },
     {
+      "source": "apps/web/src/flowrouteSetup.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
       "source": "apps/web/src/flowrouteTrunkAdmin.js",
       "family": "web",
       "liveAcceptance": "unverified"
@@ -260,7 +340,17 @@
       "liveAcceptance": "unverified"
     },
     {
+      "source": "apps/web/src/geoCallingUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
       "source": "apps/web/src/geofence.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/geofenceLocation.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -271,6 +361,21 @@
     },
     {
       "source": "apps/web/src/groups.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/hpInterconnectUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/icnUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/inboundRoutingUi.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -295,7 +400,27 @@
       "liveAcceptance": "unverified"
     },
     {
+      "source": "apps/web/src/liveCallsUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
       "source": "apps/web/src/localeSettings.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/locationHistory.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/locationReportCsv.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/locationReports.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -375,6 +500,11 @@
       "liveAcceptance": "unverified"
     },
     {
+      "source": "apps/web/src/nativeEmergency.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
       "source": "apps/web/src/nativePushClient.js",
       "family": "web",
       "liveAcceptance": "unverified"
@@ -410,7 +540,17 @@
       "liveAcceptance": "unverified"
     },
     {
+      "source": "apps/web/src/pbxBranding.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
       "source": "apps/web/src/phoneContacts.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/phoneSettingsUi.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -440,7 +580,27 @@
       "liveAcceptance": "unverified"
     },
     {
+      "source": "apps/web/src/providerLabels.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/providerManagerUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
       "source": "apps/web/src/providerWebhookAdmin.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/quickSignup.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/registrationFeedback.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -470,12 +630,27 @@
       "liveAcceptance": "unverified"
     },
     {
+      "source": "apps/web/src/singleAuth.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
       "source": "apps/web/src/sipProfiles.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
     {
       "source": "apps/web/src/sipRegistration.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/smoothDidUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/smsRouteControlUi.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -491,6 +666,11 @@
     },
     {
       "source": "apps/web/src/socialWorkspace.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/softphoneMedia.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -535,12 +715,77 @@
       "liveAcceptance": "unverified"
     },
     {
+      "source": "apps/web/src/trunkAdmin.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/twilioAccountAuthUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/twilioCredentialControls.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/twilioDidUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/twilioHubUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/twilioReadinessUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/twilioRolesUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
       "source": "apps/web/src/userActivity.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
     {
+      "source": "apps/web/src/userAppearanceUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/userCallerIdAdmin.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
       "source": "apps/web/src/userNavigation.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/userProvisionControls.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/voicemailUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/vpnNativeClient.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/vpnUi.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -585,7 +830,17 @@
       "liveAcceptance": "unverified"
     },
     {
+      "source": "apps/mobile/configure-call-permissions.py",
+      "family": "mobile",
+      "liveAcceptance": "unverified"
+    },
+    {
       "source": "apps/mobile/configure-contacts.py",
+      "family": "mobile",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/mobile/generate-brand-artwork.py",
       "family": "mobile",
       "liveAcceptance": "unverified"
     },
@@ -605,6 +860,16 @@
       "liveAcceptance": "unverified"
     },
     {
+      "source": "apps/mobile/install-vpn-native.py",
+      "family": "mobile",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/mobile/prepare-play-release.py",
+      "family": "mobile",
+      "liveAcceptance": "unverified"
+    },
+    {
       "source": "apps/mobile/push-native/NativePushPlugin.java",
       "family": "mobile",
       "liveAcceptance": "unverified"
@@ -616,6 +881,11 @@
     },
     {
       "source": "apps/mobile/push-native/OlamideMessagingService.java",
+      "family": "mobile",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/mobile/vpn-native/OlamideVpnPlugin.java",
       "family": "mobile",
       "liveAcceptance": "unverified"
     },
@@ -634,6 +904,7 @@
     "core",
     "tenancy",
     "access",
+    "system_admin_group",
     "telecom_refills",
     "telecom_reports",
     "telecom_policies",
@@ -642,6 +913,7 @@
     "onboarding",
     "sip_marketplace",
     "sip_provisioning",
+    "hosted_accounts",
     "kamailio_accounts",
     "sip_call_access",
     "sip_profiles",
@@ -682,6 +954,7 @@
     "catalog",
     "softphone",
     "geofence",
+    "location_history",
     "wallet",
     "dashboard",
     "dashboard_views",
@@ -722,7 +995,9 @@
         "access.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminGroup.js",
         "apps/web/src/adminNavigation.js",
+        "apps/web/src/adminWorkspaceUi.js",
         "apps/web/src/advancedCalling.js",
         "apps/web/src/callGui.js",
         "apps/web/src/carrierConsole.js",
@@ -730,6 +1005,7 @@
         "apps/web/src/fleetAccessAdmin.js",
         "apps/web/src/fleetFirewallAdmin.js",
         "apps/web/src/fleetNetworkAdmin.js",
+        "apps/web/src/geoCallingUi.js",
         "apps/web/src/googleContacts.js",
         "apps/web/src/main.js",
         "apps/web/src/meetings.js",
@@ -737,8 +1013,12 @@
         "apps/web/src/messengerSettings.js",
         "apps/web/src/providerCredentialsAdmin.js",
         "apps/web/src/serverFleetAdmin.js",
+        "apps/web/src/smoothDidUi.js",
         "apps/web/src/socialPublishing.js",
-        "apps/web/src/userNavigation.js"
+        "apps/web/src/twilioCredentialControls.js",
+        "apps/web/src/twilioHubUi.js",
+        "apps/web/src/userNavigation.js",
+        "apps/web/src/userProvisionControls.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -805,6 +1085,50 @@
       "liveAcceptance": "unverified"
     },
     {
+      "id": "adminGroup",
+      "source": "services/api/adminGroup.js",
+      "sha256": "7bd03bffe053238f5cac1251fbfc92ac45adfb2b195b76ef4d6ebe47322ec5f7",
+      "exportedHandlers": [
+        "handleAdminGroup"
+      ],
+      "serverReferencedHandlers": [
+        "handleAdminGroup"
+      ],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": true,
+      "tests": [
+        "adminGroup.test.js"
+      ],
+      "guiReferences": [
+        "apps/web/src/main.js"
+      ],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "apiBridge",
+      "source": "services/api/apiBridge.js",
+      "sha256": "40b46fd44d28b7336bab692e2346feed79a8f8b3554b7b239a930b21f5ead2ea",
+      "exportedHandlers": [
+        "handleApiBridge"
+      ],
+      "serverReferencedHandlers": [
+        "handleApiBridge"
+      ],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": false,
+      "tests": [
+        "apiBridge.test.js"
+      ],
+      "guiReferences": [
+        "apps/web/src/adminWorkspaceUi.js"
+      ],
+      "liveAcceptance": "unverified"
+    },
+    {
       "id": "apnsPush",
       "source": "services/api/apnsPush.js",
       "sha256": "98e30f985e9bfaf1a4efbd7f52bd4239eff3aeb8c0987f2a3a386af2d18ba399",
@@ -844,6 +1168,22 @@
       "liveAcceptance": "unverified"
     },
     {
+      "id": "authSchema",
+      "source": "services/api/authSchema.js",
+      "sha256": "4e627e037c7ba50c1c1a804c99c44382487a33b826908ab8272902095c5aa13a",
+      "exportedHandlers": [],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "authSchema.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
       "id": "background",
       "source": "services/api/background.js",
       "sha256": "264fa9bf47cc949b9003e392cfcddedb2ed212c0251d37c18f1da902d2ebc34b",
@@ -861,14 +1201,19 @@
         "background.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminMonitoringUi.js",
         "apps/web/src/adminNavigation.js",
+        "apps/web/src/adminWorkspaceUi.js",
         "apps/web/src/background.js",
+        "apps/web/src/backgroundCalls.js",
         "apps/web/src/configurationLinks.js",
         "apps/web/src/main.js",
         "apps/web/src/messengerHub.js",
         "apps/web/src/messengerOverflow.js",
         "apps/web/src/messengerSettings.js",
+        "apps/web/src/nativeEmergency.js",
         "apps/web/src/userActivity.js",
+        "apps/web/src/userAppearanceUi.js",
         "apps/web/src/userNavigation.js"
       ],
       "liveAcceptance": "unverified"
@@ -888,21 +1233,29 @@
       ],
       "guiReferences": [
         "apps/web/src/adminNavigation.js",
+        "apps/web/src/adminWorkspaceUi.js",
         "apps/web/src/configurationLinks.js",
         "apps/web/src/dashboard.js",
+        "apps/web/src/didAvailabilityUi.js",
         "apps/web/src/formGroups.js",
         "apps/web/src/groups.js",
         "apps/web/src/kamailioAdmin.js",
+        "apps/web/src/liveCallsUi.js",
         "apps/web/src/localeSettings.js",
         "apps/web/src/main.js",
         "apps/web/src/moneyWorkspace.js",
         "apps/web/src/navigationPolicy.js",
         "apps/web/src/productImport.js",
         "apps/web/src/productStore.js",
+        "apps/web/src/providerManagerUi.js",
         "apps/web/src/reports.js",
+        "apps/web/src/smoothDidUi.js",
         "apps/web/src/support.js",
         "apps/web/src/telecomReports.js",
+        "apps/web/src/twilioDidUi.js",
+        "apps/web/src/twilioHubUi.js",
         "apps/web/src/userActivity.js",
+        "apps/web/src/userAppearanceUi.js",
         "apps/web/src/userNavigation.js"
       ],
       "liveAcceptance": "unverified"
@@ -940,7 +1293,7 @@
     {
       "id": "callAccess",
       "source": "services/api/callAccess.js",
-      "sha256": "c192a829585959f4e61f84280b054feb19aa822fe76fd01d131a0b98a7d0bbf9",
+      "sha256": "d895058bdef461ed15003250ac053781a1bbaf2492bb88713787f7d8eece6a30",
       "exportedHandlers": [
         "handleCallAccess"
       ],
@@ -952,9 +1305,50 @@
       "reachableFromServer": true,
       "migrationImported": false,
       "tests": [
-        "callAccess.test.js"
+        "callAccess.test.js",
+        "callAccessDialing.test.js"
       ],
       "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "callerIdentityPolicy",
+      "source": "services/api/callerIdentityPolicy.js",
+      "sha256": "73ebe16e0ecfbb86c01bd1991061b7cb9e47947e42f3318e94aefaf23074039b",
+      "exportedHandlers": [
+        "handleCallerIdentityPolicy"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "callerIdentityPolicy.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "callerVerification",
+      "source": "services/api/callerVerification.js",
+      "sha256": "e0163b7f6e664c54e3d542efa6ad8a908f30cc8f9bb039149fe760728298bb06",
+      "exportedHandlers": [
+        "handleCallerVerification"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [
+        "startCallerVerification"
+      ],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "callerVerification.test.js"
+      ],
+      "guiReferences": [
+        "apps/web/src/twilioCredentialControls.js"
+      ],
       "liveAcceptance": "unverified"
     },
     {
@@ -1040,7 +1434,9 @@
         "cdr.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminGroup.js",
         "apps/web/src/adminNavigation.js",
+        "apps/web/src/adminWorkspaceUi.js",
         "apps/web/src/main.js",
         "apps/web/src/moduleReadiness.js",
         "apps/web/src/telecomReports.js"
@@ -1265,7 +1661,9 @@
         "dashboard.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminMonitoringUi.js",
         "apps/web/src/adminNavigation.js",
+        "apps/web/src/adminWorkspaceUi.js",
         "apps/web/src/configurationLinks.js",
         "apps/web/src/dashboard.js",
         "apps/web/src/main.js",
@@ -1320,6 +1718,44 @@
       "liveAcceptance": "unverified"
     },
     {
+      "id": "dialingPolicy",
+      "source": "services/api/dialingPolicy.js",
+      "sha256": "6723ec6a359f59d47c42ba55bd3ce8d9eb6ec6969bc9a1d71849ea5d4547a6fe",
+      "exportedHandlers": [
+        "handleDialingPolicy"
+      ],
+      "serverReferencedHandlers": [
+        "handleDialingPolicy"
+      ],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": false,
+      "tests": [
+        "dialingPolicy.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "didAvailability",
+      "source": "services/api/didAvailability.js",
+      "sha256": "6b7387ce316138ec39a112d961f807876cc7ea6973b6b3dd93a51b090434fcda",
+      "exportedHandlers": [
+        "handleDidAvailability"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "didAvailability.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
       "id": "dids",
       "source": "services/api/dids.js",
       "sha256": "1c9a532f1e653560ec7e4519c89089431ed4c9109f69c5528b1b3ab21e95f231",
@@ -1336,7 +1772,10 @@
       "tests": [
         "dids.test.js"
       ],
-      "guiReferences": [],
+      "guiReferences": [
+        "apps/web/src/geoCallingUi.js",
+        "apps/web/src/twilioDidUi.js"
+      ],
       "liveAcceptance": "unverified"
     },
     {
@@ -1434,6 +1873,22 @@
       "liveAcceptance": "unverified"
     },
     {
+      "id": "flowrouteCustomerRate",
+      "source": "services/api/flowrouteCustomerRate.js",
+      "sha256": "a2ddb999bd2ffa261575595a296a4cdc2ccaf98fe8ddbd27211dc4be3eca5b1a",
+      "exportedHandlers": [],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": false,
+      "tests": [
+        "flowrouteCustomerRate.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
       "id": "flowrouteRateSync",
       "source": "services/api/flowrouteRateSync.js",
       "sha256": "3d4e5e0600c861c6c41dc59394f660066ed8b82c8228b61b7e299f59f9babe59",
@@ -1489,6 +1944,44 @@
       "guiReferences": [
         "apps/web/src/providerCredentialsAdmin.js"
       ],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "geoCalling",
+      "source": "services/api/geoCalling.js",
+      "sha256": "040b475804fa4559c178789aaacab809c797f529f345af3a8f70a3f061f68f48",
+      "exportedHandlers": [
+        "handleGeoCalling"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "geoCalling.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "geofenceAddress",
+      "source": "services/api/geofenceAddress.js",
+      "sha256": "7eb8774cfac3e701b97d9a84e91329b62fc25e232dda58a8e7c192d6ee8d535c",
+      "exportedHandlers": [
+        "handleGeofenceAddress"
+      ],
+      "serverReferencedHandlers": [
+        "handleGeofenceAddress"
+      ],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": false,
+      "tests": [
+        "geofenceAddress.test.js"
+      ],
+      "guiReferences": [],
       "liveAcceptance": "unverified"
     },
     {
@@ -1552,6 +2045,83 @@
       "liveAcceptance": "unverified"
     },
     {
+      "id": "hostedAccounts",
+      "source": "services/api/hostedAccounts.js",
+      "sha256": "d9168a36ca08a949fefd62b02a22ba01635558c0520c850589e2d570767aa4d9",
+      "exportedHandlers": [
+        "handleHostedAccounts"
+      ],
+      "serverReferencedHandlers": [
+        "handleHostedAccounts"
+      ],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": true,
+      "tests": [
+        "apiBridge.test.js",
+        "hostedAccounts.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "hostedApps",
+      "source": "services/api/hostedApps.js",
+      "sha256": "4757897b2cf8b0b853cf1a764e23f651f1b1fc4387e6eb71243df644a6d47d5d",
+      "exportedHandlers": [
+        "handleHostedApps"
+      ],
+      "serverReferencedHandlers": [
+        "handleHostedApps"
+      ],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": false,
+      "tests": [
+        "hostedApps.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "hpInterconnect",
+      "source": "services/api/hpInterconnect.js",
+      "sha256": "ff8c4ab1a15b66cf1fc51ee76de3de2ed854df93efc958a53054ede6d6c2e77e",
+      "exportedHandlers": [
+        "handleHpInterconnect"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "hpInterconnect.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "icnInterconnect",
+      "source": "services/api/icnInterconnect.js",
+      "sha256": "ede1259212092e23c1e0cfbcbcab5ada5390d8062a1f4dab8a062eb944e5a02e",
+      "exportedHandlers": [
+        "handleIcn"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "icnInterconnect.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
       "id": "importFlowrouteTrunk",
       "source": "services/api/importFlowrouteTrunk.js",
       "sha256": "921711e33e1b23ec1ec9cbe2e950a701e10d61e3f7fc5e91b4d237121d76a85e",
@@ -1562,6 +2132,64 @@
       "reachableFromServer": false,
       "migrationImported": false,
       "tests": [],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "inboundDidOwner",
+      "source": "services/api/inboundDidOwner.js",
+      "sha256": "700c9367219a88d7a2b2806539f6b42d194b587bde098b49e7226f475ff00a90",
+      "exportedHandlers": [],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "inboundDidOwner.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "inboundRouting",
+      "source": "services/api/inboundRouting.js",
+      "sha256": "59648e58aa9fc7bced3167eca8d4664c18c206c56f2cfec34658a38ac3046bed",
+      "exportedHandlers": [
+        "handleInboundRouting"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "inboundRouting.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "justisolveBridge",
+      "source": "services/api/justisolveBridge.js",
+      "sha256": "ba54c755280ba34c2ca2e26bda1fc93d60cba0dc4b93252af3738e0e388f9612",
+      "exportedHandlers": [
+        "handleJustisolveBridge"
+      ],
+      "serverReferencedHandlers": [
+        "handleJustisolveBridge"
+      ],
+      "exportedWorkers": [
+        "startJustisolveLeaseSweep"
+      ],
+      "serverStartedWorkers": [
+        "startJustisolveLeaseSweep"
+      ],
+      "reachableFromServer": true,
+      "migrationImported": false,
+      "tests": [
+        "justisolveBridge.test.js"
+      ],
       "guiReferences": [],
       "liveAcceptance": "unverified"
     },
@@ -1585,6 +2213,7 @@
         "kamailio.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminMonitoringUi.js",
         "apps/web/src/kamailioAdmin.js",
         "apps/web/src/main.js",
         "apps/web/src/moduleReadiness.js"
@@ -1610,7 +2239,7 @@
     {
       "id": "kamailioHttpBridge",
       "source": "services/api/kamailioHttpBridge.js",
-      "sha256": "2d1bc72ae99843df093c14d3e73409e951a6774b2d970429578014e7674f4548",
+      "sha256": "72aa6794d0d7588230dfae91909bd192e18f0b7f248f1b409c71aa1f8b0e9f77",
       "exportedHandlers": [],
       "serverReferencedHandlers": [],
       "exportedWorkers": [
@@ -1668,13 +2297,54 @@
       ],
       "guiReferences": [
         "apps/web/src/adminNavigation.js",
+        "apps/web/src/adminWorkspaceUi.js",
         "apps/web/src/authProviders.js",
         "apps/web/src/formGroups.js",
         "apps/web/src/groups.js",
         "apps/web/src/ldapAdmin.js",
         "apps/web/src/main.js",
-        "apps/web/src/pageRoutes.js"
+        "apps/web/src/pageRoutes.js",
+        "apps/web/src/singleAuth.js"
       ],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "liveCalls",
+      "source": "services/api/liveCalls.js",
+      "sha256": "5d19c17fb8621ce4e4409715be6f6da2d6da05f05c91f4e44524e2daae1e2a53",
+      "exportedHandlers": [
+        "handleLiveCalls"
+      ],
+      "serverReferencedHandlers": [
+        "handleLiveCalls"
+      ],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": false,
+      "tests": [
+        "liveCalls.test.js"
+      ],
+      "guiReferences": [
+        "apps/web/src/main.js"
+      ],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "localDialing",
+      "source": "services/api/localDialing.js",
+      "sha256": "a7a175b7c0bc85d57d37dcde4d80aa57468795fcdc5f83c819780fc0b0ba403c",
+      "exportedHandlers": [],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": false,
+      "tests": [
+        "dialingPolicy.test.js",
+        "localDialing.test.js"
+      ],
+      "guiReferences": [],
       "liveAcceptance": "unverified"
     },
     {
@@ -1697,6 +2367,81 @@
       "guiReferences": [
         "apps/web/src/localeSettings.js"
       ],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "locationHistory",
+      "source": "services/api/locationHistory.js",
+      "sha256": "158b8a0b2e157d97210b4f10eccb8496d96c367618df28267bd5a2fc1a252629",
+      "exportedHandlers": [
+        "handleLocationHistory"
+      ],
+      "serverReferencedHandlers": [
+        "handleLocationHistory"
+      ],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": true,
+      "tests": [
+        "locationHistory.test.js"
+      ],
+      "guiReferences": [
+        "apps/web/src/main.js"
+      ],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "locationReportAddress",
+      "source": "services/api/locationReportAddress.js",
+      "sha256": "0106344c4df8ee46176af36f22ee121c7327cd328b06896f518a70dd1f685747",
+      "exportedHandlers": [],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": false,
+      "tests": [
+        "locationReportAddress.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "locationReports",
+      "source": "services/api/locationReports.js",
+      "sha256": "eb90d35c6986141778aedbf0dc85dbcb85acaf3766a169d49504c31dcca99652",
+      "exportedHandlers": [
+        "handleLocationReports"
+      ],
+      "serverReferencedHandlers": [
+        "handleLocationReports"
+      ],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": false,
+      "tests": [
+        "locationReportAddress.test.js",
+        "locationReports.test.js"
+      ],
+      "guiReferences": [
+        "apps/web/src/main.js"
+      ],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "manage-admin-group",
+      "source": "services/api/manage-admin-group.js",
+      "sha256": "a01a959b8d4178b408a759bc8f44e9d396411e0198a5b2edc44e59f571b6a79a",
+      "exportedHandlers": [],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [],
+      "guiReferences": [],
       "liveAcceptance": "unverified"
     },
     {
@@ -1791,7 +2536,7 @@
     {
       "id": "messagingWebhooks",
       "source": "services/api/messagingWebhooks.js",
-      "sha256": "db106a2b6ecab974b61a40a292d4f1a135c595eeafdc6857de59970c0e724a05",
+      "sha256": "18e7cac57e424c54402e0f6095a4ea9c48ad31f415c2d903938bb431c7e7b2b1",
       "exportedHandlers": [
         "handleFlowrouteWebhook",
         "handleMessagingWebhookAdmin",
@@ -1809,7 +2554,8 @@
       "reachableFromServer": true,
       "migrationImported": true,
       "tests": [
-        "messagingWebhooks.test.js"
+        "messagingWebhooks.test.js",
+        "quickSignup.test.js"
       ],
       "guiReferences": [],
       "liveAcceptance": "unverified"
@@ -1862,7 +2608,7 @@
     {
       "id": "migrate",
       "source": "services/api/migrate.js",
-      "sha256": "47f90b4b4729f3e09c3264ee4ba181e2e14651005a5fe6a9928f89de6c574029",
+      "sha256": "d6a18ad1bdcb0caff77456ac3d9cb197c107de435d961734bc6b3d8d996e7687",
       "exportedHandlers": [],
       "serverReferencedHandlers": [],
       "exportedWorkers": [],
@@ -1983,7 +2729,7 @@
     {
       "id": "navigationPolicy",
       "source": "services/api/navigationPolicy.js",
-      "sha256": "8cae27d38594503e2dfde323c28e8ee5a104059168eb39c66d6873223b74e8d6",
+      "sha256": "1b3711e1fe314849cac2b6f10b96c48f790f624548ae6ce7a7ba7a300476455c",
       "exportedHandlers": [
         "handleNavigationPolicy"
       ],
@@ -2028,7 +2774,7 @@
     {
       "id": "onboarding",
       "source": "services/api/onboarding.js",
-      "sha256": "39c5538c01abc786acd42115384783eba9437eabfe9d176d24062578a2af3a20",
+      "sha256": "23fead663fa3376030567b0643de4121d9f8f2b1b1523ef1ed1e789de15e8ae3",
       "exportedHandlers": [
         "handleOnboarding"
       ],
@@ -2040,7 +2786,8 @@
       "reachableFromServer": true,
       "migrationImported": true,
       "tests": [
-        "onboarding.test.js"
+        "onboarding.test.js",
+        "registrationSafety.test.js"
       ],
       "guiReferences": [],
       "liveAcceptance": "unverified"
@@ -2142,7 +2889,8 @@
       "tests": [],
       "guiReferences": [
         "apps/web/src/main.js",
-        "apps/web/src/messengerSettings.js"
+        "apps/web/src/messengerSettings.js",
+        "apps/web/src/twilioAccountAuthUi.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -2204,7 +2952,7 @@
     {
       "id": "pbx",
       "source": "services/api/pbx.js",
-      "sha256": "9d575504550634b74f01b2662d50db5844d22bd326a11bfb734ae884b2493284",
+      "sha256": "281017fadcae013b7b2c5607b64e5a501bf5166f20d605403b87a81fbc46b6fa",
       "exportedHandlers": [
         "handlePbx"
       ],
@@ -2216,16 +2964,21 @@
       "reachableFromServer": true,
       "migrationImported": false,
       "tests": [
-        "pbx.test.js"
+        "pbx.test.js",
+        "pbxBranding.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminMonitoringUi.js",
         "apps/web/src/adminNavigation.js",
+        "apps/web/src/adminWorkspaceUi.js",
         "apps/web/src/carrierConsole.js",
         "apps/web/src/configurationLinks.js",
         "apps/web/src/formGroups.js",
         "apps/web/src/kamailioAdmin.js",
         "apps/web/src/main.js",
-        "apps/web/src/pbx.js"
+        "apps/web/src/pbx.js",
+        "apps/web/src/pbxBranding.js",
+        "apps/web/src/trunkAdmin.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -2243,11 +2996,35 @@
         "permissions.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminGroup.js",
+        "apps/web/src/adminMonitoringUi.js",
         "apps/web/src/advancedTelecomNavigation.js",
+        "apps/web/src/callerIdentityAdmin.js",
+        "apps/web/src/geoCallingUi.js",
         "apps/web/src/groups.js",
         "apps/web/src/main.js",
-        "apps/web/src/sipProfiles.js"
+        "apps/web/src/sipProfiles.js",
+        "apps/web/src/twilioCredentialControls.js",
+        "apps/web/src/userCallerIdAdmin.js"
       ],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "phoneSettings",
+      "source": "services/api/phoneSettings.js",
+      "sha256": "18538933861096e0fd1ff0f924971107ad49186df57133aa61ccbfd36dc0bbb7",
+      "exportedHandlers": [
+        "handlePhoneSettings"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "phoneSettings.test.js"
+      ],
+      "guiReferences": [],
       "liveAcceptance": "unverified"
     },
     {
@@ -2269,11 +3046,14 @@
       ],
       "guiReferences": [
         "apps/web/src/adminNavigation.js",
+        "apps/web/src/adminWorkspaceUi.js",
         "apps/web/src/catalogControl.js",
         "apps/web/src/configurationLinks.js",
         "apps/web/src/formGroups.js",
         "apps/web/src/main.js",
         "apps/web/src/pricing.js",
+        "apps/web/src/twilioCredentialControls.js",
+        "apps/web/src/twilioHubUi.js",
         "apps/web/src/userActivity.js"
       ],
       "liveAcceptance": "unverified"
@@ -2353,14 +3133,39 @@
       "reachableFromServer": true,
       "migrationImported": true,
       "tests": [
+        "callerVerification.test.js",
         "didwwProvisioning.test.js",
         "providerCredentials.test.js",
+        "pstnDigest.test.js",
         "storeGateways.test.js",
+        "twilioAccountAuth.test.js",
+        "twilioAutoSetup.test.js",
+        "twilioCredentials.test.js",
+        "twilioHub.test.js",
+        "twilioRoles.test.js",
         "walletProviders.test.js"
       ],
       "guiReferences": [
         "apps/web/src/main.js"
       ],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "providerManager",
+      "source": "services/api/providerManager.js",
+      "sha256": "37d9962cfd04f5de48934e6c51e34c4707ce22586ca5e2cff2839bd5d067d215",
+      "exportedHandlers": [
+        "handleProviderManager"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "providerManager.test.js"
+      ],
+      "guiReferences": [],
       "liveAcceptance": "unverified"
     },
     {
@@ -2404,12 +3209,18 @@
       ],
       "guiReferences": [
         "apps/web/src/adapterAdmin.js",
+        "apps/web/src/adminMonitoringUi.js",
         "apps/web/src/adminNavigation.js",
+        "apps/web/src/adminWorkspaceUi.js",
         "apps/web/src/authProviders.js",
         "apps/web/src/carrierConsole.js",
         "apps/web/src/configurationLinks.js",
+        "apps/web/src/didAvailabilityUi.js",
+        "apps/web/src/geoCallingUi.js",
         "apps/web/src/ldapAdmin.js",
         "apps/web/src/main.js",
+        "apps/web/src/providerManagerUi.js",
+        "apps/web/src/smoothDidUi.js",
         "apps/web/src/socialPublishing.js",
         "apps/web/src/walletProvidersAdmin.js"
       ],
@@ -2418,7 +3229,7 @@
     {
       "id": "pstnBilling",
       "source": "services/api/pstnBilling.js",
-      "sha256": "6600f94db4ae0b4a4e576d98a48f6f2989f1b82c2c985a0b79c4023859eb912b",
+      "sha256": "8ee2bfe3477f9c689f384d96da8aae41bb9707e6d863ca69589ef3435fb2a5e9",
       "exportedHandlers": [],
       "serverReferencedHandlers": [],
       "exportedWorkers": [],
@@ -2426,11 +3237,37 @@
       "reachableFromServer": true,
       "migrationImported": false,
       "tests": [
+        "flowrouteSettlement.test.js",
         "outboundDids.test.js",
         "pstnBilling.test.js",
+        "pstnDigest.test.js",
         "telecomModules.integration.test.js"
       ],
       "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "quickSignup",
+      "source": "services/api/quickSignup.js",
+      "sha256": "919d96e5b3271ab58f0730b091c0a748f427169c519b1878167df17f7acbb65f",
+      "exportedHandlers": [
+        "handleQuickSignup",
+        "handleQuickProfile"
+      ],
+      "serverReferencedHandlers": [
+        "handleQuickSignup",
+        "handleQuickProfile"
+      ],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": false,
+      "tests": [
+        "quickSignup.test.js"
+      ],
+      "guiReferences": [
+        "apps/web/src/main.js"
+      ],
       "liveAcceptance": "unverified"
     },
     {
@@ -2445,6 +3282,22 @@
       "migrationImported": false,
       "tests": [
         "refreshSipAuth.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "registrationSafety",
+      "source": "services/api/registrationSafety.js",
+      "sha256": "76eb07394e4947863e6abfe7c0361026be49ee92789a5bd72817aba8a7243d2b",
+      "exportedHandlers": [],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": false,
+      "tests": [
+        "registrationSafety.test.js"
       ],
       "guiReferences": [],
       "liveAcceptance": "unverified"
@@ -2497,12 +3350,16 @@
         "reports.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminGroup.js",
         "apps/web/src/adminNavigation.js",
+        "apps/web/src/adminWorkspaceUi.js",
         "apps/web/src/advancedTelecomNavigation.js",
         "apps/web/src/dashboard.js",
+        "apps/web/src/locationReports.js",
         "apps/web/src/main.js",
         "apps/web/src/reports.js",
-        "apps/web/src/telecomReports.js"
+        "apps/web/src/telecomReports.js",
+        "apps/web/src/twilioCredentialControls.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -2563,23 +3420,38 @@
         "support.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminMonitoringUi.js",
         "apps/web/src/adminNavigation.js",
+        "apps/web/src/adminWorkspaceUi.js",
+        "apps/web/src/callerIdentityAdmin.js",
         "apps/web/src/carrierConsole.js",
         "apps/web/src/chatLanding.js",
         "apps/web/src/contactDirectory.js",
         "apps/web/src/contactManagerLayout.js",
         "apps/web/src/conversations.js",
         "apps/web/src/dialerContacts.js",
+        "apps/web/src/didAvailabilityUi.js",
         "apps/web/src/googleContacts.js",
         "apps/web/src/kamailioAdmin.js",
+        "apps/web/src/liveCallsUi.js",
         "apps/web/src/main.js",
         "apps/web/src/meetingInvite.js",
         "apps/web/src/messengerIcons.js",
+        "apps/web/src/nativeEmergency.js",
         "apps/web/src/navigationPolicy.js",
         "apps/web/src/productStore.js",
+        "apps/web/src/providerManagerUi.js",
+        "apps/web/src/smoothDidUi.js",
         "apps/web/src/socialWorkspace.js",
         "apps/web/src/support.js",
         "apps/web/src/telecomFeatures.js",
+        "apps/web/src/trunkAdmin.js",
+        "apps/web/src/twilioDidUi.js",
+        "apps/web/src/twilioHubUi.js",
+        "apps/web/src/twilioReadinessUi.js",
+        "apps/web/src/twilioRolesUi.js",
+        "apps/web/src/userAppearanceUi.js",
+        "apps/web/src/userCallerIdAdmin.js",
         "apps/web/src/userNavigation.js",
         "apps/web/src/workspaceQuick.js"
       ],
@@ -2596,10 +3468,12 @@
       "reachableFromServer": true,
       "migrationImported": false,
       "tests": [
+        "apiBridge.test.js",
         "security.test.js",
         "sessionPolicy.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminWorkspaceUi.js",
         "apps/web/src/advancedTelecomNavigation.js",
         "apps/web/src/groups.js",
         "apps/web/src/main.js",
@@ -2611,7 +3485,7 @@
     {
       "id": "server",
       "source": "services/api/server.js",
-      "sha256": "5e5851d9e143b8fcf94ef67d680ebb71051cea8d74d09612d1e080e7a692c0c3",
+      "sha256": "064c65222eb3752292d7b618086d1e8ee07548f3ca2f094f7c4e7411b4175655",
       "exportedHandlers": [],
       "serverReferencedHandlers": [],
       "exportedWorkers": [],
@@ -2622,9 +3496,13 @@
         "routeContracts.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminMonitoringUi.js",
         "apps/web/src/adminNavigation.js",
+        "apps/web/src/adminWorkspaceUi.js",
         "apps/web/src/advancedTelecomNavigation.js",
         "apps/web/src/authProviders.js",
+        "apps/web/src/backgroundCalls.js",
+        "apps/web/src/callerIdentityAdmin.js",
         "apps/web/src/carrierConsole.js",
         "apps/web/src/chatComposerShortcuts.js",
         "apps/web/src/chatLanding.js",
@@ -2633,22 +3511,29 @@
         "apps/web/src/fleetAccessAdmin.js",
         "apps/web/src/fleetFirewallAdmin.js",
         "apps/web/src/fleetNetworkAdmin.js",
+        "apps/web/src/flowrouteSetup.js",
         "apps/web/src/flowrouteTrunkAdmin.js",
         "apps/web/src/kamailioAdmin.js",
         "apps/web/src/languageTools.js",
         "apps/web/src/ldapAdmin.js",
+        "apps/web/src/liveCallsUi.js",
         "apps/web/src/main.js",
         "apps/web/src/marketplaceControl.js",
         "apps/web/src/meetingInvite.js",
         "apps/web/src/messagePrivacy.js",
         "apps/web/src/moduleReadiness.js",
         "apps/web/src/operationsAdmin.js",
+        "apps/web/src/phoneSettingsUi.js",
         "apps/web/src/providerCredentialsAdmin.js",
         "apps/web/src/serverFleetAdmin.js",
         "apps/web/src/signupCaptcha.js",
         "apps/web/src/sipProfiles.js",
         "apps/web/src/telecomReports.js",
         "apps/web/src/userActivity.js",
+        "apps/web/src/userCallerIdAdmin.js",
+        "apps/web/src/voicemailUi.js",
+        "apps/web/src/vpnNativeClient.js",
+        "apps/web/src/vpnUi.js",
         "apps/web/src/walletProvidersAdmin.js"
       ],
       "liveAcceptance": "unverified"
@@ -2691,6 +3576,7 @@
         "serviceInventory.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminMonitoringUi.js",
         "apps/web/src/kamailioAdmin.js"
       ],
       "liveAcceptance": "unverified"
@@ -2698,7 +3584,7 @@
     {
       "id": "sessionPolicy",
       "source": "services/api/sessionPolicy.js",
-      "sha256": "6f05d6368884f5ad4007c60d8005d4b91757e7350c3b61e30c8630ad8af3b69c",
+      "sha256": "1e4bf2d15e1014e8dab16e07ef088d05b72322e05d253e582b3a4f83edf73b6e",
       "exportedHandlers": [
         "handleSessionPolicy"
       ],
@@ -2718,7 +3604,7 @@
     {
       "id": "signupCaptcha",
       "source": "services/api/signupCaptcha.js",
-      "sha256": "773c101f5a8b0b3e07c97c741f5f67be69ec1828657b55c7252088755fd0acfc",
+      "sha256": "e366dfc006445c7d70386a6a095d51edd9ced7208560d8de46b6826c6eb8bc34",
       "exportedHandlers": [],
       "serverReferencedHandlers": [],
       "exportedWorkers": [],
@@ -2726,8 +3612,10 @@
       "reachableFromServer": true,
       "migrationImported": false,
       "tests": [
+        "captchaRegistration.test.js",
         "integration.test.js",
         "onboarding.test.js",
+        "quickSignup.test.js",
         "signupCaptcha.test.js"
       ],
       "guiReferences": [
@@ -2764,6 +3652,7 @@
       "reachableFromServer": true,
       "migrationImported": true,
       "tests": [
+        "apiBridge.test.js",
         "automaticSipSession.test.js",
         "refreshSipAuth.test.js",
         "repairSipDomain.test.js",
@@ -2846,6 +3735,60 @@
       "migrationImported": false,
       "tests": [
         "sipRegisterDigest.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "smoothDid",
+      "source": "services/api/smoothDid.js",
+      "sha256": "372220f81cbc38e17b2b05a3b4158e3d87a42a71515f705bb11cc8a078814860",
+      "exportedHandlers": [
+        "handleSmoothDid"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [
+        "startSmoothRentals"
+      ],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "smoothDid.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "smsCredentials",
+      "source": "services/api/smsCredentials.js",
+      "sha256": "3127d45ad3bbf9ee354ed9d00cf69cceb1daad956bb1992cbdbc1bb78e402823",
+      "exportedHandlers": [],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "smsCredentials.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "smsRouteControl",
+      "source": "services/api/smsRouteControl.js",
+      "sha256": "658cd58c3bb3c0c60582c49233a6050216774b94b2268e1b23a2f7cf2d2fa60e",
+      "exportedHandlers": [
+        "handleSmsRouteControl"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "smsRouteControl.test.js"
       ],
       "guiReferences": [],
       "liveAcceptance": "unverified"
@@ -3023,6 +3966,7 @@
       "reachableFromServer": true,
       "migrationImported": true,
       "tests": [
+        "smsRouteControl.test.js",
         "subscriberRouting.test.js"
       ],
       "guiReferences": [],
@@ -3046,10 +3990,13 @@
         "support.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminGroup.js",
         "apps/web/src/advancedCalling.js",
+        "apps/web/src/backgroundCalls.js",
         "apps/web/src/carrierControl.js",
         "apps/web/src/configurationLinks.js",
         "apps/web/src/dashboard.js",
+        "apps/web/src/didAvailabilityUi.js",
         "apps/web/src/formGroups.js",
         "apps/web/src/geofence.js",
         "apps/web/src/kamailioAdmin.js",
@@ -3061,6 +4008,8 @@
         "apps/web/src/messengerOverflow.js",
         "apps/web/src/messengerSettings.js",
         "apps/web/src/moduleReadiness.js",
+        "apps/web/src/phoneSettingsUi.js",
+        "apps/web/src/providerManagerUi.js",
         "apps/web/src/support.js",
         "apps/web/src/userActivity.js",
         "apps/web/src/userNavigation.js"
@@ -3081,6 +4030,7 @@
         "switch.test.js"
       ],
       "guiReferences": [
+        "apps/web/src/adminMonitoringUi.js",
         "apps/web/src/adminNavigation.js",
         "apps/web/src/autoSipRegistration.js",
         "apps/web/src/carrierConsole.js",
@@ -3090,16 +4040,23 @@
         "apps/web/src/didwwProvisionAdmin.js",
         "apps/web/src/fleetFirewallAdmin.js",
         "apps/web/src/fleetNetworkAdmin.js",
+        "apps/web/src/flowrouteSetup.js",
         "apps/web/src/flowrouteTrunkAdmin.js",
+        "apps/web/src/geoCallingUi.js",
+        "apps/web/src/hpInterconnectUi.js",
+        "apps/web/src/icnUi.js",
         "apps/web/src/kamailioAdmin.js",
+        "apps/web/src/liveCallsUi.js",
         "apps/web/src/main.js",
         "apps/web/src/marketplaceControl.js",
         "apps/web/src/operationsAdmin.js",
         "apps/web/src/pbx.js",
+        "apps/web/src/providerManagerUi.js",
         "apps/web/src/serverFleetAdmin.js",
         "apps/web/src/sipRegistration.js",
         "apps/web/src/tariffCatalog.js",
         "apps/web/src/tenants.js",
+        "apps/web/src/twilioRolesUi.js",
         "apps/web/src/userActivity.js"
       ],
       "liveAcceptance": "unverified"
@@ -3278,6 +4235,7 @@
       "migrationImported": true,
       "tests": [
         "authProviders.test.js",
+        "quickSignup.test.js",
         "tenancy.test.js"
       ],
       "guiReferences": [],
@@ -3286,7 +4244,7 @@
     {
       "id": "trunkManagement",
       "source": "services/api/trunkManagement.js",
-      "sha256": "8fd43b6c4b1840b136273667a699571f71ae5a7911aaacdb78ac43fc33d6e18f",
+      "sha256": "9ab0973bbe85c6509e080c29d9d48042421fe36165a9af9d83f99691b0ec3aa8",
       "exportedHandlers": [
         "handleTrunks"
       ],
@@ -3318,14 +4276,22 @@
         "apps/web/src/accountRanges.js",
         "apps/web/src/adapterAdmin.js",
         "apps/web/src/addressBookImport.js",
+        "apps/web/src/adminGroup.js",
+        "apps/web/src/adminMonitoringUi.js",
         "apps/web/src/adminNavigation.js",
+        "apps/web/src/adminStatusIcons.js",
+        "apps/web/src/adminWorkspaceUi.js",
         "apps/web/src/advancedCalling.js",
         "apps/web/src/advancedTelecomNavigation.js",
+        "apps/web/src/apiBridgeUi.js",
         "apps/web/src/authProviders.js",
         "apps/web/src/autoSipRegistration.js",
         "apps/web/src/background.js",
+        "apps/web/src/backgroundCalls.js",
         "apps/web/src/callGui.js",
         "apps/web/src/callIdentity.js",
+        "apps/web/src/callerIdentityAdmin.js",
+        "apps/web/src/callerVerificationUi.js",
         "apps/web/src/callsScreen.js",
         "apps/web/src/campaigns.js",
         "apps/web/src/carrierConsole.js",
@@ -3346,23 +4312,35 @@
         "apps/web/src/dashboard.js",
         "apps/web/src/dialIdentityInput.js",
         "apps/web/src/dialerContacts.js",
+        "apps/web/src/dialingAdmin.js",
         "apps/web/src/dialpad.js",
+        "apps/web/src/didAvailabilityUi.js",
         "apps/web/src/didwwAdmin.js",
         "apps/web/src/didwwProvisionAdmin.js",
         "apps/web/src/downloads.js",
         "apps/web/src/fleetAccessAdmin.js",
         "apps/web/src/fleetFirewallAdmin.js",
         "apps/web/src/fleetNetworkAdmin.js",
+        "apps/web/src/flowrouteSetup.js",
         "apps/web/src/flowrouteTrunkAdmin.js",
         "apps/web/src/formGroups.js",
+        "apps/web/src/geoCallingUi.js",
         "apps/web/src/geofence.js",
+        "apps/web/src/geofenceLocation.js",
         "apps/web/src/googleContacts.js",
         "apps/web/src/groups.js",
+        "apps/web/src/hpInterconnectUi.js",
+        "apps/web/src/icnUi.js",
+        "apps/web/src/inboundRoutingUi.js",
         "apps/web/src/install.js",
         "apps/web/src/kamailioAdmin.js",
         "apps/web/src/languageTools.js",
         "apps/web/src/ldapAdmin.js",
+        "apps/web/src/liveCallsUi.js",
         "apps/web/src/localeSettings.js",
+        "apps/web/src/locationHistory.js",
+        "apps/web/src/locationReportCsv.js",
+        "apps/web/src/locationReports.js",
         "apps/web/src/main.js",
         "apps/web/src/marketplaceControl.js",
         "apps/web/src/meetingInvite.js",
@@ -3377,6 +4355,7 @@
         "apps/web/src/moduleReadiness.js",
         "apps/web/src/moneyWorkspace.js",
         "apps/web/src/nativeCallClient.js",
+        "apps/web/src/nativeEmergency.js",
         "apps/web/src/nativePushClient.js",
         "apps/web/src/navigationPolicy.js",
         "apps/web/src/operationsAdmin.js",
@@ -3385,22 +4364,30 @@
         "apps/web/src/passkeyPolicy.js",
         "apps/web/src/pbx.js",
         "apps/web/src/phoneContacts.js",
+        "apps/web/src/phoneSettingsUi.js",
         "apps/web/src/pricing.js",
         "apps/web/src/productImport.js",
         "apps/web/src/productStore.js",
         "apps/web/src/profilePhoto.js",
         "apps/web/src/providerCredentialsAdmin.js",
+        "apps/web/src/providerManagerUi.js",
         "apps/web/src/providerWebhookAdmin.js",
+        "apps/web/src/quickSignup.js",
+        "apps/web/src/registrationFeedback.js",
         "apps/web/src/reports.js",
         "apps/web/src/serverFleetAdmin.js",
         "apps/web/src/sessionAdmin.js",
         "apps/web/src/sessionWatch.js",
         "apps/web/src/signupCaptcha.js",
+        "apps/web/src/singleAuth.js",
         "apps/web/src/sipProfiles.js",
         "apps/web/src/sipRegistration.js",
+        "apps/web/src/smoothDidUi.js",
+        "apps/web/src/smsRouteControlUi.js",
         "apps/web/src/socialLinks.js",
         "apps/web/src/socialPublishing.js",
         "apps/web/src/socialWorkspace.js",
+        "apps/web/src/softphoneMedia.js",
         "apps/web/src/subscriberDelivery.js",
         "apps/web/src/support.js",
         "apps/web/src/tariffCatalog.js",
@@ -3409,12 +4396,171 @@
         "apps/web/src/telecomRefills.js",
         "apps/web/src/telecomReports.js",
         "apps/web/src/tenants.js",
+        "apps/web/src/trunkAdmin.js",
+        "apps/web/src/twilioAccountAuthUi.js",
+        "apps/web/src/twilioCredentialControls.js",
+        "apps/web/src/twilioDidUi.js",
+        "apps/web/src/twilioHubUi.js",
+        "apps/web/src/twilioReadinessUi.js",
+        "apps/web/src/twilioRolesUi.js",
         "apps/web/src/userActivity.js",
+        "apps/web/src/userAppearanceUi.js",
+        "apps/web/src/userCallerIdAdmin.js",
         "apps/web/src/userNavigation.js",
+        "apps/web/src/userProvisionControls.js",
+        "apps/web/src/voicemailUi.js",
+        "apps/web/src/vpnNativeClient.js",
+        "apps/web/src/vpnUi.js",
         "apps/web/src/walletProvidersAdmin.js",
         "apps/web/src/workPlanner.js",
         "apps/web/src/workspaceNavigation.js",
         "apps/web/src/workspaceQuick.js"
+      ],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "twilioAccountAuth",
+      "source": "services/api/twilioAccountAuth.js",
+      "sha256": "63d35b157821621892f663a047397221c639c5992058e551d6dc54e5acb2b011",
+      "exportedHandlers": [
+        "handleAccountAuth"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [
+        "startAccountChallenge"
+      ],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": false,
+      "tests": [
+        "twilioAccountAuth.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "twilioAutoSetup",
+      "source": "services/api/twilioAutoSetup.js",
+      "sha256": "bbbe9edfdfe26a2eb01b8872904cdedaec40cb5de06fbd13fd0c450d1d53920d",
+      "exportedHandlers": [],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "twilioAutoSetup.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "twilioCredentials",
+      "source": "services/api/twilioCredentials.js",
+      "sha256": "e45d537aa5bf87194954ce59ed1763b5f1b35143447f6288772436f29ebd7bb2",
+      "exportedHandlers": [
+        "handleTwilioCredentials"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "twilioCredentials.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "twilioDidCore",
+      "source": "services/api/twilioDidCore.js",
+      "sha256": "f9a23dce0b27912fc2d16bce7d0a8332f6f2d33adee5769a47c0c475d4591cc9",
+      "exportedHandlers": [],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "twilioDidCore.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "twilioDids",
+      "source": "services/api/twilioDids.js",
+      "sha256": "d736b230b76fbb14a5ac912458adc6334b9dcb4d1c4346bd045074dc86bf7c4a",
+      "exportedHandlers": [
+        "handleTwilioDids"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [
+        "startTwilioDidRenewals"
+      ],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "twilioHub",
+      "source": "services/api/twilioHub.js",
+      "sha256": "d905312fd8ea97c9ebf4acc8a2767f9652e8ea2893cfd5560408009d8168cb59",
+      "exportedHandlers": [
+        "handleTwilioHub"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": false,
+      "tests": [
+        "twilioCredentials.test.js",
+        "twilioHub.test.js",
+        "twilioRoles.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "twilioReadiness",
+      "source": "services/api/twilioReadiness.js",
+      "sha256": "b5babdfe7d95915f44ead7f324d92895d7b5b4fa5d68ac388c46c5be850712ac",
+      "exportedHandlers": [
+        "handleTwilioReadiness"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "twilioReadiness.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "twilioRoles",
+      "source": "services/api/twilioRoles.js",
+      "sha256": "768d96db62013ec11ab079998d9afe72738202240a5a5a23201fe824f250d0a8",
+      "exportedHandlers": [
+        "handleTwilioRoles"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "twilioRoles.test.js"
+      ],
+      "guiReferences": [
+        "apps/web/src/twilioHubUi.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -3441,9 +4587,96 @@
       "liveAcceptance": "unverified"
     },
     {
+      "id": "userAppearance",
+      "source": "services/api/userAppearance.js",
+      "sha256": "b2a66511bc164d0ee852466702a855fdbff42538d2e703c9382815b1449a5e10",
+      "exportedHandlers": [
+        "handleUserAppearance"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "userAppearance.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "userCallerId",
+      "source": "services/api/userCallerId.js",
+      "sha256": "b2d611a8e0ac6a8760a892c5c067d99d093dc9e9bda294696ec69c3239b3a6b8",
+      "exportedHandlers": [
+        "handleUserCallerId"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "userCallerId.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "voicemail",
+      "source": "services/api/voicemail.js",
+      "sha256": "038b47b1df360a3a2eb1adeeaa00b18a21043d11e6720ce0e5976c5e1d5f936d",
+      "exportedHandlers": [
+        "handleVoicemail"
+      ],
+      "serverReferencedHandlers": [
+        "handleVoicemail"
+      ],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": false,
+      "tests": [
+        "voicemail.test.js"
+      ],
+      "guiReferences": [
+        "apps/web/src/adminWorkspaceUi.js",
+        "apps/web/src/kamailioAdmin.js",
+        "apps/web/src/main.js",
+        "apps/web/src/pbx.js",
+        "apps/web/src/phoneSettingsUi.js",
+        "apps/web/src/voicemailUi.js"
+      ],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "vpn",
+      "source": "services/api/vpn.js",
+      "sha256": "d966d630ba3188d445403fb4f44972ef6a983c03736d3cbee6d4a7f3f78f0127",
+      "exportedHandlers": [
+        "handleVpn"
+      ],
+      "serverReferencedHandlers": [
+        "handleVpn"
+      ],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": false,
+      "tests": [
+        "vpn.test.js"
+      ],
+      "guiReferences": [
+        "apps/web/src/adminWorkspaceUi.js",
+        "apps/web/src/main.js",
+        "apps/web/src/vpnUi.js"
+      ],
+      "liveAcceptance": "unverified"
+    },
+    {
       "id": "wallet",
       "source": "services/api/wallet.js",
-      "sha256": "8f43de812ff6e5c5cb5c507edbaa385749a6dde2d1a79407c9097c6b69bc0436",
+      "sha256": "dd1c2df5abf02e72c7ab2bdd837fb6353e8e358cbb4eefd594f0a08c78d531c6",
       "exportedHandlers": [
         "handleWallet"
       ],
@@ -3460,10 +4693,15 @@
       ],
       "guiReferences": [
         "apps/web/src/adminNavigation.js",
+        "apps/web/src/adminWorkspaceUi.js",
         "apps/web/src/commerceOps.js",
+        "apps/web/src/didAvailabilityUi.js",
         "apps/web/src/main.js",
         "apps/web/src/moneyWorkspace.js",
+        "apps/web/src/smoothDidUi.js",
         "apps/web/src/telecomRefills.js",
+        "apps/web/src/twilioDidUi.js",
+        "apps/web/src/twilioHubUi.js",
         "apps/web/src/walletProvidersAdmin.js"
       ],
       "liveAcceptance": "unverified"
@@ -3488,6 +4726,24 @@
       "guiReferences": [
         "apps/web/src/main.js"
       ],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "walletPurchases",
+      "source": "services/api/walletPurchases.js",
+      "sha256": "d507a04e192e3dcede746c4f283147079b20f6fbadb6e4c8ff240e390dfd1295",
+      "exportedHandlers": [
+        "handleWalletPurchase"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": false,
+      "tests": [
+        "walletPurchases.test.js"
+      ],
+      "guiReferences": [],
       "liveAcceptance": "unverified"
     },
     {
