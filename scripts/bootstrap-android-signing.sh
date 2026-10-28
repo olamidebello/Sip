@@ -7,7 +7,7 @@ PACKAGE="com.africanappsstore.olamide"
 for cmd in gh keytool openssl base64; do command -v "$cmd" >/dev/null || { echo "Missing $cmd" >&2; exit 1; }; done
 gh auth status >/dev/null
 gh repo view "$REPO" >/dev/null
-existing="$(gh secret list --repo "$REPO" --json name --jq '.[].name')"
+existing="$(gh secret list --repo "$REPO" | awk '{print $1}')"
 for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
   if grep -Fxq "$name" <<< "$existing"; then
     echo "Refusing to replace existing signing secret $name. Preserve existing upload identity." >&2
