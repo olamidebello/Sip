@@ -23,13 +23,11 @@ mkdir -m 700 -p "$BACKUP_DIR"
 KEYSTORE="$BACKUP_DIR/olamide-upload.jks"
 ALIAS="olamide-upload"
 STORE_PASS="$(openssl rand -hex 24)"
-KEY_PASS="$(openssl rand -hex 24)"
+KEY_PASS="$STORE_PASS"
 keytool -genkeypair -v -keystore "$KEYSTORE" -alias "$ALIAS" \
   -keyalg RSA -keysize 4096 -validity 10000 -storetype PKCS12 \
   -storepass "$STORE_PASS" -keypass "$KEY_PASS" \
   -dname "CN=Olamide, OU=Android, O=Olamide Olatayo Bello Corporation, C=US" >/dev/null
-# PKCS12 implementations often require key and store passwords to match.
-KEY_PASS="$STORE_PASS"
 printf '%s' "$STORE_PASS" | gh secret set ANDROID_KEYSTORE_PASSWORD --repo "$REPO"
 printf '%s' "$KEY_PASS" | gh secret set ANDROID_KEY_PASSWORD --repo "$REPO"
 printf '%s' "$ALIAS" | gh secret set ANDROID_KEY_ALIAS --repo "$REPO"
