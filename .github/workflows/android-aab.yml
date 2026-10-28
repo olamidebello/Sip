@@ -59,7 +59,7 @@ jobs:
               p = Path("app/build.gradle.kts")
           content = p.read_text()
           version_code = 10000 + int(os.environ["PLAY_VERSION_CODE"])
-          updated, count = re.subn(r"\\bversionCode\\s*(?:=\\s*)?\\d+", f"versionCode {version_code}" if p.suffix != ".kts" else f"versionCode = {version_code}", content, count=1)
+          updated, count = re.subn(r"\bversionCode\s*(?:=\s*)?\d+", f"versionCode {version_code}" if p.suffix != ".kts" else f"versionCode = {version_code}", content, count=1)
           if count != 1:
               raise SystemExit("Cannot find Android versionCode; refusing to produce a potentially non-upgradeable bundle")
           p.write_text(updated)
@@ -134,7 +134,7 @@ jobs:
           fi
 
       - name: Upload AAB artifact
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: olamide-sip-vpn-aab
