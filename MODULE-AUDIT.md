@@ -2,7 +2,7 @@
 
 Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.
 
-API source modules: 167. Application feature entries: 86. Kamailio entries: 266.
+API source modules: 168. Application feature entries: 86. Kamailio entries: 266.
 
 ## API sources
 
@@ -38,6 +38,7 @@ API source modules: 167. Application feature entries: 86. Kamailio entries: 266.
 | contactDiscovery | True | True | contactDiscovery.test.js | handleContactDiscovery |
 | contactSettings | True | False | contactSettings.test.js | handleContactSettings |
 | conversations | True | True | conversations.test.js, readAll.test.js | handleConversations |
+| countryBoundaries | False | False | none identified | library / CLI / no direct reference |
 | dashboard | True | True | dashboard.test.js | handleDashboard |
 | db | True | True | accountRanges.integration.test.js, integration.test.js, moduleRollout.integration.test.js, storeGateways.integration.test.js, tariffCatalog.integration.test.js, telecomModules.integration.test.js | library / CLI / no direct reference |
 | defaultPresence | True | True | defaultPresence.test.js | library / CLI / no direct reference |

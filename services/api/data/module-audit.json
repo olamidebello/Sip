@@ -3,7 +3,7 @@
   "scope": "Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.",
   "summary": {
     "clientSourceModules": 177,
-    "apiSourceModules": 167,
+    "apiSourceModules": 168,
     "applicationFeatures": 86,
     "featureStates": {
       "implemented": 13,
@@ -1641,6 +1641,20 @@
         "apps/web/src/chatLanding.js",
         "apps/web/src/main.js"
       ],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "countryBoundaries",
+      "source": "services/api/countryBoundaries.js",
+      "sha256": "993c3c52be57e889ff1d7cfe3989ad1cdc28577e2f9d5abf7d31a106508cefe2",
+      "exportedHandlers": [],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [],
+      "guiReferences": [],
       "liveAcceptance": "unverified"
     },
     {
