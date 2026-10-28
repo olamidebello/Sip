@@ -1,0 +1,76 @@
+---
+- name: Add olamideconnect.com as an HTTPS entry point to the existing SIP platform
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Require exclusive DNS routing to the existing SIP server
+      ansible.builtin.command:
+        argv:
+          - python3
+          - '-c'
+          - |
+            import socket,sys
+            expected={'154.29.77.102'}
+            for name in ['olamideconnect.com','www.olamideconnect.com']:
+                try:addresses={r[4][0] for r in socket.getaddrinfo(name,None,socket.AF_INET)}
+                except socket.gaierror:sys.exit('DNS missing for '+name+'; set its A record to 154.29.77.102')
+                if addresses!=expected:sys.exit('DNS must point only to 154.29.77.102 for '+name+'; remove parking and extra A records')
+                try:ipv6={r[4][0] for r in socket.getaddrinfo(name,None,socket.AF_INET6)}
+                except socket.gaierror:ipv6=set()
+                if ipv6:sys.exit('Review/remove AAAA records for '+name+' before enabling this IPv4 alias')
+            print('Both alias names point exclusively to the SIP IPv4 server')
+      changed_when: false
+    - name: Create private domain rollback directory
+      ansible.builtin.tempfile:
+        state: directory
+        path: /opt/olamide/backups
+        prefix: connect-domain-
+      register: connect_backup
+    - name: Preserve, validate and deploy HTTPS aliases with rollback
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        exec 9>/run/olamide-update.lock
+        flock -n 9
+        cd /opt/olamide/repo/deployment/docker
+        backup='{{ connect_backup.path }}'
+        exec > "$backup/deploy.log" 2>&1
+        test -f Caddyfile
+        cp -p Caddyfile "$backup/Caddyfile"
+        docker compose exec -T web cat /etc/caddy/Caddyfile > "$backup/running-Caddyfile"
+        cmp Caddyfile "$backup/running-Caddyfile"
+        container=$(docker compose ps -q web)
+        test -n "$container"
+        image=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$container")
+        tag="olamide-web:before-connect-$(basename "$backup")"
+        docker tag "$image" "$tag"
+        printf 'services:\n  web:\n    image: %s\n' "$tag" > "$backup/rollback.yml"
+        promoted=0
+        rollback() {
+          trap - ERR
+          cp -p "$backup/Caddyfile" Caddyfile
+          if test "$promoted" = 1; then docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps web || true; fi
+          exit 1
+        }
+        trap rollback ERR
+        python3 '{{ playbook_dir }}/../../tools/prepare_connect_domain.py' Caddyfile "$backup/staged-Caddyfile"
+        cmp Caddyfile "$backup/Caddyfile"
+        cp "$backup/staged-Caddyfile" Caddyfile
+        docker compose build web
+        docker compose run --rm --no-deps -T --entrypoint caddy web validate --config /etc/caddy/Caddyfile --adapter caddyfile
+        promoted=1
+        docker compose up -d --no-deps web
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        for host in olamideconnect.com www.olamideconnect.com; do
+          curl --fail --silent --show-error --head --max-time 15 --retry 12 --retry-all-errors --retry-delay 3 "https://$host/" > "$backup/$host.headers"
+          grep -Eiq '^location: https://sip[.]dobhrap[.]com/' "$backup/$host.headers"
+        done
+        trap - ERR
+      args:
+        executable: /bin/bash
+      no_log: true
+      changed_when: true
+    - name: Report HTTPS domain result
+      ansible.builtin.debug:
+        msg: 'https://olamideconnect.com and https://www.olamideconnect.com now redirect to the existing SIP platform, preserving requested paths. Canonical SIP identities, login and calling configuration remain on sip.dobhrap.com. Backup/private log: {{ connect_backup.path }}'
