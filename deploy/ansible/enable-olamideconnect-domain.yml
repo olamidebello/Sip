@@ -27,50 +27,89 @@
         path: /opt/olamide/backups
         prefix: connect-domain-
       register: connect_backup
-    - name: Preserve, validate and deploy HTTPS aliases with rollback
-      ansible.builtin.shell: |
-        set -euo pipefail
-        umask 077
-        exec 9>/run/olamide-update.lock
-        flock -n 9
-        cd /opt/olamide/repo/deployment/docker
-        backup='{{ connect_backup.path }}'
-        exec > "$backup/deploy.log" 2>&1
-        test -f Caddyfile
-        cp -p Caddyfile "$backup/Caddyfile"
-        docker compose exec -T web cat /etc/caddy/Caddyfile > "$backup/running-Caddyfile"
-        cmp Caddyfile "$backup/running-Caddyfile"
-        container=$(docker compose ps -q web)
-        test -n "$container"
-        image=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$container")
-        tag="olamide-web:before-connect-$(basename "$backup")"
-        docker tag "$image" "$tag"
-        printf 'services:\n  web:\n    image: %s\n' "$tag" > "$backup/rollback.yml"
-        promoted=0
-        rollback() {
-          trap - ERR
-          cp -p "$backup/Caddyfile" Caddyfile
-          if test "$promoted" = 1; then docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps web || true; fi
-          exit 1
-        }
-        trap rollback ERR
-        python3 '{{ playbook_dir }}/../../tools/prepare_connect_domain.py' Caddyfile "$backup/staged-Caddyfile"
-        cmp Caddyfile "$backup/Caddyfile"
-        cp "$backup/staged-Caddyfile" Caddyfile
-        docker compose build web
-        docker compose run --rm --no-deps -T --entrypoint caddy web validate --config /etc/caddy/Caddyfile --adapter caddyfile
-        promoted=1
-        docker compose up -d --no-deps web
-        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
-        for host in olamideconnect.com www.olamideconnect.com; do
-          curl --fail --silent --show-error --head --max-time 15 --retry 12 --retry-all-errors --retry-delay 3 "https://$host/" > "$backup/$host.headers"
-          grep -Eiq '^location: https://sip[.]dobhrap[.]com/' "$backup/$host.headers"
-        done
-        trap - ERR
-      args:
-        executable: /bin/bash
-      no_log: true
-      changed_when: true
+    - name: Deploy the domain and report a safe failure stage
+      block:
+        - name: Preserve, validate and deploy HTTPS aliases with rollback
+          ansible.builtin.shell: |
+            set -euo pipefail
+            umask 077
+            backup='{{ connect_backup.path }}'
+            exec > "$backup/deploy.log" 2>&1
+            phase=lock
+            trap 'printf "CONNECT_DOMAIN_ERROR phase=%s\n" "$phase" > "$backup/status"; exit 1' ERR
+            exec 9>/run/olamide-update.lock
+            flock -n 9 || { echo 'Another deployment holds /run/olamide-update.lock; retry after it finishes.'; false; }
+            phase=application_path
+            cd /opt/olamide/repo/deployment/docker
+            phase=source_config
+            test -f Caddyfile
+            cp -p Caddyfile "$backup/Caddyfile"
+            phase=running_config
+            docker compose exec -T web cat /etc/caddy/Caddyfile > "$backup/running-Caddyfile"
+            phase=config_comparison
+            cmp Caddyfile "$backup/running-Caddyfile"
+            phase=image_backup
+            container=$(docker compose ps -q web)
+            test -n "$container"
+            image=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$container")
+            tag="olamide-web:before-connect-$(basename "$backup")"
+            docker tag "$image" "$tag"
+            printf 'services:\n  web:\n    image: %s\n' "$tag" > "$backup/rollback.yml"
+            promoted=0
+            rollback() {
+              trap - ERR
+              printf "CONNECT_DOMAIN_ERROR phase=%s\n" "$phase" > "$backup/status"
+              cp -p "$backup/Caddyfile" Caddyfile
+              if test "$promoted" = 1; then docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps web || true; fi
+              exit 1
+            }
+            trap rollback ERR
+            phase=alias_staging
+            python3 '{{ playbook_dir }}/../../tools/prepare_connect_domain.py' Caddyfile "$backup/staged-Caddyfile"
+            cmp Caddyfile "$backup/Caddyfile"
+            cp "$backup/staged-Caddyfile" Caddyfile
+            phase=web_build
+            docker compose build web
+            phase=config_validation
+            docker compose run --rm --no-deps -T --entrypoint caddy web validate --config /etc/caddy/Caddyfile --adapter caddyfile
+            phase=web_promotion
+            promoted=1
+            docker compose up -d --no-deps web
+            phase=canonical_health
+            curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+            phase=alias_https
+            for host in olamideconnect.com www.olamideconnect.com; do
+              curl --fail --silent --show-error --head --max-time 15 --retry 12 --retry-all-errors --retry-delay 3 "https://$host/" > "$backup/$host.headers"
+              grep -Eiq '^location: https://sip[.]dobhrap[.]com/' "$backup/$host.headers"
+            done
+            trap - ERR
+          args:
+            executable: /bin/bash
+          no_log: true
+          changed_when: true
+      rescue:
+        - name: Read fixed error stage only
+          ansible.builtin.command:
+            argv:
+              - python3
+              - '-c'
+              - |
+                from pathlib import Path
+                import re,sys
+                p=Path(sys.argv[1])/'status'
+                value=p.read_text().strip() if p.exists() else ''
+                print(value if re.fullmatch(r'CONNECT_DOMAIN_ERROR phase=[a-z_]+',value) else 'CONNECT_DOMAIN_ERROR phase=unknown')
+              - '{{ connect_backup.path }}'
+          register: domain_failure
+          changed_when: false
+        - name: Show failure stage and private log path
+          ansible.builtin.debug:
+            msg:
+              - '{{ domain_failure.stdout }}'
+              - 'Private log: {{ connect_backup.path }}/deploy.log'
+        - name: Stop after domain deployment failure
+          ansible.builtin.fail:
+            msg: 'Domain update stopped. phase=lock means another deployment is running; retry when it finishes. Other stages are detailed in the reported private log.'
     - name: Report HTTPS domain result
       ansible.builtin.debug:
         msg: 'https://olamideconnect.com and https://www.olamideconnect.com now redirect to the existing SIP platform, preserving requested paths. Canonical SIP identities, login and calling configuration remain on sip.dobhrap.com. Backup/private log: {{ connect_backup.path }}'
