@@ -129,8 +129,8 @@ jobs:
             export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/upload-keystore.jks"
             ./gradlew bundleRelease
           else
-            echo "::warning::No Android upload key configured. This bundle is for build verification only and cannot be uploaded to Play Console until signed with your persistent upload key."
-            ./gradlew bundleRelease
+            echo "::error::Missing ANDROID_KEYSTORE_BASE64. Configure a persistent upload key before building a Play Store release."
+            exit 1
           fi
 
       - name: Upload AAB artifact
