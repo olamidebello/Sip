@@ -57,26 +57,26 @@ jobs:
         id: signing
         working-directory: apps/mobile/android
         env:
-          CARRIER_KEYSTORE_B64: ${{ secrets.CARRIER_KEYSTORE_B64 }}
-          CARRIER_KEY_ALIAS: ${{ secrets.CARRIER_KEY_ALIAS }}
-          CARRIER_KEYSTORE_PASSWORD: ${{ secrets.CARRIER_KEYSTORE_PASSWORD }}
-          CARRIER_KEY_PASSWORD: ${{ secrets.CARRIER_KEY_PASSWORD }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           mkdir -p play-output
           cp app/build/outputs/apk/debug/app-debug.apk play-output/Olamide-debug.apk
-          if [[ -n "$CARRIER_KEYSTORE_B64" && -n "$CARRIER_KEY_ALIAS" && -n "$CARRIER_KEYSTORE_PASSWORD" && -n "$CARRIER_KEY_PASSWORD" ]]; then
+          if [[ -n "$ANDROID_KEYSTORE_BASE64" && -n "$ANDROID_KEY_ALIAS" && -n "$ANDROID_KEYSTORE_PASSWORD" && -n "$ANDROID_KEY_PASSWORD" ]]; then
             umask 077
             trap 'rm -f "$RUNNER_TEMP/play-upload.jks"' EXIT
-            printf '%s' "$CARRIER_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/play-upload.jks"
-            jarsigner -keystore "$RUNNER_TEMP/play-upload.jks" -storepass:env CARRIER_KEYSTORE_PASSWORD -keypass:env CARRIER_KEY_PASSWORD -signedjar play-output/Olamide-release.aab app/build/outputs/bundle/release/app-release.aab "$CARRIER_KEY_ALIAS"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/play-upload.jks"
+            jarsigner -keystore "$RUNNER_TEMP/play-upload.jks" -storepass:env ANDROID_KEYSTORE_PASSWORD -keypass:env ANDROID_KEY_PASSWORD -signedjar play-output/Olamide-release.aab app/build/outputs/bundle/release/app-release.aab "$ANDROID_KEY_ALIAS"
             jarsigner -verify play-output/Olamide-release.aab
             tools="$ANDROID_HOME/build-tools/36.0.0"
             "$tools/zipalign" -f -p 4 app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/aligned-release.apk"
-            "$tools/apksigner" sign --ks "$RUNNER_TEMP/play-upload.jks" --ks-key-alias "$CARRIER_KEY_ALIAS" --ks-pass env:CARRIER_KEYSTORE_PASSWORD --key-pass env:CARRIER_KEY_PASSWORD --out play-output/Olamide-release.apk "$RUNNER_TEMP/aligned-release.apk"
+            "$tools/apksigner" sign --ks "$RUNNER_TEMP/play-upload.jks" --ks-key-alias "$ANDROID_KEY_ALIAS" --ks-pass env:ANDROID_KEYSTORE_PASSWORD --key-pass env:ANDROID_KEY_PASSWORD --out play-output/Olamide-release.apk "$RUNNER_TEMP/aligned-release.apk"
             "$tools/apksigner" verify --verbose play-output/Olamide-release.apk
             rm -f "$RUNNER_TEMP/aligned-release.apk"
-            echo 'Release bundle signed with configured carrier key. Verify this key matches the Play upload certificate before submitting.' > play-output/STATUS.txt
+            echo 'Release bundle signed with configured Android upload key. Verify this key matches the Play upload certificate before submitting.' > play-output/STATUS.txt
           else
             cp app/build/outputs/bundle/release/app-release.aab play-output/Olamide-UNSIGNED.aab
             echo 'Signing key not configured. Debug APK is for testing only. UNSIGNED bundle cannot be submitted to Google Play.' > play-output/STATUS.txt
