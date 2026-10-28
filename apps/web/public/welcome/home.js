@@ -1,0 +1,1 @@
+for(const button of document.querySelectorAll('[data-watch]'))button.addEventListener('click',()=>{const video=document.getElementById('product-demo');if(video)video.play().catch(()=>{video.focus();});});

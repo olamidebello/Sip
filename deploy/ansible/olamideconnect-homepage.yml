@@ -1,0 +1,133 @@
+---
+- name: Publish the OlamideConnect marketing homepage without changing SIP app routes
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Require two public DNS resolvers to agree on the SIP server
+      ansible.builtin.command:
+        argv: [python3, '{{ playbook_dir }}/../../tools/check_connect_dns.py']
+      register: connect_dns
+      changed_when: false
+    - name: Show public DNS and local cache comparison
+      ansible.builtin.debug:
+        var: connect_dns.stdout_lines
+    - name: Create private domain rollback directory
+      ansible.builtin.tempfile:
+        state: directory
+        path: /opt/olamide/backups
+        prefix: connect-homepage-
+      register: connect_backup
+    - name: Deploy the domain and report a safe failure stage
+      block:
+        - name: Preserve, validate and publish the marketing homepage with rollback
+          ansible.builtin.shell: |
+            set -euo pipefail
+            umask 077
+            backup='{{ connect_backup.path }}'
+            exec > "$backup/deploy.log" 2>&1
+            phase=lock
+            trap 'printf "CONNECT_DOMAIN_ERROR phase=%s\n" "$phase" > "$backup/status"; exit 1' ERR
+            exec 9>/run/olamide-update.lock
+            flock -n 9 || { echo 'Another deployment holds /run/olamide-update.lock; retry after it finishes.'; false; }
+            phase=application_path
+            cd /opt/olamide/repo/deployment/docker
+            phase=source_config
+            test -f Caddyfile
+            cp -p Caddyfile "$backup/Caddyfile"
+            phase=running_config
+            docker compose exec -T web cat /etc/caddy/Caddyfile > "$backup/running-Caddyfile"
+            phase=config_comparison
+            cmp Caddyfile "$backup/running-Caddyfile"
+            phase=image_backup
+            container=$(docker compose ps -q web)
+            test -n "$container"
+            image=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$container")
+            tag="olamide-web:before-connect-$(basename "$backup")"
+            docker tag "$image" "$tag"
+            printf 'services:\n  web:\n    image: %s\n' "$tag" > "$backup/rollback.yml"
+            promoted=0
+            phase=homepage_backup
+            python3 - "$backup" <<'PYCODE'
+            from pathlib import Path
+            import json,sys,shutil
+            root=Path('/opt/olamide/repo/apps/web/public/welcome');b=Path(sys.argv[1]);manifest={}
+            if root.is_symlink():raise SystemExit('Symlinked welcome directory refused')
+            for name in ['index.html','home.css','home.js','mark.svg','demo-poster.svg','demo-en.vtt','olamideconnect-demo.mp4']:
+                p=root/name
+                if p.is_symlink():raise SystemExit('Symlinked welcome asset refused')
+                manifest[name]=p.exists()
+                if p.exists():
+                    target=b/'assets'/name;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,target)
+            (b/'asset-manifest.json').write_text(json.dumps(manifest))
+            PYCODE
+            rollback() {
+              trap - ERR
+              printf "CONNECT_DOMAIN_ERROR phase=%s\n" "$phase" > "$backup/status"
+              cp -p "$backup/Caddyfile" Caddyfile
+              python3 - "$backup" <<'PYCODE'
+            from pathlib import Path
+            import json,sys,shutil
+            b=Path(sys.argv[1]);root=Path('/opt/olamide/repo/apps/web/public/welcome')
+            for name,exists in json.loads((b/'asset-manifest.json').read_text()).items():
+                if exists:shutil.copy2(b/'assets'/name,root/name)
+                else:(root/name).unlink(missing_ok=True)
+            PYCODE
+              if test "$promoted" = 1; then docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps web || true; fi
+              exit 1
+            }
+            trap rollback ERR
+            phase=alias_staging
+            python3 '{{ playbook_dir }}/../../tools/prepare_connect_homepage.py' Caddyfile "$backup/staged-Caddyfile"
+            cmp Caddyfile "$backup/Caddyfile"
+            cp "$backup/staged-Caddyfile" Caddyfile
+            phase=homepage_assets
+            install -d /opt/olamide/repo/apps/web/public/welcome
+            for name in index.html home.css home.js mark.svg demo-poster.svg demo-en.vtt olamideconnect-demo.mp4; do
+              install -m 0644 '{{ playbook_dir }}/../../apps/web/public/welcome/'"$name" "/opt/olamide/repo/apps/web/public/welcome/$name"
+            done
+            phase=web_build
+            docker compose build web
+            phase=config_validation
+            docker compose run --rm --no-deps -T --entrypoint caddy web validate --config /etc/caddy/Caddyfile --adapter caddyfile
+            phase=web_promotion
+            promoted=1
+            docker compose up -d --no-deps web
+            phase=canonical_health
+            curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+            phase=alias_https
+            for host in olamideconnect.com www.olamideconnect.com; do
+              curl --fail --silent --show-error --max-time 15 --retry 12 --retry-all-errors --retry-delay 3 --resolve "$host:443:154.29.77.102" "https://$host/" > "$backup/$host.html"
+              grep -Fq 'A little closer.' "$backup/$host.html"
+            done
+            trap - ERR
+          args:
+            executable: /bin/bash
+          no_log: true
+          changed_when: true
+      rescue:
+        - name: Read fixed error stage only
+          ansible.builtin.command:
+            argv:
+              - python3
+              - '-c'
+              - |
+                from pathlib import Path
+                import re,sys
+                p=Path(sys.argv[1])/'status'
+                value=p.read_text().strip() if p.exists() else ''
+                print(value if re.fullmatch(r'CONNECT_DOMAIN_ERROR phase=[a-z_]+',value) else 'CONNECT_DOMAIN_ERROR phase=unknown')
+              - '{{ connect_backup.path }}'
+          register: domain_failure
+          changed_when: false
+        - name: Show failure stage and private log path
+          ansible.builtin.debug:
+            msg:
+              - '{{ domain_failure.stdout }}'
+              - 'Private log: {{ connect_backup.path }}/deploy.log'
+        - name: Stop after domain deployment failure
+          ansible.builtin.fail:
+            msg: 'Domain update stopped. phase=lock means another deployment is running; retry when it finishes. Other stages are detailed in the reported private log.'
+    - name: Report marketing homepage result
+      ansible.builtin.debug:
+        msg: 'Marketing homepage published at https://olamideconnect.com and https://www.olamideconnect.com. Login and signup link to the existing SIP platform. Includes an 18-second captioned illustrated demo. Backup/private log: {{ connect_backup.path }}'
