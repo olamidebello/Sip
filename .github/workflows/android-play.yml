@@ -82,7 +82,7 @@ jobs:
             echo 'Signing key not configured. Debug APK is for testing only. UNSIGNED bundle cannot be submitted to Google Play.' > play-output/STATUS.txt
           fi
           printf '%s\n' "$GITHUB_SHA" > play-output/SOURCE_COMMIT.txt
-          printf '%s\n' 'Package: com.dobhrap.olamide. Target API: 36. Hosted-web preview; physical-device and policy acceptance required. No Play submission performed.' >> play-output/STATUS.txt
+          printf '%s\n' 'Package: com.africanappsstore.olamide. Target API: 36. Hosted-web preview; physical-device and policy acceptance required. No Play submission performed.' >> play-output/STATUS.txt
           cat play-output/STATUS.txt >> "$GITHUB_STEP_SUMMARY"
           cd play-output && sha256sum *.apk *.aab > SHA256SUMS
       - uses: actions/upload-artifact@v4
