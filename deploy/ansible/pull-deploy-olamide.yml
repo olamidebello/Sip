@@ -1,0 +1,42 @@
+---
+# Deploy the Olamide SIP web/API service on the existing host.
+# Android signing keys MUST NOT be generated or stored on this server.
+- name: Pull and deploy Olamide SIP safely
+  hosts: all
+  become: true
+  gather_facts: false
+  serial: 1
+  tasks:
+    - name: Check required Docker Compose installation
+      ansible.builtin.command: docker compose version
+      register: compose_version
+      changed_when: false
+
+    - name: Ensure backup location exists
+      ansible.builtin.file:
+        path: /opt/olamide/backups
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: Deploy using existing guarded backup and verification script
+      block:
+        - name: Run existing SIP deployment procedure
+          ansible.builtin.script: ../../deployment/pull-and-deploy.sh
+          args:
+            executable: /bin/bash
+          register: deploy_result
+          changed_when: "'SIP_DEPLOYED' in deploy_result.stdout"
+          no_log: true
+      rescue:
+        - name: Display only sanitized failure status
+          ansible.builtin.debug:
+            msg: "{{ deploy_result.stdout_lines | default([]) | select('match', '^SIP_DEPLOY_ERROR phase=[a-z_]+ log=/opt/olamide/backups/deploy-log-[A-Za-z0-9]+$') | list }}"
+        - name: Stop rather than overwrite local changes or reset history
+          ansible.builtin.fail:
+            msg: "Deployment failed. Inspect root-only deployment log on the target. Do not force reset or discard local changes."
+
+    - name: Report successful deployment
+      ansible.builtin.debug:
+        msg: "{{ deploy_result.stdout_lines | select('match', '^SIP_DEPLOYED ') | list }}"
