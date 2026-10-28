@@ -1,5 +1,5 @@
 {
-  "appId": "com.dobhrap.olamide",
+  "appId": "com.africanappsstore.olamide",
   "appName": "Olamide",
   "webDir": "www",
   "server": {"url": "https://sip.dobhrap.com", "cleartext": false},
