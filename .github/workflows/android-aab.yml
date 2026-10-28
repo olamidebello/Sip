@@ -46,6 +46,22 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Apply original Olamide logo and artwork to Android
+        run: |
+          python3 -m pip install --user Pillow
+          python3 apps/mobile/generate-brand-artwork.py
+          test -s apps/mobile/play-artwork/play-icon-512.png
+          test -s apps/mobile/play-artwork/feature-graphic-1024x500.png
+          test -s apps/mobile/android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+
+      - name: Upload Play Store branding artwork
+        uses: actions/upload-artifact@v4
+        with:
+          name: olamide-sip-vpn-brand-artwork
+          path: apps/mobile/play-artwork/
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Set unique Play Store version code
         working-directory: apps/mobile/android
         env:
