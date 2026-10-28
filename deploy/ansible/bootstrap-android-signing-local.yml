@@ -1,0 +1,91 @@
+---
+# Run locally ON the trusted signing host:
+# ansible-playbook -i localhost, -c local deploy/ansible/bootstrap-android-signing-local.yml
+# GitHub no longer accepts account passwords for CLI/API authentication.
+# First authorize 'gh auth login' (device/browser) with the desired GitHub account.
+- name: Initialize Olamide Android Play upload signing secrets
+  hosts: all
+  connection: local
+  become: false
+  gather_facts: false
+  vars:
+    repo: olamidebello/Sip
+    checkout: /opt/olamide-signing/source
+    backup_dir: /root/olamide-android-signing
+    expected_email: dobcalldemo@gmail.com
+  tasks:
+    - name: Require root shell for private backup location
+      ansible.builtin.assert:
+        that: ansible_user_id | default(lookup('env', 'USER')) == 'root'
+        fail_msg: Run as root (already root on the SIP server), not sudo.
+    - name: Install required tools
+      ansible.builtin.apt:
+        name: [git, gh, openssl, default-jdk, ca-certificates]
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+    - name: Check GitHub CLI authorization
+      ansible.builtin.command: gh auth status
+      register: gh_status
+      changed_when: false
+      failed_when: false
+      no_log: true
+    - name: Explain required secure GitHub authorization
+      ansible.builtin.fail:
+        msg: >-
+          GitHub does not support logging in with an account password for CLI/API operations.
+          Run 'gh auth login --hostname github.com --git-protocol https --web' once,
+          authenticate as the account associated with dobcalldemo@gmail.com,
+          then rerun this playbook. Never provide your GitHub password to Ansible.
+      when: gh_status.rc != 0
+    - name: Verify authenticated account has access to target repository
+      ansible.builtin.command: gh repo view {{ repo }} --json nameWithOwner --jq .nameWithOwner
+      register: repo_check
+      changed_when: false
+      no_log: true
+    - name: Confirm target repository
+      ansible.builtin.assert:
+        that: repo_check.stdout == repo
+    - name: Check whether signing backup already exists
+      ansible.builtin.stat:
+        path: "{{ backup_dir }}"
+      register: backup_stat
+    - name: Require explicit recovery when backup already exists
+      ansible.builtin.fail:
+        msg: >-
+          Existing signing backup found. No keys were overwritten.
+          Check GitHub secrets and retain the original keystore.
+      when: backup_stat.stat.exists
+    - name: Clone signing automation repository
+      ansible.builtin.git:
+        repo: https://github.com/olamidebello/Sip.git
+        dest: "{{ checkout }}"
+        version: main
+        update: true
+      # Keep the signing checkout separate from the live SIP service.
+    - name: Run one-time signing key bootstrap and upload GitHub secrets
+      ansible.builtin.command: bash scripts/bootstrap-android-signing.sh
+      args:
+        chdir: "{{ checkout }}"
+      environment:
+        OLAMIDE_SIGNING_BACKUP_DIR: "{{ backup_dir }}"
+      register: signing
+      no_log: true
+    - name: Verify signing secret names (never display values)
+      ansible.builtin.command: gh secret list --repo {{ repo }} --json name --jq '.[].name'
+      register: names
+      changed_when: false
+      no_log: true
+    - name: Confirm all four signing secrets exist
+      ansible.builtin.assert:
+        that:
+          - "'ANDROID_KEYSTORE_BASE64' in names.stdout_lines"
+          - "'ANDROID_KEYSTORE_PASSWORD' in names.stdout_lines"
+          - "'ANDROID_KEY_ALIAS' in names.stdout_lines"
+          - "'ANDROID_KEY_PASSWORD' in names.stdout_lines"
+    - name: Report completion without revealing credentials
+      ansible.builtin.debug:
+        msg: >-
+          Android signing secrets are configured for {{ repo }}.
+          Protect and back up {{ backup_dir }} offline, then remove the private
+          backup from the production SIP server after verifying recovery.
