@@ -27,3 +27,21 @@ for name in sorted(known):
                 'apps/web/src/'+name)
     if not (root/relative).is_file():
         print('PHONE_SIGNAL_CHECK absent_now='+name)
+# Use the controller's public source catalog to recognize other missing modules.
+catalog=Path(__file__).resolve().parents[1]/'apps/web'
+public_names={f.name for folder in [catalog/'src',catalog/'public'] for f in folder.rglob('*') if f.is_file() and f.suffix in {'.js','.css','.html','.json','.svg','.png'}}
+for line in s.splitlines():
+    if not re.search(r'ENOENT|No such file|Could not resolve|failed to read|not found|Cannot find|Could not load',line,re.I):continue
+    for name in sorted(public_names-known):
+        if re.search(r'(?<![A-Za-z0-9_.-])'+re.escape(name)+r'(?![A-Za-z0-9_.-])',line):
+            print('PHONE_SIGNAL_CHECK build_reference='+name)
+main=root/'apps/web/src/main.js'
+if main.is_file():
+    source=main.read_text(errors='replace')
+    for relative in re.findall(r'''(?:from\s*|import\s*)['"](\./[^'"\n]+)['"]''',source):
+        name=Path(relative).name
+        if name in public_names and not (main.parent/relative).is_file():
+            print('PHONE_SIGNAL_CHECK unresolved_import='+name)
+# Distinguish runtime/build filesystem problems from frontend module resolution.
+for marker,code in [('esbuild','esbuild'),('node_modules','node_modules'),('/bin/sh','build_shell'),('npm ERR!','npm'),('ENOSPC','disk_full'),('Could not load','module_load'),('Could not resolve','module_resolution')]:
+    if marker in s:print('PHONE_SIGNAL_CHECK build_context='+code)
