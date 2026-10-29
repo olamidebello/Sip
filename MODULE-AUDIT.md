@@ -291,6 +291,7 @@ API source modules: 168. Application feature entries: 86. Kamailio entries: 266.
 | apps/web/src/pbxBranding.js | web | unverified |
 | apps/web/src/phoneContacts.js | web | unverified |
 | apps/web/src/phoneSettingsUi.js | web | unverified |
+| apps/web/src/phoneSignal.js | web | unverified |
 | apps/web/src/pricing.js | web | unverified |
 | apps/web/src/productImport.js | web | unverified |
 | apps/web/src/productStore.js | web | unverified |

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.",
   "summary": {
-    "clientSourceModules": 179,
+    "clientSourceModules": 180,
     "apiSourceModules": 168,
     "applicationFeatures": 86,
     "featureStates": {
@@ -561,6 +561,11 @@
     },
     {
       "source": "apps/web/src/phoneSettingsUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/phoneSignal.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -4389,6 +4394,7 @@
         "apps/web/src/pbx.js",
         "apps/web/src/phoneContacts.js",
         "apps/web/src/phoneSettingsUi.js",
+        "apps/web/src/phoneSignal.js",
         "apps/web/src/pricing.js",
         "apps/web/src/productImport.js",
         "apps/web/src/productStore.js",
