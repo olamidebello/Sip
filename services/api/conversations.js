@@ -46,12 +46,12 @@ export async function handleConversations({req,res,path,user,pool,send,readJson,
       CASE WHEN m.deleted_at IS NULL THEN m.body ELSE '' END AS body,m.created_at,m.expires_at,m.view_once,m.opened_at,m.reply_to,m.read_at,m.edited_at,m.deleted_at,m.attachment_id,a.name AS attachment_name,a.mime AS attachment_mime,EXISTS(SELECT 1 FROM message_stars stars WHERE stars.user_id=$1 AND stars.message_id=m.id) AS starred,
       CASE WHEN r.deleted_at IS NULL AND r.view_once=FALSE AND (r.expires_at IS NULL OR r.expires_at>UTC_TIMESTAMP(3)) THEN r.body ELSE '' END AS reply_body
       FROM messages m LEFT JOIN messenger_attachments a ON a.id=m.attachment_id LEFT JOIN messages r ON r.id=m.reply_to AND ((r.sender_id=m.sender_id AND r.recipient_id=m.recipient_id) OR (r.sender_id=m.recipient_id AND r.recipient_id=m.sender_id))
-      WHERE ((m.sender_id=$1 AND m.recipient_id=$2) OR (m.sender_id=$2 AND m.recipient_id=$1)) AND (m.expires_at IS NULL OR m.expires_at>UTC_TIMESTAMP(3))
+      WHERE NOT EXISTS (SELECT 1 FROM subscriber_sms_deliveries sms_copy WHERE sms_copy.id=m.id) AND ((m.sender_id=$1 AND m.recipient_id=$2) OR (m.sender_id=$2 AND m.recipient_id=$1)) AND (m.expires_at IS NULL OR m.expires_at>UTC_TIMESTAMP(3))
       ORDER BY m.created_at DESC,m.id DESC LIMIT 100`,[user.id,contact]);
     const prefs=(await pool.query(`SELECT owner_id,blocked,muted,archived,pinned,unread,typing_until>NOW(3) AS typing
       FROM conversation_preferences WHERE (owner_id=$1 AND contact_id=$2) OR (owner_id=$2 AND contact_id=$1)`,[user.id,contact])).rows;
     const reactionRows=(await pool.query(`SELECT r.message_id,r.user_id,r.reaction FROM message_reactions r JOIN messages m ON m.id=r.message_id
-      WHERE ((m.sender_id=$1 AND m.recipient_id=$2) OR (m.sender_id=$2 AND m.recipient_id=$1)) AND m.deleted_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>UTC_TIMESTAMP(3))
+      WHERE NOT EXISTS (SELECT 1 FROM subscriber_sms_deliveries sms_copy WHERE sms_copy.id=m.id) AND ((m.sender_id=$1 AND m.recipient_id=$2) OR (m.sender_id=$2 AND m.recipient_id=$1)) AND m.deleted_at IS NULL AND (m.expires_at IS NULL OR m.expires_at>UTC_TIMESTAMP(3))
       ORDER BY m.created_at DESC LIMIT 200`,[user.id,contact])).rows;
     const own=prefs.find(p=>p.owner_id===user.id),other=prefs.find(p=>p.owner_id===contact);
     return send(res,200,{viewer:user.id,messages:messages.rows.reverse(),reactions:reactionRows,

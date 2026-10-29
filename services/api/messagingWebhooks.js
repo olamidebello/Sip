@@ -1,3 +1,4 @@
+import {handleSmsHistory} from './smsHistory.js';
 import {acceptQuickSignup} from './quickSignup.js';
 import {queueSubscriberSms} from './subscriberRouting.js';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
@@ -123,6 +124,7 @@ export async function handleMessagingWebhookAdmin({req,res,user,pool,send,origin
 
 const phone = value => typeof value === 'string' && /^\+[1-9][0-9]{7,14}$/.test(value);
 export async function handleExternalSms({req,res,path,user,pool,send,readJson}) {
+  if(path==='/api/external-sms/history')return handleSmsHistory({req,res,path,user,pool,send,readJson});
   if (path === '/api/external-sms/numbers' && req.method === 'GET') {
     const rows=await pool.query('SELECT number_e164,daily_limit,used_today,usage_day,enabled FROM flowroute_sms_numbers WHERE tenant_id=$1 AND user_id=$2 ORDER BY number_e164',[user.tenant_id,user.id]);
     return send(res,200,{numbers:rows.rows});

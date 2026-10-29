@@ -417,7 +417,7 @@ root.innerHTML = `
       <label>To (international format) <input name="to" type="tel" placeholder="+12065550123" pattern="[+][1-9][0-9]{7,14}" required></label>
       <label>Message <textarea name="body" maxlength="1600" required></textarea></label>
       <button>Send SMS</button></form>
-    <details><summary>Subscriber SMS and call routing</summary><p>Copies use your verified profile email and SIP chat. Calls use SIP when the subscriber opts in and is registered online. Carrier SMS delivery still applies.</p><form id="subscriber-routing"><label><input type="checkbox" name="sms_to_email"> Copy incoming SMS to email</label><label><input type="checkbox" name="sms_to_chat"> Copy incoming SMS to SIP chat</label><label><input type="checkbox" name="prefer_online_sip"> Prefer online SIP subscribers for number calls</label><label><input type="checkbox" name="receive_number_sip_calls"> Accept number calls on SIP</label><button>Save controls</button></form><button id="routing-refresh" type="button">Reload routing</button><button id="routing-email-code" type="button">Send email verification code</button><form id="routing-verify"><label>Email code <input name="code" inputmode="numeric" pattern="[0-9]{6}" required></label><button>Verify</button></form><p id="routing-status" role="status"></p><h3>SMS in SIP chat</h3><div id="routing-chat"></div></details><p id="sms-status" role="status"></p><h3>Inbox</h3><div id="sms-inbox"></div><h3>Sent</h3><div id="sms-sent"></div>
+    <details><summary>Subscriber SMS and call routing</summary><p>Copies use your verified profile email and SIP chat. Calls use SIP when the subscriber opts in and is registered online. Carrier SMS delivery still applies.</p><form id="subscriber-routing"><label><input type="checkbox" name="sms_to_email"> Copy incoming SMS to email</label><label><input type="checkbox" name="sms_to_chat"> Keep SMS in the SMS tab</label><label><input type="checkbox" name="prefer_online_sip"> Prefer online SIP subscribers for number calls</label><label><input type="checkbox" name="receive_number_sip_calls"> Accept number calls on SIP</label><button>Save controls</button></form><button id="routing-refresh" type="button">Reload routing</button><button id="routing-email-code" type="button">Send email verification code</button><form id="routing-verify"><label>Email code <input name="code" inputmode="numeric" pattern="[0-9]{6}" required></label><button>Verify</button></form><p id="routing-status" role="status"></p><h3>SMS in SIP chat</h3><div id="routing-chat"></div></details><p id="sms-status" role="status"></p><h3>Inbox</h3><div id="sms-inbox"></div><h3>Sent</h3><div id="sms-sent"></div>
   </section>
   <section id="outbound-rates" hidden><h2>Outbound calling rates</h2>
     <p>Look up the current Flowroute customer rate by destination digits. Prices are USD per minute; this is a rate quote, not a live call charge.</p>
@@ -2867,7 +2867,7 @@ async function refreshMessagingWebhooks(){
 }
 $('#webhooks-refresh').onclick=()=>refreshMessagingWebhooks().catch(error=>{$('#webhooks-status').textContent=error.message;});
 
-smsConversations=setupSmsConversations({document});
+smsConversations=setupSmsConversations({document,history:body=>accountRequest('/api/external-sms/history',body)});
 async function refreshExternalSms(){
   await refreshSubscriberRouting();
   const [numbers,inbox,sent]=await Promise.all([apiGet('/api/external-sms/numbers'),apiGet('/api/external-sms/inbox'),apiGet('/api/external-sms/sent')]);
@@ -2940,12 +2940,14 @@ $('#help-ticket').onclick=()=>showWorkspace('support');
 const routingFlags=['sms_to_email','sms_to_chat','prefer_online_sip','receive_number_sip_calls'];
 async function refreshSubscriberRouting(){
  const data=await apiGet('/api/account/subscriber-routing');
+ $('#subscriber-routing').elements.sms_to_chat.closest('label').hidden=true;
  for(const key of routingFlags)$('#subscriber-routing').elements[key].checked=data[key];
  $('#routing-status').textContent=`Service ${data.enabled?'enabled':'disabled by administrator'} · Email ${data.emailVerified?'verified':'unverified'} · Registrar ${data.callPresenceConfigured?'configured':'not configured'}`;
  const inbox=await apiGet('/api/account/subscriber-routing/sms-chat'),node=$('#routing-chat');node.replaceChildren();
  for(const message of inbox.messages){const item=document.createElement('p');item.textContent=`${message.sender_number} · ${message.body}`;node.append(item);}
 }
 $('#routing-refresh').onclick=()=>refreshSubscriberRouting().catch(e=>{$('#routing-status').textContent=e.message;});
-$('#subscriber-routing').onsubmit=async event=>{event.preventDefault();try{const body={};for(const key of routingFlags)body[key]=event.currentTarget.elements[key].checked;await accountRequest('/api/account/subscriber-routing',body,'PUT');await refreshSubscriberRouting();}catch(e){$('#routing-status').textContent=e.message;}};
+$('#subscriber-routing').onsubmit=async event=>{event.preventDefault();try{const body={};$('#subscriber-routing').elements.sms_to_chat.closest('label').hidden=true;
+ for(const key of routingFlags)body[key]=key==='sms_to_chat'?false:event.currentTarget.elements[key].checked;await accountRequest('/api/account/subscriber-routing',body,'PUT');await refreshSubscriberRouting();}catch(e){$('#routing-status').textContent=e.message;}};
 $('#routing-email-code').onclick=async()=>{try{await accountRequest('/api/account/subscriber-routing/email-code',{});$('#routing-status').textContent='Verification code sent to your profile email.';}catch(e){$('#routing-status').textContent=e.message;}};
 $('#routing-verify').onsubmit=async event=>{event.preventDefault();try{await accountRequest('/api/account/subscriber-routing/verify-email',{code:event.currentTarget.elements.code.value});event.currentTarget.reset();await refreshSubscriberRouting();}catch(e){$('#routing-status').textContent=e.message;}};
