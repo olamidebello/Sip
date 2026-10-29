@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "scope": "Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.",
   "summary": {
-    "clientSourceModules": 186,
-    "apiSourceModules": 169,
+    "clientSourceModules": 187,
+    "apiSourceModules": 170,
     "applicationFeatures": 86,
     "featureStates": {
       "implemented": 13,
@@ -386,6 +386,11 @@
     },
     {
       "source": "apps/web/src/hpInterconnectUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/icnFxUi.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -1285,6 +1290,7 @@
         "apps/web/src/didAvailabilityUi.js",
         "apps/web/src/formGroups.js",
         "apps/web/src/groups.js",
+        "apps/web/src/icnFxUi.js",
         "apps/web/src/kamailioAdmin.js",
         "apps/web/src/liveCallsUi.js",
         "apps/web/src/localeSettings.js",
@@ -2164,6 +2170,26 @@
       "migrationImported": false,
       "tests": [
         "hpInterconnect.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "icnFx",
+      "source": "services/api/icnFx.js",
+      "sha256": "0c4a21a5fe0535d24b1880e74be9a05feb2523fe7106c233601cfff8a9c6c687",
+      "exportedHandlers": [
+        "handleIcnFx"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [
+        "startIcnFx"
+      ],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "icnFx.test.js"
       ],
       "guiReferences": [],
       "liveAcceptance": "unverified"
@@ -4424,6 +4450,7 @@
         "apps/web/src/googleContacts.js",
         "apps/web/src/groups.js",
         "apps/web/src/hpInterconnectUi.js",
+        "apps/web/src/icnFxUi.js",
         "apps/web/src/icnUi.js",
         "apps/web/src/inboundRoutingUi.js",
         "apps/web/src/install.js",

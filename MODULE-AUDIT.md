@@ -2,7 +2,7 @@
 
 Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.
 
-API source modules: 169. Application feature entries: 86. Kamailio entries: 266.
+API source modules: 170. Application feature entries: 86. Kamailio entries: 266.
 
 ## API sources
 
@@ -62,6 +62,7 @@ API source modules: 169. Application feature entries: 86. Kamailio entries: 266.
 | hostedAccounts | True | True | apiBridge.test.js, hostedAccounts.test.js | handleHostedAccounts |
 | hostedApps | True | False | hostedApps.test.js | handleHostedApps |
 | hpInterconnect | False | False | hpInterconnect.test.js | library / CLI / no direct reference |
+| icnFx | False | False | icnFx.test.js | library / CLI / no direct reference |
 | icnInterconnect | False | False | icnInterconnect.test.js | library / CLI / no direct reference |
 | importFlowrouteTrunk | False | False | none identified | library / CLI / no direct reference |
 | inboundDidOwner | False | False | inboundDidOwner.test.js | library / CLI / no direct reference |
@@ -257,6 +258,7 @@ API source modules: 169. Application feature entries: 86. Kamailio entries: 266.
 | apps/web/src/googleContacts.js | web | unverified |
 | apps/web/src/groups.js | web | unverified |
 | apps/web/src/hpInterconnectUi.js | web | unverified |
+| apps/web/src/icnFxUi.js | web | unverified |
 | apps/web/src/icnUi.js | web | unverified |
 | apps/web/src/inboundRoutingUi.js | web | unverified |
 | apps/web/src/install.js | web | unverified |
