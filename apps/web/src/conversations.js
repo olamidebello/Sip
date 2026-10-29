@@ -1,3 +1,4 @@
+import {setupChatWritingTools,appendChatFormatting} from './chatWritingTools.js';
 import {setupMessagePrivacy,closeViewOnce} from './messagePrivacy.js';
 import {chatDayLabel,messageReceipt,setupMessageDetails} from './chatPresentation.js';
 import {icon} from './messengerIcons.js';
@@ -6,6 +7,7 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
   const $=selector=>document.querySelector(selector),thread=()=>$('#contact-list').value;
   const media=setupMediaComposer({document,form:$('#send-message'),request,onError:message=>$('#chat-status').textContent=message});
   const details=setupMessageDetails(document);
+  const writing=setupChatWritingTools({document,form:$('#send-message'),contact:$('#contact-list'),status:$('#chat-status')});
   const privacy=setupMessagePrivacy({document,form:$('#send-message'),media,get});
   let contacts=[],replyTo=null,editing=null,loading=false,lastTyping=0,lastRendered='';
   function setSendLabel(label){const button=$('#send-message button:not([type=button])');button.innerHTML=icon('send');button.setAttribute('aria-label',label);button.title=label;}
@@ -17,6 +19,7 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
     try {
       const data=await get('/api/messages?contact='+encodeURIComponent(contact));
       if(thread()!==contact||!isSignedIn())return;
+      writing.account(data.viewer);
       const list=$('#message-list');
       const search=$('#message-search').value.toLowerCase();
       const renderKey=JSON.stringify([contact,search,data.messages,data.reactions]);
@@ -27,9 +30,9 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
       for(const message of data.messages) {
         if(search&&!message.body.toLowerCase().includes(search))continue;
         const day=chatDayLabel(message.created_at);if(day&&day!==lastDay){const divider=document.createElement('li');divider.className='chat-date-divider';divider.textContent=day;list.append(divider);lastDay=day;}
-        const own=message.sender===data.viewer,item=document.createElement('li');item.className=own?'message-bubble sent':'message-bubble received';item.dataset.messageId=message.id;if(!message.deleted_at&&!message.view_once){item.tabIndex=0;item.setAttribute('aria-expanded','false');item.setAttribute('aria-label','Message. Long press or press Enter for actions.');}
+        const own=message.sender===data.viewer,item=document.createElement('li');item.className=own?'message-bubble sent':'message-bubble received';item.dataset.messageId=message.id;item.dataset.createdDay=String(message.created_at).slice(0,10);item.dataset.starred=String(!!message.starred);if(!message.deleted_at&&!message.view_once){item.tabIndex=0;item.setAttribute('aria-expanded','false');item.setAttribute('aria-label','Message. Long press or press Enter for actions.');}
         if(message.reply_to){const quote=document.createElement('blockquote'),jump=document.createElement('button');jump.type='button';jump.className='chat-reply-quote';jump.textContent=message.reply_body||'Original message removed';jump.setAttribute('aria-label','Go to replied message');jump.onclick=()=>{const original=[...list.querySelectorAll('[data-message-id]')].find(node=>node.dataset.messageId===message.reply_to);if(original){original.scrollIntoView?.({block:'center',behavior:'smooth'});original.classList.add('message-flash');setTimeout(()=>original.classList.remove('message-flash'),1200);}else $('#chat-status').textContent='Original message is outside the loaded history.';};quote.append(jump);item.append(quote);}
-        const body=document.createElement('p');body.textContent=message.deleted_at?'Message removed':message.body;item.append(body);appendAttachment(document,item,message);
+        const body=document.createElement('p');appendChatFormatting(document,body,message.deleted_at?'Message removed':message.body);item.append(body);appendAttachment(document,item,message);
         const stamp=document.createElement('small');stamp.className='message-timestamp';stamp.textContent=new Date(message.created_at).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})+(message.edited_at?' · edited':'');if(own){const state=messageReceipt(message),receipt=document.createElement('span');receipt.className='message-receipt'+(state.read?' read':'');receipt.textContent=state.symbol;receipt.setAttribute('aria-label',state.label);stamp.append(' ',receipt);}item.append(stamp);
         if(!message.deleted_at&&!message.view_once){
           const controls=document.createElement('div');controls.className='message-actions';
@@ -71,12 +74,12 @@ export function setupConversations({get,request,isSignedIn,isVisible,callContact
   };
   const timer=setInterval(()=>{if(isSignedIn()&&isVisible()&&document.visibilityState==='visible')refresh().catch(error=>{$('#chat-status').textContent=error.message;});},5000);
   timer.unref?.();
-  return {refresh,dispose(){clearInterval(timer);media.stop();privacy.dispose();details.dispose();},stopMedia(){lastRendered='';media.stop();privacy.stop();closeViewOnce(document);details.close();},resumeMedia(){media.resume();void privacy.resume();},clearAttachment(){media.reset();},setContacts(value){contacts=value;clearDraft();},clearDraft,async send(body){
+  return {refresh,dispose(){writing.dispose();clearInterval(timer);media.stop();privacy.dispose();details.dispose();},stopMedia(){writing.stop();lastRendered='';media.stop();privacy.stop();closeViewOnce(document);details.close();},resumeMedia(){media.resume();void privacy.resume();},clearAttachment(){media.reset();},setContacts(value){contacts=value;clearDraft();},clearDraft,async send(body){
     if(media.busy)throw new Error('Finish recording or uploading before sending');
     body=body||media.name;
     if(editing)await request('/api/messages/'+editing,{body},'PATCH');
     else await request('/api/messages',{recipient:thread(),body,replyTo,...privacy.payload,...(media.id?{attachmentId:media.id}:{})});
-    media.reset();privacy.reset();
+    writing.sent();media.reset();privacy.reset();
     clearDraft();await request('/api/messages/conversation/'+thread(),{typing:false},'PUT').catch(()=>{});
   }};
 }

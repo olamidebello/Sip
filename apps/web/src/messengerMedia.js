@@ -17,11 +17,14 @@ export function setupMediaComposer({document,form,request,onError,voice=true}){
  const input=document.createElement('input');input.type='file';input.accept='image/png,image/jpeg,image/gif,image/webp,audio/webm,audio/ogg,audio/mp4,video/webm,video/mp4,application/pdf';input.setAttribute('aria-label','Attach a file (up to 2 MB)');
  const preview=document.createElement('span');preview.setAttribute('role','status');
  const remove=document.createElement('button');remove.type='button';remove.textContent='Remove attachment';remove.hidden=true;
+ const localPreview=document.createElement('div');localPreview.className='chat-media-review';form.prepend(localPreview);let previewUrl=null;
+ function clearPreview(){if(previewUrl)document.defaultView.URL.revokeObjectURL(previewUrl);previewUrl=null;localPreview.replaceChildren();}
+ function review(file){clearPreview();localPreview.append(document.createTextNode(file.name+' · '+Math.ceil(file.size/1024)+' KB'));if(!document.defaultView.URL.createObjectURL)return;previewUrl=document.defaultView.URL.createObjectURL(file);const tag=file.type.startsWith('image/')?'img':file.type.startsWith('audio/')?'audio':file.type.startsWith('video/')?'video':null;if(tag){const node=document.createElement(tag);node.src=previewUrl;node.style.maxWidth='100%';node.style.maxHeight='180px';if(tag==='img')node.alt='Attachment preview';else node.controls=true;localPreview.append(node);if(tag==='audio'){const speed=document.createElement('select');speed.setAttribute('aria-label','Voice preview playback speed');for(const rate of [1,1.5,2]){const o=document.createElement('option');o.value=rate;o.textContent=rate+'×';speed.append(o);}speed.onchange=()=>node.playbackRate=Number(speed.value);localPreview.append(speed);}}}
  let attachment=null,recorder=null,stream=null,timeout=null,disposed=false,uploading=false,gesture=null,suppressClick=0,cancelRecording=false,generation=0;
  async function upload(file){
   if(disposed||uploading)return;
   if(file.size>2*1024*1024){onError('File limit is 2 MB');return;}
-  const version=generation;uploading=true;input.disabled=true;preview.textContent='Uploading…';
+  review(file);const version=generation;uploading=true;input.disabled=true;preview.textContent='Uploading…';
   try{
    if(attachment)await request('/api/messenger/attachments/'+attachment.id,{},'DELETE');attachment=null;
    const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=()=>reject(new Error('Could not read file'));reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.readAsDataURL(file);});
@@ -33,6 +36,7 @@ export function setupMediaComposer({document,form,request,onError,voice=true}){
  input.onchange=()=>{if(input.files[0])void upload(input.files[0]);};
  remove.onclick=async()=>{try{if(attachment)await request('/api/messenger/attachments/'+attachment.id,{},'DELETE');reset();}catch(error){onError(error.message);}};
  if(compact){input.hidden=true;const attach=document.createElement('button');attach.type='button';attach.className='chat-attach';attach.innerHTML=icon('attach');attach.setAttribute('aria-label','Attach file');attach.title='Attach file (up to 2 MB)';attach.onclick=()=>input.click();remove.innerHTML=icon('close');remove.setAttribute('aria-label','Remove attachment');remove.title='Remove attachment';preview.className='chat-attachment-preview';toolbar.append(input,attach,preview,remove);}else toolbar.append(input,preview,remove);form.prepend(toolbar);
+ const capture=document.createElement('input');capture.type='file';capture.accept='image/*,video/*';capture.setAttribute('capture','environment');capture.hidden=true;capture.setAttribute('aria-label','Capture photo or video');capture.onchange=()=>{if(capture.files?.[0])void upload(capture.files[0]);capture.value='';};const camera=document.createElement('button');camera.type='button';camera.textContent='Camera';camera.setAttribute('aria-label','Take photo or video');camera.onclick=()=>{if(!input.disabled&&!form.querySelector('[name=body]')?.disabled)capture.click();};toolbar.append(capture,camera);
  let record;
  function setRecordLabel(label){if(compact)record.innerHTML=icon(label==='Stop recording'?'stop':'mic');else record.textContent=label;record.setAttribute('aria-label',label);}
  function stopTracks(){clearTimeout(timeout);stream?.getTracks().forEach(track=>track.stop());stream=null;}
@@ -40,7 +44,7 @@ export function setupMediaComposer({document,form,request,onError,voice=true}){
   record=document.createElement('button');record.type='button';setRecordLabel('Record voice note');record.className='chat-record';record.setAttribute('aria-pressed','false');toolbar.append(record);
   record.onclick=async event=>{
    if(event&&Date.now()<suppressClick)return;
-   if(recorder?.state==='recording'){recorder.stop();return;}
+   if(['recording','paused'].includes(recorder?.state)){recorder.stop();return;}
    if(!document.defaultView.navigator.mediaDevices?.getUserMedia||!document.defaultView.MediaRecorder){onError('Voice recording is unavailable in this browser');return;}
    try{
     cancelRecording=false;
@@ -52,23 +56,24 @@ export function setupMediaComposer({document,form,request,onError,voice=true}){
     recorder.ondataavailable=event=>{if(event.data.size){chunks.push(event.data);bytes+=event.data.size;if(bytes>2*1024*1024&&recorder.state==='recording')recorder.stop();}};
     recorder.onstop=()=>{stopTracks();setRecordLabel('Record voice note');record.setAttribute('aria-pressed','false');if(!disposed&&!cancelRecording)void upload(new File(chunks,'voice-note.'+(mime==='audio/ogg'?'ogg':mime==='audio/mp4'?'m4a':'webm'),{type:mime}));gesture=null;cancelRecording=false;};
     recorder.onerror=()=>{stopTracks();setRecordLabel('Record voice note');onError('Voice recording failed');};
-    recorder.start(1000);setRecordLabel('Stop recording');record.setAttribute('aria-pressed','true');timeout=setTimeout(()=>{if(recorder?.state==='recording')recorder.stop();},60000);
+    recorder.start(1000);setRecordLabel('Stop recording');record.setAttribute('aria-pressed','true');timeout=setTimeout(()=>{if(['recording','paused'].includes(recorder?.state))recorder.stop();},60000);
    }catch(error){stopTracks();onError(error.message);}
   };
   record.addEventListener('pointerdown',event=>{
    if(event.pointerType!=='touch'&&event.pointerType!=='pen')return;
-   if(recorder?.state==='recording')return;
+   if(['recording','paused'].includes(recorder?.state))return;
    gesture={id:event.pointerId,x:event.clientX,y:event.clientY,pressed:true,locked:false};suppressClick=Date.now()+2000;record.setPointerCapture?.(event.pointerId);void record.onclick();
   });
   record.addEventListener('pointermove',event=>{
    if(!gesture||gesture.id!==event.pointerId||!gesture.pressed)return;
-   if(event.clientX-gesture.x<-80){cancelRecording=true;gesture.pressed=false;if(recorder?.state==='recording')recorder.stop();preview.textContent='Recording canceled';}
+   if(event.clientX-gesture.x<-80){cancelRecording=true;gesture.pressed=false;if(['recording','paused'].includes(recorder?.state))recorder.stop();preview.textContent='Recording canceled';}
    else if(event.clientY-gesture.y<-80){gesture.locked=true;preview.textContent='Recording locked. Tap Stop recording to finish.';}
   });
-  record.addEventListener('pointerup',event=>{if(gesture?.id!==event.pointerId)return;gesture.pressed=false;suppressClick=Date.now()+500;if(!gesture.locked&&recorder?.state==='recording')recorder.stop();});
-  record.addEventListener('pointercancel',()=>{if(gesture){gesture.pressed=false;cancelRecording=true;if(recorder?.state==='recording')recorder.stop();}});
+  record.addEventListener('pointerup',event=>{if(gesture?.id!==event.pointerId)return;gesture.pressed=false;suppressClick=Date.now()+500;if(!gesture.locked&&['recording','paused'].includes(recorder?.state))recorder.stop();});
+  record.addEventListener('pointercancel',()=>{if(gesture){gesture.pressed=false;cancelRecording=true;if(['recording','paused'].includes(recorder?.state))recorder.stop();}});
+  const pause=document.createElement('button');pause.type='button';pause.textContent='Pause / resume voice';pause.onclick=()=>{if(recorder?.state==='recording'){recorder.pause();preview.textContent='Recording paused';}else if(recorder?.state==='paused'){recorder.resume();preview.textContent='Recording resumed';}};toolbar.append(pause);
   record.title='Tap to record; on touch, hold to record, slide left to cancel or up to lock';
  }
- function reset(){generation++;if(recorder?.state==='recording'){cancelRecording=true;recorder.stop();}stopTracks();attachment=null;preview.textContent='';remove.hidden=true;input.value='';}
- return {get id(){return attachment?.id||null;},get name(){return attachment?.name||'';},get mime(){return attachment?.mime||'';},get busy(){return uploading||recorder?.state==='recording';},reset,stop(){disposed=true;if(recorder?.state==='recording')recorder.stop();stopTracks();reset();},resume(){disposed=false;}};
+ function reset(){clearPreview();generation++;if(['recording','paused'].includes(recorder?.state)){cancelRecording=true;recorder.stop();}stopTracks();attachment=null;preview.textContent='';remove.hidden=true;input.value='';}
+ return {get id(){return attachment?.id||null;},get name(){return attachment?.name||'';},get mime(){return attachment?.mime||'';},get busy(){return uploading||['recording','paused'].includes(recorder?.state);},reset,stop(){disposed=true;if(['recording','paused'].includes(recorder?.state))recorder.stop();stopTracks();reset();},resume(){disposed=false;}};
 }

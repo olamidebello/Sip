@@ -1,0 +1,11 @@
+# In-app chat GUI
+
+Deploy `deploy/ansible/chat-gui.yml` on SIP server 154.29.77.102. This updates web assets only. It checks recognized source fragments, backs up changed files and the running web image, checks module syntax, builds and validates Caddy, and restores files using absolute paths on failure. It does not install or change messaging backend services.
+
+New controls: expanding 4000-character composer; session drafts separated by account and contact; configurable Enter-to-send with Shift+Enter and IME safeguards; searchable emoji shortcuts; quick reply saved on this device; bold/italic/strike/code formatting and preview; quote/list text insertion; right-to-left text; browser-dependent dictation; current-location map link and contact text sharing; loaded-history date jump and attachment/star filters; offline draft notice; camera capture shortcut; attachment media/file-size preview; voice pause/resume and audio preview speed.
+
+Existing integration retained: single attachment per message, 2 MB upload limit and supported MIME restrictions; voice hold/cancel/lock; reply/edit/remove/star/forward/react; typing and read receipt API; blocking/muting/archiving/pinning; disappearing/view-once controls; existing translation/read-aloud and voice/video call integrations. Availability depends on permissions and existing service setup.
+
+Not implemented by this update: multiple-file messages; image crop/rotate/compression; GIF provider search or sticker packs; group mentions/threaded discussions; per-message pin or bulk actions; live/last-seen privacy service; live location and place search; server-side scheduled messages and unattended queue; new translation service or AI rewrite/reply/summarization; new themes, wallpapers, send-button customization, encryption, or delivery guarantees. Existing appearance and privacy controls remain in place. No simulated delivery/read/presence indicators are added. Offline drafts are not automatically sent on reconnect.
+
+Draft text is stored in this browser tab's session storage. Quick reply and Enter preference are saved under the account ID in local storage. Device storage is not encrypted by this feature. Media previews use temporary blob URLs revoked on reset; attachments still upload to the existing authorized service before Send.
