@@ -2867,7 +2867,7 @@ async function refreshMessagingWebhooks(){
 }
 $('#webhooks-refresh').onclick=()=>refreshMessagingWebhooks().catch(error=>{$('#webhooks-status').textContent=error.message;});
 
-smsConversations=setupSmsConversations({document,call:peer=>{showWorkspace('calling-workspace');dialForm.elements.target.value=peer;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));callsScreen.open('keypad');},getUserId:()=>softphoneUserId,history:body=>accountRequest('/api/external-sms/history',body)});
+smsConversations=setupSmsConversations({document,getContacts:()=>apiGet('/api/contacts/address-book'),call:peer=>{showWorkspace('calling-workspace');dialForm.elements.target.value=peer;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));callsScreen.open('keypad');},getUserId:()=>softphoneUserId,history:body=>accountRequest('/api/external-sms/history',body)});
 async function refreshExternalSms(){
   await refreshSubscriberRouting();
   const [numbers,inbox,sent]=await Promise.all([apiGet('/api/external-sms/numbers'),apiGet('/api/external-sms/inbox'),apiGet('/api/external-sms/sent')]);

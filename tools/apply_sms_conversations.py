@@ -30,6 +30,8 @@ if 'getUserId:()=>softphoneUserId' not in s[s.index('smsConversations=setupSmsCo
  s=s.replace('smsConversations=setupSmsConversations({document','smsConversations=setupSmsConversations({document,getUserId:()=>softphoneUserId',1)
 if 'call:peer=>' not in s[s.index('smsConversations=setupSmsConversations('):s.index('smsConversations=setupSmsConversations(')+500]:
  s=s.replace('smsConversations=setupSmsConversations({document',"smsConversations=setupSmsConversations({document,call:peer=>{showWorkspace('calling-workspace');dialForm.elements.target.value=peer;dialForm.elements.target.dispatchEvent(new Event('input',{bubbles:true}));callsScreen.open('keypad');}",1)
+if 'getContacts:()=>apiGet(' not in s[s.index('smsConversations=setupSmsConversations('):s.index('smsConversations=setupSmsConversations(')+900]:
+ s=s.replace('smsConversations=setupSmsConversations({document',"smsConversations=setupSmsConversations({document,getContacts:()=>apiGet('/api/contacts/address-book')",1)
 p.write_text(s)
 assets=Path(__file__).resolve().parents[1]
-for name in ['smsConversations.js','smsConversations.css','smsAppearance.js']:shutil.copy2(assets/'apps/web/src'/name,root/'apps/web/src'/name)
+for name in ['smsConversations.js','smsConversations.css','smsAppearance.js','smsTools.js']:shutil.copy2(assets/'apps/web/src'/name,root/'apps/web/src'/name)

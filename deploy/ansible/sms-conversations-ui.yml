@@ -8,7 +8,7 @@
     - name: Patch recognized sources and deploy with private backups and rollback
       ansible.builtin.shell: "set -euo pipefail\numask 077\nexec 9>/run/olamide-update.lock\nflock -n 9 || { echo 'Another deployment is running';\
         \ exit 1; }\ncd /opt/olamide/repo\nbackup=$(mktemp -d /opt/olamide/backups/sms-threads-XXXXXXXX)\nexec > \"$backup/deploy.log\" 2>&1\n\
-        files=(apps/web/src/main.js apps/web/src/smsConversations.js apps/web/src/smsConversations.css apps/web/src/smsAppearance.js)\nfor f in\
+        files=(apps/web/src/main.js apps/web/src/smsConversations.js apps/web/src/smsConversations.css apps/web/src/smsAppearance.js apps/web/src/smsTools.js)\nfor f in\
         \ \"${files[@]}\"; do\n  test ! -L \"$f\"\n  mkdir -p \"$backup/source/$(dirname \"$f\")\"\n  if test -f \"$f\"; then cp -p \"$f\" \"\
         $backup/source/$f\"; fi\ndone\ncd deployment/docker\nprintf 'services:\\n' > \"$backup/rollback.yml\"\nfor service in web; do\n  cid=$(docker\
         \ compose ps -q \"$service\")\n  test -n \"$cid\"\n  image=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' \"$cid\")\n  tag=\"\
