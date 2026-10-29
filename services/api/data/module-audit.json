@@ -1739,7 +1739,8 @@
         "apps/web/src/callsScreen.js",
         "apps/web/src/main.js",
         "apps/web/src/messengerSettings.js",
-        "apps/web/src/phoneSignal.js"
+        "apps/web/src/phoneSignal.js",
+        "apps/web/src/smsConversations.js"
       ],
       "liveAcceptance": "unverified"
     },
