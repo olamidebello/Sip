@@ -3,6 +3,20 @@ import json,sys,shutil,re
 from pathlib import Path
 changes=json.loads("[[\"import \\\"./style.css\\\";\",\"import \\\"./style.css\\\";\\nlet smsConversations;\\nimport {setupSmsConversations} from './smsConversations.js';\\nimport './smsConversations.css';\"],[\"async function refreshExternalSms(){\",\"smsConversations=setupSmsConversations({document});\\nasync function refreshExternalSms(){\"],[\"  for(const [target,records,direction] of [['#sms-inbox',inbox.messages,'from'],['#sms-sent',sent.messages,'to']]){\\n    const node=$(target);node.replaceChildren();\\n    for(const message of records){const item=document.createElement('p');\\n      item.textContent=`${new Date(message.received_at||message.created_at).toLocaleString()} · ${direction==='from'?'From':'To'} ${message[direction==='from'?'sender':'recipient']} · ${message.body||'(media)'} ${message.status||''}`;\\n      node.append(item);\\n    }\\n    if(!records.length)node.textContent='No messages yet.';\\n  }\",\"  smsConversations.render(inbox.messages,sent.messages);\"],[\"function resetWorkspace() {\",\"function resetWorkspace() {\\n  smsConversations?.reset();\"]]")
 root=Path(sys.argv[1]);p=root/'apps/web/src/main.js';s=p.read_text()
+# Merge repeated known phone-signal imports before parsing the shared entry point.
+phone_import = r"(?m)^import\s*\{([^}]+)\}\s*from\s*['\"]\./phoneSignal\.js['\"]\s*;"
+phone_matches=list(re.finditer(phone_import,s))
+if len(phone_matches)>1:
+ names=[]
+ for match in phone_matches:
+  for name in match.group(1).split(','):
+   name=name.strip()
+   if name not in {'setupPhoneSignal','phoneStatusText'}:
+    raise SystemExit('PHONE_SIGNAL_PATCH unsupported_import=true')
+   if name not in names:names.append(name)
+ s=re.sub(phone_import,'',s)
+ s="import {"+','.join(names)+"} from './phoneSignal.js';\n"+s
+
 # Canonicalize only this feature's imports and binding before applying edits.
 # Earlier installers used const or differently spaced imports; mixing them
 # with a new let declaration caused the commissioned build to fail.

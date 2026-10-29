@@ -5,6 +5,8 @@ class SmsPatchTest(unittest.TestCase):
  def test_commissioned_declarations_and_imports_are_normalized_before_build(self):
   original=(ROOT/'apps/web/src/main.js').read_text()
   fixtures=[original,
+    "import { setupPhoneSignal } from './phoneSignal.js';\n"+original,
+    "import { setupPhoneSignal, phoneStatusText } from './phoneSignal.js';\n"+original,
     original.replace('smsConversations=setupSmsConversations(', 'const smsConversations = setupSmsConversations(',1),
     original.replace("import {setupSmsConversations} from './smsConversations.js';",'import { setupSmsConversations } from "./smsConversations.js";\nimport {setupSmsConversations} from \'./smsConversations.js\';'),
     original.replace('async function refreshExternalSms(){','smsConversations=setupSmsConversations({document});\nasync function refreshExternalSms(){',1)]
