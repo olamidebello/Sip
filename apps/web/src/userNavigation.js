@@ -1,5 +1,5 @@
 export const userNavigationGroups=[
- {label:'Chats & contacts',items:[['chat','Chats'],['contact-directory','Find & import contacts'],['messenger-groups','Groups & communities'],['messenger-updates','Status updates'],['messenger-broadcast','Broadcast lists'],['messenger-starred','Starred messages'],['external-sms','Text messages']]},
+ {label:'Chats & contacts',items:[['chat','Chats'],['external-sms','SMS'],['contact-directory','Find & import contacts'],['messenger-groups','Groups & communities'],['messenger-updates','Status updates'],['messenger-broadcast','Broadcast lists'],['messenger-starred','Starred messages']]},
  {label:'Calls & meetings',items:[['calling-workspace','Calls & dialpad'],['meetings','Video meetings'],['outbound-rates','Calling rates'],['geo','Calling area'],['agent-panel','Call center']]},
  {label:'Money & services',items:[['money','Send & request money'],['billing','Plans, numbers & billing'],['dialplan-marketplace','Dial plan marketplace']]},
  {label:'Marketplace',items:[['product-store','Shop products & services'],['marketplace-my-orders','My orders & subscriptions']]},

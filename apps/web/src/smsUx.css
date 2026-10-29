@@ -1,0 +1,18 @@
+/* SMS workspace and navigation: preserve readable touch targets on small screens. */
+body.messenger-mode .messenger-tabs{gap:4px;scrollbar-width:thin;scroll-padding-inline:12px}
+body.messenger-mode .messenger-tabs>a:not(.admin-entry){flex:1 0 72px;min-height:64px;min-width:72px;padding:8px 6px;font-size:12px;line-height:1.35;text-align:center}
+body.messenger-mode .messenger-tabs>a:focus-visible{outline:2px solid #47d6c6;outline-offset:-3px;border-radius:12px}
+body.messenger-mode .messenger-tabs>a>span{max-width:none;overflow:visible;text-overflow:clip}
+body.messenger-mode .messenger-tabs a>svg,body.messenger-mode .messenger-tabs a[aria-current=page]>svg{width:22px;height:22px;padding:6px 12px}
+body.messenger-mode #external-sms{width:100%;max-width:980px;box-sizing:border-box;margin:0 auto;padding:24px 20px calc(110px + env(safe-area-inset-bottom));border:0;background:transparent}
+#external-sms .sms-intro{max-width:68ch;font-size:14px;line-height:1.65;margin:12px 0 22px}
+#external-sms #sms-send{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:22px;border:1px solid #36505a;border-radius:18px;margin:18px 0 24px}
+#sms-send h3,#sms-send label:has(textarea),#sms-send>button{grid-column:1/-1}
+#sms-send label{display:flex;flex-direction:column;gap:8px;margin:0;min-width:0;font-size:14px}
+#sms-send input,#sms-send select,#sms-send textarea{box-sizing:border-box;width:100%;min-height:48px;padding:12px;border-radius:10px;font:inherit}
+#sms-send textarea{min-height:132px;resize:vertical;line-height:1.6}
+#sms-send>button{justify-self:end;min-height:48px;min-width:132px;border-radius:12px}
+#external-sms>button,#external-sms summary{min-height:44px;padding:12px;cursor:pointer}
+#external-sms>details{padding:12px;border:1px solid #36505a;border-radius:12px;margin:20px 0}
+#sms-inbox,#sms-sent,#external-sms #sms-status{overflow-wrap:anywhere;line-height:1.6}
+@media(max-width:600px){body.messenger-mode #external-sms{padding:16px 16px calc(110px + env(safe-area-inset-bottom))}#external-sms #sms-send{grid-template-columns:1fr;padding:16px;gap:16px}#sms-send>button{width:100%}body.messenger-mode .messenger-tabs>a:not(.admin-entry){flex-basis:68px;min-width:68px;font-size:11px}body.messenger-mode .messenger-tabs{padding-bottom:env(safe-area-inset-bottom)}}

@@ -1,0 +1,61 @@
+---
+- name: Publish SMS beside Chats and improve the user workspace
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Patch recognized sources and deploy with private backups and rollback
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        cd /opt/olamide/repo
+        backup=$(mktemp -d /opt/olamide/backups/sms-ux-XXXXXXXX)
+        exec > "$backup/deploy.log" 2>&1
+        files=(apps/web/src/main.js apps/web/src/userNavigation.js apps/web/src/smsUx.css services/api/navigationPolicy.js)
+        for f in "${files[@]}"; do
+          test ! -L "$f"
+          mkdir -p "$backup/source/$(dirname "$f")"
+          if test -f "$f"; then cp -p "$f" "$backup/source/$f"; fi
+        done
+        cd deployment/docker
+        printf 'services:\n' > "$backup/rollback.yml"
+        for service in web api; do
+          cid=$(docker compose ps -q "$service")
+          test -n "$cid"
+          image=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$cid")
+          tag="olamide-$service:before-$(basename "$backup")"
+          docker tag "$image" "$tag"
+          printf '  %s:\n    image: %s\n' "$service" "$tag" >> "$backup/rollback.yml"
+        done
+        cd ../..
+        promoted=0
+        rollback() {
+          trap - ERR
+          for f in "${files[@]}"; do
+            if test -f "$backup/source/$f"; then cp -p "$backup/source/$f" "$f"; else rm -f "$f"; fi
+          done
+          if test "$promoted" = 1; then
+            cd /opt/olamide/repo/deployment/docker
+            docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps api web || true
+          fi
+          exit 1
+        }
+        trap rollback ERR
+        python3 '{{ playbook_dir }}/../../tools/apply_sms_navigation.py' /opt/olamide/repo
+        cd deployment/docker
+        docker compose build web api
+        docker compose run --rm --no-deps -T --entrypoint node api --check navigationPolicy.js
+        docker compose run --rm --no-deps -T --entrypoint caddy web validate --config /etc/caddy/Caddyfile --adapter caddyfile
+        promoted=1
+        docker compose up -d --no-deps api web
+        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
+        trap - ERR
+      args:
+        executable: /bin/bash
+      no_log: true
+      changed_when: true
+    - name: Report user interface update
+      ansible.builtin.debug:
+        msg: 'SMS now appears beside Chats for messaging-enabled users unless explicitly hidden by navigation policy. Improved touch targets and SMS composer spacing are installed. Refresh or reopen the app. Backups and private logs: /opt/olamide/backups/sms-ux-*'

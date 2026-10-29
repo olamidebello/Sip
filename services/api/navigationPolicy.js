@@ -9,7 +9,7 @@ export function validateNavigationPolicy(value){
 }
 export function resolveNavigation(groups=[],override={}){
  const result=Object.fromEntries(Object.keys(EXTRA_NAVIGATION).map(key=>[key,false]));
- for(const key of Object.keys(result)){const values=groups.map(decode).map(g=>g[key]);result[key]=values.includes(false)?false:values.includes(true)||['money','social','outbound-rates'].includes(key);}
+ for(const key of Object.keys(result)){const values=groups.map(decode).map(g=>g[key]);result[key]=values.includes(false)?false:values.includes(true)||['money','social','outbound-rates','external-sms'].includes(key);}
  return {...result,...validateNavigationPolicy(decode(override))};
 }
 export async function migrateNavigationPolicy(pool){

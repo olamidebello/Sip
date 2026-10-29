@@ -104,6 +104,7 @@ import { setupDashboard } from "./dashboard.js";
 import { setupSupport } from "./support.js";
 import { setupLocaleSettings } from "./localeSettings.js";
 import "./style.css";
+import './smsUx.css';
 
 const root = document.querySelector("#app");
 root.innerHTML = `
@@ -404,7 +405,7 @@ root.innerHTML = `
     <p id="chat-status" role="status"></p>
   </section>
   <section id="external-sms" hidden>
-    <h2>Text messages</h2><p>Send SMS to external mobile numbers using an assigned, messaging-enabled Flowroute number. Carrier delivery and fees depend on the provider. Ask your administrator to assign a sender and daily allowance.</p>
+    <h2>SMS</h2><p class="sms-intro">Send SMS to external mobile numbers using an assigned, messaging-enabled Flowroute number. Carrier delivery and fees depend on the provider. Ask your administrator to assign a sender and daily allowance.</p>
     <button id="sms-refresh" type="button">Refresh inbox and sent</button>
     <form id="sms-send"><h3>New text</h3>
       <label>From <select name="from" id="sms-senders" required></select></label>
@@ -1314,7 +1315,7 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   const rootView=workspaceViews.find(id=>{const section=document.getElementById(id);return section&&(section===requested||section.contains(requested));});
   if(!rootView) return false;
   activeView=target;
-  const titleNode=$("#app-nav .menu-heading strong");if(titleNode&&!adminMode)titleNode.textContent=({"calling-workspace":"Calls","messenger-updates":"Updates","messenger-groups":"Communities","messenger-settings":"Settings"}[target]||"Olamide");
+  const titleNode=$("#app-nav .menu-heading strong");if(titleNode&&!adminMode)titleNode.textContent=({"external-sms":"SMS","calling-workspace":"Calls","messenger-updates":"Updates","messenger-groups":"Communities","messenger-settings":"Settings"}[target]||"Olamide");
   for(const link of $('#app-nav').querySelectorAll('.messenger-tabs a')){if(link.hash===`#${target}`)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');}
   userActivity?.track("navigate",target);
   if(!preserveForm&&historyMode!=="none") {
@@ -1364,7 +1365,7 @@ function updateNavigation() {
   nav.hidden=!activeRole;
   if (!activeRole) return;
   const heading=document.createElement("div");heading.className="menu-heading";
-  const title=document.createElement("strong");title.textContent=document.body.classList.contains("admin-mode")?"Olamide administration":({"calling-workspace":"Calls","messenger-updates":"Updates","messenger-groups":"Communities","messenger-settings":"Settings"}[activeView]||"Olamide");
+  const title=document.createElement("strong");title.textContent=document.body.classList.contains("admin-mode")?"Olamide administration":({"external-sms":"SMS","calling-workspace":"Calls","messenger-updates":"Updates","messenger-groups":"Communities","messenger-settings":"Settings"}[activeView]||"Olamide");
   const role=document.createElement("span");role.className="role-badge";role.textContent=activeRole==="super_admin"?"Super admin":activeRole==="admin"?"Administrator":"User";
   heading.append(title,role);nav.append(heading);
   const connection=document.createElement('span');connection.id='communication-status';connection.className='communication-status';connection.setAttribute('role','status');connection.textContent=sipRegistered?'Connected for calls':'Connecting your SIP account…';heading.append(connection);
@@ -1375,7 +1376,7 @@ function updateNavigation() {
     pageRoutes?.refresh();return;
   }
   const tabs=document.createElement('div');tabs.className='messenger-tabs';
-  for(const [id,label,symbol] of [['chat','Chats','chat'],['messenger-updates','Updates','updates'],['messenger-groups','Communities','people'],['calling-workspace','Calls','calls'],['money','Money','money'],['social','Social','social']]){
+  for(const [id,label,symbol] of [['chat','Chats','chat'],['external-sms','SMS','chat'],['messenger-updates','Updates','updates'],['messenger-groups','Communities','people'],['calling-workspace','Calls','calls'],['money','Money','money'],['social','Social','social']]){
     if(!navigationAllowed(id)||document.getElementById(id)?.closest('[hidden]'))continue;
     const link=document.createElement('a');link.href=`/#${id}`;link.innerHTML=icon(symbol);const caption=document.createElement('span');caption.textContent=label;link.append(caption);if(activeView===id)link.setAttribute('aria-current','page');tabs.append(link);
   }
