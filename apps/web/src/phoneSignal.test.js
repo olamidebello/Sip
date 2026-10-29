@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {signalQuality,phoneStatusText} from './phoneSignal.js';
+test('bars reflect network estimates only when phone is connected',()=>{assert.equal(signalQuality({ready:true,downlink:10,rtt:50}).bars,4);assert.equal(signalQuality({ready:true,downlink:.3,rtt:50}).bars,1);assert.equal(signalQuality({ready:true,downlink:10,rtt:900}).bars,2);assert.equal(signalQuality({ready:false,downlink:10}).state,'connecting');assert.equal(signalQuality({online:false,ready:true}).state,'offline');assert.equal(signalQuality({ready:true}).state,'unknown');});
+test('phone-facing status avoids registration terminology while retaining failures',()=>{assert.equal(phoneStatusText('Registered'),'');assert.equal(phoneStatusText('Waiting for SIP registration…'),'');assert.equal(phoneStatusText('SIP registration rejected (403)'),'Phone connection rejected (403)');});

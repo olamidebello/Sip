@@ -104,6 +104,8 @@ import { setupDashboard } from "./dashboard.js";
 import { setupSupport } from "./support.js";
 import { setupLocaleSettings } from "./localeSettings.js";
 import "./style.css";
+import {setupPhoneSignal,phoneStatusText} from './phoneSignal.js';
+import './phoneSignal.css';
 import './smsUx.css';
 
 const root = document.querySelector("#app");
@@ -1368,7 +1370,7 @@ function updateNavigation() {
   const title=document.createElement("strong");title.textContent=document.body.classList.contains("admin-mode")?"Olamide administration":({"external-sms":"SMS","calling-workspace":"Calls","messenger-updates":"Updates","messenger-groups":"Communities","messenger-settings":"Settings"}[activeView]||"Olamide");
   const role=document.createElement("span");role.className="role-badge";role.textContent=activeRole==="super_admin"?"Super admin":activeRole==="admin"?"Administrator":"User";
   heading.append(title,role);nav.append(heading);
-  const connection=document.createElement('span');connection.id='communication-status';connection.className='communication-status';connection.setAttribute('role','status');connection.textContent=sipRegistered?'Connected for calls':'Connecting your SIP account…';heading.append(connection);
+  const connection=document.createElement('span');connection.id='communication-status';connection.className='communication-status';connection.setAttribute('role','status');heading.append(connection);phoneSignal.refresh();
   const returnToCall=document.createElement("a");returnToCall.id="return-to-call";returnToCall.href="#calling-workspace";returnToCall.textContent="Return to call";returnToCall.hidden=!onCall;
   nav.append(returnToCall);
   if(document.body.classList.contains('admin-mode')){
@@ -1527,6 +1529,7 @@ const catalogControl = setupCatalogControl();
 setupInstall();
 let phone;
 let sipRegistered=false;
+const phoneSignal=setupPhoneSignal({document,isReady:()=>sipRegistered&&!!phone?.isConnected()});
 let onCall = false;
 let sipConnectionGeneration=0;
 let onHold = false;
@@ -2658,7 +2661,7 @@ fetch("/api/me", { credentials: "same-origin" })
   .then(async (response) => response.ok ? signedIn(await response.json()) : undefined)
   .catch(() => { $("#account-status").textContent = "Account service unavailable"; });
 
-function status(message) { callsScreen.connectionStatus(message);$("#status").textContent = message;const badge=$('#communication-status');if(badge)badge.textContent=message; }
+function status(message) { const text=phoneStatusText(message);callsScreen.connectionStatus(text);$("#status").textContent=text;phoneSignal.refresh(); }
 function callState(active) {
   onCall = active;
   callGui.active(active);
