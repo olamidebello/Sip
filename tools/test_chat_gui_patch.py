@@ -18,6 +18,11 @@ class ChatPatchTests(unittest.TestCase):
    for _ in range(2):subprocess.run(['python3',str(ROOT/'tools/apply_chat_gui.py'),folder],check=True)
    for name in ['conversations.js','messengerMedia.js','chatWritingTools.js']:
     subprocess.run(['node','--input-type=module','--check'],input=(src/name).read_text(),text=True,check=True)
+   customized='export const commissionedMedia = true;\n'
+   (src/'messengerMedia.js').write_text(customized)
+   subprocess.run(['python3',str(ROOT/'tools/apply_chat_gui.py'),folder],check=True)
+   self.assertEqual((src/'messengerMedia.js').read_text(),customized)
+   self.assertEqual((src/'.chat-gui-media-result').read_text(),'preserved_existing')
    self.assertIn('commissioned custom style',(src/'style.css').read_text())
    self.assertEqual((src/'conversations.js').read_text().count('const writing=setupChatWritingTools'),1)
   data=yaml.safe_load((ROOT/'deploy/ansible/chat-gui.yml').read_text())
