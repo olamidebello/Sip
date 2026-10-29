@@ -1,3 +1,15 @@
 ---
+- name: Verify this is the SIP platform server before deployment
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Read local IPv4 addresses
+      ansible.builtin.command: hostname -I
+      register: messaging_host_addresses
+      changed_when: false
+    - name: Require the commissioned SIP server
+      ansible.builtin.assert:
+        that: "'154.29.77.102' in messaging_host_addresses.stdout.split()"
+        fail_msg: "Run this deployment on SIP server 154.29.77.102 (root@sip), not the panel server."
 - import_playbook: phone-signal-ui.yml
 - import_playbook: sms-conversations-ui.yml

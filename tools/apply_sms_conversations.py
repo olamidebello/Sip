@@ -34,4 +34,4 @@ if 'getContacts:()=>apiGet(' not in s[s.index('smsConversations=setupSmsConversa
  s=s.replace('smsConversations=setupSmsConversations({document',"smsConversations=setupSmsConversations({document,getContacts:()=>apiGet('/api/contacts/address-book')",1)
 p.write_text(s)
 assets=Path(__file__).resolve().parents[1]
-for name in ['smsConversations.js','smsConversations.css','smsAppearance.js','smsTools.js']:shutil.copy2(assets/'apps/web/src'/name,root/'apps/web/src'/name)
+for name in ['smsConversations.js','smsConversations.css','smsAppearance.js','smsTools.js','smsComposer.js']:shutil.copy2(assets/'apps/web/src'/name,root/'apps/web/src'/name)
