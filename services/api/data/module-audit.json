@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.",
   "summary": {
-    "clientSourceModules": 181,
+    "clientSourceModules": 182,
     "apiSourceModules": 169,
     "applicationFeatures": 86,
     "featureStates": {
@@ -661,6 +661,11 @@
     },
     {
       "source": "apps/web/src/smoothDidUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/smsAppearance.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -4440,6 +4445,7 @@
         "apps/web/src/sipProfiles.js",
         "apps/web/src/sipRegistration.js",
         "apps/web/src/smoothDidUi.js",
+        "apps/web/src/smsAppearance.js",
         "apps/web/src/smsConversations.js",
         "apps/web/src/smsRouteControlUi.js",
         "apps/web/src/socialLinks.js",
