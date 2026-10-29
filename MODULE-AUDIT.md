@@ -226,6 +226,7 @@ API source modules: 169. Application feature entries: 86. Kamailio entries: 266.
 | apps/web/src/chatGestures.js | web | unverified |
 | apps/web/src/chatLanding.js | web | unverified |
 | apps/web/src/chatPresentation.js | web | unverified |
+| apps/web/src/chatWritingTools.js | web | unverified |
 | apps/web/src/commerceOps.js | web | unverified |
 | apps/web/src/configurationLinks.js | web | unverified |
 | apps/web/src/contactCard.js | web | unverified |

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.",
   "summary": {
-    "clientSourceModules": 184,
+    "clientSourceModules": 185,
     "apiSourceModules": 169,
     "applicationFeatures": 86,
     "featureStates": {
@@ -231,6 +231,11 @@
     },
     {
       "source": "apps/web/src/chatPresentation.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/chatWritingTools.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -1747,6 +1752,7 @@
       "guiReferences": [
         "apps/web/src/advancedCalling.js",
         "apps/web/src/callsScreen.js",
+        "apps/web/src/chatWritingTools.js",
         "apps/web/src/main.js",
         "apps/web/src/messengerSettings.js",
         "apps/web/src/phoneSignal.js",
@@ -3480,6 +3486,7 @@
         "apps/web/src/callerIdentityAdmin.js",
         "apps/web/src/carrierConsole.js",
         "apps/web/src/chatLanding.js",
+        "apps/web/src/chatWritingTools.js",
         "apps/web/src/contactDirectory.js",
         "apps/web/src/contactManagerLayout.js",
         "apps/web/src/conversations.js",
@@ -3563,6 +3570,7 @@
         "apps/web/src/carrierConsole.js",
         "apps/web/src/chatComposerShortcuts.js",
         "apps/web/src/chatLanding.js",
+        "apps/web/src/chatWritingTools.js",
         "apps/web/src/didwwAdmin.js",
         "apps/web/src/didwwProvisionAdmin.js",
         "apps/web/src/fleetAccessAdmin.js",
@@ -4110,6 +4118,7 @@
         "apps/web/src/adminNavigation.js",
         "apps/web/src/autoSipRegistration.js",
         "apps/web/src/carrierConsole.js",
+        "apps/web/src/chatWritingTools.js",
         "apps/web/src/configurationLinks.js",
         "apps/web/src/contactCard.js",
         "apps/web/src/dashboard.js",
@@ -4377,6 +4386,7 @@
         "apps/web/src/chatGestures.js",
         "apps/web/src/chatLanding.js",
         "apps/web/src/chatPresentation.js",
+        "apps/web/src/chatWritingTools.js",
         "apps/web/src/commerceOps.js",
         "apps/web/src/configurationLinks.js",
         "apps/web/src/contactCard.js",
