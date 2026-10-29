@@ -234,6 +234,7 @@ API source modules: 169. Application feature entries: 86. Kamailio entries: 266.
 | apps/web/src/contactDiscovery.js | web | unverified |
 | apps/web/src/contactManagerLayout.js | web | unverified |
 | apps/web/src/contactsCsv.js | web | unverified |
+| apps/web/src/conversationLook.js | web | unverified |
 | apps/web/src/conversations.js | web | unverified |
 | apps/web/src/dashboard.js | web | unverified |
 | apps/web/src/dialIdentityInput.js | web | unverified |
