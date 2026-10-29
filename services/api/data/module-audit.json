@@ -3,7 +3,7 @@
   "scope": "Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.",
   "summary": {
     "clientSourceModules": 181,
-    "apiSourceModules": 168,
+    "apiSourceModules": 169,
     "applicationFeatures": 86,
     "featureStates": {
       "implemented": 13,
@@ -1642,7 +1642,7 @@
     {
       "id": "conversations",
       "source": "services/api/conversations.js",
-      "sha256": "dd132b61ae27ff653f73d4dd9c8825467a595891a94c1a509cf4bb40abc835e3",
+      "sha256": "d3cd3fa4649a3e1cd0e98bc27a07e893cf61a4980dc8627c89dfddd5018b87b3",
       "exportedHandlers": [
         "handleConversations"
       ],
@@ -2571,7 +2571,7 @@
     {
       "id": "messagingWebhooks",
       "source": "services/api/messagingWebhooks.js",
-      "sha256": "18e7cac57e424c54402e0f6095a4ea9c48ad31f415c2d903938bb431c7e7b2b1",
+      "sha256": "d8f20865b50646fc10a1eec1eec72629c20c194692f1c32045aa53e02a264b28",
       "exportedHandlers": [
         "handleFlowrouteWebhook",
         "handleMessagingWebhookAdmin",
@@ -3807,6 +3807,24 @@
       "migrationImported": false,
       "tests": [
         "smsCredentials.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "smsHistory",
+      "source": "services/api/smsHistory.js",
+      "sha256": "03d9ac54415f9d9816d0228136e8544b9439b551ba5709992520f0260d684e30",
+      "exportedHandlers": [
+        "handleSmsHistory"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": true,
+      "migrationImported": false,
+      "tests": [
+        "smsHistory.test.js"
       ],
       "guiReferences": [],
       "liveAcceptance": "unverified"

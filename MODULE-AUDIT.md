@@ -2,7 +2,7 @@
 
 Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.
 
-API source modules: 168. Application feature entries: 86. Kamailio entries: 266.
+API source modules: 169. Application feature entries: 86. Kamailio entries: 266.
 
 ## API sources
 
@@ -137,6 +137,7 @@ API source modules: 168. Application feature entries: 86. Kamailio entries: 266.
 | sipRegisterDigest | False | False | sipRegisterDigest.test.js | library / CLI / no direct reference |
 | smoothDid | False | False | smoothDid.test.js | library / CLI / no direct reference |
 | smsCredentials | False | False | smsCredentials.test.js | library / CLI / no direct reference |
+| smsHistory | True | False | smsHistory.test.js | library / CLI / no direct reference |
 | smsRouteControl | False | False | smsRouteControl.test.js | library / CLI / no direct reference |
 | social | True | True | social.test.js | handleSocial |
 | socialLinks | True | False | socialLinks.test.js | library / CLI / no direct reference |
