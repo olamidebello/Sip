@@ -17,9 +17,11 @@
         \ test -f \"$backup/source/$f\"; then cp -p \"$backup/source/$f\" \"$f\"; else rm -f \"$f\"; fi\n  done\n  if test \"$promoted\" = 1;\
         \ then\n    cd /opt/olamide/repo/deployment/docker\n    docker compose -f compose.yml -f \"$backup/rollback.yml\" up -d --no-deps web\
         \ || true\n  fi\n  exit 1\n}\ntrap rollback ERR\npython3 '{{ playbook_dir }}/../../tools/apply_sms_conversations.py' /opt/olamide/repo\n\
-        cd deployment/docker\ndocker compose build web\ndocker compose run --rm --no-deps -T --entrypoint caddy web validate --config /etc/caddy/Caddyfile\
-        \ --adapter caddyfile\npromoted=1\ndocker compose up -d --no-deps web\ncurl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay\
-        \ 3 https://sip.dobhrap.com/api/health\ntrap - ERR\n"
+        cd deployment/docker\napi_container=$(docker compose ps -q api)\ntest -n \"$api_container\"\napi_image=$(docker inspect --format '{% raw\
+        \ %}{{.Image}}{% endraw %}' \"$api_container\")\ndocker run --rm -i --network none --read-only --entrypoint node \"$api_image\" --input-type=module\
+        \ --check < ../../apps/web/src/main.js\ndocker compose build web\ndocker compose run --rm --no-deps -T --entrypoint caddy web validate\
+        \ --config /etc/caddy/Caddyfile --adapter caddyfile\npromoted=1\ndocker compose up -d --no-deps web\ncurl -fsS --max-time 10 --retry 12\
+        \ --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health\ntrap - ERR\n"
       args:
         executable: /bin/bash
       no_log: true
@@ -35,7 +37,9 @@
           if p else 'SMS_UI_CHECK backup=none');codes=re.findall(r'SMS_THREAD_PATCH step=([1-4])',s);[print('SMS_UI_CHECK patch_step='+c) for
           c in sorted(set(codes))];[print('SMS_UI_CHECK error='+code) for pattern,code in [('SyntaxError','javascript_syntax'),('already been
           declared','duplicate_declaration'),('Could not resolve','missing_module'),('failed to solve','image_build'),('unrecognized directive','caddy_configuration'),('curl:','health_check')]
-          if pattern in s];print('SMS_UI_CHECK review_private_log=true')
+          if pattern in s];print('SMS_UI_CHECK review_private_log=true');symbols=re.findall(r'(?:symbol|Identifier) [\"\']([A-Za-z_$][A-Za-z0-9_$]{0,63})[\"\']
+          has already been declared',s);[print('SMS_UI_CHECK duplicate_symbol='+(x if x in ['smsConversations','setupSmsConversations','phoneSignal','setupPhoneSignal']
+          else 'other')) for x in sorted(set(symbols))]
       register: sms_ui_failure
       changed_when: false
     - name: Show fixed failure codes
