@@ -313,6 +313,7 @@ API source modules: 169. Application feature entries: 86. Kamailio entries: 266.
 | apps/web/src/sipRegistration.js | web | unverified |
 | apps/web/src/smoothDidUi.js | web | unverified |
 | apps/web/src/smsAppearance.js | web | unverified |
+| apps/web/src/smsComposer.js | web | unverified |
 | apps/web/src/smsConversations.js | web | unverified |
 | apps/web/src/smsRouteControlUi.js | web | unverified |
 | apps/web/src/smsTools.js | web | unverified |

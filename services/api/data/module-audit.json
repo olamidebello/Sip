@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.",
   "summary": {
-    "clientSourceModules": 183,
+    "clientSourceModules": 184,
     "apiSourceModules": 169,
     "applicationFeatures": 86,
     "featureStates": {
@@ -666,6 +666,11 @@
     },
     {
       "source": "apps/web/src/smsAppearance.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/smsComposer.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -1745,6 +1750,7 @@
         "apps/web/src/main.js",
         "apps/web/src/messengerSettings.js",
         "apps/web/src/phoneSignal.js",
+        "apps/web/src/smsComposer.js",
         "apps/web/src/smsConversations.js"
       ],
       "liveAcceptance": "unverified"
@@ -3490,6 +3496,7 @@
         "apps/web/src/productStore.js",
         "apps/web/src/providerManagerUi.js",
         "apps/web/src/smoothDidUi.js",
+        "apps/web/src/smsComposer.js",
         "apps/web/src/smsConversations.js",
         "apps/web/src/socialWorkspace.js",
         "apps/web/src/support.js",
@@ -4454,6 +4461,7 @@
         "apps/web/src/sipRegistration.js",
         "apps/web/src/smoothDidUi.js",
         "apps/web/src/smsAppearance.js",
+        "apps/web/src/smsComposer.js",
         "apps/web/src/smsConversations.js",
         "apps/web/src/smsRouteControlUi.js",
         "apps/web/src/smsTools.js",
