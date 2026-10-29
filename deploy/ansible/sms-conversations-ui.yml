@@ -13,7 +13,7 @@
         cd /opt/olamide/repo
         backup=$(mktemp -d /opt/olamide/backups/sms-threads-XXXXXXXX)
         exec > "$backup/deploy.log" 2>&1
-        files=(apps/web/src/main.js apps/web/src/smsConversations.js apps/web/src/smsConversations.css)
+        files=(apps/web/src/main.js apps/web/src/smsConversations.js apps/web/src/smsConversations.css apps/web/src/smsAppearance.js)
         for f in "${files[@]}"; do
           test ! -L "$f"
           mkdir -p "$backup/source/$(dirname "$f")"

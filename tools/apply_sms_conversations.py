@@ -8,6 +8,8 @@ for n,(old,new) in enumerate(changes,1):
  if new in s:continue
  if s.count(old)!=1:raise SystemExit('SMS_THREAD_PATCH step='+str(n))
  s=s.replace(old,new,1)
+if 'getUserId:()=>softphoneUserId' not in s[s.index('smsConversations=setupSmsConversations('):s.index('smsConversations=setupSmsConversations(')+180]:
+ s=s.replace('smsConversations=setupSmsConversations({document','smsConversations=setupSmsConversations({document,getUserId:()=>softphoneUserId',1)
 p.write_text(s)
 assets=Path(__file__).resolve().parents[1]
-for name in ['smsConversations.js','smsConversations.css']:shutil.copy2(assets/'apps/web/src'/name,root/'apps/web/src'/name)
+for name in ['smsConversations.js','smsConversations.css','smsAppearance.js']:shutil.copy2(assets/'apps/web/src'/name,root/'apps/web/src'/name)
