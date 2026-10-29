@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.",
   "summary": {
-    "clientSourceModules": 180,
+    "clientSourceModules": 181,
     "apiSourceModules": 168,
     "applicationFeatures": 86,
     "featureStates": {
@@ -661,6 +661,11 @@
     },
     {
       "source": "apps/web/src/smoothDidUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/smsConversations.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -1654,7 +1659,8 @@
       ],
       "guiReferences": [
         "apps/web/src/chatLanding.js",
-        "apps/web/src/main.js"
+        "apps/web/src/main.js",
+        "apps/web/src/smsConversations.js"
       ],
       "liveAcceptance": "unverified"
     },
@@ -3471,6 +3477,7 @@
         "apps/web/src/productStore.js",
         "apps/web/src/providerManagerUi.js",
         "apps/web/src/smoothDidUi.js",
+        "apps/web/src/smsConversations.js",
         "apps/web/src/socialWorkspace.js",
         "apps/web/src/support.js",
         "apps/web/src/telecomFeatures.js",
@@ -4413,6 +4420,7 @@
         "apps/web/src/sipProfiles.js",
         "apps/web/src/sipRegistration.js",
         "apps/web/src/smoothDidUi.js",
+        "apps/web/src/smsConversations.js",
         "apps/web/src/smsRouteControlUi.js",
         "apps/web/src/socialLinks.js",
         "apps/web/src/socialPublishing.js",
