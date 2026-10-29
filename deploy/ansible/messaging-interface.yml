@@ -11,5 +11,6 @@
       ansible.builtin.assert:
         that: "'154.29.77.102' in messaging_host_addresses.stdout.split()"
         fail_msg: "Run this deployment on SIP server 154.29.77.102 (root@sip), not the panel server."
-- import_playbook: phone-signal-ui.yml
+# Install SMS module dependencies before either feature rebuilds the shared web image.
 - import_playbook: sms-conversations-ui.yml
+- import_playbook: phone-signal-ui.yml
