@@ -104,6 +104,9 @@ import { setupDashboard } from "./dashboard.js";
 import { setupSupport } from "./support.js";
 import { setupLocaleSettings } from "./localeSettings.js";
 import "./style.css";
+let smsConversations;
+import {setupSmsConversations} from './smsConversations.js';
+import './smsConversations.css';
 import {setupPhoneSignal,phoneStatusText} from './phoneSignal.js';
 import './phoneSignal.css';
 import './smsUx.css';
@@ -1343,6 +1346,7 @@ function showWorkspace(target,{preserveForm=false,historyMode="push"}={}) {
   return true;
 }
 function resetWorkspace() {
+  smsConversations?.reset();
   locationHistory.stop();locationReports.stop();
   marketplaceControl.reset();
   productStore.stop();
@@ -2863,6 +2867,7 @@ async function refreshMessagingWebhooks(){
 }
 $('#webhooks-refresh').onclick=()=>refreshMessagingWebhooks().catch(error=>{$('#webhooks-status').textContent=error.message;});
 
+smsConversations=setupSmsConversations({document});
 async function refreshExternalSms(){
   await refreshSubscriberRouting();
   const [numbers,inbox,sent]=await Promise.all([apiGet('/api/external-sms/numbers'),apiGet('/api/external-sms/inbox'),apiGet('/api/external-sms/sent')]);
@@ -2873,14 +2878,7 @@ async function refreshExternalSms(){
   }
   if([...senders.options].some(n=>n.value===selected))senders.value=selected;
   $('#sms-status').textContent=senders.length?'':'No assigned messaging number yet.';
-  for(const [target,records,direction] of [['#sms-inbox',inbox.messages,'from'],['#sms-sent',sent.messages,'to']]){
-    const node=$(target);node.replaceChildren();
-    for(const message of records){const item=document.createElement('p');
-      item.textContent=`${new Date(message.received_at||message.created_at).toLocaleString()} · ${direction==='from'?'From':'To'} ${message[direction==='from'?'sender':'recipient']} · ${message.body||'(media)'} ${message.status||''}`;
-      node.append(item);
-    }
-    if(!records.length)node.textContent='No messages yet.';
-  }
+  smsConversations.render(inbox.messages,sent.messages);
 }
 $('#sms-refresh').onclick=()=>refreshExternalSms().catch(error=>{$('#sms-status').textContent=error.message;});
 let pendingSubscriberSms;

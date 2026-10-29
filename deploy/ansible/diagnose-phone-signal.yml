@@ -1,0 +1,14 @@
+---
+- name: Read fixed phone indicator deployment failure codes
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Inspect private log without displaying its contents
+      ansible.builtin.command:
+        argv: [python3, '{{ playbook_dir }}/../../tools/diagnose_phone_signal.py']
+      register: signal_check
+      changed_when: false
+    - name: Show safe failure summary
+      ansible.builtin.debug:
+        var: signal_check.stdout_lines
