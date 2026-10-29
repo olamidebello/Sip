@@ -2753,7 +2753,7 @@
     {
       "id": "navigationPolicy",
       "source": "services/api/navigationPolicy.js",
-      "sha256": "1b3711e1fe314849cac2b6f10b96c48f790f624548ae6ce7a7ba7a300476455c",
+      "sha256": "825833a6729148e7c0edaefc5c3b99687e241fb4bc8bc6f86077243a984a891b",
       "exportedHandlers": [
         "handleNavigationPolicy"
       ],
