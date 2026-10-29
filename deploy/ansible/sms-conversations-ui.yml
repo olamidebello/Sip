@@ -1,60 +1,49 @@
----
 - name: Publish SMS conversation list and message threads
   hosts: all
   become: true
   gather_facts: false
   tasks:
+  - name: Deploy SMS interface with safe failure reporting
+    block:
     - name: Patch recognized sources and deploy with private backups and rollback
-      ansible.builtin.shell: |
-        set -euo pipefail
-        umask 077
-        exec 9>/run/olamide-update.lock
-        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
-        cd /opt/olamide/repo
-        backup=$(mktemp -d /opt/olamide/backups/sms-threads-XXXXXXXX)
-        exec > "$backup/deploy.log" 2>&1
-        files=(apps/web/src/main.js apps/web/src/smsConversations.js apps/web/src/smsConversations.css apps/web/src/smsAppearance.js)
-        for f in "${files[@]}"; do
-          test ! -L "$f"
-          mkdir -p "$backup/source/$(dirname "$f")"
-          if test -f "$f"; then cp -p "$f" "$backup/source/$f"; fi
-        done
-        cd deployment/docker
-        printf 'services:\n' > "$backup/rollback.yml"
-        for service in web; do
-          cid=$(docker compose ps -q "$service")
-          test -n "$cid"
-          image=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' "$cid")
-          tag="olamide-$service:before-$(basename "$backup")"
-          docker tag "$image" "$tag"
-          printf '  %s:\n    image: %s\n' "$service" "$tag" >> "$backup/rollback.yml"
-        done
-        cd ../..
-        promoted=0
-        rollback() {
-          trap - ERR
-          for f in "${files[@]}"; do
-            if test -f "$backup/source/$f"; then cp -p "$backup/source/$f" "$f"; else rm -f "$f"; fi
-          done
-          if test "$promoted" = 1; then
-            cd /opt/olamide/repo/deployment/docker
-            docker compose -f compose.yml -f "$backup/rollback.yml" up -d --no-deps web || true
-          fi
-          exit 1
-        }
-        trap rollback ERR
-        python3 '{{ playbook_dir }}/../../tools/apply_sms_conversations.py' /opt/olamide/repo
-        cd deployment/docker
-        docker compose build web
-        docker compose run --rm --no-deps -T --entrypoint caddy web validate --config /etc/caddy/Caddyfile --adapter caddyfile
-        promoted=1
-        docker compose up -d --no-deps web
-        curl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 https://sip.dobhrap.com/api/health
-        trap - ERR
+      ansible.builtin.shell: "set -euo pipefail\numask 077\nexec 9>/run/olamide-update.lock\nflock -n 9 || { echo 'Another deployment is running';\
+        \ exit 1; }\ncd /opt/olamide/repo\nbackup=$(mktemp -d /opt/olamide/backups/sms-threads-XXXXXXXX)\nexec > \"$backup/deploy.log\" 2>&1\n\
+        files=(apps/web/src/main.js apps/web/src/smsConversations.js apps/web/src/smsConversations.css apps/web/src/smsAppearance.js)\nfor f in\
+        \ \"${files[@]}\"; do\n  test ! -L \"$f\"\n  mkdir -p \"$backup/source/$(dirname \"$f\")\"\n  if test -f \"$f\"; then cp -p \"$f\" \"\
+        $backup/source/$f\"; fi\ndone\ncd deployment/docker\nprintf 'services:\\n' > \"$backup/rollback.yml\"\nfor service in web; do\n  cid=$(docker\
+        \ compose ps -q \"$service\")\n  test -n \"$cid\"\n  image=$(docker inspect --format '{% raw %}{{.Image}}{% endraw %}' \"$cid\")\n  tag=\"\
+        olamide-$service:before-$(basename \"$backup\")\"\n  docker tag \"$image\" \"$tag\"\n  printf '  %s:\\n    image: %s\\n' \"$service\"\
+        \ \"$tag\" >> \"$backup/rollback.yml\"\ndone\ncd ../..\npromoted=0\nrollback() {\n  trap - ERR\n  for f in \"${files[@]}\"; do\n    if\
+        \ test -f \"$backup/source/$f\"; then cp -p \"$backup/source/$f\" \"$f\"; else rm -f \"$f\"; fi\n  done\n  if test \"$promoted\" = 1;\
+        \ then\n    cd /opt/olamide/repo/deployment/docker\n    docker compose -f compose.yml -f \"$backup/rollback.yml\" up -d --no-deps web\
+        \ || true\n  fi\n  exit 1\n}\ntrap rollback ERR\npython3 '{{ playbook_dir }}/../../tools/apply_sms_conversations.py' /opt/olamide/repo\n\
+        cd deployment/docker\ndocker compose build web\ndocker compose run --rm --no-deps -T --entrypoint caddy web validate --config /etc/caddy/Caddyfile\
+        \ --adapter caddyfile\npromoted=1\ndocker compose up -d --no-deps web\ncurl -fsS --max-time 10 --retry 12 --retry-all-errors --retry-delay\
+        \ 3 https://sip.dobhrap.com/api/health\ntrap - ERR\n"
       args:
         executable: /bin/bash
       no_log: true
       changed_when: true
-    - name: Report SMS conversation update
+    rescue:
+    - name: Read safe SMS deployment failure summary
+      ansible.builtin.command:
+        argv:
+        - python3
+        - -c
+        - from pathlib import Path;import re;folders=list(Path('/opt/olamide/backups').glob('sms-threads-*'));p=max(folders,key=lambda p:p.stat().st_mtime)
+          if folders else None;s=(p/'deploy.log').read_text(errors='replace') if p and (p/'deploy.log').exists() else '';print('SMS_UI_CHECK backup='+p.name
+          if p else 'SMS_UI_CHECK backup=none');codes=re.findall(r'SMS_THREAD_PATCH step=([1-4])',s);[print('SMS_UI_CHECK patch_step='+c) for
+          c in sorted(set(codes))];[print('SMS_UI_CHECK error='+code) for pattern,code in [('SyntaxError','javascript_syntax'),('already been
+          declared','duplicate_declaration'),('Could not resolve','missing_module'),('failed to solve','image_build'),('unrecognized directive','caddy_configuration'),('curl:','health_check')]
+          if pattern in s];print('SMS_UI_CHECK review_private_log=true')
+      register: sms_ui_failure
+      changed_when: false
+    - name: Show fixed failure codes
       ansible.builtin.debug:
-        msg: 'SMS conversation list and message threads installed. Refresh or reopen the app.'
+        var: sms_ui_failure.stdout_lines
+    - name: Stop after failed SMS deployment
+      ansible.builtin.fail:
+        msg: SMS update stopped. Review the fixed error summary above; previous files and web image were restored where necessary.
+  - name: Report SMS conversation update
+    ansible.builtin.debug:
+      msg: SMS conversation list and message threads installed. Refresh or reopen the app.
