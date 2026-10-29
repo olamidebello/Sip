@@ -4,7 +4,7 @@ import {JSDOM} from 'jsdom';
 let bundle;
 export async function appFixture({url="https://sip.example.com",navigationExtras=null}={}){
   if(!bundle){const path=new URL('./src/main.js',import.meta.url);const source=await readFile(path,'utf8');
-    const result=await build({stdin:{contents:source+'\nwindow.audit={signedIn,showWorkspace,updateNavigation,pageRoutes,resetWorkspace,localeSettings};',resolveDir:new URL('./src/',import.meta.url).pathname},bundle:true,format:'iife',write:false,loader:{'.css':'empty'},logLevel:'silent'});bundle=result.outputFiles[0].text;}
+    const result=await build({stdin:{contents:source+'\nwindow.audit={signedIn,showWorkspace,updateNavigation,pageRoutes,resetWorkspace,localeSettings};',resolveDir:new URL('./src/',import.meta.url).pathname},bundle:true,format:'iife',define:{'import.meta.url':JSON.stringify('https://sip.example.com/assets/audit.js')},write:false,loader:{'.css':'empty'},logLevel:'silent'});bundle=result.outputFiles[0].text;}
   const dom=new JSDOM('<div id="app"></div>',{url,runScripts:'outside-only',pretendToBeVisual:true});
   const window=dom.window,registrations=new WeakMap(),calls=[];
   const original=window.EventTarget.prototype.addEventListener;

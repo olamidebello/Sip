@@ -1,3 +1,4 @@
+import {setupConversationLook} from './conversationLook.js';
 export function appendChatFormatting(document,node,text){
  // Deliberately small plain-text syntax; never insert message HTML.
  const pattern=/(\*[^*\n]+\*|_[^_\n]+_|~[^~\n]+~|`[^`\n]+`)/g;let offset=0;
@@ -9,7 +10,7 @@ export function setupChatWritingTools({document,form,contact,status}){
  const el=(tag,text)=>{const n=document.createElement(tag);if(text)n.textContent=text;return n;};
  const tools=el('details');tools.className='chat-writing-tools';tools.append(el('summary','Writing tools'));
  const sidebar=document.querySelector('#chat .chat-sidebar');if(sidebar&&!sidebar.querySelector('.chat-feature-guide')){const guide=el('p','Open a chat to use formatting, saved drafts, camera, attachments and voice notes.');guide.className='chat-feature-guide';sidebar.prepend(guide);}
- const header=document.querySelector('#chat .chat-thread-header');if(header&&!header.querySelector('.chat-writing-shortcut')){const shortcut=el('button','✎');shortcut.type='button';shortcut.className='chat-writing-shortcut';shortcut.setAttribute('aria-label','Open writing tools');shortcut.title='Formatting, emoji search and quick replies';shortcut.onclick=()=>{tools.open=!tools.open;if(tools.open)tools.scrollIntoView?.({block:'nearest'});};header.append(shortcut);}
+ const header=document.querySelector('#chat .chat-thread-header');if(header&&!header.querySelector('.chat-writing-shortcut')){const shortcut=el('button','✎');shortcut.type='button';shortcut.className='chat-writing-shortcut';shortcut.setAttribute('aria-label','Open writing tools');shortcut.title='Formatting, emoji search and quick replies';shortcut.onclick=()=>{tools.open=!tools.open;if(tools.open){const extras=tools.closest('.phone-message-extras');if(extras)extras.open=true;}if(tools.open)tools.scrollIntoView?.({block:'nearest'});};header.append(shortcut);}
 
  const button=(label,handler)=>{const b=el('button',label);b.type='button';b.onclick=handler;tools.append(b);return b;};
  const feedback=text=>status.textContent=text,storeKey=()=>`olamide:chat-writing:${owner}`,draftKey=()=>`${storeKey()}:${key}`;
@@ -39,9 +40,9 @@ export function setupChatWritingTools({document,form,contact,status}){
  function network(){networkNotice.hidden=win.navigator.onLine!==false;networkNotice.textContent='Offline — your draft is saved. Reconnect and tap Send to retry.';}
  const offlineSubmit=event=>{if(win.navigator.onLine===false){event.preventDefault();event.stopImmediatePropagation();saveDraft();feedback('Offline. Draft saved; reconnect and tap Send.');}};
  form.addEventListener('submit',offlineSubmit,true);win.addEventListener('online',network);win.addEventListener('offline',network);network();
- form.append(tools);update();
+ form.append(tools);const conversationLook=setupConversationLook({document,form});update();
  function switchThread(){saveDraft();dictation?.stop();key=contact.value;body.value='';try{if(owner&&key)body.value=win.sessionStorage.getItem(draftKey())||'';}catch{}update();}
  contact.addEventListener('change',switchThread,true);
  form.addEventListener('reset',()=>win.queueMicrotask(()=>{saveDraft();update();}));
- return {account(value){if(owner===value){if(key!==contact.value)switchThread();return;}owner=value;key=contact.value;enter.checked=false;quick.value='';try{const p=JSON.parse(win.localStorage.getItem(storeKey())||'{}');enter.checked=p.enter===true;quick.value=String(p.quick||'').slice(0,2000);body.value=win.sessionStorage.getItem(draftKey())||'';}catch{}update();},sent(){body.value='';saveDraft();update();},stop(){dictation?.stop();owner=null;key=null;quick.value='';body.value='';enter.checked=false;preview.replaceChildren();tools.open=false;update();},dispose(){win.removeEventListener('online',network);win.removeEventListener('offline',network);form.removeEventListener('submit',offlineSubmit,true);observer.disconnect();dictation?.stop();contact.removeEventListener('change',switchThread,true);}};
+ return {account(value){if(owner===value){if(key!==contact.value)switchThread();return;}owner=value;key=contact.value;enter.checked=false;quick.value='';try{const p=JSON.parse(win.localStorage.getItem(storeKey())||'{}');enter.checked=p.enter===true;quick.value=String(p.quick||'').slice(0,2000);body.value=win.sessionStorage.getItem(draftKey())||'';}catch{}update();},sent(){body.value='';saveDraft();update();},stop(){dictation?.stop();owner=null;key=null;quick.value='';body.value='';enter.checked=false;preview.replaceChildren();tools.open=false;update();},dispose(){conversationLook.dispose();win.removeEventListener('online',network);win.removeEventListener('offline',network);form.removeEventListener('submit',offlineSubmit,true);observer.disconnect();dictation?.stop();contact.removeEventListener('change',switchThread,true);}};
 }
