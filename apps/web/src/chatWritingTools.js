@@ -8,6 +8,9 @@ export function setupChatWritingTools({document,form,contact,status}){
  const win=document.defaultView,body=form.querySelector('[name=body]');let owner=null,key=null,dictation=null;
  const el=(tag,text)=>{const n=document.createElement(tag);if(text)n.textContent=text;return n;};
  const tools=el('details');tools.className='chat-writing-tools';tools.append(el('summary','Writing tools'));
+ const sidebar=document.querySelector('#chat .chat-sidebar');if(sidebar&&!sidebar.querySelector('.chat-feature-guide')){const guide=el('p','Open a chat to use formatting, saved drafts, camera, attachments and voice notes.');guide.className='chat-feature-guide';sidebar.prepend(guide);}
+ const header=document.querySelector('#chat .chat-thread-header');if(header&&!header.querySelector('.chat-writing-shortcut')){const shortcut=el('button','✎');shortcut.type='button';shortcut.className='chat-writing-shortcut';shortcut.setAttribute('aria-label','Open writing tools');shortcut.title='Formatting, emoji search and quick replies';shortcut.onclick=()=>{tools.open=!tools.open;if(tools.open)tools.scrollIntoView?.({block:'nearest'});};header.append(shortcut);}
+
  const button=(label,handler)=>{const b=el('button',label);b.type='button';b.onclick=handler;tools.append(b);return b;};
  const feedback=text=>status.textContent=text,storeKey=()=>`olamide:chat-writing:${owner}`,draftKey=()=>`${storeKey()}:${key}`;
  const insert=text=>{if(body.disabled)return;const start=body.selectionStart??body.value.length,end=body.selectionEnd??start;if(body.value.length-end+start+text.length>4000){feedback('Message limit is 4000 characters.');return;}body.setRangeText(text,start,end,'end');body.dispatchEvent(new win.Event('input',{bubbles:true}));body.focus();};
