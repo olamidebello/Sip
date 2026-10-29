@@ -18,6 +18,23 @@ class ChatPatchTests(unittest.TestCase):
    for _ in range(2):subprocess.run(['python3',str(ROOT/'tools/apply_chat_gui.py'),folder],check=True)
    for name in ['conversations.js','messengerMedia.js','chatWritingTools.js']:
     subprocess.run(['node','--input-type=module','--check'],input=(src/name).read_text(),text=True,check=True)
+   # The live file joins statements onto lines; strings remain untouched.
+   baseline=(src/'messengerMedia.js').read_text()
+   for path,old,new in reversed(changes):
+    if path.endswith('/messengerMedia.js'):baseline=baseline.replace(new,old,1)
+   import re
+   compact=re.sub(r'\n[ ]*',' ',baseline)
+   (src/'messengerMedia.js').write_text(compact)
+   subprocess.run(['python3',str(ROOT/'tools/apply_chat_gui.py'),folder],check=True)
+   self.assertEqual((src/'.chat-gui-media-result').read_text(),'updated')
+   upgraded=(src/'messengerMedia.js').read_text()
+   self.assertIn('Pause / resume voice',upgraded)
+   self.assertIn('chat-media-review',upgraded)
+   subprocess.run(['node','--input-type=module','--check'],input=upgraded,text=True,check=True)
+   # String changes are substantive, not formatting.
+   (src/'messengerMedia.js').write_text(compact.replace('File limit is 2 MB','Custom policy'))
+   subprocess.run(['python3',str(ROOT/'tools/apply_chat_gui.py'),folder],check=True)
+   self.assertEqual((src/'.chat-gui-media-result').read_text(),'preserved_existing')
    customized='export const commissionedMedia = true;\n'
    (src/'messengerMedia.js').write_text(customized)
    subprocess.run(['python3',str(ROOT/'tools/apply_chat_gui.py'),folder],check=True)
