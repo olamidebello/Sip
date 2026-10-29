@@ -3,19 +3,13 @@ import json,sys,shutil,re
 from pathlib import Path
 changes=json.loads("[[\"import \\\"./style.css\\\";\",\"import \\\"./style.css\\\";\\nimport {setupPhoneSignal,phoneStatusText} from './phoneSignal.js';\\nimport './phoneSignal.css';\"],[\"let sipRegistered=false;\",\"let sipRegistered=false;\\nconst phoneSignal=setupPhoneSignal({document,isReady:()=>sipRegistered&&!!phone?.isConnected()});\"],[\"connection.textContent=sipRegistered?'Connected for calls':'Connecting your SIP account…';heading.append(connection);\",\"heading.append(connection);phoneSignal.refresh();\"],[\"function status(message) { callsScreen.connectionStatus(message);$(\\\"#status\\\").textContent = message;const badge=$('#communication-status');if(badge)badge.textContent=message; }\",\"function status(message) { const text=phoneStatusText(message);callsScreen.connectionStatus(text);$(\\\"#status\\\").textContent=text;phoneSignal.refresh(); }\"]]")
 root=Path(sys.argv[1]);p=root/'apps/web/src/main.js';s=p.read_text()
-# Merge repeated known phone-signal imports before parsing the shared entry point.
+# Reinsert one canonical import block; its location may change after SMS edits.
 phone_import = r"(?m)^import\s*\{([^}]+)\}\s*from\s*['\"]\./phoneSignal\.js['\"]\s*;"
-phone_matches=list(re.finditer(phone_import,s))
-if len(phone_matches)>1:
- names=[]
- for match in phone_matches:
-  for name in match.group(1).split(','):
-   name=name.strip()
-   if name not in {'setupPhoneSignal','phoneStatusText'}:
-    raise SystemExit('PHONE_SIGNAL_PATCH unsupported_import=true')
-   if name not in names:names.append(name)
- s=re.sub(phone_import,'',s)
- s="import {"+','.join(names)+"} from './phoneSignal.js';\n"+s
+for match in re.finditer(phone_import,s):
+ if any(name.strip() not in {'setupPhoneSignal','phoneStatusText'} for name in match.group(1).split(',')):
+  raise SystemExit('PHONE_SIGNAL_PATCH unsupported_import=true')
+s=re.sub(phone_import,'',s)
+s=re.sub(r"(?m)^import\s*['\"]\./phoneSignal\.css['\"]\s*;",'',s)
 
 for n,(old,new) in enumerate(changes,1):
  if new in s:continue
