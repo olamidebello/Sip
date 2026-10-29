@@ -1232,6 +1232,7 @@
         "apps/web/src/messengerOverflow.js",
         "apps/web/src/messengerSettings.js",
         "apps/web/src/nativeEmergency.js",
+        "apps/web/src/smsConversations.js",
         "apps/web/src/userActivity.js",
         "apps/web/src/userAppearanceUi.js",
         "apps/web/src/userNavigation.js"
