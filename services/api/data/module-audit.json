@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.",
   "summary": {
-    "clientSourceModules": 182,
+    "clientSourceModules": 183,
     "apiSourceModules": 169,
     "applicationFeatures": 86,
     "featureStates": {
@@ -676,6 +676,11 @@
     },
     {
       "source": "apps/web/src/smsRouteControlUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/smsTools.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -3522,6 +3527,7 @@
         "apps/web/src/groups.js",
         "apps/web/src/main.js",
         "apps/web/src/messengerHub.js",
+        "apps/web/src/smsConversations.js",
         "apps/web/src/userNavigation.js"
       ],
       "liveAcceptance": "unverified"
@@ -4072,6 +4078,7 @@
         "apps/web/src/moduleReadiness.js",
         "apps/web/src/phoneSettingsUi.js",
         "apps/web/src/providerManagerUi.js",
+        "apps/web/src/smsConversations.js",
         "apps/web/src/support.js",
         "apps/web/src/userActivity.js",
         "apps/web/src/userNavigation.js"
@@ -4449,6 +4456,7 @@
         "apps/web/src/smsAppearance.js",
         "apps/web/src/smsConversations.js",
         "apps/web/src/smsRouteControlUi.js",
+        "apps/web/src/smsTools.js",
         "apps/web/src/socialLinks.js",
         "apps/web/src/socialPublishing.js",
         "apps/web/src/socialWorkspace.js",

@@ -315,6 +315,7 @@ API source modules: 169. Application feature entries: 86. Kamailio entries: 266.
 | apps/web/src/smsAppearance.js | web | unverified |
 | apps/web/src/smsConversations.js | web | unverified |
 | apps/web/src/smsRouteControlUi.js | web | unverified |
+| apps/web/src/smsTools.js | web | unverified |
 | apps/web/src/socialLinks.js | web | unverified |
 | apps/web/src/socialPublishing.js | web | unverified |
 | apps/web/src/socialWorkspace.js | web | unverified |
