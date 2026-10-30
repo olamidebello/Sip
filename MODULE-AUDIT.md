@@ -2,7 +2,7 @@
 
 Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.
 
-API source modules: 172. Application feature entries: 86. Kamailio entries: 266.
+API source modules: 173. Application feature entries: 86. Kamailio entries: 266.
 
 ## API sources
 
@@ -68,6 +68,7 @@ API source modules: 172. Application feature entries: 86. Kamailio entries: 266.
 | importFlowrouteTrunk | False | False | none identified | library / CLI / no direct reference |
 | inboundDidOwner | False | False | inboundDidOwner.test.js | library / CLI / no direct reference |
 | inboundRouting | False | False | inboundRouting.test.js | library / CLI / no direct reference |
+| inhouseLifecycle | False | False | inhouseLifecycle.test.js | library / CLI / no direct reference |
 | inhouseSubscriber | False | False | inhouseSubscriber.test.js | library / CLI / no direct reference |
 | justisolveBridge | True | False | justisolveBridge.test.js | handleJustisolveBridge, startJustisolveLeaseSweep |
 | kamailio | True | True | kamailio.test.js | handleKamailioAdmin, handleKamailioRunner |
@@ -263,6 +264,7 @@ API source modules: 172. Application feature entries: 86. Kamailio entries: 266.
 | apps/web/src/icnFxUi.js | web | unverified |
 | apps/web/src/icnUi.js | web | unverified |
 | apps/web/src/inboundRoutingUi.js | web | unverified |
+| apps/web/src/inhouseVerification.js | web | unverified |
 | apps/web/src/install.js | web | unverified |
 | apps/web/src/kamailioAdmin.js | web | unverified |
 | apps/web/src/languageTools.js | web | unverified |

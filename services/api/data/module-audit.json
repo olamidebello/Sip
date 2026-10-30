@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "scope": "Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.",
   "summary": {
-    "clientSourceModules": 187,
-    "apiSourceModules": 172,
+    "clientSourceModules": 188,
+    "apiSourceModules": 173,
     "applicationFeatures": 86,
     "featureStates": {
       "implemented": 13,
@@ -401,6 +401,11 @@
     },
     {
       "source": "apps/web/src/inboundRoutingUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/inhouseVerification.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -2277,9 +2282,29 @@
       "liveAcceptance": "unverified"
     },
     {
+      "id": "inhouseLifecycle",
+      "source": "services/api/inhouseLifecycle.js",
+      "sha256": "a93eb4d62e897d426ea9cae6709b7d01f70beae88f9eeb5065451590540c0d1c",
+      "exportedHandlers": [
+        "handleInhouseLifecycle"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [
+        "startInhouseLifecycle"
+      ],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "inhouseLifecycle.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
       "id": "inhouseSubscriber",
       "source": "services/api/inhouseSubscriber.js",
-      "sha256": "04775d1e7227ebdb0fe7c27a74b13e105b00c94872d47143ec2e48de6e014cfe",
+      "sha256": "62b0ba152fa1459625e2d75aca090951c842bb04b49d6ac27489382c6d12d2a9",
       "exportedHandlers": [],
       "serverReferencedHandlers": [],
       "exportedWorkers": [],
@@ -4486,6 +4511,7 @@
         "apps/web/src/icnFxUi.js",
         "apps/web/src/icnUi.js",
         "apps/web/src/inboundRoutingUi.js",
+        "apps/web/src/inhouseVerification.js",
         "apps/web/src/install.js",
         "apps/web/src/kamailioAdmin.js",
         "apps/web/src/languageTools.js",
