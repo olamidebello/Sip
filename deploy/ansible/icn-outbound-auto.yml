@@ -1,4 +1,7 @@
 ---
+- name: Install subscriber-included numbering and free internal routing
+  ansible.builtin.import_playbook: inhouse-subscriber-free.yml
+
 - name: Provision ICN activation information from existing paid rentals
   hosts: localhost
   connection: local
@@ -60,7 +63,7 @@
       ansible.builtin.debug:
         msg:
           - 'Activation file created: /etc/olamide/icn-activation.yml'
-          - 'Active paid DIDs discovered: {{ icn_generated.provisioning.activePaidDids }}'
+          - 'Eligible subscriber DIDs discovered: {{ icn_generated.provisioning.activePaidDids }}'
           - 'Still required: {{ icn_generated.provisioning.missing | join(", ") | default("none", true) }}'
           - 'Known values are saved. Carrier approval and tariff categories are never fabricated.'
 

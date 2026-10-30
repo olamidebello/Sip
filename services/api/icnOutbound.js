@@ -1,4 +1,5 @@
 import {readFileSync} from 'node:fs';
+import {inhouseNumber} from './inhouseSubscriber.js';
 const CONFIG='/var/lib/olamide/service-inventory/icn-outbound.json';
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export function loadIcnOutbound(path=CONFIG){
@@ -29,13 +30,14 @@ export async function icnLocationProof(db,user,sessionHash){
 // Runs inside reservePstn's tenant lock and transaction. null means this user has
 // no in-house Nigeria DID and can follow their existing carrier route.
 export async function reserveIcnOutbound(db,{actor,data,destination,charge,assertWindow,policies,allowance},{config,access}={}){
+ if(inhouseNumber(destination))throw Error('In-house DID must use free subscriber routing');
  if(!destination.startsWith('234'))return null;config??=loadIcnOutbound();if(!config||!config.tenants.includes(actor.tenant_id))return null;
- const rentals=(await db.query("SELECT d.id,d.number_e164,d.status,d.user_id,r.status AS rental_status,r.paid_until,g.policy,EXISTS(SELECT 1 FROM smooth_did_payments p JOIN invoices i ON i.id=p.invoice_id AND i.user_id=p.user_id AND i.status='paid' WHERE p.did_id=d.id AND p.tenant_id=d.tenant_id AND p.user_id=d.user_id AND p.period_end=r.paid_until) AS purchased FROM inhouse_dids d JOIN smooth_did_rentals r ON r.did_id=d.id AND r.tenant_id=d.tenant_id AND r.user_id=d.user_id LEFT JOIN smooth_did_members m ON m.did_id=d.id LEFT JOIN smooth_did_groups g ON g.id=m.group_id AND g.tenant_id=d.tenant_id WHERE d.tenant_id=$1 AND d.user_id=$2 AND d.number_e164 LIKE '+234%' ORDER BY d.number_e164 FOR UPDATE",[actor.tenant_id,actor.user_id])).rows;
+ const rentals=(await db.query("SELECT d.id,d.number_e164,d.status,d.user_id,CASE WHEN f.did_id IS NOT NULL THEN 'active' ELSE r.status END AS rental_status,CASE WHEN f.did_id IS NOT NULL THEN '9999-12-31' ELSE r.paid_until END AS paid_until,g.policy,CASE WHEN f.did_id IS NOT NULL THEN 1 ELSE EXISTS(SELECT 1 FROM smooth_did_payments p JOIN invoices i ON i.id=p.invoice_id AND i.user_id=p.user_id AND i.status='paid' WHERE p.did_id=d.id AND p.tenant_id=d.tenant_id AND p.user_id=d.user_id AND p.period_end=r.paid_until) END AS purchased FROM inhouse_dids d LEFT JOIN inhouse_subscriber_assignments f ON f.did_id=d.id AND f.tenant_id=d.tenant_id AND f.user_id=d.user_id LEFT JOIN smooth_did_rentals r ON r.did_id=d.id AND r.tenant_id=d.tenant_id AND r.user_id=d.user_id LEFT JOIN smooth_did_members m ON m.did_id=d.id LEFT JOIN smooth_did_groups g ON g.id=m.group_id AND g.tenant_id=d.tenant_id WHERE d.tenant_id=$1 AND d.user_id=$2 AND d.number_e164 LIKE '+234%' AND (f.did_id IS NOT NULL OR r.did_id IS NOT NULL) ORDER BY d.number_e164 FOR UPDATE",[actor.tenant_id,actor.user_id])).rows;
  const preferred=config.preferredDids?.[actor.user_id];
  if(!rentals.length){if(preferred)throw Error('Configured ICN DID is not purchased by this user');return null;}
  const candidates=preferred?rentals.filter(r=>r.number_e164===preferred):rentals.filter(r=>r.status==='assigned'&&r.rental_status==='active'&&new Date(r.paid_until)>new Date());
  if(candidates.length!==1)throw Error('Select one active purchased ICN DID in preferredDids');const did=candidates[0];
- if(!Number(did.purchased))throw Error('Paid purchase invoice required for ICN DID');
+ if(!Number(did.purchased))throw Error('Subscriber assignment or paid rental required for ICN DID');
  if(did.status!=='assigned'||did.rental_status!=='active'||new Date(did.paid_until)<=new Date())throw Error('ICN DID rental expired or suspended');
  const group=typeof did.policy==='string'?JSON.parse(did.policy):did.policy;
  if(!group||!group.geofenceEnabled||!group.voiceReady||!group.interconnects?.includes('icn'))throw Error('Purchased DID group is not configured for ICN voice');
