@@ -30,3 +30,4 @@ if __name__=='__main__':
  if target.is_symlink():raise ValueError('INHOUSE_PATCH symlink rejected')
  for p,s in pending:p.write_text(s)
  shutil.copyfile(here/'services/api/inhouseSubscriber.js',target)
+ shutil.copyfile(here/'services/api/inhouseLifecycle.js',root/'services/api/inhouseLifecycle.js')
