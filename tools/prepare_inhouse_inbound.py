@@ -1,12 +1,13 @@
 """Add a source-restricted ICN inbound route to a staged switch config."""
 import pathlib,re,json,sys
 def patch(s,token):
- if '# INHOUSE_ICN_INBOUND_V1' in s:return s
+ if '# INHOUSE_ICN_INBOUND_V1' in s:
+  return s.replace('is_method("INVITE") && !has_totag()', 'is_method("INVITE") && $tt == $null')
  if not re.fullmatch('[a-f0-9]{64}',token):raise ValueError('Stable bridge token required')
  if s.count('request_route {')!=1:raise ValueError('Unrecognized main request route')
  s=s.replace('request_route {','''request_route {
     # INHOUSE_ICN_INBOUND_V1
-    if ($si == "196.216.253.173" && is_method("INVITE") && !has_totag()) {
+    if ($si == "196.216.253.173" && is_method("INVITE") && $tt == $null) {
         route(INHOUSE_ICN_INBOUND); exit;
     }
 ''',1)
