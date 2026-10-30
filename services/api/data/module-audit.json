@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scope": "Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.",
   "summary": {
-    "clientSourceModules": 188,
+    "clientSourceModules": 189,
     "apiSourceModules": 173,
     "applicationFeatures": 86,
     "featureStates": {
@@ -161,6 +161,11 @@
     },
     {
       "source": "apps/web/src/backgroundCalls.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/callCredit.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -1290,6 +1295,7 @@
       "guiReferences": [
         "apps/web/src/adminNavigation.js",
         "apps/web/src/adminWorkspaceUi.js",
+        "apps/web/src/callCredit.js",
         "apps/web/src/configurationLinks.js",
         "apps/web/src/dashboard.js",
         "apps/web/src/didAvailabilityUi.js",
@@ -4464,6 +4470,7 @@
         "apps/web/src/autoSipRegistration.js",
         "apps/web/src/background.js",
         "apps/web/src/backgroundCalls.js",
+        "apps/web/src/callCredit.js",
         "apps/web/src/callGui.js",
         "apps/web/src/callIdentity.js",
         "apps/web/src/callerIdentityAdmin.js",
@@ -4879,6 +4886,7 @@
       "guiReferences": [
         "apps/web/src/adminNavigation.js",
         "apps/web/src/adminWorkspaceUi.js",
+        "apps/web/src/callCredit.js",
         "apps/web/src/commerceOps.js",
         "apps/web/src/didAvailabilityUi.js",
         "apps/web/src/main.js",

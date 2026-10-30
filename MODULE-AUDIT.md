@@ -216,6 +216,7 @@ API source modules: 173. Application feature entries: 86. Kamailio entries: 266.
 | apps/web/src/autoSipRegistration.js | web | unverified |
 | apps/web/src/background.js | web | unverified |
 | apps/web/src/backgroundCalls.js | web | unverified |
+| apps/web/src/callCredit.js | web | unverified |
 | apps/web/src/callGui.js | web | unverified |
 | apps/web/src/callIdentity.js | web | unverified |
 | apps/web/src/callerIdentityAdmin.js | web | unverified |
