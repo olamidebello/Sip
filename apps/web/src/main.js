@@ -2120,7 +2120,7 @@ async function refreshBilling() {
   const storePayments=await apiGet('/api/marketplace/gateways').catch(()=>({providers:[]}));
   $("#invoices").replaceChildren(...invoices.invoices.map((invoice) => {
     const li = document.createElement("li");
-    li.textContent = `${invoice.description}: ${money(invoice.amount_cents)} — ${invoice.status} `;
+    li.textContent = `${invoice.description}: ${new Intl.NumberFormat(undefined,{style:'currency',currency:invoice.currency}).format(invoice.amount_cents/100)} — ${invoice.status} `;
     if(invoice.status==='unpaid'&&invoice.currency==='USD'&&Number(invoice.amount_cents)>0){
       const payBalance=document.createElement('button');payBalance.type='button';payBalance.textContent='Pay with account balance';
       payBalance.disabled=Number(wallet.balanceCents)<Number(invoice.amount_cents);
@@ -2140,8 +2140,17 @@ async function refreshBilling() {
     }
     if(invoice.status==='unpaid'&&Number(invoice.amount_cents)>0){
       for(const provider of storePayments.providers){
-        const button=document.createElement('button');button.type='button';button.textContent='Pay with '+provider;
-        button.onclick=async()=>{button.disabled=true;try{const result=await accountRequest('/api/marketplace/checkout',{invoiceId:invoice.id,provider});
+        if(invoice.currency==='NGN'&&provider!=='flutterwave')continue;
+        const button=document.createElement('button');button.type='button';button.textContent=provider==='flutterwave'?'Pay in naira with Flutterwave':'Pay with '+provider;
+        button.onclick=async()=>{button.disabled=true;try{
+          let quote;
+          if(provider==='flutterwave'){
+            ({quote}=await accountRequest('/api/marketplace/naira-quote',{invoiceId:invoice.id}));
+            const total=new Intl.NumberFormat(undefined,{style:'currency',currency:'NGN'}).format(quote.amountCents/100);
+            const rateText=quote.baseCurrency==='USD'?`Parallel-market sell rate: ₦${quote.rate} per $1 from ${quote.source}, updated ${new Date(quote.rateAt).toLocaleString()}.`:'This invoice is already priced in naira.';
+            if(!confirm(`Pay ${total} with Flutterwave?\n${rateText}\nQuote expires ${new Date(quote.expiresAt).toLocaleString()}.`)){button.disabled=false;return;}
+          }
+          const result=await accountRequest('/api/marketplace/checkout',{invoiceId:invoice.id,provider,...(quote?{currency:'NGN',quoteId:quote.id}:{currency:'USD'})});
           const dest=new URL(result.url),hosts={paystack:'checkout.paystack.com',flutterwave:'checkout.flutterwave.com'};
           if(dest.protocol!=='https:'||dest.hostname!==hosts[provider]||dest.username||dest.password)throw Error('Invalid checkout destination');
           location.assign(dest.href);
@@ -2151,8 +2160,9 @@ async function refreshBilling() {
     return li;
   }));
   const attempts=await apiGet('/api/marketplace/payment-attempts').catch(()=>({attempts:[]}));
-  for(const a of attempts.attempts.filter(a=>a.status!=='paid')){
-    const li=document.createElement('li');li.textContent=`${a.provider} payment ${a.id}: ${a.status} `;
+  for(const a of attempts.attempts){
+    const li=document.createElement('li');li.textContent=`${a.provider} payment ${a.id}: ${a.status} · ${new Intl.NumberFormat(undefined,{style:'currency',currency:a.charge_currency||'USD'}).format(Number(a.charge_amount_cents||0)/100)} ${a.rate&&a.source!=='native-NGN'?`· ₦${a.rate}/USD (${a.source}, ${new Date(a.rate_at).toLocaleString()})`:''} `;
+    if(a.status==='paid'){$('#invoices').append(li);continue;}
     const verify=document.createElement('button');verify.type='button';verify.textContent='Verify payment';
     verify.onclick=async()=>{verify.disabled=true;try{await accountRequest('/api/marketplace/verify',{attemptId:a.id});$('#checkout-status').textContent='Payment verified.';await refreshBilling();}catch(e){$('#checkout-status').textContent=e.message;}finally{verify.disabled=false;}};li.append(verify);$('#invoices').append(li);
   }

@@ -1,4 +1,5 @@
 import {randomUUID} from 'node:crypto';
+import {migrateNairaPayments,handleNairaConfig,createNairaQuote,minorUnits,formatMinorUnits} from './nairaPayments.js';
 import {seal,unseal} from './providerCredentials.js';
 import {canManageGateway,storePolicy} from './marketplaceControl.js';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -11,6 +12,7 @@ export const gatewayCatalog=[
 ];
 export function validCheckoutUrl(provider,value){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&({paystack:['checkout.paystack.com'],flutterwave:['checkout.flutterwave.com'],stripe:['checkout.stripe.com']}[provider]||[]).includes(u.hostname);}catch{return false;}}
 export async function migrateStoreGateways(pool){
+ await migrateNairaPayments(pool);
  await pool.query(`CREATE TABLE IF NOT EXISTS store_gateways (
  tenant_id CHAR(36) NOT NULL,provider VARCHAR(16) NOT NULL,enabled BOOLEAN NOT NULL DEFAULT FALSE,
  environment VARCHAR(12) NOT NULL,ciphertext BLOB NOT NULL,updated_by CHAR(36) NOT NULL,
@@ -27,6 +29,7 @@ async function api(provider,path,secret,body,fetchImpl){
  const data=await r.json();if(!r.ok||!(data.status===true||data.status==='success'))throw Error('Provider request failed');return data.data;
 }
 export async function handleStoreGateways({req,res,path,user,pool,send,readJson,origin,fetchImpl=fetch}){
+ if(path==='/api/admin/marketplace/naira')return handleNairaConfig({req,res,user,pool,send,readJson});
  const admin=path.startsWith('/api/admin/marketplace/');
  if(admin&&!['admin','super_admin'].includes(user.role))return send(res,403,{error:'Administrator required'});
  if(path==='/api/admin/marketplace/gateways'&&req.method==='GET'){
@@ -60,30 +63,50 @@ export async function handleStoreGateways({req,res,path,user,pool,send,readJson,
  if(policy&&(!policy.authorized||!policy.enabled))return send(res,403,{error:'Store disabled'});
  if(path==='/api/marketplace/gateways'&&req.method==='GET'){
   const r=await pool.query('SELECT provider FROM store_gateways WHERE tenant_id=$1 AND enabled=TRUE',[user.tenant_id]);
-  return send(res,200,{providers:key()?r.rows.map(r=>r.provider):[]});
+  return send(res,200,{providers:key()?r.rows.map(r=>r.provider):[],currencyProviders:{NGN:['flutterwave'],USD:['stripe','paystack','flutterwave']}});
+ }
+ if(path==='/api/marketplace/naira-quote'&&req.method==='POST'){
+  const b=await readJson(req);
+  if(!uuid.test(b.invoiceId||''))return send(res,400,{error:'Valid invoice required'});
+  if(!await gateway(pool,user.tenant_id,'flutterwave'))return send(res,503,{error:'Flutterwave unavailable'});
+  const invoice=(await pool.query("SELECT i.* FROM invoices i JOIN users u ON u.id=i.user_id WHERE i.id=$1 AND i.user_id=$2 AND u.tenant_id=$3 AND i.status='unpaid'",[b.invoiceId,user.id,user.tenant_id])).rows[0];
+  if(!invoice)return send(res,404,{error:'Unpaid invoice unavailable'});
+  try{return send(res,201,{quote:await createNairaQuote(pool,invoice,user,{fetchImpl})});}
+  catch{return send(res,503,{error:'A fresh parallel-market quote is unavailable. Check the rate-feed configuration or retry later.'});}
  }
  if(path==='/api/marketplace/checkout'&&req.method==='POST'){
   const b=await readJson(req);
   if(!uuid.test(b.invoiceId||'')||!['paystack','flutterwave'].includes(b.provider))return send(res,400,{error:'Valid invoice and provider required'});
+  if(b.currency!==undefined&&!['USD','NGN'].includes(b.currency))return send(res,400,{error:'USD or NGN payment currency required'});
+  if(b.currency==='NGN'&&b.provider!=='flutterwave')return send(res,400,{error:'Naira payments require Flutterwave'});
   const g=await gateway(pool,user.tenant_id,b.provider);if(!g)return send(res,503,{error:'Gateway unavailable'});
-  const db=await pool.connect();let attempt,invoice;
+  const db=await pool.connect();let attempt,invoice,quote,paymentCurrency,paymentAmount;
   try{
    await db.query('START TRANSACTION');
    invoice=(await db.query("SELECT i.*,u.email FROM invoices i JOIN users u ON u.id=i.user_id WHERE i.id=$1 AND i.user_id=$2 AND u.tenant_id=$3 AND i.status='unpaid' FOR UPDATE",[b.invoiceId,user.id,user.tenant_id])).rows[0];
-   if(!invoice||invoice.currency!=='USD'||invoice.amount_cents<1){await db.query('ROLLBACK');return send(res,409,{error:'Unpaid USD invoice required'});}
+   if(!invoice||!['USD','NGN'].includes(invoice.currency)||invoice.amount_cents<1){await db.query('ROLLBACK');return send(res,409,{error:'Unpaid USD or NGN invoice required'});}
+   paymentCurrency=b.currency||invoice.currency;
+   if(invoice.currency==='NGN'&&(paymentCurrency!=='NGN'||b.provider!=='flutterwave')){await db.query('ROLLBACK');return send(res,400,{error:'Naira invoices require Flutterwave in NGN'});}
+   if(paymentCurrency==='NGN'){
+    if(!uuid.test(b.quoteId||'')){await db.query('ROLLBACK');return send(res,400,{error:'Review a current naira quote before payment'});}
+    quote=(await db.query('SELECT * FROM naira_payment_quotes WHERE id=$1 AND tenant_id=$2 AND user_id=$3 AND invoice_id=$4 FOR UPDATE',[b.quoteId,user.tenant_id,user.id,invoice.id])).rows[0];
+    if(!quote||quote.attempt_id||new Date(quote.expires_at).getTime()-Date.now()<60000||Number(quote.base_amount_cents)!==Number(invoice.amount_cents)||quote.base_currency!==invoice.currency){await db.query('ROLLBACK');return send(res,409,{error:'Quote expired, used or changed; request a fresh naira quote'});}
+    paymentAmount=Number(quote.charge_amount_cents);
+   }else paymentAmount=Number(invoice.amount_cents);
    // The invoice lock serializes creation across all three providers.
    const active=(await db.query("SELECT id FROM payment_attempts WHERE invoice_id=$1 AND tenant_id=$2 AND status IN ('creating','open') LIMIT 1 FOR UPDATE",[invoice.id,user.tenant_id])).rows[0];
    if(active){await db.query('ROLLBACK');return send(res,409,{error:'An existing checkout is pending. Verify it before opening another.'});}
    attempt=randomUUID();
    await db.query('INSERT INTO payment_attempts(id,tenant_id,user_id,invoice_id,provider,amount_cents,currency) VALUES($1,$2,$3,$4,$5,$6,$7)',[attempt,user.tenant_id,user.id,invoice.id,b.provider,invoice.amount_cents,invoice.currency]);
+   if(quote)await db.query('UPDATE naira_payment_quotes SET attempt_id=$1 WHERE id=$2',[attempt,quote.id]);
    await db.query('COMMIT');
   }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
   try{
-   const result=await api(b.provider,b.provider==='paystack'?'/transaction/initialize':'/payments',g.secretKey,b.provider==='paystack'?{email:invoice.email,amount:invoice.amount_cents,currency:invoice.currency,reference:attempt,callback_url:origin+'/#billing'}:{tx_ref:attempt,amount:(invoice.amount_cents/100).toFixed(2),currency:invoice.currency,redirect_url:origin+'/#billing',customer:{email:invoice.email}},fetchImpl);
+   const result=await api(b.provider,b.provider==='paystack'?'/transaction/initialize':'/payments',g.secretKey,b.provider==='paystack'?{email:invoice.email,amount:paymentAmount,currency:paymentCurrency,reference:attempt,callback_url:origin+'/#billing'}:{tx_ref:attempt,amount:formatMinorUnits(paymentAmount),currency:paymentCurrency,redirect_url:origin+'/#billing',customer:{email:invoice.email},...(quote?{configurations:{session_duration:Math.max(1,Math.floor((new Date(quote.expires_at).getTime()-Date.now())/60000)),max_retry_attempt:5},meta:{quote_id:quote.id,rate_source:quote.source,ngn_per_usd:quote.rate,invoice_currency:invoice.currency,invoice_amount_cents:invoice.amount_cents}}:{})},fetchImpl);
    const url=result.authorization_url||result.link;
    if(!validCheckoutUrl(b.provider,url))throw Error('Invalid checkout destination');
    await pool.query("UPDATE payment_attempts SET status='open',checkout_url=$1 WHERE id=$2 AND tenant_id=$3",[url,attempt,user.tenant_id]);
-   return send(res,201,{url,attemptId:attempt});
+   return send(res,201,{url,attemptId:attempt,amountCents:paymentAmount,currency:paymentCurrency,quoteId:quote?.id});
   }catch{
    // Provider may have accepted a timed-out request. Keep it reconcilable; do not create a replacement charge.
    await pool.query("UPDATE payment_attempts SET status='open' WHERE id=$1 AND tenant_id=$2",[attempt,user.tenant_id]);
@@ -91,7 +114,7 @@ export async function handleStoreGateways({req,res,path,user,pool,send,readJson,
   }
  }
  if(path==='/api/marketplace/payment-attempts'&&req.method==='GET'){
-  const r=await pool.query("SELECT id,invoice_id,provider,status,checkout_url FROM payment_attempts WHERE tenant_id=$1 AND user_id=$2 AND provider IN ('paystack','flutterwave') ORDER BY created_at DESC LIMIT 100",[user.tenant_id,user.id]);
+  const r=await pool.query("SELECT p.id,p.invoice_id,p.provider,p.status,p.checkout_url,COALESCE(q.charge_amount_cents,p.amount_cents) AS charge_amount_cents,CASE WHEN q.id IS NOT NULL THEN 'NGN' ELSE p.currency END AS charge_currency,q.rate,q.source,q.rate_side,q.rate_at,q.expires_at FROM payment_attempts p LEFT JOIN naira_payment_quotes q ON q.attempt_id=p.id WHERE p.tenant_id=$1 AND p.user_id=$2 AND p.provider IN ('paystack','flutterwave') ORDER BY p.created_at DESC LIMIT 100",[user.tenant_id,user.id]);
   return send(res,200,{attempts:r.rows});
  }
  if(path==='/api/marketplace/verify'&&req.method==='POST'){
@@ -105,8 +128,10 @@ export async function handleStoreGateways({req,res,path,user,pool,send,readJson,
 }
 export function matchesPayment(a,d){
  if(!d||typeof d!=='object')return false;
- const amount=a.provider==='paystack'?Number(d.amount):Math.round(Number(d.amount)*100);
- return (a.provider==='paystack'?d.status==='success'&&d.reference===a.id:d.status==='successful'&&d.tx_ref===a.id)&&amount===a.amount_cents&&d.currency===a.currency&&d.id!=null;
+ let amount;try{amount=a.provider==='paystack'?Number(d.amount):minorUnits(d.amount);}catch{return false;}
+ const currency=a.charge_currency||a.currency;
+ if(currency==='NGN'&&a.provider!=='flutterwave')return false;
+ return (a.provider==='paystack'?d.status==='success'&&d.reference===a.id:d.status==='successful'&&d.tx_ref===a.id)&&amount===Number(a.charge_amount_cents??a.amount_cents)&&d.currency===currency&&d.id!=null;
 }
 
 export async function reconcileStorePayment(pool,a,{fetchImpl=fetch}={}){
@@ -114,6 +139,11 @@ export async function reconcileStorePayment(pool,a,{fetchImpl=fetch}={}){
  if(a.status==='paid')return result(200,{status:'paid'});
   const g=await gateway(pool,a.tenant_id,a.provider,{allowDisabled:true});if(!g)return result(503,{error:'Gateway unavailable'});
   let data;try{data=await api(a.provider,a.provider==='paystack'?'/transaction/verify/'+a.id:'/transactions/verify_by_reference?tx_ref='+a.id,g.secretKey,null,fetchImpl);}catch{return result(502,{error:'Verification unavailable; payment remains pending'});}
+  const quote=(await pool.query('SELECT * FROM naira_payment_quotes WHERE attempt_id=$1 AND tenant_id=$2',[a.id,a.tenant_id])).rows[0];
+  if(quote){
+   if(Number(quote.base_amount_cents)!==Number(a.amount_cents)||quote.base_currency!==a.currency||quote.invoice_id!==a.invoice_id||quote.user_id!==a.user_id)return result(409,{error:'Quote reconciliation mismatch'});
+   a={...a,charge_amount_cents:Number(quote.charge_amount_cents),charge_currency:'NGN'};
+  }
   if(!matchesPayment(a,data))return result(409,{error:'Payment pending or reconciliation mismatch'});
   const db=await pool.connect();try{
    await db.query('START TRANSACTION');

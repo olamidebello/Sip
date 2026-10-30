@@ -1,3 +1,4 @@
+import {handleFlutterwaveWebhook} from './flutterwaveWebhook.js';
 import {adminRouteAllowed,scopedAdminUser,handleAdminGroup,adminGroupPolicy} from './adminGroup.js';
 import {handleQuickSignup,handleQuickProfile} from './quickSignup.js';
 import {migrateApiBridge,handleApiBridge} from './apiBridge.js';
@@ -189,17 +190,18 @@ async function handler(req, res) {
     return send(res, 200, { status: "ok", ...(process.env.APP_RELEASE ? {release:process.env.APP_RELEASE} : {}) });
   const flowrouteWebhook = path.startsWith("/api/webhooks/flowroute/");
   const stripeWebhook = path.startsWith("/api/webhooks/stripe/");
+  const flutterwaveWebhook=path.startsWith("/api/webhooks/flutterwave/");
   const providerWebhook=path.startsWith("/api/webhooks/providers/");
   const didwwWebhook=path.startsWith("/api/webhooks/didww/");
   const cdrIngest = req.method === "POST" && path === "/api/integrations/cdr";
   const switchXml = path === "/api/switch/xml";
   const deployRunner = path.startsWith('/api/integrations/deployment/');
   const kamailioRunner=path.startsWith('/api/integrations/kamailio/');
-  if (req.method !== "GET" && !keyedBridge && !hostedBridge && !hostedIntegration && !justisolveRunner && !nativePushHook && !deployRunner && !kamailioRunner && !switchXml && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !didwwWebhook && req.headers.origin !== origin)
+  if (req.method !== "GET" && !keyedBridge && !hostedBridge && !hostedIntegration && !justisolveRunner && !nativePushHook && !deployRunner && !kamailioRunner && !switchXml && !cdrIngest && !flowrouteWebhook && !stripeWebhook && !providerWebhook && !flutterwaveWebhook && !didwwWebhook && req.headers.origin !== origin)
     return send(res, 403, { error: "Invalid origin" });
   try {
     if(req.method!=='GET'||path==='/api/register/captcha'){
-      const external=!!(keyedBridge||hostedBridge||hostedIntegration||justisolveRunner||nativePushHook||deployRunner||kamailioRunner||switchXml||cdrIngest||flowrouteWebhook||stripeWebhook||providerWebhook||didwwWebhook);
+      const external=!!(keyedBridge||hostedBridge||hostedIntegration||justisolveRunner||nativePushHook||deployRunner||kamailioRunner||switchXml||cdrIngest||flowrouteWebhook||stripeWebhook||providerWebhook||flutterwaveWebhook||didwwWebhook);
       const client=await proxyClient(req);
       const edge=requestLimiter.check('edge:'+client,600);
       if(!edge.allowed)return send(res,429,{error:'Too many requests',retryAfter:edge.retryAfter},{'Retry-After':String(edge.retryAfter)});
@@ -224,6 +226,7 @@ async function handler(req, res) {
     if (deployRunner) return await handleServerFleetRunner({req,res,path,pool,send,readJson});
     if (flowrouteWebhook) return await handleFlowrouteWebhook({req,res,path,pool,send,origin});
     if (stripeWebhook) return await handleStripeWebhook({req,res,path,pool,send});
+    if (flutterwaveWebhook) return await handleFlutterwaveWebhook({req,res,path,pool,send});
     if (providerWebhook) return await handleProviderWebhook({req,res,path,pool,send});
     if (didwwWebhook) return await handleDidwwCallback({req,res,path,pool,send,origin});
     if (cdrIngest) return await handleCdrIngest({req,res,pool,send,keys:cdrKeys});
@@ -338,7 +341,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/wallet-providers')) return await handleWalletProviderAdmin({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/marketplace/reconciliation') return await handlePaymentReconciliation({req,res,user,pool,send});
       if(path.startsWith('/api/admin/telecom/archives')) return await handleCdrArchives({req,res,path,user,pool,send,readJson});
-      if(path.startsWith('/api/marketplace/')||path==='/api/admin/marketplace/gateways') return await handleStoreGateways({req,res,path,user,pool,send,readJson,origin});
+      if(path.startsWith('/api/marketplace/')||path==='/api/admin/marketplace/gateways'||path==='/api/admin/marketplace/naira') return await handleStoreGateways({req,res,path,user,pool,send,readJson,origin});
       if(path.startsWith('/api/admin/marketplace/')) return await handleMarketplaceControl({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/payments/')) return await handlePaymentAdmin({req,res,path,user,pool,send,readJson});
       if(path==='/api/payments/checkout'&&req.method==='POST') return await handlePaymentCheckout({req,res,user,pool,send,readJson,origin});
