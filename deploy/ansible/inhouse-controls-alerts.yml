@@ -42,11 +42,7 @@
               if test -f "$root/$f"; then mkdir -p "$backup/$(dirname "$f")"; cp -a "$root/$f" "$backup/$f"; fi
             done
             cp -a /etc/kamailio/kamailio.cfg "$backup/kamailio.cfg"
-            kamcmd -s unix:/run/kamailio/olamide_carrier_ctl stats.get_statistics dialog:active_dialogs > "$backup/dialogs"
-            python3 - "$backup/dialogs" <<'PYCODE'
-            import re,sys
-            if not re.search(r'active_dialogs\s*[=:]\s*0\s*$',open(sys.argv[1]).read(),re.M):raise SystemExit('Finish active calls before switch deployment')
-            PYCODE
+            python3 "$controller/tools/check_inhouse_idle.py" "$backup/dialogs"
             python3 "$controller/tools/prepare_inhouse_inbound.py" "$backup/kamailio-staged.cfg"
             kamailio -c -f "$backup/kamailio-staged.cfg"
             switch_promoted=0
