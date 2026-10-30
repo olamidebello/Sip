@@ -2325,7 +2325,7 @@
     {
       "id": "inhouseActivation",
       "source": "services/api/inhouseActivation.js",
-      "sha256": "137f462c6e581a5fc26c410962ec2fcd823000b4a3d90a0bdca3165c140e345c",
+      "sha256": "ba81e10ae913923c9a7109d124ab000ef00576fdb8b0b5df5d9cf431b82e3390",
       "exportedHandlers": [
         "handleInhouseActivationAdmin"
       ],
@@ -2335,7 +2335,8 @@
       "reachableFromServer": false,
       "migrationImported": false,
       "tests": [
-        "inhouseActivation.test.js"
+        "inhouseActivation.test.js",
+        "inhouseInventory.test.js"
       ],
       "guiReferences": [],
       "liveAcceptance": "unverified"
@@ -3642,6 +3643,7 @@
         "apps/web/src/dialerContacts.js",
         "apps/web/src/didAvailabilityUi.js",
         "apps/web/src/googleContacts.js",
+        "apps/web/src/inhouseActivationAdmin.js",
         "apps/web/src/kamailioAdmin.js",
         "apps/web/src/liveCallsUi.js",
         "apps/web/src/main.js",

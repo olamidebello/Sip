@@ -69,7 +69,7 @@ API source modules: 176. Application feature entries: 86. Kamailio entries: 266.
 | importFlowrouteTrunk | False | False | none identified | library / CLI / no direct reference |
 | inboundDidOwner | False | False | inboundDidOwner.test.js | library / CLI / no direct reference |
 | inboundRouting | False | False | inboundRouting.test.js | library / CLI / no direct reference |
-| inhouseActivation | False | False | inhouseActivation.test.js | library / CLI / no direct reference |
+| inhouseActivation | False | False | inhouseActivation.test.js, inhouseInventory.test.js | library / CLI / no direct reference |
 | inhouseLifecycle | False | False | inhouseLifecycle.test.js | library / CLI / no direct reference |
 | inhouseSubscriber | False | False | inhouseSubscriber.test.js | library / CLI / no direct reference |
 | justisolveBridge | True | False | justisolveBridge.test.js | handleJustisolveBridge, startJustisolveLeaseSweep |
