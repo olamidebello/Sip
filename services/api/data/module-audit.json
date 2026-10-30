@@ -3,7 +3,7 @@
   "scope": "Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.",
   "summary": {
     "clientSourceModules": 187,
-    "apiSourceModules": 171,
+    "apiSourceModules": 172,
     "applicationFeatures": 86,
     "featureStates": {
       "implemented": 13,
@@ -2215,7 +2215,7 @@
     {
       "id": "icnOutbound",
       "source": "services/api/icnOutbound.js",
-      "sha256": "93d20e61722b5d27efb392621abf836aefb8752d2c056a5211f2353735d08781",
+      "sha256": "66fd9e20a503249c3f2f9f63e6f30de449e2e6e978a869e69025f23803579cb6",
       "exportedHandlers": [],
       "serverReferencedHandlers": [],
       "exportedWorkers": [],
@@ -2272,6 +2272,22 @@
       "migrationImported": false,
       "tests": [
         "inboundRouting.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "inhouseSubscriber",
+      "source": "services/api/inhouseSubscriber.js",
+      "sha256": "04775d1e7227ebdb0fe7c27a74b13e105b00c94872d47143ec2e48de6e014cfe",
+      "exportedHandlers": [],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "inhouseSubscriber.test.js"
       ],
       "guiReferences": [],
       "liveAcceptance": "unverified"
