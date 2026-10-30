@@ -1,0 +1,171 @@
+---
+- name: Deploy ICN prepaid outbound routing and settlement
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read server addresses
+      ansible.builtin.command: hostname -I
+      register: icn_addresses
+      changed_when: false
+
+    - name: Require SIP host and explicit carrier activation settings
+      ansible.builtin.assert:
+        that:
+          - "'154.29.77.102' in icn_addresses.stdout.split()"
+          - icn_activation is defined
+          - icn_activation is mapping
+        fail_msg: >-
+          Run on root@sip with -e @/etc/olamide/icn-activation.yml.
+          See deploy/ansible/icn-activation.example.yml for required carrier,
+          tenant, caller-ID and tariff-prefix settings. No settings changed.
+
+    - name: Deploy ICN with rollback and safe failure reporting
+      block:
+        - name: Apply with private backups and rollback
+          ansible.builtin.shell: |
+            set -Eeuo pipefail
+            exec 9>/run/olamide-update.lock
+            flock -n 9
+            umask 077
+            root=/opt/olamide/repo
+            controller={{ playbook_dir | dirname | dirname | quote }}
+            mkdir -p /opt/olamide/backups /var/lib/olamide/service-inventory
+            backup=$(mktemp -d /opt/olamide/backups/icn-outbound-XXXXXXXX)
+            echo "$backup" > /opt/olamide/backups/icn-outbound-latest
+            exec >"$backup/deploy.log" 2>&1
+            echo ICN_DEPLOY_START
+            cd "$root/deployment/docker"
+            compose=(docker compose --env-file /etc/olamide/secrets.env)
+            test -f /etc/olamide/billing-queue.json
+            systemctl is-active --quiet olamide-billing-queue
+            test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:18444/event)" = 401
+            kamcmd -s unix:/run/kamailio/olamide_carrier_ctl stats.get_statistics dialog:active_dialogs > "$backup/dialogs"
+            python3 - "$backup/dialogs" <<'PY'
+            import re,sys
+            text=open(sys.argv[1]).read()
+            if not re.search(r'active_dialogs\s*[=:]\s*0\s*$',text,re.M):raise SystemExit('ICN_DEPLOY active_calls_or_statistics_unavailable')
+            PY
+            printf '%s' "$ICN_ACTIVATION_JSON" > "$backup/settings.json"
+            api_id=$("${compose[@]}" ps -q api)
+            test -n "$api_id"
+            "${compose[@]}" config --format json > "$backup/resolved-compose.json"
+            web_id=$("${compose[@]}" ps -q web)
+            test -n "$web_id"
+            old_web_image=$(docker inspect --format '{{ '{{' }}.Image{{ '}}' }}' "$web_id")
+            old_image=$(docker inspect --format '{{ '{{' }}.Image{{ '}}' }}' "$api_id")
+            docker tag "$old_image" "olamide-icn-rollback:$(basename "$backup")"
+            docker tag "$old_web_image" "olamide-icn-web-rollback:$(basename "$backup")"
+            printf 'services:\n  api:\n    image: olamide-icn-rollback:%s\n' "$(basename "$backup")" > "$backup/rollback.yml"
+            printf '  web:\n    image: olamide-icn-web-rollback:%s\n' "$(basename "$backup")" >> "$backup/rollback.yml"
+            mkdir -p "$backup/files"
+            files=(services/api/pstnBilling.js services/api/icnOutbound.js services/api/server.js apps/web/src/main.js)
+            for f in "${files[@]}"; do
+              if test -f "$root/$f"; then mkdir -p "$backup/files/$(dirname "$f")"; cp -a "$root/$f" "$backup/files/$f"; fi
+            done
+            cp -a /etc/kamailio/kamailio.cfg "$backup/kamailio.cfg"
+            config=/var/lib/olamide/service-inventory/icn-outbound.json
+            if test -f "$config"; then cp -a "$config" "$backup/previous-settings.json"; fi
+            promoted=0
+            switch_promoted=0
+            firewall_added=0
+            rollback() {
+              rc=$?
+              trap - ERR
+              set +e
+              for f in "${files[@]}"; do
+                if test -f "$backup/files/$f"; then cp -a "$backup/files/$f" "$root/$f"; else rm -f "$root/$f"; fi
+              done
+              if test -f "$backup/previous-settings.json"; then cp -a "$backup/previous-settings.json" "$config"; else rm -f "$config"; fi
+              cp -a "$backup/kamailio.cfg" /etc/kamailio/kamailio.cfg
+              if test "$switch_promoted" = 1; then systemctl restart kamailio; fi
+              if test "$promoted" = 1; then "${compose[@]}" -f "$backup/resolved-compose.json" -f "$backup/rollback.yml" up -d --no-deps --no-build api web; fi
+              if test "$firewall_added" = 1; then ufw --force delete allow proto udp from 196.216.253.173 to 154.29.77.102 port 5060; fi
+              echo ICN_DEPLOY_ROLLED_BACK
+              exit "$rc"
+            }
+            trap rollback ERR
+            python3 "$controller/tools/install_icn_outbound.py" "$root" /etc/kamailio/kamailio.cfg "$backup/kamailio-staged.cfg"
+            kamailio -c -f "$backup/kamailio-staged.cfg"
+            "${compose[@]}" build api web
+            # Run syntax, config and behavioral checks inside the newly built image.
+            image_tag=$(python3 -c 'import json,sys;c=json.load(open(sys.argv[1]));print(c["services"]["api"].get("image") or c["name"]+"-api")' "$backup/resolved-compose.json")
+            image=$(docker image inspect --format '{{ '{{' }}.Id{{ '}}' }}' "$image_tag")
+            test -n "$image"
+            docker run --rm --user 0 --entrypoint node -v "$backup/settings.json:/tmp/icn-settings.json:ro" "$image" --input-type=module -e "import fs from 'node:fs';import {validateIcnOutbound} from '/app/icnOutbound.js';validateIcnOutbound(JSON.parse(fs.readFileSync('/tmp/icn-settings.json','utf8')));"
+            docker run --rm --entrypoint node "$image" --check /app/pstnBilling.js
+            docker run --rm --entrypoint node "$image" --check /app/server.js
+            docker run --rm --entrypoint node -v "$controller/services/api/icnOutbound.test.js:/app/icnOutbound.test.js:ro" -v "$controller/services/api/icnSettlement.test.js:/app/icnSettlement.test.js:ro" "$image" --test /app/icnOutbound.test.js /app/icnSettlement.test.js
+            # Confirm the running service already has the shared read-only directory mount.
+            docker inspect "$api_id" --format '{{ '{{' }}json .Mounts{{ '}}' }}' > "$backup/mounts.json"
+            python3 - "$backup/mounts.json" <<'PY'
+            import json,sys
+            if not any(m['Destination']=='/var/lib/olamide/service-inventory' and m['Source']=='/var/lib/olamide/service-inventory' for m in json.load(open(sys.argv[1]))):raise SystemExit('ICN_DEPLOY inventory_mount_missing')
+            PY
+            install -m 0644 "$backup/settings.json" "$config"
+            # Add only the exact ICN signaling source; preserve all other firewall rules.
+            ufw status > "$backup/ufw-before"
+            grep -q 'Status: active' "$backup/ufw-before"
+            ufw_result=$(LC_ALL=C ufw allow proto udp from 196.216.253.173 to 154.29.77.102 port 5060 comment 'ICN SIP peering')
+            if [[ "$ufw_result" == *"Rule added"* ]]; then firewall_added=1; fi
+            promoted=1
+            "${compose[@]}" up -d --no-deps --no-build api web
+            for attempt in $(seq 1 30); do
+              if curl -fsS https://sip.dobhrap.com/api/health >/dev/null; then break; fi
+              test "$attempt" -lt 30
+              sleep 2
+            done
+            # Validate the actual running module and configuration, not just host source.
+            "${compose[@]}" exec -T api node --input-type=module -e "import {loadIcnOutbound} from './icnOutbound.js';if(!loadIcnOutbound())process.exit(1);"
+            install -m 0640 "$backup/kamailio-staged.cfg" /etc/kamailio/kamailio.cfg
+            switch_promoted=1
+            systemctl restart kamailio
+            systemctl is-active --quiet kamailio
+            trap - ERR
+            echo ICN_DEPLOY_INSTALLED
+          args:
+            executable: /bin/bash
+          environment:
+            ICN_ACTIVATION_JSON: '{{ icn_activation | to_json }}'
+          no_log: true
+          register: icn_deployment
+          changed_when: true
+
+      rescue:
+        - name: Read fixed failure summary
+          ansible.builtin.command:
+            argv:
+              - python3
+              - -c
+              - |
+                import pathlib,re
+                marker=pathlib.Path('/opt/olamide/backups/icn-outbound-latest')
+                path=pathlib.Path(marker.read_text().strip()) if marker.exists() else None
+                if not path or path.parent!=pathlib.Path('/opt/olamide/backups') or not re.fullmatch('icn-outbound-[a-zA-Z0-9]{8}',path.name):
+                    print('ICN_DEPLOY error=backup_not_created')
+                else:
+                    print('ICN_DEPLOY backup='+path.name)
+                    log=path/'deploy.log';text=log.read_text(errors='replace') if log.exists() else ''
+                    for code,needle in [('patch_layout','ICN_PATCH'),('active_calls','active_calls_or_statistics_unavailable'),('configuration','approval'),('syntax','SyntaxError'),('switch_validation','config file invalid'),('image_build','failed to solve'),('module_missing','Cannot find'),('mount_missing','inventory_mount_missing'),('rolled_back','ICN_DEPLOY_ROLLED_BACK')]:
+                        if needle.lower() in text.lower():print('ICN_DEPLOY error='+code)
+                    print('ICN_DEPLOY review_private_log=true')
+          register: icn_failure
+          changed_when: false
+          failed_when: false
+        - name: Show safe deployment summary
+          ansible.builtin.debug:
+            var: icn_failure.stdout_lines
+        - name: Stop after unsuccessful deployment
+          ansible.builtin.fail:
+            msg: ICN deployment failed. Inspect the private deploy.log in the backup listed above. Activation was not verified.
+
+    - name: Report installation and acceptance test
+      when: not ansible_check_mode
+      ansible.builtin.debug:
+        msg: >-
+          ICN paid routing installed. Existing wallet reservation and durable
+          dialog-event settlement are used. Only eligible active purchased
+          Nigeria DIDs in configured tenants can use the route. A live call
+          must still verify carrier acceptance, two-way audio and settlement.
+          Deployment log is under /opt/olamide/backups/icn-outbound-*/deploy.log.

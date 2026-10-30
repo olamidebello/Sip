@@ -1,0 +1,17 @@
+# Copy to /etc/olamide/icn-activation.yml on the SIP host and fill the fields.
+# This file contains no SIP password or API token. Do not put credentials here.
+icn_activation:
+  version: 1
+  enabled: true
+  carrierApproved: false # Set true only after ICN authorizes 154.29.77.102.
+  approvalReference: '' # Carrier ticket or written approval reference.
+  callerIdFormat: domestic # Confirm with ICN: domestic, e164-digits, e164-plus.
+  firstInterval: 60 # Customer billing: first 60 seconds, then 60-second increments.
+  nextInterval: 60
+  maxSeconds: 3600
+  maxConcurrent: 1 # Start with one call; set within the contracted capacity.
+  tenants: [] # Exact tenant UUIDs authorized for ICN outbound calling.
+  preferredDids: {} # user-UUID: '+2342031500001'; required if multiple active rentals.
+  # Fill reviewed destination prefixes in E164 digits WITHOUT + or national 0.
+  # Examples only: 23480 GSM; 23420 other. No catch-all tariff is installed.
+  prefixes: [] # [{prefix: '23480', category: gsm}, {prefix: '23420', category: other}]
