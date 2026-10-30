@@ -37,6 +37,10 @@ To also auto-provision existing TEST Flutterwave credentials, add `-e flutterwav
 
 The playbook backs up source and database, fetches and pins the payment branch, applies staged three-way merges to retain existing server fixes, builds API and web, runs targeted tests, restarts only those services, verifies the expected API release and webhook route, and checks HTTPS. Merge conflicts stop before source writes. A failed build or test stops before restarting services. Database integration and a real provider test payment are still required before enabling live payments.
 
+For the shared API router, the installer adds the payment import, public webhook classification, origin exemption, external rate-limit classification and dispatch using individually validated anchors. It retains other local routes and security checks rather than merging an old copy of the whole router. Missing or ambiguous anchors abort before any source writes. Five Python regression tests cover these integrations and conflict handling.
+
+Both deployment and test provisioning use /etc/olamide/secrets.env when present, falling back to deployment/docker/.env. After any installer update, fetch the payment branch and regenerate /root/flutterwave-naira.yml before retrying; rerunning an old copied playbook does not update its shell steps.
+
 Backups are root-private under /opt/olamide/backups/flutterwave-naira-*. If a post-start health check fails, inspect the containers and backup before restoring. Schema additions are additive; the playbook does not automatically restore a live database or discard local modifications.
 
 Deployment from this development session is unverified because the SIP host is unreachable over SSH.

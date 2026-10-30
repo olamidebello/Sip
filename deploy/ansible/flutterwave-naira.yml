@@ -22,7 +22,12 @@
         cd {{ application_repo | quote }}
         exec 9>/run/olamide-update.lock
         flock -n 9 || { echo 'Another deployment is running'; exit 1; }
-        test -f deployment/docker/.env
+        if test -f /etc/olamide/secrets.env; then
+          compose_env=/etc/olamide/secrets.env
+        else
+          compose_env={{ (application_repo + '/deployment/docker/.env') | quote }}
+        fi
+        test -f "$compose_env" || { echo 'Compose environment file is missing'; exit 1; }
         test -z "$(git ls-files -u)" || { echo 'Resolve existing conflicts first'; exit 1; }
         backup_dir="/opt/olamide/backups/flutterwave-naira-$(date -u +%Y%m%dT%H%M%S)-$$"
         install -d -m 0700 "$backup_dir"
@@ -35,14 +40,15 @@
         git show "$target_commit:tools/install-flutterwave-local.py" > "$backup_dir/install-payment.py"
         python3 "$backup_dir/install-payment.py" --root {{ application_repo | quote }} --ref "$target_commit"
         cd deployment/docker
+        compose=(docker compose --env-file "$compose_env")
         export APP_RELEASE="$target_commit"
-        docker compose config --quiet </dev/null
-        docker compose exec -T mysql sh -c 'exec mysqldump --single-transaction --hex-blob -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' </dev/null 2>"$backup_dir/database-backup.log" | gzip > "$backup_dir/database.sql.gz"
+        "${compose[@]}" config --quiet </dev/null
+        "${compose[@]}" exec -T mysql sh -c 'exec mysqldump --single-transaction --hex-blob -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' </dev/null 2>"$backup_dir/database-backup.log" | gzip > "$backup_dir/database.sql.gz"
         gzip -t "$backup_dir/database.sql.gz"
         gzip -cd "$backup_dir/database.sql.gz" | tail -n 10 | grep -q 'Dump completed'
-        docker compose build api web </dev/null
-        docker compose run --rm --no-deps -T api node --test flutterwaveWebhook.test.js nairaPayments.test.js storeGateways.test.js paymentReconciliation.test.js payments.test.js </dev/null
-        docker compose up -d --no-deps api web </dev/null
+        "${compose[@]}" build api web </dev/null
+        "${compose[@]}" run --rm --no-deps -T api node --test flutterwaveWebhook.test.js nairaPayments.test.js storeGateways.test.js paymentReconciliation.test.js payments.test.js </dev/null
+        "${compose[@]}" up -d --no-deps api web </dev/null
         curl --fail --silent --show-error --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 {{ (public_origin + '/api/health') | quote }} -o "$backup_dir/health.json"
         python3 -c 'import json,sys; h=json.load(open(sys.argv[1])); assert h.get("status")=="ok" and h.get("release")==sys.argv[2], "Running API is not the expected release"' "$backup_dir/health.json" "$target_commit"
         status_code=$(curl --silent --show-error --max-time 10 -o "$backup_dir/webhook-probe.json" -w '%{http_code}' {{ (public_origin + '/api/webhooks/flutterwave/00000000-0000-4000-8000-000000000000') | quote }})
@@ -51,7 +57,7 @@
         {% if flutterwave_provision_test | bool %}
         bash {{ (application_repo + '/tools/provision-flutterwave.sh') | quote }} {{ application_repo | quote }}
         {% endif %}
-        docker compose ps api web
+        "${compose[@]}" ps api web
         echo "Deployment verified. Backup: $backup_dir"
         echo 'Configure the Aboki Forex API key in Super admin > Store payment gateways > Naira parallel-market rate feed.'
       args:
