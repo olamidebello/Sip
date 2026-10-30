@@ -2,7 +2,7 @@
 
 Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.
 
-API source modules: 170. Application feature entries: 86. Kamailio entries: 266.
+API source modules: 171. Application feature entries: 86. Kamailio entries: 266.
 
 ## API sources
 
@@ -64,6 +64,7 @@ API source modules: 170. Application feature entries: 86. Kamailio entries: 266.
 | hpInterconnect | False | False | hpInterconnect.test.js | library / CLI / no direct reference |
 | icnFx | False | False | icnFx.test.js | library / CLI / no direct reference |
 | icnInterconnect | False | False | icnInterconnect.test.js | library / CLI / no direct reference |
+| icnOutbound | False | False | icnOutbound.test.js | library / CLI / no direct reference |
 | importFlowrouteTrunk | False | False | none identified | library / CLI / no direct reference |
 | inboundDidOwner | False | False | inboundDidOwner.test.js | library / CLI / no direct reference |
 | inboundRouting | False | False | inboundRouting.test.js | library / CLI / no direct reference |
@@ -114,7 +115,7 @@ API source modules: 170. Application feature entries: 86. Kamailio entries: 266.
 | providerManager | False | False | providerManager.test.js | library / CLI / no direct reference |
 | providerWebhooks | True | True | providerWebhooks.test.js | handleProviderWebhook, handleProviderWebhookAdmin |
 | providers | True | False | flowrouteInventoryEndpoint.test.js, inventoryFailure.test.js, providers.test.js | library / CLI / no direct reference |
-| pstnBilling | True | False | flowrouteSettlement.test.js, outboundDids.test.js, pstnBilling.test.js, pstnDigest.test.js, telecomModules.integration.test.js | library / CLI / no direct reference |
+| pstnBilling | True | False | flowrouteSettlement.test.js, icnSettlement.test.js, outboundDids.test.js, pstnBilling.test.js, pstnDigest.test.js, telecomModules.integration.test.js | library / CLI / no direct reference |
 | quickSignup | True | False | quickSignup.test.js | handleQuickSignup, handleQuickProfile |
 | refreshSipAuth | False | False | refreshSipAuth.test.js | library / CLI / no direct reference |
 | registrationSafety | True | False | registrationSafety.test.js | library / CLI / no direct reference |

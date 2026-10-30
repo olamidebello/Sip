@@ -3,7 +3,7 @@
   "scope": "Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.",
   "summary": {
     "clientSourceModules": 187,
-    "apiSourceModules": 170,
+    "apiSourceModules": 171,
     "applicationFeatures": 86,
     "featureStates": {
       "implemented": 13,
@@ -2213,6 +2213,22 @@
       "liveAcceptance": "unverified"
     },
     {
+      "id": "icnOutbound",
+      "source": "services/api/icnOutbound.js",
+      "sha256": "93d20e61722b5d27efb392621abf836aefb8752d2c056a5211f2353735d08781",
+      "exportedHandlers": [],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "icnOutbound.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
       "id": "importFlowrouteTrunk",
       "source": "services/api/importFlowrouteTrunk.js",
       "sha256": "921711e33e1b23ec1ec9cbe2e950a701e10d61e3f7fc5e91b4d237121d76a85e",
@@ -3330,6 +3346,7 @@
       "migrationImported": false,
       "tests": [
         "flowrouteSettlement.test.js",
+        "icnSettlement.test.js",
         "outboundDids.test.js",
         "pstnBilling.test.js",
         "pstnDigest.test.js",
