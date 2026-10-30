@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {creditState} from './callCredit.js';
+test('free internal calls bypass wallet gate',()=>assert.deepEqual(creditState({balanceCents:0,currency:'USD'},'internal'),{free:true,blocked:false,low:false}));
+test('zero available credit blocks paid calls; low balance warns without blocking',()=>{assert.equal(creditState({balanceCents:0,currency:'USD'}).blocked,true);assert.equal(creditState({balanceCents:50,currency:'USD'}).low,true);assert.equal(creditState({balanceCents:50,currency:'USD'}).blocked,false);assert.equal(creditState({balanceCents:100,currency:'USD'}).low,false);});
+test('unknown currency and failed reads do not invent balance decisions',()=>assert.equal(creditState({balanceCents:50,currency:'NGN'}).unknown,true));

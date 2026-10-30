@@ -1,0 +1,48 @@
+- name: Install call credit prompts and low-balance warnings
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  tasks:
+  - name: Read local addresses
+    ansible.builtin.command: hostname -I
+    register: inhouse_addresses
+    changed_when: false
+  - name: Require SIP server
+    ansible.builtin.assert:
+      that: '''154.29.77.102'' in inhouse_addresses.stdout.split()'
+  - name: Install call credit UI and SIP payment response with rollback
+    ansible.builtin.shell: "set -Eeuo pipefail\numask 077\nexec 9>/run/olamide-update.lock\nflock -n 9\nroot=/opt/olamide/repo\n\
+      controller={{ playbook_dir | dirname | dirname | quote }}\nmkdir -p /opt/olamide/backups\nbackup=$(mktemp -d /opt/olamide/backups/inhouse-free-XXXXXXXX)\n\
+      exec >\"$backup/deploy.log\" 2>&1\ncd \"$root/deployment/docker\"\ncompose=(docker compose --env-file /etc/olamide/secrets.env)\n\
+      \"${compose[@]}\" config --format json > \"$backup/compose.json\"\nid=$(\"${compose[@]}\" ps -q api)\nweb_id=$(\"${compose[@]}\"\
+      \ ps -q web)\nold_web=$(docker inspect --format '{{ '{{' }}.Image{{ '}}' }}' \"$web_id\")\ndocker tag \"$old_web\" \"\
+      olamide-inhouse-web-rollback:$(basename \"$backup\")\"\nold=$(docker inspect --format '{{ '{{' }}.Image{{ '}}' }}' \"\
+      $id\")\ndocker tag \"$old\" \"olamide-inhouse-rollback:$(basename \"$backup\")\"\nprintf 'services:\\n  api:\\n    image:\
+      \ olamide-inhouse-rollback:%s\\n' \"$(basename \"$backup\")\" > \"$backup/rollback.yml\"\nprintf '  web:\\n    image:\
+      \ olamide-inhouse-web-rollback:%s\\n' \"$(basename \"$backup\")\" >> \"$backup/rollback.yml\"\nfiles=(apps/web/src/main.js\
+      \ apps/web/src/callCredit.js)\nfor f in \"${files[@]}\"; do\n  test ! -L \"$root/$f\"\n  if test -f \"$root/$f\"; then\
+      \ mkdir -p \"$backup/$(dirname \"$f\")\"; cp -a \"$root/$f\" \"$backup/$f\"; fi\ndone\ncp -a /etc/kamailio/kamailio.cfg\
+      \ \"$backup/kamailio.cfg\"\nkamcmd -s unix:/run/kamailio/olamide_carrier_ctl stats.get_statistics dialog:active_dialogs\
+      \ > \"$backup/dialogs\"\npython3 - \"$backup/dialogs\" <<'PYCODE'\nimport re,sys\nif not re.search(r'active_dialogs\\\
+      s*[=:]\\s*0\\s*$',open(sys.argv[1]).read(),re.M):raise SystemExit('Finish active calls before switch deployment')\n\
+      PYCODE\ncp -a /etc/kamailio/kamailio.cfg \"$backup/kamailio-staged.cfg\"\nswitch_promoted=0\npromoted=0\nrollback()\
+      \ {\n  rc=$?;trap - ERR;set +e\n  cp -a \"$backup/kamailio.cfg\" /etc/kamailio/kamailio.cfg\n  if test \"$switch_promoted\"\
+      \ = 1; then systemctl restart kamailio; fi\n  for f in \"${files[@]}\"; do if test -f \"$backup/$f\"; then cp -a \"\
+      $backup/$f\" \"$root/$f\"; else rm -f \"$root/$f\"; fi; done\n  if test \"$promoted\" = 1; then \"${compose[@]}\" -f\
+      \ \"$backup/compose.json\" -f \"$backup/rollback.yml\" up -d --no-deps --no-build api web; fi\n  exit \"$rc\"\n}\ntrap\
+      \ rollback ERR\npython3 \"$controller/tools/install_call_credit.py\" \"$root\" \"$backup/kamailio-staged.cfg\"\nkamailio\
+      \ -c -f \"$backup/kamailio-staged.cfg\"\n\"${compose[@]}\" build api web\nimage_tag=$(python3 -c 'import json,sys;c=json.load(open(sys.argv[1]));print(c[\"\
+      services\"][\"api\"].get(\"image\") or c[\"name\"]+\"-api\")' \"$backup/compose.json\")\npromoted=1\n\"${compose[@]}\"\
+      \ up -d --no-deps --no-build api web\nfor attempt in $(seq 1 30); do if curl -fsS https://sip.dobhrap.com/api/health\
+      \ >/dev/null; then break; fi; test \"$attempt\" -lt 30;sleep 2;done\ninstall -m 0640 \"$backup/kamailio-staged.cfg\"\
+      \ /etc/kamailio/kamailio.cfg\nswitch_promoted=1\nsystemctl restart kamailio\nsystemctl is-active --quiet kamailio\n\
+      trap - ERR\n"
+    args:
+      executable: /bin/bash
+    no_log: true
+    changed_when: true
+  - name: Report credit UI installation
+    ansible.builtin.debug:
+      msg: Call credit UI installed. Refresh the app. Zero-credit external calls prompt for top-up; balances below USD 1 warn.
+        Free internal calls bypass the credit gate.

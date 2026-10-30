@@ -1,0 +1,15 @@
+---
+- name: Read safe in-house deployment failure codes
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read fixed failure codes without printing private logs
+      ansible.builtin.command:
+        argv: [python3, '{{ playbook_dir }}/../../tools/inhouse_failure_summary.py']
+      register: inhouse_failure
+      changed_when: false
+    - name: Show safe failure summary
+      ansible.builtin.debug:
+        var: inhouse_failure.stdout_lines
