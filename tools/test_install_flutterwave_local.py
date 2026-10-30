@@ -19,6 +19,20 @@ function handler(req,res) {
 '''
 
 class RouterTests(unittest.TestCase):
+ def test_ui_edits_keep_adjacent_wallet_fixes(self):
+  base='import old;\nconst walletBalance=wallet.balanceCents;\ncheckoutOld();\nfooter();\n'
+  incoming=base.replace('checkoutOld();','checkoutWithNairaQuote();')
+  local=base.replace('import old;','import old;\nimport localFeature;').replace('wallet.balanceCents','wallet.availableBalanceCents')
+  result=installer.integrate_ui(local,base,incoming,'main.js')
+  self.assertIn('import localFeature;',result);self.assertIn('wallet.availableBalanceCents',result);self.assertIn('checkoutWithNairaQuote();',result)
+  self.assertEqual(installer.integrate_ui(result,base,incoming,'main.js'),result)
+ def test_ui_insertions_support_repeated_runs(self):
+  base='head();\nuniqueAnchor();\nfooter();\n';incoming=base.replace('uniqueAnchor();','uniqueAnchor();\nnairaSettings();')
+  result=installer.integrate_ui(base,base,incoming,'admin.js')
+  self.assertEqual(installer.integrate_ui(result,base,incoming,'admin.js'),result)
+ def test_unknown_or_ambiguous_ui_edit_fails(self):
+  for local in ['other();\n','checkoutOld();\ncheckoutOld();\n']:
+   with self.assertRaisesRegex(RuntimeError,'missing or ambiguous'):installer.integrate_ui(local,'checkoutOld();\n','checkoutWithNairaQuote();\n','main.js')
  def test_overlapping_local_routes_are_preserved(self):
   result=installer.integrate_server(ROUTER)
   for line in ["import {localFix} from './localFix.js';","  if(path==='/api/local/fix') return localFix();"]:self.assertIn(line,result)

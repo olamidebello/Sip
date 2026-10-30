@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Apply reviewed payment files with staged three-way merges; keep local fixes."""
 import argparse
+import difflib
 import re
 from pathlib import Path
 import subprocess
@@ -46,6 +47,25 @@ def integrate_server(text):
   unique(r'^.*if\s*\(path\.startsWith\(\'/api/marketplace/\'\).*handleStoreGateways.*$',lambda s:"      if(path==='/api/admin/marketplace/naira') return await handleStoreGateways({req,res,path,user,pool,send,readJson,origin});\n"+s,'naira settings dispatch')
  return text
 
+def integrate_ui(text,base,incoming,path):
+ """Apply only uniquely identified feature edits, retaining adjacent UI fixes."""
+ original=base.splitlines(keepends=True);updated=incoming.splitlines(keepends=True)
+ edits=difflib.SequenceMatcher(a=original,b=updated,autojunk=False).get_opcodes()
+ for kind,start,end,new_start,new_end in reversed(edits):
+  if kind=='equal':continue
+  old=''.join(original[start:end]);new=''.join(updated[new_start:new_end])
+  if kind=='insert':
+   if start==0:raise RuntimeError('Unrecognized UI insertion: '+path)
+   anchor=original[start-1]
+   if text.count(anchor+new)==1:continue
+   if text.count(anchor)!=1:raise RuntimeError('UI insertion anchor missing or ambiguous: '+path)
+   text=text.replace(anchor,anchor+new,1)
+  else:
+   if new and text.count(new)==1:continue
+   if not old or text.count(old)!=1:raise RuntimeError('UI payment edit missing or ambiguous; no files written: '+path)
+   text=text.replace(old,new,1)
+ return text
+
 def install(root,ref):
  root=Path(root).resolve()
  def git(*args,check=True):
@@ -70,6 +90,9 @@ def install(root,ref):
     if ours is not None:raise RuntimeError('Existing custom file requires review: '+path)
     pending[path]=incoming;continue
    if ours is None:raise RuntimeError('Local source file missing: '+path)
+   if path in ('apps/web/src/main.js','apps/web/src/marketplaceControl.js'):
+    pending[path]=integrate_ui(ours.decode(),original.stdout.decode(),incoming.decode(),path).encode()
+    continue
    files=[Path(work)/name for name in ('ours','base','incoming')]
    for file,data in zip(files,(ours,original.stdout,incoming)):file.write_bytes(data)
    merged=subprocess.run(['git','merge-file','-p',*map(str,files)],capture_output=True)
