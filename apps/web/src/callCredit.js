@@ -4,7 +4,7 @@ export function creditState(wallet,scope='external',threshold=100){
  return {blocked:cents<=0,low:cents>0&&cents<threshold,cents};
 }
 export function setupCallCredit({document,get,show,isSignedIn=()=>true}){
- const host=document.getElementById('calling-workspace');const warning=document.createElement('div');warning.hidden=true;warning.setAttribute('role','status');const text=document.createElement('p'),top=document.createElement('button');top.type='button';top.textContent='Top up account';warning.append(text,top);host?.prepend(warning);
+ const host=document.getElementById('calling-workspace');const warning=document.createElement('div');warning.id='call-credit-alert';warning.hidden=true;warning.setAttribute('role','status');const text=document.createElement('p'),top=document.createElement('button');top.type='button';top.textContent='Top up account';warning.append(text,top);host?.prepend(warning);
  const dialog=document.createElement('dialog');dialog.setAttribute('aria-label','Call credit required');const title=document.createElement('h2'),message=document.createElement('p'),fund=document.createElement('button'),close=document.createElement('button');title.textContent='Top up to make this call';fund.type=close.type='button';fund.textContent='Top up account';close.textContent='Cancel';dialog.append(title,message,fund,close);document.body.append(dialog);
  const dismiss=()=>{if(dialog.open)dialog.close();else dialog.hidden=true;};
  const billing=()=>{dismiss();show('billing');const balance=document.getElementById('wallet-balance');balance?.scrollIntoView?.({block:'center'});};top.onclick=fund.onclick=billing;close.onclick=dismiss;

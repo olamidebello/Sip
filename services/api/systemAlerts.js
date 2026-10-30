@@ -1,0 +1,7 @@
+import {userBroadcasts} from './alertBroadcasts.js';
+export async function handleSystemAlerts({req,res,user,pool,send}){
+ if(req.method!=='GET')return send(res,405,{error:'GET required'});res.setHeader('Cache-Control','no-store');
+ const notices=(await pool.query('SELECT n.did_id,n.kind,n.created_at,d.number_e164 FROM inhouse_retention_notices n JOIN inhouse_dids d ON d.id=n.did_id AND d.tenant_id=$2 WHERE n.user_id=$1 ORDER BY n.created_at DESC LIMIT 50',[user.id,user.tenant_id])).rows;
+ const pending=(await pool.query("SELECT d.number_e164,f.created_at FROM inhouse_subscriber_assignments f JOIN inhouse_dids d ON d.id=f.did_id AND d.tenant_id=f.tenant_id AND d.user_id=f.user_id WHERE f.tenant_id=$1 AND f.user_id=$2 AND f.state='pending'",[user.tenant_id,user.id])).rows;
+ return send(res,200,{alerts:[...await userBroadcasts(pool,user),...pending.map(p=>({id:'pending/'+p.number_e164,level:'warning',title:'Complete DID provisioning',message:'Make an answered call to your verified Nigeria number to activate '+p.number_e164+'. Normal external call charges apply.',at:p.created_at})),...notices.map(n=>({id:n.did_id+'/'+n.kind+'/'+new Date(n.created_at).toISOString(),level:n.kind==='expired'?'error':'warning',title:n.kind==='expired'?'In-house DID expired':'In-house DID activity reminder',message:n.number_e164+': '+(n.kind==='expired'?'The assignment expired under the activity policy.':'Complete a qualifying call before the activity window ends.'),at:n.created_at}))]});
+}

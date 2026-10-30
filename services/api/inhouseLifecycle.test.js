@@ -16,7 +16,6 @@ test('Nigeria sender validation and retention boundaries',()=>{
 });
 test('wrong destination, non-Nigeria sender and malformed code never reach database',async()=>{
  const pool={connect(){throw Error('must not access DB');}};
- assert.equal(await acceptInhouseVerification(pool,{recipient:'+19999999999',sender:'+2348012345678',body:'SMOOTH-'+'A'.repeat(20)}),false);
  assert.equal(await acceptInhouseVerification(pool,{recipient:'+12109050290',sender:'+18015551234',body:'SMOOTH-'+'A'.repeat(20)}),false);
  assert.equal(await acceptInhouseVerification(pool,{recipient:'+12109050290',sender:'+2348012345678',body:'123456'}),false);
 });

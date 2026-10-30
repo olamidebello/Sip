@@ -31,3 +31,5 @@ if __name__=='__main__':
  for p,s in pending:p.write_text(s)
  shutil.copyfile(here/'services/api/inhouseSubscriber.js',target)
  shutil.copyfile(here/'services/api/inhouseLifecycle.js',root/'services/api/inhouseLifecycle.js')
+
+ if __name__=='__main__':shutil.copyfile(here/'services/api/inhouseActivation.js',root/'services/api/inhouseActivation.js')

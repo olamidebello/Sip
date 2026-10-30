@@ -1,3 +1,4 @@
+import {activationPolicy,reserveActivation} from './inhouseActivation.js';
 import {migrateInhouseLifecycle,nigeriaVerified,registerInhouseCall} from './inhouseLifecycle.js';
 // Subscriber-included numbers and on-net routing. No wallet or invoice mutation.
 export function inhouseNumber(value){
@@ -9,15 +10,19 @@ export async function subscriberActive(db,tenant,user){return (await db.query("S
 export async function ensureIncludedDid(pool,user){
  const db=await pool.connect();try{
  await db.query('START TRANSACTION');await db.query('SELECT id FROM users WHERE id=$1 AND tenant_id=$2 FOR UPDATE',[user.id,user.tenant_id]);
+ const policy=await activationPolicy(db,user.tenant_id);
  if(!await nigeriaVerified(db,user)){await db.query('ROLLBACK');return null;}
  if(!await subscriberActive(db,user.tenant_id,user.id)){await db.query('ROLLBACK');return null;}
- let numbers=(await db.query("SELECT id,number_e164 FROM inhouse_dids WHERE tenant_id=$1 AND user_id=$2 AND status='assigned' AND number_e164 REGEXP '^[+]23420315[0-4][0-9]{4}$' ORDER BY number_e164 FOR UPDATE",[user.tenant_id,user.id])).rows;
+ const current=(await db.query("SELECT d.number_e164 FROM inhouse_subscriber_assignments f JOIN inhouse_dids d ON d.id=f.did_id AND d.tenant_id=f.tenant_id AND d.user_id=f.user_id WHERE f.user_id=$1 AND f.tenant_id=$2 AND d.status='assigned' ORDER BY d.number_e164 LIMIT 1",[user.id,user.tenant_id])).rows[0];if(current){await db.query('COMMIT');return current.number_e164;}
+ if(!policy.allocationEnabled){await db.query('ROLLBACK');return null;}
+ let numbers=(await db.query("SELECT id,number_e164 FROM inhouse_dids WHERE tenant_id=$1 AND user_id=$2 AND status='assigned' AND number_e164 REGEXP '^[+]23420315[0-4][0-9]{4}$' ORDER BY number_e164 LIMIT 1 FOR UPDATE",[user.tenant_id,user.id])).rows;
  if(!numbers.length){const did=(await db.query("SELECT id,number_e164 FROM inhouse_dids WHERE tenant_id=$1 AND user_id IS NULL AND status='available' AND number_e164 REGEXP '^[+]23420315[0-4][0-9]{4}$' ORDER BY number_e164 LIMIT 1 FOR UPDATE",[user.tenant_id])).rows[0];if(did)numbers=[did];}
  if(!numbers.length){await db.query('ROLLBACK');return null;}
+ numbers=numbers.slice(0,1);
  for(const did of numbers){
   const prior=(await db.query('SELECT user_id,tenant_id FROM inhouse_subscriber_assignments WHERE did_id=$1 FOR UPDATE',[did.id])).rows[0];
   if(prior&&(prior.user_id!==user.id||prior.tenant_id!==user.tenant_id))throw Error('In-house assignment ownership conflict');
-  if(!prior)await db.query('INSERT INTO inhouse_subscriber_assignments(did_id,tenant_id,user_id) VALUES($1,$2,$3)',[did.id,user.tenant_id,user.id]);
+  if(!prior){const state=await reserveActivation(db,user,did,policy);await db.query('INSERT INTO inhouse_subscriber_assignments(did_id,tenant_id,user_id,state,provisioned_at) VALUES($1,$2,$3,$4,$5)',[did.id,user.tenant_id,user.id,state,state==='active'?new Date():null]);}
   await db.query("UPDATE inhouse_dids SET user_id=$1,status='assigned',monthly_cents=0,setup_cents=0 WHERE id=$2 AND tenant_id=$3",[user.id,did.id,user.tenant_id]);
   await db.query("UPDATE smooth_did_rentals SET auto_renew=FALSE,status='included',monthly_cents=0 WHERE did_id=$1 AND tenant_id=$2 AND user_id=$3",[did.id,user.tenant_id,user.id]);
  }
@@ -29,7 +34,7 @@ export async function routeIncludedDid(db,{caller,domain,destination}){
  if(!/^[a-zA-Z0-9]{2,64}$/.test(caller||'')||!/^[-a-zA-Z0-9.]{1,253}$/.test(domain||''))return [403,{error:'Authenticated subscriber required'}];
  const actor=(await db.query('SELECT tenant_id,user_id FROM olamide_sip_call_access WHERE username=$1 AND domain=$2',[caller,domain])).rows[0];
  if(!actor||!await subscriberActive(db,actor.tenant_id,actor.user_id))return [403,{error:'Active subscription required for free in-house calls'}];
- const recipient=(await db.query("SELECT d.user_id,d.tenant_id,a.username,a.domain FROM inhouse_dids d JOIN inhouse_subscriber_assignments f ON f.did_id=d.id AND f.user_id=d.user_id AND f.tenant_id=d.tenant_id JOIN sip_accounts a ON a.user_id=d.user_id AND a.tenant_id=d.tenant_id AND a.status='active' WHERE d.number_e164=$1 AND d.status='assigned' AND a.domain=$2 ORDER BY a.username LIMIT 1",[number,domain])).rows[0];
+ const recipient=(await db.query("SELECT d.user_id,d.tenant_id,a.username,a.domain FROM inhouse_dids d JOIN inhouse_subscriber_assignments f ON f.did_id=d.id AND f.user_id=d.user_id AND f.tenant_id=d.tenant_id JOIN sip_accounts a ON a.user_id=d.user_id AND a.tenant_id=d.tenant_id AND a.status='active' WHERE f.state='active' AND d.number_e164=$1 AND d.status='assigned' AND a.domain=$2 ORDER BY a.username LIMIT 1",[number,domain])).rows[0];
  if(!recipient||!await subscriberActive(db,recipient.tenant_id,recipient.user_id))return [404,{error:'In-house subscriber unavailable; no external fallback'}];
  const presence=(await db.query('SELECT presence FROM user_presence WHERE user_id=$1',[recipient.user_id])).rows[0];if(presence?.presence==='dnd')return [480,{error:'Subscriber is not accepting calls'}];
  await registerInhouseCall(db,arguments[1],actor.user_id,recipient.user_id);
@@ -38,7 +43,7 @@ export async function routeIncludedDid(db,{caller,domain,destination}){
 export async function inboundIncludedDid(db,{sourceIp,destination}){
  if(sourceIp!=='196.216.253.173')return [403,{error:'ICN peer required'}];
  const number=inhouseNumber(destination);if(!number)return [404,{error:'Not an in-house DID'}];
- const rows=(await db.query("SELECT d.user_id,d.tenant_id,a.username,a.domain FROM inhouse_dids d JOIN inhouse_subscriber_assignments f ON f.did_id=d.id AND f.user_id=d.user_id AND f.tenant_id=d.tenant_id JOIN sip_accounts a ON a.user_id=d.user_id AND a.tenant_id=d.tenant_id AND a.status='active' WHERE d.number_e164=$1 AND d.status='assigned' ORDER BY a.username LIMIT 2",[number])).rows;
+ const rows=(await db.query("SELECT d.user_id,d.tenant_id,a.username,a.domain FROM inhouse_dids d JOIN inhouse_subscriber_assignments f ON f.did_id=d.id AND f.user_id=d.user_id AND f.tenant_id=d.tenant_id JOIN sip_accounts a ON a.user_id=d.user_id AND a.tenant_id=d.tenant_id AND a.status='active' WHERE f.state='active' AND d.number_e164=$1 AND d.status='assigned' ORDER BY a.username LIMIT 2",[number])).rows;
  if(rows.length!==1||!await subscriberActive(db,rows[0].tenant_id,rows[0].user_id))return [404,{error:'Assigned subscriber unavailable'}];
  const target=rows[0],p=(await db.query('SELECT presence FROM user_presence WHERE user_id=$1',[target.user_id])).rows[0];if(p?.presence==='dnd')return [480,{error:'Subscriber not accepting calls'}];
  await registerInhouseCall(db,arguments[1],null,target.user_id);

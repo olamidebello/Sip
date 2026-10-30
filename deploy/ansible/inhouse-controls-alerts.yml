@@ -1,0 +1,120 @@
+---
+- name: Install in-house activation controls and subscriber System Alerts
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read local addresses
+      ansible.builtin.command: hostname -I
+      register: inhouse_addresses
+      changed_when: false
+    - name: Require SIP server
+      ansible.builtin.assert:
+        that: "'154.29.77.102' in inhouse_addresses.stdout.split()"
+    - name: Deploy verified in-house policy with safe failure reporting
+      block:
+        - name: Install API policy with file and image rollback
+          ansible.builtin.shell: |
+            set -Eeuo pipefail
+            umask 077
+            exec 9>/run/olamide-update.lock
+            flock -n 9
+            root=/opt/olamide/repo
+            controller={{ playbook_dir | dirname | dirname | quote }}
+            mkdir -p /opt/olamide/backups
+            backup=$(mktemp -d /opt/olamide/backups/inhouse-free-XXXXXXXX)
+            exec >"$backup/deploy.log" 2>&1
+            cd "$root/deployment/docker"
+            compose=(docker compose --env-file /etc/olamide/secrets.env)
+            "${compose[@]}" config --format json > "$backup/compose.json"
+            id=$("${compose[@]}" ps -q api)
+            web_id=$("${compose[@]}" ps -q web)
+            old_web=$(docker inspect --format '{{ '{{' }}.Image{{ '}}' }}' "$web_id")
+            docker tag "$old_web" "olamide-inhouse-web-rollback:$(basename "$backup")"
+            old=$(docker inspect --format '{{ '{{' }}.Image{{ '}}' }}' "$id")
+            docker tag "$old" "olamide-inhouse-rollback:$(basename "$backup")"
+            printf 'services:\n  api:\n    image: olamide-inhouse-rollback:%s\n' "$(basename "$backup")" > "$backup/rollback.yml"
+            printf '  web:\n    image: olamide-inhouse-web-rollback:%s\n' "$(basename "$backup")" >> "$backup/rollback.yml"
+            files=(services/api/inhouseActivation.js services/api/systemAlerts.js services/api/alertBroadcasts.js services/api/pstnBilling.js apps/web/src/inhouseActivationAdmin.js apps/web/src/systemAlerts.js apps/web/src/alertBroadcastsAdmin.js services/api/inhouseLifecycle.js services/api/inhouseSubscriber.js services/api/server.js services/api/callAccess.js services/api/kamailioHttpBridge.js services/api/smoothDid.js services/api/messagingWebhooks.js apps/web/src/main.js apps/web/src/inhouseVerification.js)
+            for f in "${files[@]}"; do
+              test ! -L "$root/$f"
+              if test -f "$root/$f"; then mkdir -p "$backup/$(dirname "$f")"; cp -a "$root/$f" "$backup/$f"; fi
+            done
+            cp -a /etc/kamailio/kamailio.cfg "$backup/kamailio.cfg"
+            kamcmd -s unix:/run/kamailio/olamide_carrier_ctl stats.get_statistics dialog:active_dialogs > "$backup/dialogs"
+            python3 - "$backup/dialogs" <<'PYCODE'
+            import re,sys
+            if not re.search(r'active_dialogs\s*[=:]\s*0\s*$',open(sys.argv[1]).read(),re.M):raise SystemExit('Finish active calls before switch deployment')
+            PYCODE
+            python3 "$controller/tools/prepare_inhouse_inbound.py" "$backup/kamailio-staged.cfg"
+            kamailio -c -f "$backup/kamailio-staged.cfg"
+            switch_promoted=0
+            promoted=0
+            rollback() {
+              rc=$?;trap - ERR;set +e
+              cp -a "$backup/kamailio.cfg" /etc/kamailio/kamailio.cfg
+              if test "$switch_promoted" = 1; then systemctl restart kamailio; fi
+              for f in "${files[@]}"; do if test -f "$backup/$f"; then cp -a "$backup/$f" "$root/$f"; else rm -f "$root/$f"; fi; done
+              if test "$promoted" = 1; then "${compose[@]}" -f "$backup/compose.json" -f "$backup/rollback.yml" up -d --no-deps --no-build api web; fi
+              exit "$rc"
+            }
+            trap rollback ERR
+            python3 "$controller/tools/install_inhouse_subscribers.py" "$root"
+            python3 "$controller/tools/install_inhouse_lifecycle.py" "$root" "$backup/kamailio-staged.cfg" "$backup/kamailio-staged.cfg"
+            python3 "$controller/tools/install_inhouse_controls.py" "$root"
+            kamailio -c -f "$backup/kamailio-staged.cfg"
+            "${compose[@]}" build api web
+            image_tag=$(python3 -c 'import json,sys;c=json.load(open(sys.argv[1]));print(c["services"]["api"].get("image") or c["name"]+"-api")' "$backup/compose.json")
+            docker run --rm --entrypoint node -v "$controller/services/api/inhouseSubscriber.test.js:/app/inhouseSubscriber.test.js:ro" -v "$controller/services/api/inhouseLifecycle.test.js:/app/inhouseLifecycle.test.js:ro" -v "$controller/services/api/inhouseActivation.test.js:/app/inhouseActivation.test.js:ro" -v "$controller/services/api/alertBroadcasts.test.js:/app/alertBroadcasts.test.js:ro" "$image_tag" --test /app/inhouseSubscriber.test.js /app/inhouseLifecycle.test.js /app/inhouseActivation.test.js /app/alertBroadcasts.test.js
+            for f in server.js callAccess.js kamailioHttpBridge.js smoothDid.js messagingWebhooks.js pstnBilling.js inhouseActivation.js systemAlerts.js alertBroadcasts.js; do docker run --rm --entrypoint node "$image_tag" --check "/app/$f"; done
+            promoted=1
+            "${compose[@]}" up -d --no-deps --no-build api web
+            for attempt in $(seq 1 30); do if curl -fsS https://sip.dobhrap.com/api/health >/dev/null; then break; fi; test "$attempt" -lt 30;sleep 2;done
+            install -m 0640 "$backup/kamailio-staged.cfg" /etc/kamailio/kamailio.cfg
+            switch_promoted=1
+            systemctl restart kamailio
+            systemctl is-active --quiet kamailio
+            ufw allow proto udp from 196.216.253.173 to 154.29.77.102 port 5060 comment 'ICN SIP peering'
+            trap - ERR
+          args:
+            executable: /bin/bash
+          no_log: true
+          changed_when: true
+      rescue:
+        - name: Read safe failure summary
+          ansible.builtin.command:
+            argv: [python3, '{{ playbook_dir }}/../../tools/inhouse_failure_summary.py']
+          register: inhouse_failure
+          changed_when: false
+          failed_when: false
+        - name: Show safe failure summary
+          ansible.builtin.debug:
+            var: inhouse_failure.stdout_lines
+        - name: Stop after deployment failure
+          ansible.builtin.fail:
+            msg: In-house deployment did not complete. Review the safe codes above; no activation success is claimed.
+
+    - name: Assign included numbers to active subscribers from existing inventory
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - --env-file
+          - /etc/olamide/secrets.env
+          - exec
+          - -T
+          - api
+          - node
+          - --input-type=module
+          - -e
+          - |
+            import {createDatabase} from './db.js';import {ensureIncludedDid} from './inhouseSubscriber.js';
+            const db=createDatabase(process.env.MYSQL_URL);let assigned=0,unavailable=0,errors=0;
+            try{const users=(await db.query("SELECT DISTINCT u.id,u.tenant_id FROM users u JOIN tenants t ON t.id=u.tenant_id JOIN subscriptions s ON s.user_id=u.id JOIN plans p ON p.id=s.plan_id AND p.tenant_id=u.tenant_id WHERE u.status='active' AND t.status='active' AND s.status='active' AND p.active=TRUE")).rows;for(const u of users){try{if(await ensureIncludedDid(db,u))assigned++;else unavailable++;}catch{errors++;}}console.log(JSON.stringify({assigned,inventoryUnavailable:unavailable,pendingErrors:errors}));}finally{await db.end();}
+        chdir: /opt/olamide/repo/deployment/docker
+      register: inhouse_result
+      changed_when: true
+    - name: Report subscriber number assignment results
+      ansible.builtin.debug:
+        msg: '{{ inhouse_result.stdout }}'
