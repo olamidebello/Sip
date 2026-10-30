@@ -67,7 +67,7 @@
             promoted=1
             "${compose[@]}" up -d --no-deps --no-build api web
             for attempt in $(seq 1 30); do if curl -fsS https://sip.dobhrap.com/api/health >/dev/null; then break; fi; test "$attempt" -lt 30;sleep 2;done
-            install -m 0640 "$backup/kamailio-staged.cfg" /etc/kamailio/kamailio.cfg
+            install -o "$(stat -c %u "$backup/kamailio.cfg")" -g "$(stat -c %g "$backup/kamailio.cfg")" -m "$(stat -c %a "$backup/kamailio.cfg")" "$backup/kamailio-staged.cfg" /etc/kamailio/kamailio.cfg
             switch_promoted=1
             systemctl restart kamailio
             systemctl is-active --quiet kamailio
