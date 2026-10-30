@@ -1,0 +1,52 @@
+---
+- name: Check ICN outbound activation prerequisites
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read server addresses
+      ansible.builtin.command: hostname -I
+      register: icn_addresses
+      changed_when: false
+
+    - name: Require SIP platform server
+      ansible.builtin.assert:
+        that:
+          - "'154.29.77.102' in icn_addresses.stdout.split()"
+        fail_msg: Run this playbook on SIP server 154.29.77.102.
+
+    - name: Inspect deployed ICN implementation without exposing configuration
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - |
+            import json
+            from pathlib import Path
+            root=Path('/opt/olamide/repo')
+            module=root/'services/api/icnInterconnect.js'
+            cfg=Path('/etc/kamailio/kamailio.cfg')
+            source=module.read_text() if module.is_file() else ''
+            config=cfg.read_text() if cfg.is_file() else ''
+            print(json.dumps({
+              'icn_module_present': module.is_file(),
+              'uncommissioned_adapter': 'switch termination adapter and carrier peering still require commissioning' in source,
+              'switch_peer_present': '196.216.253.173' in config,
+              'activation_supported': False
+            }))
+      register: icn_inspection
+      changed_when: false
+
+    - name: Show activation readiness
+      ansible.builtin.debug:
+        var: icn_inspection.stdout
+
+    - name: Explain missing activation implementation
+      ansible.builtin.fail:
+        msg: >-
+          ICN outbound activation is not implemented in this release.
+          No firewall, routing, wallet or trunk settings were changed.
+          A commissioned switch adapter, ICN rate deck and settlement integration
+          are required before paid routing can be enabled. Do not bypass
+          decideIcn or redirect unbilled INVITEs directly to ICN.
