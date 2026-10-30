@@ -2,7 +2,7 @@
 
 Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.
 
-API source modules: 173. Application feature entries: 86. Kamailio entries: 266.
+API source modules: 176. Application feature entries: 86. Kamailio entries: 266.
 
 ## API sources
 
@@ -13,6 +13,7 @@ API source modules: 173. Application feature entries: 86. Kamailio entries: 266.
 | adapterRegistry | True | True | adapterRegistry.test.js, adapterTargets.test.js | handleAdapterRegistry |
 | adapterTargets | True | False | adapterTargets.test.js | library / CLI / no direct reference |
 | adminGroup | True | True | adminGroup.test.js | handleAdminGroup |
+| alertBroadcasts | False | False | alertBroadcasts.test.js | library / CLI / no direct reference |
 | apiBridge | True | False | apiBridge.test.js | handleApiBridge |
 | apnsPush | True | False | apnsPush.test.js | library / CLI / no direct reference |
 | authProviders | True | True | authProviders.test.js | handleAuthProviders |
@@ -68,6 +69,7 @@ API source modules: 173. Application feature entries: 86. Kamailio entries: 266.
 | importFlowrouteTrunk | False | False | none identified | library / CLI / no direct reference |
 | inboundDidOwner | False | False | inboundDidOwner.test.js | library / CLI / no direct reference |
 | inboundRouting | False | False | inboundRouting.test.js | library / CLI / no direct reference |
+| inhouseActivation | False | False | inhouseActivation.test.js | library / CLI / no direct reference |
 | inhouseLifecycle | False | False | inhouseLifecycle.test.js | library / CLI / no direct reference |
 | inhouseSubscriber | False | False | inhouseSubscriber.test.js | library / CLI / no direct reference |
 | justisolveBridge | True | False | justisolveBridge.test.js | handleJustisolveBridge, startJustisolveLeaseSweep |
@@ -153,6 +155,7 @@ API source modules: 173. Application feature entries: 86. Kamailio entries: 266.
 | subscriberRouting | True | True | smsRouteControl.test.js, subscriberRouting.test.js | handleSubscriberRouting, startSubscriberDelivery |
 | support | True | True | support.test.js | handleSupport |
 | switch | True | True | switch.test.js | library / CLI / no direct reference |
+| systemAlerts | False | False | none identified | library / CLI / no direct reference |
 | tariffCatalog | True | True | tariffCatalog.integration.test.js, tariffCatalog.test.js | handleTariffCatalog |
 | telecomAnalytics | True | False | telecomModules.integration.test.js | handleTelecomAnalytics |
 | telecomFeatures | True | False | telecomFeatures.test.js | handleTelecomFeatures |
@@ -210,6 +213,7 @@ API source modules: 173. Application feature entries: 86. Kamailio entries: 266.
 | apps/web/src/adminWorkspaceUi.js | web | unverified |
 | apps/web/src/advancedCalling.js | web | unverified |
 | apps/web/src/advancedTelecomNavigation.js | web | unverified |
+| apps/web/src/alertBroadcastsAdmin.js | web | unverified |
 | apps/web/src/apiBridgeUi.js | web | unverified |
 | apps/web/src/appearanceDefaults.js | web | unverified |
 | apps/web/src/authProviders.js | web | unverified |
@@ -265,6 +269,7 @@ API source modules: 173. Application feature entries: 86. Kamailio entries: 266.
 | apps/web/src/icnFxUi.js | web | unverified |
 | apps/web/src/icnUi.js | web | unverified |
 | apps/web/src/inboundRoutingUi.js | web | unverified |
+| apps/web/src/inhouseActivationAdmin.js | web | unverified |
 | apps/web/src/inhouseVerification.js | web | unverified |
 | apps/web/src/install.js | web | unverified |
 | apps/web/src/kamailioAdmin.js | web | unverified |
@@ -332,6 +337,7 @@ API source modules: 173. Application feature entries: 86. Kamailio entries: 266.
 | apps/web/src/softphoneMedia.js | web | unverified |
 | apps/web/src/subscriberDelivery.js | web | unverified |
 | apps/web/src/support.js | web | unverified |
+| apps/web/src/systemAlerts.js | web | unverified |
 | apps/web/src/tariffCatalog.js | web | unverified |
 | apps/web/src/telecomFeatures.js | web | unverified |
 | apps/web/src/telecomPolicies.js | web | unverified |

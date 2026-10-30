@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "scope": "Static source inventory only. Tests listed here are present, not necessarily passing. Installation, credentials, runtime service loading and real call/payment acceptance require separate evidence.",
   "summary": {
-    "clientSourceModules": 189,
-    "apiSourceModules": 173,
+    "clientSourceModules": 192,
+    "apiSourceModules": 176,
     "applicationFeatures": 86,
     "featureStates": {
       "implemented": 13,
@@ -131,6 +131,11 @@
     },
     {
       "source": "apps/web/src/advancedTelecomNavigation.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/alertBroadcastsAdmin.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -406,6 +411,11 @@
     },
     {
       "source": "apps/web/src/inboundRoutingUi.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/inhouseActivationAdmin.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -741,6 +751,11 @@
     },
     {
       "source": "apps/web/src/support.js",
+      "family": "web",
+      "liveAcceptance": "unverified"
+    },
+    {
+      "source": "apps/web/src/systemAlerts.js",
       "family": "web",
       "liveAcceptance": "unverified"
     },
@@ -1167,6 +1182,24 @@
       "liveAcceptance": "unverified"
     },
     {
+      "id": "alertBroadcasts",
+      "source": "services/api/alertBroadcasts.js",
+      "sha256": "3684ac294b5c98bfce1bfcf45dd6d876e1846fd375905d2dc8b1bc3b9187e82e",
+      "exportedHandlers": [
+        "handleAlertBroadcasts"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "alertBroadcasts.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
       "id": "apiBridge",
       "source": "services/api/apiBridge.js",
       "sha256": "40b46fd44d28b7336bab692e2346feed79a8f8b3554b7b239a930b21f5ead2ea",
@@ -1295,6 +1328,7 @@
       "guiReferences": [
         "apps/web/src/adminNavigation.js",
         "apps/web/src/adminWorkspaceUi.js",
+        "apps/web/src/alertBroadcastsAdmin.js",
         "apps/web/src/callCredit.js",
         "apps/web/src/configurationLinks.js",
         "apps/web/src/dashboard.js",
@@ -1302,6 +1336,7 @@
         "apps/web/src/formGroups.js",
         "apps/web/src/groups.js",
         "apps/web/src/icnFxUi.js",
+        "apps/web/src/inhouseActivationAdmin.js",
         "apps/web/src/kamailioAdmin.js",
         "apps/web/src/liveCallsUi.js",
         "apps/web/src/localeSettings.js",
@@ -2288,9 +2323,27 @@
       "liveAcceptance": "unverified"
     },
     {
+      "id": "inhouseActivation",
+      "source": "services/api/inhouseActivation.js",
+      "sha256": "137f462c6e581a5fc26c410962ec2fcd823000b4a3d90a0bdca3165c140e345c",
+      "exportedHandlers": [
+        "handleInhouseActivationAdmin"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [
+        "inhouseActivation.test.js"
+      ],
+      "guiReferences": [],
+      "liveAcceptance": "unverified"
+    },
+    {
       "id": "inhouseLifecycle",
       "source": "services/api/inhouseLifecycle.js",
-      "sha256": "a93eb4d62e897d426ea9cae6709b7d01f70beae88f9eeb5065451590540c0d1c",
+      "sha256": "73dabefb2bb5aad12379447d2833047de609e93f92e48eb57d7e14dd1cb298ef",
       "exportedHandlers": [
         "handleInhouseLifecycle"
       ],
@@ -2310,7 +2363,7 @@
     {
       "id": "inhouseSubscriber",
       "source": "services/api/inhouseSubscriber.js",
-      "sha256": "62b0ba152fa1459625e2d75aca090951c842bb04b49d6ac27489382c6d12d2a9",
+      "sha256": "9a8b884fcea6ea6b68a6f4233de323a06c105026498bc9f68ea709afde015314",
       "exportedHandlers": [],
       "serverReferencedHandlers": [],
       "exportedWorkers": [],
@@ -3690,6 +3743,7 @@
         "apps/web/src/serverFleetAdmin.js",
         "apps/web/src/signupCaptcha.js",
         "apps/web/src/sipProfiles.js",
+        "apps/web/src/systemAlerts.js",
         "apps/web/src/telecomReports.js",
         "apps/web/src/userActivity.js",
         "apps/web/src/userCallerIdAdmin.js",
@@ -4192,6 +4246,7 @@
         "apps/web/src/providerManagerUi.js",
         "apps/web/src/smsConversations.js",
         "apps/web/src/support.js",
+        "apps/web/src/systemAlerts.js",
         "apps/web/src/userActivity.js",
         "apps/web/src/userNavigation.js"
       ],
@@ -4241,6 +4296,22 @@
         "apps/web/src/twilioRolesUi.js",
         "apps/web/src/userActivity.js"
       ],
+      "liveAcceptance": "unverified"
+    },
+    {
+      "id": "systemAlerts",
+      "source": "services/api/systemAlerts.js",
+      "sha256": "453728f43a649c3dde41f36e83a68c19ed140ec93ced498a11a50097034fc4c8",
+      "exportedHandlers": [
+        "handleSystemAlerts"
+      ],
+      "serverReferencedHandlers": [],
+      "exportedWorkers": [],
+      "serverStartedWorkers": [],
+      "reachableFromServer": false,
+      "migrationImported": false,
+      "tests": [],
+      "guiReferences": [],
       "liveAcceptance": "unverified"
     },
     {
@@ -4465,6 +4536,7 @@
         "apps/web/src/adminWorkspaceUi.js",
         "apps/web/src/advancedCalling.js",
         "apps/web/src/advancedTelecomNavigation.js",
+        "apps/web/src/alertBroadcastsAdmin.js",
         "apps/web/src/apiBridgeUi.js",
         "apps/web/src/authProviders.js",
         "apps/web/src/autoSipRegistration.js",
@@ -4518,6 +4590,7 @@
         "apps/web/src/icnFxUi.js",
         "apps/web/src/icnUi.js",
         "apps/web/src/inboundRoutingUi.js",
+        "apps/web/src/inhouseActivationAdmin.js",
         "apps/web/src/inhouseVerification.js",
         "apps/web/src/install.js",
         "apps/web/src/kamailioAdmin.js",
@@ -4582,6 +4655,7 @@
         "apps/web/src/softphoneMedia.js",
         "apps/web/src/subscriberDelivery.js",
         "apps/web/src/support.js",
+        "apps/web/src/systemAlerts.js",
         "apps/web/src/tariffCatalog.js",
         "apps/web/src/telecomFeatures.js",
         "apps/web/src/telecomPolicies.js",
