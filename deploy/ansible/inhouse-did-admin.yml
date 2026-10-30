@@ -1,0 +1,2 @@
+---
+- import_playbook: inhouse-controls-alerts.yml
