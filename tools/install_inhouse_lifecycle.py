@@ -18,7 +18,8 @@ def mainjs(s):
  if '// INHOUSE_VERIFICATION_UI_V1' in s:return s
  return "import {setupInhouseVerification} from './inhouseVerification.js';\n"+once(s,'function finishCall(result) {',"// INHOUSE_VERIFICATION_UI_V1\nsetupInhouseVerification({document,get:apiGet,request:accountRequest});\nfunction finishCall(result) {")
 def switch(s):
- if '# INHOUSE_ACTIVITY_EVENTS_V1' in s:return s
+ if '# INHOUSE_ACTIVITY_EVENTS_V1' in s:
+  return s.replace('is_method("INVITE") && !has_totag()', 'is_method("INVITE") && $tt == $null')
  for t in ['event_route[dialog:start]','event_route[dialog:end]','18444/event']:
   if t not in s:raise ValueError('Durable dialog event queue required')
  # Track on-net subscriber calls through the existing durable dialog event queue.
@@ -26,7 +27,7 @@ def switch(s):
  matches=__import__('re').search(r'if\s*\(\s*\$var\(route\)\s*==\s*"pstn"\s*\)',s)
  if not matches:raise ValueError('Paid route gate missing')
  hook='''# INHOUSE_ACTIVITY_EVENTS_V1
-    if ($rU =~ "^([+]?23420315[0-4][0-9]{4}|020315[0-4][0-9]{4})$" && is_method("INVITE") && !has_totag()) {
+    if ($rU =~ "^([+]?23420315[0-4][0-9]{4}|020315[0-4][0-9]{4})$" && is_method("INVITE") && $tt == $null) {
         dlg_manage();
         $dlg_var(paid_key) = $(ci{s.md5}) + $(ft{s.md5});
     }
