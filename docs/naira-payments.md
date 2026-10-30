@@ -41,7 +41,7 @@ For the shared API router, the installer adds the payment import, public webhook
 
 Both deployment and test provisioning use /etc/olamide/secrets.env when present, falling back to deployment/docker/.env. After any installer update, fetch the payment branch and regenerate /root/flutterwave-naira.yml before retrying; rerunning an old copied playbook does not update its shell steps.
 
-The billing and payment-admin UI files are integrated using uniquely matched payment-edit blocks rather than whole-file merges. Adjacent wallet fixes and unrelated imports/features remain intact. Missing or ambiguous payment-edit blocks still stop before any application writes. Eight installer regression tests cover router changes, UI edits, repeated runs and conflicts; the payment test suite has 29 tests.
+The billing and payment-admin UI files are integrated using uniquely matched payment-edit blocks rather than whole-file merges. Adjacent wallet fixes and unrelated imports/features remain intact. Matching tolerates formatting changes and retains production customerText() sanitization of invoice descriptions. Missing or ambiguous payment-edit blocks still stop before any application writes. Nine installer regression tests cover router changes, production billing-layout variants, UI edits, repeated runs and conflicts; the payment test suite has 29 tests.
 
 Backups are root-private under /opt/olamide/backups/flutterwave-naira-*. If a post-start health check fails, inspect the containers and backup before restoring. Schema additions are additive; the playbook does not automatically restore a live database or discard local modifications.
 

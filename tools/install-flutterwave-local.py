@@ -49,6 +49,11 @@ def integrate_server(text):
 
 def integrate_ui(text,base,incoming,path):
  """Apply only uniquely identified feature edits, retaining adjacent UI fixes."""
+ def matches(code):
+  # Formatting changes can join source lines without changing payment logic.
+  parts=re.split(r'(\s+)',code.strip())
+  pattern=''.join(r'\s*' if part.isspace() else re.escape(part) for part in parts if part)
+  return list(re.finditer(pattern,text)) if pattern else []
  original=base.splitlines(keepends=True);updated=incoming.splitlines(keepends=True)
  edits=difflib.SequenceMatcher(a=original,b=updated,autojunk=False).get_opcodes()
  for kind,start,end,new_start,new_end in reversed(edits):
@@ -57,13 +62,19 @@ def integrate_ui(text,base,incoming,path):
   if kind=='insert':
    if start==0:raise RuntimeError('Unrecognized UI insertion: '+path)
    anchor=original[start-1]
-   if text.count(anchor+new)==1:continue
-   if text.count(anchor)!=1:raise RuntimeError('UI insertion anchor missing or ambiguous: '+path)
-   text=text.replace(anchor,anchor+new,1)
+   if len(matches(anchor+new))==1:continue
+   found=matches(anchor)
+   if len(found)!=1:raise RuntimeError('UI insertion anchor missing or ambiguous: '+path)
+   match=found[0];text=text[:match.end()]+'\n'+new.rstrip()+'\n'+text[match.end():]
   else:
-   if new and text.count(new)==1:continue
-   if not old or text.count(old)!=1:raise RuntimeError('UI payment edit missing or ambiguous; no files written: '+path)
-   text=text.replace(old,new,1)
+   # Production sanitizes customer-visible invoice descriptions; retain it.
+   if '${customerText(invoice.description)}' in text and '${invoice.description}' in old:
+    old=old.replace('${invoice.description}','${customerText(invoice.description)}')
+    new=new.replace('${invoice.description}','${customerText(invoice.description)}')
+   if new and len(matches(new))==1:continue
+   found=matches(old)
+   if len(found)!=1:raise RuntimeError('UI payment edit missing or ambiguous at baseline line '+str(start+1)+'; no files written: '+path)
+   match=found[0];text=text[:match.start()]+new.strip()+text[match.end():]
  return text
 
 def install(root,ref):

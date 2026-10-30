@@ -19,6 +19,21 @@ function handler(req,res) {
 '''
 
 class RouterTests(unittest.TestCase):
+ def test_production_description_sanitizer_and_joined_lines_are_preserved(self):
+  root=Path(__file__).resolve().parents[1];path='apps/web/src/main.js'
+  base=subprocess.check_output(['git','show',installer.BASE+':'+path],cwd=root).decode()
+  incoming=(root/path).read_text()
+  local=base.replace('${invoice.description}','${customerText(invoice.description)}').replace('Number(wallet.balanceCents)','Number(wallet.availableBalanceCents??wallet.balanceCents)')
+  local=local.replace('const li = document.createElement("li");\n    li.textContent','const li = document.createElement("li");    li.textContent')
+  local=local.replace("for(const a of attempts.attempts.filter(a=>a.status!=='paid')){\n    const li", "for(const a of attempts.attempts.filter(a=>a.status!=='paid')){    const li")
+  patched=installer.integrate_ui(local,base,incoming,path)
+  self.assertIn('${customerText(invoice.description)}',patched)
+  self.assertIn('wallet.availableBalanceCents??wallet.balanceCents',patched)
+  self.assertIn('/api/marketplace/naira-quote',patched)
+  self.assertNotIn("attempts.attempts.filter(a=>a.status!=='paid')",patched)
+  self.assertEqual(installer.integrate_ui(patched,base,incoming,path),patched)
+  with tempfile.TemporaryDirectory() as tmp:
+   output=Path(tmp)/'main.mjs';output.write_text(patched);subprocess.run(['node','--check',str(output)],check=True)
  def test_ui_edits_keep_adjacent_wallet_fixes(self):
   base='import old;\nconst walletBalance=wallet.balanceCents;\ncheckoutOld();\nfooter();\n'
   incoming=base.replace('checkoutOld();','checkoutWithNairaQuote();')
