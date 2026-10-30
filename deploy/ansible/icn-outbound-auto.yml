@@ -1,0 +1,71 @@
+---
+- name: Provision ICN activation information from existing paid rentals
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read server addresses
+      ansible.builtin.command: hostname -I
+      changed_when: false
+      register: icn_addresses
+    - name: Require SIP platform server
+      ansible.builtin.assert:
+        that: "'154.29.77.102' in icn_addresses.stdout.split()"
+    - name: Generate activation settings without altering carrier approvals or wallets
+      ansible.builtin.shell: |
+        set -Eeuo pipefail
+        umask 077
+        exec 9>/run/olamide-update.lock
+        flock -n 9
+        mkdir -p /etc/olamide /opt/olamide/backups
+        work=$(mktemp -d /opt/olamide/backups/icn-provision-XXXXXXXX)
+        settings=/etc/olamide/icn-activation.yml
+        test ! -L "$settings"
+        python3 - "$settings" "$work/prior.json" <<'PY'
+        import sys,json,pathlib,yaml
+        source=pathlib.Path(sys.argv[1]);runtime=pathlib.Path('/var/lib/olamide/service-inventory/icn-outbound.json')
+        data=yaml.safe_load(source.read_text()) if source.exists() else json.loads(runtime.read_text()) if runtime.exists() else {}
+        if data is None:data={}
+        if not isinstance(data,dict):raise SystemExit('ICN_PROVISION invalid_existing_settings')
+        pathlib.Path(sys.argv[2]).write_text(json.dumps(data))
+        PY
+        cd /opt/olamide/repo/deployment/docker
+        docker compose --env-file /etc/olamide/secrets.env run --rm --no-deps -T \
+          --entrypoint node \
+          -v {{ ((playbook_dir | dirname | dirname) ~ '/services/api/provisionIcnActivation.mjs') | quote }}:/app/provisionIcnActivation.mjs:ro \
+          api /app/provisionIcnActivation.mjs < "$work/prior.json" > "$work/generated.json" 2> "$work/provision.log"
+        python3 - "$settings" "$work/generated.json" "$work" <<'PY'
+        import os,sys,json,pathlib,shutil,tempfile
+        target=pathlib.Path(sys.argv[1]);data=json.loads(pathlib.Path(sys.argv[2]).read_text())
+        if not isinstance(data.get('icn_activation'),dict) or not isinstance(data.get('provisioning',{}).get('missing'),list):raise SystemExit('ICN_PROVISION invalid_generated_settings')
+        if target.exists():shutil.copy2(target,pathlib.Path(sys.argv[3])/'previous-activation.yml')
+        fd,temp=tempfile.mkstemp(prefix='.icn-activation-',dir=target.parent)
+        try:
+            with os.fdopen(fd,'w') as out:json.dump(data,out,indent=2);out.write('\n');out.flush();os.fsync(out.fileno())
+            os.chmod(temp,0o600);os.replace(temp,target)
+        finally:
+            if os.path.exists(temp):os.unlink(temp)
+        PY
+      args:
+        executable: /bin/bash
+      no_log: true
+      changed_when: true
+    - name: Load provisioned settings
+      ansible.builtin.include_vars:
+        file: /etc/olamide/icn-activation.yml
+        name: icn_generated
+      no_log: true
+    - name: Report automatically provisioned information
+      ansible.builtin.debug:
+        msg:
+          - 'Activation file created: /etc/olamide/icn-activation.yml'
+          - 'Active paid DIDs discovered: {{ icn_generated.provisioning.activePaidDids }}'
+          - 'Still required: {{ icn_generated.provisioning.missing | join(", ") | default("none", true) }}'
+          - 'Known values are saved. Carrier approval and tariff categories are never fabricated.'
+
+- name: Activate once all required information is available
+  ansible.builtin.import_playbook: icn-outbound-activate.yml
+  vars:
+    icn_activation: '{{ icn_generated.icn_activation }}'
+  when: icn_generated.provisioning.missing | length == 0
