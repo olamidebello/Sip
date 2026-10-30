@@ -9,23 +9,27 @@ export function setupMarketplaceControl({get,request}){
  <p id="market-status" role="status"></p><div id="market-stores"></div></section>
  <section id="marketplace-plans-admin"><h3>Recommended subscription plans</h3><button type="button" id="market-plans">Add recommended SIP plans as drafts</button>
  <p>Suggested monthly prices: Personal $9.95, Team $29.95, Business $79.95. Usage and numbers are billed separately. Review capacity, margin and delivery terms in Product catalog management before publishing.</p>
- </section><section id="marketplace-gateways-admin"><h3>Store payment gateways</h3><p>Stripe is managed above. Paystack and Flutterwave require merchant accounts supporting USD. Pending payments are verified by the server automatically. Customers can also use Verify payment in Billing. Stripe uses signed webhook reconciliation.</p>
+ </section><section id="marketplace-gateways-admin"><h3>Store payment gateways</h3><p>Naira payments use Flutterwave only. USD invoices can be paid in naira using the current parallel-market sell rate. Customers review the rate, source and final total before paying. Quotes last ten minutes; unavailable or stale rates block conversion. Pending payments are verified by the server automatically.</p>
  <ul id="market-gateways"></ul>
  <form id="market-gateway-form" hidden>
  <label>Provider <select name="provider"><option value="paystack">Paystack</option><option value="flutterwave">Flutterwave</option></select></label>
  <label>Environment <select name="environment"><option value="test">Test</option><option value="live">Live</option></select></label>
  <label>Secret API key <input type="password" name="secretKey" autocomplete="off" placeholder="Leave blank to preserve saved key"></label>
  <label><input type="checkbox" name="enabled">Enable for this store</label>
- <label><input type="checkbox" name="confirmLive">Confirm live payments</label><button>Save gateway</button></form></section><section id="marketplace-reconciliation-admin"><h3>Payment reconciliation</h3><ul id="market-reconciliation"></ul></section>`;
+ <label><input type="checkbox" name="confirmLive">Confirm live payments</label><button>Save gateway</button></form>
+ <form id="naira-rate-form" hidden><h4>Naira parallel-market rate feed</h4><p>Aboki Forex API subscription required. Uses the USD sell rate with no added markup. Feed updates hourly; rates older than 90 minutes are rejected.</p><p id="naira-feed-status" role="status"></p><label>Aboki Forex API key <input name="apiKey" type="password" autocomplete="off" required></label><button>Save rate-feed key</button></form>
+ </section><section id="marketplace-reconciliation-admin"><h3>Payment reconciliation</h3><ul id="market-reconciliation"></ul></section>`;
  panel.append(box);
  const status=box.querySelector('#market-status');
  let epoch=0;
- function reset(){epoch++;box.querySelector('#market-overview').textContent='';box.querySelector('#market-stores').replaceChildren();box.querySelector('#market-gateways').replaceChildren();box.querySelector('#market-reconciliation').replaceChildren();box.querySelector('#market-gateway-form').reset();box.querySelector('#market-gateway-form').hidden=true;status.textContent='';}
+ function reset(){epoch++;box.querySelector('#market-overview').textContent='';box.querySelector('#market-stores').replaceChildren();box.querySelector('#market-gateways').replaceChildren();box.querySelector('#market-reconciliation').replaceChildren();box.querySelector('#market-gateway-form').reset();box.querySelector('#market-gateway-form').hidden=true;box.querySelector('#naira-rate-form').reset();box.querySelector('#naira-rate-form').hidden=true;status.textContent='';}
  async function refresh(){const current=++epoch;try{
-  const [stores,gateways,reconciliation,overview]=await Promise.all([get('/api/admin/marketplace/stores'),get('/api/admin/marketplace/gateways'),get('/api/admin/marketplace/reconciliation').catch(()=>({attempts:[]})),get('/api/admin/marketplace/overview').catch(()=>null)]);
+  const [stores,gateways,reconciliation,overview,naira]=await Promise.all([get('/api/admin/marketplace/stores'),get('/api/admin/marketplace/gateways'),get('/api/admin/marketplace/reconciliation').catch(()=>({attempts:[]})),get('/api/admin/marketplace/overview').catch(()=>null),get('/api/admin/marketplace/naira').catch(()=>null)]);
   if(current!==epoch)return;
   if(Array.isArray(overview?.products)&&Array.isArray(overview?.orders))box.querySelector('#market-overview').textContent=`Store: ${overview.store?.name||overview.tenantId}. Products: ${overview.products.reduce((n,r)=>n+Number(r.count),0)}. Orders: ${overview.orders.reduce((n,r)=>n+Number(r.count),0)}. ${overview.note}`;
   box.querySelector('#market-gateway-form').hidden=!gateways.editable;
+  box.querySelector('#naira-rate-form').hidden=!naira;
+  if(naira)box.querySelector('#naira-feed-status').textContent=naira.configured?'Rate-feed key configured. Naira payments use Flutterwave.':'Save your rate-feed API key to enable automatic USD → NGN quotes.';
   const history=box.querySelector('#market-reconciliation');history.replaceChildren();for(const a of reconciliation.attempts||[]){const li=document.createElement('li');li.textContent=`${a.provider} ${a.id}: ${a.payment_status} · ${a.reconciliation_status||'queued'} · ${a.attempts||0} checks`;history.append(li);}
   const list=box.querySelector('#market-gateways');list.replaceChildren();
   for(const p of gateways.catalog){const li=document.createElement('li'),saved=gateways.gateways.find(g=>g.provider===p.id);li.textContent=`${p.name}: ${p.implemented?(p.id==='stripe'?'configured above':saved?`${saved.environment} · ${saved.enabled?'enabled':'disabled'}`:'not configured'):'adapter not implemented'}`;list.append(li);}
@@ -42,6 +46,7 @@ export function setupMarketplaceControl({get,request}){
   }
  }catch(e){if(current===epoch)status.textContent=e.message;}}
  box.querySelector('#market-refresh').onclick=refresh;
+ box.querySelector('#naira-rate-form').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget,button=f.querySelector('button');button.disabled=true;try{await request('/api/admin/marketplace/naira',{apiKey:f.elements.apiKey.value.trim()},'PUT');f.reset();status.textContent='Rate-feed key saved encrypted.';await refresh();}catch(error){status.textContent=error.message;}finally{button.disabled=false;}};
  box.querySelector('#market-plans').onclick=async()=>{try{await request('/api/admin/marketplace/recommended-plans',{});status.textContent='Recommended plans added as drafts. Open Product catalog management to review and publish.';}catch(e){status.textContent=e.message;}};
  box.querySelector('#market-gateway-form').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget,b={provider:f.elements.provider.value,environment:f.elements.environment.value,enabled:f.elements.enabled.checked,confirmLive:f.elements.confirmLive.checked};if(f.elements.secretKey.value)b.secretKey=f.elements.secretKey.value.trim();try{await request('/api/admin/marketplace/gateways',b,'PUT');f.elements.secretKey.value='';status.textContent='Gateway saved.';await refresh();}catch(e){status.textContent=e.message;}};
  return {refresh,reset};

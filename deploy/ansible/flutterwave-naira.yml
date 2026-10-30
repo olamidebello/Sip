@@ -1,0 +1,63 @@
+---
+- name: Pull and deploy Flutterwave webhooks and naira checkout
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    application_repo: /opt/olamide/repo
+    payment_branch: codex/flutterwave-v3-webhook
+    public_origin: https://sip.dobhrap.com
+    flutterwave_provision_test: false
+  tasks:
+    - name: Validate deployment inputs
+      ansible.builtin.assert:
+        that:
+          - application_repo is match('^/[A-Za-z0-9_./-]+$')
+          - payment_branch is match('^[A-Za-z0-9_./-]+$')
+          - public_origin == 'https://sip.dobhrap.com'
+    - name: Back up, pull, merge payment changes, test and deploy
+      ansible.builtin.shell: |
+        set -euo pipefail
+        umask 077
+        cd {{ application_repo | quote }}
+        exec 9>/run/olamide-update.lock
+        flock -n 9 || { echo 'Another deployment is running'; exit 1; }
+        test -f deployment/docker/.env
+        test -z "$(git ls-files -u)" || { echo 'Resolve existing conflicts first'; exit 1; }
+        backup_dir="/opt/olamide/backups/flutterwave-naira-$(date -u +%Y%m%dT%H%M%S)-$$"
+        install -d -m 0700 "$backup_dir"
+        git rev-parse HEAD > "$backup_dir/commit.txt"
+        git diff --binary HEAD > "$backup_dir/local-changes.patch"
+        tar --exclude=.git --exclude=node_modules --exclude=dist -czf "$backup_dir/source.tar.gz" .
+        git fetch origin {{ payment_branch | quote }} </dev/null
+        target_commit=$(git rev-parse FETCH_HEAD)
+        printf '%s\n' "$target_commit" > "$backup_dir/payment-release.txt"
+        git show "$target_commit:tools/install-flutterwave-local.py" > "$backup_dir/install-payment.py"
+        python3 "$backup_dir/install-payment.py" --root {{ application_repo | quote }} --ref "$target_commit"
+        cd deployment/docker
+        export APP_RELEASE="$target_commit"
+        docker compose config --quiet </dev/null
+        docker compose exec -T mysql sh -c 'exec mysqldump --single-transaction --hex-blob -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' </dev/null 2>"$backup_dir/database-backup.log" | gzip > "$backup_dir/database.sql.gz"
+        gzip -t "$backup_dir/database.sql.gz"
+        gzip -cd "$backup_dir/database.sql.gz" | tail -n 10 | grep -q 'Dump completed'
+        docker compose build api web </dev/null
+        docker compose run --rm --no-deps -T api node --test flutterwaveWebhook.test.js nairaPayments.test.js storeGateways.test.js paymentReconciliation.test.js payments.test.js </dev/null
+        docker compose up -d --no-deps api web </dev/null
+        curl --fail --silent --show-error --max-time 10 --retry 12 --retry-all-errors --retry-delay 3 {{ (public_origin + '/api/health') | quote }} -o "$backup_dir/health.json"
+        python3 -c 'import json,sys; h=json.load(open(sys.argv[1])); assert h.get("status")=="ok" and h.get("release")==sys.argv[2], "Running API is not the expected release"' "$backup_dir/health.json" "$target_commit"
+        status_code=$(curl --silent --show-error --max-time 10 -o "$backup_dir/webhook-probe.json" -w '%{http_code}' {{ (public_origin + '/api/webhooks/flutterwave/00000000-0000-4000-8000-000000000000') | quote }})
+        test "$status_code" = 405 || { echo 'Webhook route health check failed'; exit 1; }
+        curl --fail --silent --show-error --max-time 10 {{ public_origin | quote }} -o /dev/null
+        {% if flutterwave_provision_test | bool %}
+        bash {{ (application_repo + '/tools/provision-flutterwave.sh') | quote }} {{ application_repo | quote }}
+        {% endif %}
+        docker compose ps api web
+        echo "Deployment verified. Backup: $backup_dir"
+        echo 'Configure the Aboki Forex API key in Super admin > Store payment gateways > Naira parallel-market rate feed.'
+      args:
+        executable: /bin/bash
+      register: payment_deployment
+      changed_when: true
+    - name: Report deployment verification
+      ansible.builtin.debug:
+        var: payment_deployment.stdout_lines

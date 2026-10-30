@@ -341,7 +341,7 @@ async function handler(req, res) {
       if(path.startsWith('/api/admin/wallet-providers')) return await handleWalletProviderAdmin({req,res,path,user,pool,send,readJson});
       if(path==='/api/admin/marketplace/reconciliation') return await handlePaymentReconciliation({req,res,user,pool,send});
       if(path.startsWith('/api/admin/telecom/archives')) return await handleCdrArchives({req,res,path,user,pool,send,readJson});
-      if(path.startsWith('/api/marketplace/')||path==='/api/admin/marketplace/gateways') return await handleStoreGateways({req,res,path,user,pool,send,readJson,origin});
+      if(path.startsWith('/api/marketplace/')||path==='/api/admin/marketplace/gateways'||path==='/api/admin/marketplace/naira') return await handleStoreGateways({req,res,path,user,pool,send,readJson,origin});
       if(path.startsWith('/api/admin/marketplace/')) return await handleMarketplaceControl({req,res,path,user,pool,send,readJson});
       if(path.startsWith('/api/admin/payments/')) return await handlePaymentAdmin({req,res,path,user,pool,send,readJson});
       if(path==='/api/payments/checkout'&&req.method==='POST') return await handlePaymentCheckout({req,res,user,pool,send,readJson,origin});

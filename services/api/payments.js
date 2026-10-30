@@ -87,7 +87,8 @@ export async function handlePaymentAdmin({req,res,path,user,pool,send,readJson,f
 }
 export async function handlePaymentCheckout({req,res,user,pool,send,readJson,origin,fetchImpl=fetch}){
   if(!user.features?.billing)return send(res,403,{error:'Billing unavailable'});
-  const {invoiceId}=await readJson(req);
+  const {invoiceId,currency}=await readJson(req);
+  if(currency!==undefined&&currency!=='USD')return send(res,400,{error:'Naira payments require Flutterwave; Stripe checkout supports USD only'});
   if(!uuid.test(invoiceId||''))return send(res,400,{error:'Valid invoice ID required'});
   const policy=await storePolicy(pool,user.tenant_id);
   if(policy&&(!policy.authorized||!policy.enabled))return send(res,403,{error:'Store disabled'});
