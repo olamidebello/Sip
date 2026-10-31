@@ -1,0 +1,115 @@
+---
+- name: Commit and push the current Olamide checkout to GitHub
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_path: "{{ playbook_dir }}/../.."
+    target_branch: "{{ github_branch | default('main') }}"
+    commit_text: "{{ github_commit_message | default('') }}"
+
+  tasks:
+    - name: Require a commit message
+      ansible.builtin.assert:
+        that:
+          - commit_text | trim | length > 0
+          - "'\n' not in commit_text"
+        fail_msg: >-
+          Supply a one-line message with
+          -e 'github_commit_message=Describe your change'.
+
+    - name: Confirm repository checkout
+      ansible.builtin.command:
+        argv:
+          - git
+          - -C
+          - "{{ repo_path }}"
+          - rev-parse
+          - --show-toplevel
+      register: git_root
+      changed_when: false
+
+    - name: Read current branch
+      ansible.builtin.command:
+        argv:
+          - git
+          - -C
+          - "{{ repo_path }}"
+          - branch
+          - --show-current
+      register: current_branch
+      changed_when: false
+
+    - name: Require the intended branch
+      ansible.builtin.assert:
+        that:
+          - current_branch.stdout | trim == target_branch
+        fail_msg: >-
+          Checked-out branch is '{{ current_branch.stdout | trim }}',
+          but target_branch is '{{ target_branch }}'. Check out the intended
+          branch before running this playbook.
+
+    - name: Read origin remote
+      ansible.builtin.command:
+        argv:
+          - git
+          - -C
+          - "{{ repo_path }}"
+          - remote
+          - get-url
+          - origin
+      register: origin_url
+      changed_when: false
+
+    - name: Require a GitHub origin
+      ansible.builtin.assert:
+        that:
+          - "'github.com' in origin_url.stdout"
+        fail_msg: "The origin remote must point to GitHub; no push was attempted."
+
+    - name: Stage checkout changes
+      ansible.builtin.command:
+        argv:
+          - git
+          - -C
+          - "{{ repo_path }}"
+          - add
+          - --all
+      changed_when: true
+
+    - name: Check whether anything is staged
+      ansible.builtin.command:
+        argv:
+          - git
+          - -C
+          - "{{ repo_path }}"
+          - diff
+          - --cached
+          - --quiet
+      register: staged_diff
+      changed_when: staged_diff.rc == 1
+      failed_when: staged_diff.rc not in [0, 1]
+
+    - name: Commit staged changes
+      ansible.builtin.command:
+        argv:
+          - git
+          - -C
+          - "{{ repo_path }}"
+          - commit
+          - -m
+          - "{{ commit_text }}"
+      when: staged_diff.rc == 1
+
+    - name: Push branch to GitHub
+      ansible.builtin.command:
+        argv:
+          - git
+          - -C
+          - "{{ repo_path }}"
+          - push
+          - origin
+          - "HEAD:refs/heads/{{ target_branch }}"
+      register: push_result
+      changed_when: "'Everything up-to-date' not in push_result.stderr"
