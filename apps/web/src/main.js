@@ -1,3 +1,4 @@
+import {setupCallingPlanBuilder} from './callingPlanBuilderUi.js';
 import {setupTrunkAdmin} from './trunkAdmin.js';
 import {setupSystemAdminGroup} from './adminGroup.js';
 import {setupQuickSignup} from './quickSignup.js';
@@ -1541,6 +1542,8 @@ let muted = false;
 let currentCall = null;
 const favorites = new Set();
 let recentCalls = [],softphoneUserId=null,softphoneLoad=0;
+// CALLING_PLAN_BUILDER_V1
+setupCallingPlanBuilder({document,get:apiGet,request:accountRequest,getUserId:()=>softphoneUserId,show:showWorkspace,refreshBilling});
 async function softphoneRequest(path,method="GET",body) {
   const response=await fetch(path,{method,credentials:"same-origin",
     headers:body?{"Content-Type":"application/json"}:{},body:body?JSON.stringify(body):undefined});

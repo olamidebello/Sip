@@ -15,8 +15,8 @@ export async function ensureIncludedDid(pool,user){
  if(!await subscriberActive(db,user.tenant_id,user.id)){await db.query('ROLLBACK');return null;}
  const current=(await db.query("SELECT d.number_e164 FROM inhouse_subscriber_assignments f JOIN inhouse_dids d ON d.id=f.did_id AND d.tenant_id=f.tenant_id AND d.user_id=f.user_id WHERE f.user_id=$1 AND f.tenant_id=$2 AND d.status='assigned' ORDER BY d.number_e164 LIMIT 1",[user.id,user.tenant_id])).rows[0];if(current){await db.query('COMMIT');return current.number_e164;}
  if(!policy.allocationEnabled){await db.query('ROLLBACK');return null;}
- let numbers=(await db.query("SELECT id,number_e164 FROM inhouse_dids WHERE tenant_id=$1 AND user_id=$2 AND status='assigned' AND number_e164 REGEXP '^[+]23420315[0-4][0-9]{4}$' ORDER BY number_e164 LIMIT 1 FOR UPDATE",[user.tenant_id,user.id])).rows;
- if(!numbers.length){const did=(await db.query("SELECT id,number_e164 FROM inhouse_dids WHERE tenant_id=$1 AND user_id IS NULL AND status='available' AND number_e164 REGEXP '^[+]23420315[0-4][0-9]{4}$' ORDER BY number_e164 LIMIT 1 FOR UPDATE",[user.tenant_id])).rows[0];if(did)numbers=[did];}
+ let numbers=(await db.query("SELECT id,number_e164 FROM inhouse_dids WHERE tenant_id=$1 AND user_id=$2 AND status='assigned' AND NOT EXISTS(SELECT 1 FROM smooth_did_rentals r WHERE r.did_id=inhouse_dids.id) AND number_e164 REGEXP '^[+]23420315[0-4][0-9]{4}$' ORDER BY number_e164 LIMIT 1 FOR UPDATE",[user.tenant_id,user.id])).rows;
+ if(!numbers.length){const did=(await db.query("SELECT id,number_e164 FROM inhouse_dids WHERE tenant_id=$1 AND user_id IS NULL AND status='available' AND NOT EXISTS(SELECT 1 FROM smooth_did_rentals r WHERE r.did_id=inhouse_dids.id) AND NOT EXISTS(SELECT 1 FROM inhouse_release_holds h WHERE h.did_id=inhouse_dids.id) AND number_e164 REGEXP '^[+]23420315[0-4][0-9]{4}$' ORDER BY number_e164 LIMIT 1 FOR UPDATE",[user.tenant_id])).rows[0];if(did)numbers=[did];}
  if(!numbers.length){await db.query('ROLLBACK');return null;}
  numbers=numbers.slice(0,1);
  for(const did of numbers){
@@ -24,7 +24,6 @@ export async function ensureIncludedDid(pool,user){
   if(prior&&(prior.user_id!==user.id||prior.tenant_id!==user.tenant_id))throw Error('In-house assignment ownership conflict');
   if(!prior){const state=await reserveActivation(db,user,did,policy);await db.query('INSERT INTO inhouse_subscriber_assignments(did_id,tenant_id,user_id,state,provisioned_at) VALUES($1,$2,$3,$4,$5)',[did.id,user.tenant_id,user.id,state,state==='active'?new Date():null]);}
   await db.query("UPDATE inhouse_dids SET user_id=$1,status='assigned',monthly_cents=0,setup_cents=0 WHERE id=$2 AND tenant_id=$3",[user.id,did.id,user.tenant_id]);
-  await db.query("UPDATE smooth_did_rentals SET auto_renew=FALSE,status='included',monthly_cents=0 WHERE did_id=$1 AND tenant_id=$2 AND user_id=$3",[did.id,user.tenant_id,user.id]);
  }
  await db.query('COMMIT');return numbers[0].number_e164;
  }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}

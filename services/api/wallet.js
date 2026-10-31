@@ -42,8 +42,10 @@ export async function handleWallet({req,res,path,user,pool,send,readJson}) {
   if (path==="/api/wallet" && req.method==="GET") {
     const account=await pool.query("SELECT balance_cents,currency FROM wallet_accounts WHERE user_id=$1 AND tenant_id=$2",[user.id,user.tenant_id]);
     const entries=await pool.query("SELECT e.id,e.delta_cents,e.balance_after_cents,e.created_at,t.sender_id,t.recipient_id FROM wallet_entries e JOIN wallet_transfers t ON t.id=e.transfer_id WHERE e.user_id=$1 AND e.tenant_id=$2 ORDER BY e.created_at DESC,e.id DESC LIMIT 50",[user.id,user.tenant_id]);
+    // CALLING_PLAN_FUNDING_HISTORY_V1
+    const funding=await pool.query('SELECT plan_id AS id,amount_cents AS delta_cents,balance_after_cents,created_at FROM calling_plan_funding WHERE user_id=$1 AND tenant_id=$2 ORDER BY created_at DESC LIMIT 50',[user.id,user.tenant_id]);
     const purchases=await pool.query('SELECT id,invoice_id,amount_cents,balance_after_cents,created_at FROM wallet_purchases WHERE user_id=$1 AND tenant_id=$2 ORDER BY created_at DESC LIMIT 50',[user.id,user.tenant_id]);
-    return send(res,200,{purchases:purchases.rows,balanceCents:Number(account.rows[0]?.balance_cents||0),currency:"USD",entries:entries.rows,
+    return send(res,200,{purchases:purchases.rows,balanceCents:Number(account.rows[0]?.balance_cents||0),currency:"USD",entries:[...entries.rows,...funding.rows],
       fundingAvailable:false,payoutAvailable:false,note:"No payment provider or funding path is connected."});
   }
   if (path==="/api/wallet/transfers" && req.method==="POST") {

@@ -1,3 +1,4 @@
+import {migrateCallingPlans,handleCallingPlans,startCallingPlanFunding} from './callingPlanBuilder.js';
 import {adminRouteAllowed,scopedAdminUser,handleAdminGroup,adminGroupPolicy} from './adminGroup.js';
 import {handleQuickSignup,handleQuickProfile} from './quickSignup.js';
 import {migrateApiBridge,handleApiBridge} from './apiBridge.js';
@@ -544,6 +545,7 @@ async function handler(req, res) {
         return send(res, 200, {processed:normalized.length,duplicates:emails.length-normalized.length});
       }
       if(path.startsWith('/api/messages'))return await handleConversations({req,res,path,user,pool,send,readJson,url:new URL(req.url,origin)});
+      if(path.startsWith('/api/billing/calling-plans'))return await handleCallingPlans({req,res,path,user,pool,send,readJson});
       if (path === "/api/billing/invoices" && req.method === "GET") {
         const result = await pool.query(
           "SELECT id,description,amount_cents,currency,status,created_at FROM invoices WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100",
@@ -878,6 +880,9 @@ await migrate(pool);
 await migrateHostedApps(pool);
 await migrateApiBridge(pool);
 await migratePstnBilling(pool);
+// CALLING_PLAN_BUILDER_V1
+await migrateCallingPlans(pool);
+const stopCallingPlanFunding=startCallingPlanFunding(pool);
 await migrateJustisolveBridge(pool);
 const kamailioHttpBridge=startKamailioHttpBridge(pool);
 const stopTelecomReports=startTelecomReports(pool);

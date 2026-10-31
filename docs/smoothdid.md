@@ -32,3 +32,11 @@ Legacy public in-house listing/reservation excludes SmoothDID-managed inventory,
 This deploys purchase/allocation and policy controls. Live inbound carrier delivery, SMS capabilities, outbound caller-ID authorization, actual HP termination, end-to-end media and device proof forwarding require host/carrier verification. Existing server-local handlers must use the integrated lookup/reservation paths; independent carrier handlers are not invented or replaced.
 
 Tests cover all 50,000 unique numbers, calendar dates, price expectations, duplicate requests, assigned-number denial, transaction rollback, insufficient credit, group membership, fresh location/uncertainty, zone-specific clearing houses, channel readiness, role restrictions and GUI requests. SQL behavior and simultaneous purchases must also be validated against the host's MySQL deployment; local tests use a query-recording database double, not a production database.
+
+## Marketplace entry and subscription coexistence
+
+**Marketplace → Shop products & services → Buy in-house DID** opens the same live number catalog and wallet checkout as Billing. Active subscribers may purchase additional paid numbers. The included-number worker excludes all paid rental records and never cancels or zeroes a rental. Paid checkout does not require the Nigeria SMS verification used for the separate free included-number benefit. Existing billing access, user-group and fresh-location requirements still apply.
+
+Only recorded `allocated_ncc` blocks can be initialized or newly sold. Checkout also rejects included assignments and release holds before accessing the wallet. Listings exclude those records and existing rentals. Existing prices and service areas are preserved; administrators must configure a positive price and enable their eligible groups before numbers become purchasable. Provisioning a number alone does not enable group sales.
+
+Deploy with `ansible-pull -U https://github.com/olamidebello/Sip.git -C codex/marketplace-calling-plans -d /opt/olamide-deploy-controller -i localhost, -c local deploy/ansible/inhouse-marketplace.yml`. The installer preserves existing integrations and configuration; source and running images roll back on deployment failure. No customer is charged by deployment. A real authenticated checkout and host MySQL concurrency test remain host validation steps.

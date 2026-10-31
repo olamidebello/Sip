@@ -17,3 +17,14 @@ test('unassigned in-house number fails closed rather than entering a paid route'
  const db={async query(sql){if(sql.includes('olamide_sip_call_access'))return {rows:[{tenant_id:'t',user_id:'u'}]};if(sql.includes('inhouse_nigeria_verifications'))return {rows:[{number_e164:'+2348012345678'}]};if(sql.includes('FROM subscriptions'))return {rows:[{}]};return {rows:[]};}};
  assert.equal((await routeIncludedDid(db,{caller:'caller',domain:'sip.dobhrap.com',destination:'+2342031500001'}))[0],404);assert.equal(await routeIncludedDid(db,{destination:'+2348012345678'}),null);
 });
+
+test('included allocation excludes paid rentals and never rewrites their contracted billing',async()=>{
+ const queries=[];const db={release(){},async query(sql){queries.push(sql);
+  if(sql.includes('FROM inhouse_nigeria_verifications')||sql.includes('FROM subscriptions'))return {rows:[{}]};
+  return {rows:[]};
+ }};
+ assert.equal(await ensureIncludedDid({connect:async()=>db},{id:'u',tenant_id:'t'}),null);
+ const selection=queries.filter(s=>s.startsWith('SELECT id,number_e164'));
+ assert.equal(selection.length,2);assert(selection.every(s=>s.includes('NOT EXISTS(SELECT 1 FROM smooth_did_rentals')));
+ assert(!queries.some(s=>s.startsWith('UPDATE smooth_did_rentals')));
+});

@@ -1,0 +1,72 @@
+---
+- name: Deploy wallet-backed in-house DID marketplace
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Install and validate marketplace with source and image rollback
+      ansible.builtin.shell: |
+        set -Eeuo pipefail
+        umask 077
+        test "$(hostname)" = sip || hostname -I | tr ' ' '\n' | grep -Fxq 154.29.77.102
+        exec 9>/run/olamide-update.lock
+        flock -n 9
+        root=/opt/olamide/repo
+        controller={{ playbook_dir | dirname | dirname | quote }}
+        mkdir -p /opt/olamide/backups
+        backup=$(mktemp -d /opt/olamide/backups/inhouse-marketplace-XXXXXXXX)
+        exec >"$backup/deploy.log" 2>&1
+        cd "$root/deployment/docker"
+        compose=(docker compose --env-file /etc/olamide/secrets.env)
+        "${compose[@]}" config --format json > "$backup/compose.json"
+        suffix=$(basename "$backup")
+        for service in api web; do
+          id=$("${compose[@]}" ps -q "$service")
+          old=$(docker inspect --format '{{ '{{' }}.Image{{ '}}' }}' "$id")
+          docker tag "$old" "olamide-marketplace-$service-rollback:$suffix"
+        done
+        printf 'services:\n  api:\n    image: olamide-marketplace-api-rollback:%s\n  web:\n    image: olamide-marketplace-web-rollback:%s\n' "$suffix" "$suffix" > "$backup/rollback.yml"
+        files=(services/api/server.js services/api/dids.js services/api/locationPolicy.js services/api/pstnBilling.js services/api/subscriberRouting.js services/api/inboundRouting.js apps/web/src/main.js services/api/smoothDid.js services/api/inhouseSubscriber.js apps/web/src/smoothDidUi.js)
+        for f in "${files[@]}"; do
+          test ! -L "$root/$f"
+          if test -f "$root/$f"; then mkdir -p "$backup/$(dirname "$f")"; cp -a "$root/$f" "$backup/$f"; fi
+        done
+        promoted=0
+        rollback() {
+          rc=$?; trap - ERR; set +e
+          for f in "${files[@]}"; do
+            if test -f "$backup/$f"; then cp -a "$backup/$f" "$root/$f"; else rm -f "$root/$f"; fi
+          done
+          if test "$promoted" = 1; then "${compose[@]}" -f "$backup/compose.json" -f "$backup/rollback.yml" up -d --no-deps --no-build api web; fi
+          exit "$rc"
+        }
+        trap rollback ERR
+        python3 "$controller/tools/install_inhouse_marketplace.py" "$root"
+        "${compose[@]}" build api web
+        api_image=$(python3 -c 'import json,sys;c=json.load(open(sys.argv[1]));print(c["services"]["api"].get("image") or c["name"]+"-api")' "$backup/compose.json")
+        docker run --rm --entrypoint node \
+          -v "$controller/services/api/smoothDid.test.js:/app/smoothDid.test.js:ro" \
+          -v "$controller/services/api/inhouseSubscriber.test.js:/app/inhouseSubscriber.test.js:ro" \
+          "$api_image" --test /app/smoothDid.test.js /app/inhouseSubscriber.test.js
+        for f in server.js dids.js locationPolicy.js pstnBilling.js subscriberRouting.js inboundRouting.js smoothDid.js inhouseSubscriber.js; do
+          docker run --rm --entrypoint node "$api_image" --check "/app/$f"
+        done
+        promoted=1
+        "${compose[@]}" up -d --no-deps --no-build api web
+        for attempt in $(seq 1 30); do
+          if curl -fsS --max-time 5 https://sip.dobhrap.com/api/health >/dev/null; then break; fi
+          test "$attempt" -lt 30
+          sleep 2
+        done
+        trap - ERR
+      args:
+        executable: /bin/bash
+      no_log: true
+      changed_when: true
+    - name: Marketplace deployment result
+      ansible.builtin.debug:
+        msg: >-
+          Marketplace installed. Users open Marketplace > Shop products & services > Buy in-house DID.
+          Super admin configures licensed inventory, monthly price and permitted service areas under SmoothDID management.
+          Existing paused groups remain paused; no carrier routing or licensing status was changed.
