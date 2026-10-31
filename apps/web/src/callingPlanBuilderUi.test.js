@@ -5,8 +5,8 @@ import {setupCallingPlanBuilder} from './callingPlanBuilderUi.js';
 const tick=()=>new Promise(r=>setTimeout(r,15));
 const quoteId='11111111-1111-4111-8111-111111111111';
 const quote={quoteId,expiresAt:new Date(Date.now()+600000).toISOString(),days:30,dailyMinutes:10,monthlyMinutes:300,totalCents:3900,existingBalanceCents:1000,fundingCents:2900,destinations:[{country:'NG',rateBasis:'Highest listed selling rate',dailyMinutes:10,monthlyMinutes:300,sellingRate:'0.130000',monthlyCents:3900}]};
-function fixture({quoteResponse=async()=>quote}={}){
- const dom=new JSDOM('<section id="billing"></section><section id="product-store"></section>'),calls=[],navigations=[];let owner='user';
+function fixture({quoteResponse=async()=>quote,account=false}={}){
+ const dom=new JSDOM((account?'<section id="account"></section>':'')+'<section id="billing"></section><section id="product-store"></section>'),calls=[],navigations=[];let owner='user';
  const ui=setupCallingPlanBuilder({document:dom.window.document,getUserId:()=>owner,show:t=>calls.push(['show',t]),navigate:url=>navigations.push(url),setTimer:()=>1,clearTimer(){},get:async path=>{
   if(path.endsWith('/countries'))return {countries:[{country:'NG',callingCode:'234',exampleRequired:false},{country:'GH',callingCode:'233',exampleRequired:false}]};
   if(path==='/api/billing/calling-plans')return {plans:[],note:'Shared calling balance'};
@@ -42,5 +42,16 @@ test('late quote after user edits or logout cannot enable a stale purchase',asyn
  let resolve;const f=fixture({quoteResponse:()=>new Promise(r=>resolve=r)});try{
   await open(f);find(f,'Calculate monthly plan').click();await tick();const minutes=f.d.querySelector('[data-daily-minutes]');minutes.value='30';minutes.dispatchEvent(new f.dom.window.Event('input'));f.logout();resolve(quote);await tick();
   assert.equal(find(f,'Create plan & fund').disabled,true);
+ }finally{f.close();}
+});
+
+test('account screen exposes builder even when marketplace and billing screens are hidden',async()=>{
+ const f=fixture({account:true});try{
+  f.d.getElementById('billing').hidden=true;f.d.getElementById('product-store').hidden=true;
+  const account=f.d.getElementById('account');assert(account.querySelector('[data-build-calling-plan]'));
+  account.querySelector('[data-build-calling-plan]').click();await tick();
+  assert.equal(f.d.querySelector('#calling-plan-builder').parentElement,account);
+  assert(f.calls.some(([path,target])=>path==='show'&&target==='account'));
+  assert.equal(f.d.querySelector('#calling-plan-builder').open,true);
  }finally{f.close();}
 });

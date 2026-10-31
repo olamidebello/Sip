@@ -1,5 +1,5 @@
 export function setupCallingPlanBuilder({document,get,request,getUserId,show,refreshBilling=async()=>{},navigate=url=>globalThis.location.assign(url),setTimer=setTimeout,clearTimer=clearTimeout}){
- const billing=document.getElementById('billing');if(!billing)return {dispose(){}};
+ const billing=document.getElementById('billing'),account=document.getElementById('account'),builderHost=account||billing;if(!builderHost)return {dispose(){}};
  const node=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
  const button=(text,fn)=>{const b=node('button',text);b.type='button';b.onclick=fn;return b;};
  const panel=node('details');panel.id='calling-plan-builder';panel.append(node('summary','Build a plan'));
@@ -8,9 +8,9 @@ export function setupCallingPlanBuilder({document,get,request,getUserId,show,ref
  const calculate=button('Calculate monthly plan',()=>void quote()),buy=button('Create plan & fund',()=>void purchase());buy.disabled=true;
  const terms=node('input');terms.type='checkbox';const acceptance=node('label');acceptance.append(terms,' I accept the displayed estimate and funding amount. Calls use live rates; unused funds stay in my wallet. No automatic monthly charge.');
  const add=button('Add calling country',()=>addRow()),reload=button('Refresh my plans',()=>void loadPlans());
- panel.append(rows,add,calculate,summary,acceptance,buy,status,reload,history);billing.prepend(panel);
- const shortcuts=[];for(const host of [billing,document.getElementById('product-store')].filter(Boolean)){
-  const b=button('Build a plan',()=>{if(!getUserId())return;show('billing');panel.open=true;panel.scrollIntoView?.({block:'start'});void initialize();});b.dataset.buildCallingPlan='';host.prepend(b);shortcuts.push(b);
+ panel.append(rows,add,calculate,summary,acceptance,buy,status,reload,history);builderHost.prepend(panel);
+ const shortcuts=[];for(const host of [account,billing,document.getElementById('product-store'),document.getElementById('calling-workspace')].filter(Boolean)){
+  const b=button('Build a plan',()=>{if(!getUserId())return;show(builderHost.id);panel.open=true;panel.scrollIntoView?.({block:'start'});void initialize();});b.dataset.buildCallingPlan='';host.prepend(b);shortcuts.push(b);
  }
  let owner=getUserId(),generation=0,revision=0,countryList=[],catalogPromise=null,current=null,pending=null,timer,disposed=false;
  const money=n=>'$'+(Number(n)/100).toFixed(2),valid=(g,id)=>!disposed&&generation===g&&getUserId()===id&&!!id;
