@@ -1,4 +1,5 @@
 from pathlib import Path
+import importlib.util
 import subprocess
 import sys
 import tempfile
@@ -28,6 +29,20 @@ class CallingPlanInstallerTests(unittest.TestCase):
             self.assertGreater(main.index('setupCallingPlanBuilder({'),main.index('let recentCalls = [],softphoneUserId=null'))
             server=before['services/api/server.js']
             self.assertGreater(server.index("if(path.startsWith('/api/billing/calling-plans'))"),server.index('const user = await currentUser(req);',server.index('path===\"/api/activity/events\"')))
+
+    def test_custom_wallet_history_merge_is_preserved(self):
+        spec=importlib.util.spec_from_file_location('plan_installer',ROOT/'tools/install_calling_plan_builder.py')
+        module=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        original=subprocess.check_output(['git','show','62d7292b65ef064a58eba6aca1336a00d6c62399:services/api/wallet.js'],cwd=ROOT,text=True)
+        custom=original.replace('entries:entries.rows,','entries: [...entries.rows,...providerDeposits.rows],')
+        patched=module.wallet(custom)
+        self.assertIn('entries: [...entries.rows,...providerDeposits.rows],',patched)
+        self.assertIn('entries.rows.push(...callingPlanCredits.rows);',patched)
+        self.assertEqual(patched,module.wallet(patched))
+        # Existing host variables must not conflict with our added query name.
+        self.assertNotIn('const funding=',patched)
+        subprocess.run(['node','--check','--input-type=module'],input=patched,text=True,check=True)
 
     def test_unknown_layout_stops_before_any_files_are_changed(self):
         with tempfile.TemporaryDirectory() as td:

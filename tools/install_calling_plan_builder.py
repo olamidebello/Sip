@@ -35,10 +35,13 @@ def wallet_purchase(source):
 def wallet(source):
     if '// CALLING_PLAN_FUNDING_HISTORY_V1' in source:
         return source
-    source = once(source, '    const purchases=await pool.query(', """    // CALLING_PLAN_FUNDING_HISTORY_V1
-    const funding=await pool.query('SELECT plan_id AS id,amount_cents AS delta_cents,balance_after_cents,created_at FROM calling_plan_funding WHERE user_id=$1 AND tenant_id=$2 ORDER BY created_at DESC LIMIT 50',[user.id,user.tenant_id]);
+    # Extend the fetched entries before the existing response is assembled.
+    # Host funding integrations may already merge other ledger entries in that
+    # response; replacing its entries expression would discard those changes.
+    return once(source, '    const purchases=await pool.query(', """    // CALLING_PLAN_FUNDING_HISTORY_V1
+    const callingPlanCredits=await pool.query('SELECT plan_id AS id,amount_cents AS delta_cents,balance_after_cents,created_at FROM calling_plan_funding WHERE user_id=$1 AND tenant_id=$2 ORDER BY created_at DESC LIMIT 50',[user.id,user.tenant_id]);
+    entries.rows.push(...callingPlanCredits.rows);
     const purchases=await pool.query(""")
-    return once(source, 'entries:entries.rows,', 'entries:[...entries.rows,...funding.rows],')
 
 
 def install(root):
