@@ -1,0 +1,63 @@
+---
+# Run the server's existing verified-update procedure over Ansible.
+# The server-side script fetches only CI-validated commits on origin/main,
+# backs up MySQL before cutover, checks application health, and rolls back
+# the application commit if the update fails.
+- name: Pull and deploy the latest validated Olamide release
+  hosts: olamide
+  become: true
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+
+  vars:
+    app_repo: /opt/olamide/repo
+    update_script: /opt/olamide/repo/deployment/update.sh
+
+  pre_tasks:
+    - name: Require the supported Debian production host
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "Debian"
+          - ansible_distribution_major_version == "12"
+        fail_msg: "This playbook is for the configured Debian 12 Olamide production server."
+
+    - name: Check that the existing production checkout and update script exist
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ app_repo }}/.git"
+        - "{{ update_script }}"
+        - "{{ app_repo }}/deployment/docker/.env"
+      register: production_paths
+
+    - name: Require a provisioned production installation
+      ansible.builtin.assert:
+        that:
+          - production_paths.results[0].stat.isdir | default(false)
+          - production_paths.results[1].stat.isreg | default(false)
+          - production_paths.results[2].stat.isreg | default(false)
+        fail_msg: >-
+          Production checkout or private Compose environment is missing.
+          Provision the server first; this playbook intentionally does not
+          perform initial installation or create production secrets.
+
+  tasks:
+    - name: Pull and deploy the latest CI-validated main release
+      ansible.builtin.command:
+        argv:
+          - bash
+          - "{{ update_script }}"
+      args:
+        chdir: "{{ app_repo }}"
+      register: deployment_result
+      changed_when: "'Updated Olamide from ' in deployment_result.stdout"
+      # The update script uses a server-side flock, refuses tracked local
+      # modifications/non-forward releases, backs up MySQL and rolls back
+      # application containers on failed health checks.
+      timeout: 3600
+
+    - name: Report deployment result
+      ansible.builtin.debug:
+        msg: >-
+          {{ deployment_result.stdout | default('No new validated release was available; production is already current.') }}
