@@ -27,7 +27,7 @@
           docker tag "$old" "olamide-marketplace-$service-rollback:$suffix"
         done
         printf 'services:\n  api:\n    image: olamide-marketplace-api-rollback:%s\n  web:\n    image: olamide-marketplace-web-rollback:%s\n' "$suffix" "$suffix" > "$backup/rollback.yml"
-        files=(services/api/server.js services/api/dids.js services/api/locationPolicy.js services/api/pstnBilling.js services/api/subscriberRouting.js services/api/inboundRouting.js apps/web/src/main.js services/api/smoothDid.js services/api/inhouseSubscriber.js apps/web/src/smoothDidUi.js)
+        files=(services/api/didAvailability.js services/api/server.js services/api/dids.js services/api/locationPolicy.js services/api/pstnBilling.js services/api/subscriberRouting.js services/api/inboundRouting.js apps/web/src/main.js services/api/smoothDid.js services/api/inhouseSubscriber.js apps/web/src/smoothDidUi.js)
         for f in "${files[@]}"; do
           test ! -L "$root/$f"
           if test -f "$root/$f"; then mkdir -p "$backup/$(dirname "$f")"; cp -a "$root/$f" "$backup/$f"; fi
@@ -49,7 +49,7 @@
           -v "$controller/services/api/smoothDid.test.js:/app/smoothDid.test.js:ro" \
           -v "$controller/services/api/inhouseSubscriber.test.js:/app/inhouseSubscriber.test.js:ro" \
           "$api_image" --test /app/smoothDid.test.js /app/inhouseSubscriber.test.js
-        for f in server.js dids.js locationPolicy.js pstnBilling.js subscriberRouting.js inboundRouting.js smoothDid.js inhouseSubscriber.js; do
+        for f in didAvailability.js server.js dids.js locationPolicy.js pstnBilling.js subscriberRouting.js inboundRouting.js smoothDid.js inhouseSubscriber.js; do
           docker run --rm --entrypoint node "$api_image" --check "/app/$f"
         done
         promoted=1
