@@ -1,0 +1,77 @@
+---
+- name: Deploy monthly calling plan builder and verified funding
+  hosts: localhost
+  connection: local
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Install and validate marketplace with source and image rollback
+      ansible.builtin.shell: |
+        set -Eeuo pipefail
+        umask 077
+        test "$(hostname)" = sip || hostname -I | tr ' ' '\n' | grep -Fxq 154.29.77.102
+        exec 9>/run/olamide-update.lock
+        flock -n 9
+        root=/opt/olamide/repo
+        controller={{ playbook_dir | dirname | dirname | quote }}
+        mkdir -p /opt/olamide/backups
+        backup=$(mktemp -d /opt/olamide/backups/calling-plan-builder-XXXXXXXX)
+        exec >"$backup/deploy.log" 2>&1
+        cd "$root/deployment/docker"
+        compose=(docker compose --env-file /etc/olamide/secrets.env)
+        "${compose[@]}" config --format json > "$backup/compose.json"
+        suffix=$(basename "$backup")
+        for service in api web; do
+          id=$("${compose[@]}" ps -q "$service")
+          old=$(docker inspect --format '{{ '{{' }}.Image{{ '}}' }}' "$id")
+          docker tag "$old" "olamide-calling-plan-$service-rollback:$suffix"
+        done
+        printf 'services:\n  api:\n    image: olamide-calling-plan-api-rollback:%s\n  web:\n    image: olamide-calling-plan-web-rollback:%s\n' "$suffix" "$suffix" > "$backup/rollback.yml"
+        files=(services/api/server.js services/api/wallet.js services/api/walletPurchases.js services/api/callingPlanBuilder.js apps/web/src/main.js apps/web/src/callingPlanBuilderUi.js)
+        for f in "${files[@]}"; do
+          test ! -L "$root/$f"
+          if test -f "$root/$f"; then mkdir -p "$backup/$(dirname "$f")"; cp -a "$root/$f" "$backup/$f"; fi
+        done
+        promoted=0
+        rollback() {
+          rc=$?; trap - ERR; set +e
+          for f in "${files[@]}"; do
+            if test -f "$backup/$f"; then cp -a "$backup/$f" "$root/$f"; else rm -f "$root/$f"; fi
+          done
+          if test "$promoted" = 1; then "${compose[@]}" -f "$backup/compose.json" -f "$backup/rollback.yml" up -d --no-deps --no-build api web; fi
+          exit "$rc"
+        }
+        trap rollback ERR
+        python3 "$controller/tools/install_calling_plan_builder.py" "$root"
+        "${compose[@]}" build api web
+        api_image=$(python3 -c 'import json,sys;c=json.load(open(sys.argv[1]));print(c["services"]["api"].get("image") or c["name"]+"-api")' "$backup/compose.json")
+        docker run --rm --entrypoint node \
+          -v "$controller/services/api/callingPlanBuilder.test.js:/app/callingPlanBuilder.test.js:ro" \
+          -v "$controller/services/api/walletPurchases.test.js:/app/walletPurchases.test.js:ro" \
+          "$api_image" --test /app/callingPlanBuilder.test.js /app/walletPurchases.test.js
+        for f in server.js wallet.js walletPurchases.js callingPlanBuilder.js; do
+          docker run --rm --entrypoint node "$api_image" --check "/app/$f"
+        done
+        cd "$root"
+        docker build -f deployment/docker/web.Dockerfile --target build -t "olamide-calling-plan-ui-check:$suffix" .
+        docker run --rm --entrypoint node -v "$controller/apps/web/src/callingPlanBuilderUi.test.js:/app/src/callingPlanBuilderUi.test.js:ro" "olamide-calling-plan-ui-check:$suffix" --test /app/src/callingPlanBuilderUi.test.js
+        cd "$root/deployment/docker"
+        promoted=1
+        "${compose[@]}" up -d --no-deps --no-build api web
+        for attempt in $(seq 1 30); do
+          if curl -fsS --max-time 5 https://sip.dobhrap.com/api/health >/dev/null; then break; fi
+          test "$attempt" -lt 30
+          sleep 2
+        done
+        trap - ERR
+      args:
+        executable: /bin/bash
+      no_log: true
+      changed_when: true
+    - name: Calling plan deployment result
+      ansible.builtin.debug:
+        msg: >-
+          Calling plan builder installed under Marketplace and Billing > Build a plan.
+          Existing rates and payment gateways are preserved. Users choose countries and daily minutes,
+          accept a 30-day selling-rate estimate, and fund only the wallet shortfall.
+          New funds are credited only after a verified external gateway payment.

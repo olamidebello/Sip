@@ -18,6 +18,8 @@ export async function payInvoiceFromWallet(pool,user,invoiceId){
   const invoice=(await db.query('SELECT i.id,i.status,i.amount_cents,i.currency FROM invoices i JOIN users u ON u.id=i.user_id WHERE i.id=$1 AND i.user_id=$2 AND u.tenant_id=$3 FOR UPDATE',[invoiceId,user.id,user.tenant_id])).rows[0];
   const reject=async(error,status=409)=>{await db.query('ROLLBACK');return {status,error};};
   if(!invoice)return await reject('Invoice unavailable',404);
+  // CALLING_PLAN_FUNDING_GUARD_V1
+  if((await db.query('SELECT id FROM custom_calling_plans WHERE invoice_id=$1',[invoiceId])).rows.length)return await reject('Calling plan funding requires an external payment; existing balance is used when creating the plan');
   const previous=(await db.query('SELECT id,amount_cents,balance_after_cents FROM wallet_purchases WHERE invoice_id=$1 AND user_id=$2 AND tenant_id=$3',[invoiceId,user.id,user.tenant_id])).rows[0];
   if(previous){await db.query('COMMIT');return {status:200,paid:true,duplicate:true,purchaseId:previous.id};}
   const amount=Number(invoice.amount_cents);

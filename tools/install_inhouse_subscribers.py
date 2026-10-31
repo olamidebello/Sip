@@ -18,8 +18,10 @@ def patch_server(s):
  if '// INHOUSE_SUBSCRIBER_SCHEMA_V1' in s:return s
  return "import {migrateInhouseSubscribers} from './inhouseSubscriber.js';\n"+once(s,'await migratePstnBilling(pool);','await migratePstnBilling(pool);\n// INHOUSE_SUBSCRIBER_SCHEMA_V1\nawait migrateInhouseSubscribers(pool);')
 def patch_smooth(s):
- if '// INHOUSE_SUBSCRIBER_NO_RENTAL_V1' in s:return s
- return "import {subscriberActive} from './inhouseSubscriber.js';\n"+once(s,'export async function rentSmoothDid(pool,user,input,{renew=false,automatic=false,sessionHash}={}){',"export async function rentSmoothDid(pool,user,input,{renew=false,automatic=false,sessionHash}={}){\n // INHOUSE_SUBSCRIBER_NO_RENTAL_V1\n if(await subscriberActive(pool,user.tenant_id,user.id))throw Error('Your subscriber in-house DID is included free. Use your assigned number; no rental purchase is required.');")
+ # Paid marketplace rentals remain available to subscribers; their included
+ # number is a separate entitlement. Remove the prior deployment-only blocker.
+ old=" // INHOUSE_SUBSCRIBER_NO_RENTAL_V1\n if(await subscriberActive(pool,user.tenant_id,user.id))throw Error('Your subscriber in-house DID is included free. Use your assigned number; no rental purchase is required.');"
+ return s.replace(old,'')
 if __name__=='__main__':
  root=pathlib.Path(sys.argv[1]);here=pathlib.Path(__file__).resolve().parents[1];pending=[]
  for name,fn in [('kamailioHttpBridge.js',patch_bridge),('callAccess.js',patch_access),('server.js',patch_server),('smoothDid.js',patch_smooth)]:
